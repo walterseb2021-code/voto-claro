@@ -220,20 +220,28 @@ function getBaseUrl(req: Request) {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "localhost:3000";
   return `${proto}://${host}`;
 }
-
 async function fetchPlan(req: Request, candidateId: string): Promise<PdfPagesApiResponse> {
-  const base = getBaseUrl(req);
-  const url = `${base}/api/docs/plan?id=${encodeURIComponent(candidateId)}`;
+  const origin = new URL(req.url).origin; // ✅ siempre el mismo origen real del request
+  const url = `${origin}/api/docs/plan?id=${encodeURIComponent(candidateId)}`;
 
   const res = await fetch(url, { cache: "no-store" });
-  const data = (await res.json()) as PdfPagesApiResponse;
+
+  // ✅ leer como texto primero para evitar "Unexpected token <" si llega HTML
+  const text = await res.text();
+  let data: any = null;
+
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`docs/plan devolvió no-JSON (status ${res.status}) (id=${candidateId})`);
+  }
 
   if (!res.ok) {
-    const msg = (data as any)?.error ?? "No se pudo cargar el plan";
+    const msg = data?.error ?? "No se pudo cargar el plan";
     throw new Error(`${msg} (id=${candidateId})`);
   }
 
-  return data;
+  return data as PdfPagesApiResponse;
 }
 
 // ✅ helper: intentar cargar plan sin romper flujo
