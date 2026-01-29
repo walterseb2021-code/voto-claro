@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { Suspense } from "react";
 
 // ✅ Panel asistente (FAB + voz)
 import FederalitoAssistantPanel from "@/components/assistant/FederalitoAssistantPanel";
@@ -43,7 +44,10 @@ export default function RootLayout({
         ].join(" ")}
       >
         <FederalitoSplash />
-        <FederalitoAssistantPanel />
+       <Suspense fallback={null}>
+  <FederalitoAssistantPanel />
+</Suspense>
+
         {children}
       </body>
     </html>
