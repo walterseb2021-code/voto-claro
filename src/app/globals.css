@@ -24,3 +24,139 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* =========================
+   Federalito Animated Avatar
+   ========================= */
+
+@keyframes federalito-float {
+  0%   { transform: translateY(0px) rotate(-0.6deg); }
+  50%  { transform: translateY(-6px) rotate(0.6deg); }
+  100% { transform: translateY(0px) rotate(-0.6deg); }
+}
+
+@keyframes federalito-glow {
+  0%   { box-shadow: 0 10px 30px rgba(0,0,0,.10); }
+  50%  { box-shadow: 0 14px 38px rgba(16,185,129,.20); } /* verde suave */
+  100% { box-shadow: 0 10px 30px rgba(0,0,0,.10); }
+}
+
+@keyframes federalito-shine {
+  0%   { transform: translateX(-120%) rotate(20deg); opacity: 0; }
+  10%  { opacity: .35; }
+  50%  { opacity: .15; }
+  100% { transform: translateX(120%) rotate(20deg); opacity: 0; }
+}
+
+/* Mini “bandera” animada (solo un ícono liviano) */
+@keyframes federalito-flag-wave {
+  0%   { transform: rotate(-6deg) translateY(0px); }
+  50%  { transform: rotate(6deg) translateY(-1px); }
+  100% { transform: rotate(-6deg) translateY(0px); }
+}
+
+/* Pulso CTA suave (invita a click) */
+@keyframes federalito-cta-pulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.federalito-anim {
+  position: relative;
+  animation: federalito-float 2.8s ease-in-out infinite, federalito-glow 2.8s ease-in-out infinite;
+  will-change: transform, box-shadow;
+}
+
+/* Shine */
+.federalito-anim::after {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,.55) 50%,
+    transparent 100%
+  );
+  filter: blur(2px);
+  opacity: 0;
+  transform: translateX(-120%) rotate(20deg);
+  animation: federalito-shine 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Banderita “ondeando” (badge esquina) */
+.federalito-anim::before {
+  content: "🇵🇪";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.92);
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 10px 25px rgba(0,0,0,.10);
+  transform-origin: 20% 70%;
+  animation: federalito-flag-wave 1.15s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Si el avatar es clickeable: más “vida” al hover */
+.federalito-anim.is-clickable {
+  animation:
+    federalito-float 2.8s ease-in-out infinite,
+    federalito-glow 2.8s ease-in-out infinite,
+    federalito-cta-pulse 1.9s ease-in-out infinite;
+  cursor: pointer;
+}
+
+.federalito-anim.is-clickable:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 18px 42px rgba(16,185,129,.22);
+}
+
+.federalito-anim.is-clickable:active {
+  transform: translateY(0px) scale(0.99);
+}
+
+/* Accesibilidad: si el usuario pide menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  .federalito-anim,
+  .federalito-anim::before,
+  .federalito-anim::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+/* =========================
+   Bandera ondeando (solo bandera, NO todo el PNG)
+   ========================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .federalito-flag {
+    animation: none !important;
+  }
+}
+
+.federalito-flag {
+  animation: federalito-flag-wave 1.6s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+/* animación de la forma (path) */
+@keyframes federalito-flag-wave {
+  0% {
+    d: path("M20 20 C120 10 220 30 360 18 L360 130 C220 142 120 118 20 130 Z");
+  }
+  50% {
+    d: path("M20 20 C120 40 220 6 360 22 L360 130 C220 112 120 150 20 130 Z");
+  }
+  100% {
+    d: path("M20 20 C120 10 220 30 360 18 L360 130 C220 142 120 118 20 130 Z");
+  }
+}

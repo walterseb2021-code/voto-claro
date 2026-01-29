@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  width="520"
+  height="720"
+  viewBox="0 0 520 720"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <title>Federalito (animado)</title>
+
+  <style>
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; }
+      animate, animateTransform { display: none !important; }
+    }
+
+    /* Sway suave del cuerpo (opcional) */
+    @keyframes sway {
+      0%   { transform: translateY(0px) rotate(-0.4deg); }
+      50%  { transform: translateY(-2px) rotate(0.4deg); }
+      100% { transform: translateY(0px) rotate(-0.4deg); }
+    }
+
+    #fed {
+      transform-origin: 260px 650px;
+      animation: sway 3.2s ease-in-out infinite;
+    }
+  </style>
+
+  <!-- Tarjeta/fondo -->
+  <g opacity="1">
+    <rect x="60" y="40" width="400" height="640" rx="28" fill="#1B5E20" opacity="0.10"/>
+    <rect x="75" y="55" width="370" height="610" rx="24" fill="#2E7D32" opacity="0.18"/>
+    <rect x="90" y="70" width="340" height="580" rx="22" fill="#0B3D1E" opacity="0.25"/>
+  </g>
+
+  <g id="fed">
+
+    <!-- Palo bandera -->
+    <rect x="122" y="160" width="14" height="380" rx="7" fill="#0F172A" opacity="0.92"/>
+    <rect x="126" y="160" width="6" height="380" rx="3" fill="#334155" opacity="0.55"/>
+
+    <!-- BANDERA (ondea) -->
+    <g transform="translate(136,165)">
+      <path
+        id="flagPath"
+        fill="#FFFFFF"
+        stroke="#0F172A"
+        stroke-width="4"
+        stroke-linejoin="round"
+        d="M0,0 C40,10 90,-10 140,0 L140,84 C90,74 40,94 0,84 Z"
+      >
+        <!-- ✅ Ondeo real: anima el "d" (SMIL) -->
+        <animate
+          attributeName="d"
+          dur="1.6s"
+          repeatCount="indefinite"
+          values="
+            M0,0 C40,10 90,-10 140,0 L140,84 C90,74 40,94 0,84 Z;
+            M0,0 C48,-12 96,16 140,0 L140,84 C96,68 48,98 0,84 Z;
+            M0,0 C36,14 88,-14 140,0 L140,84 C88,72 36,96 0,84 Z;
+            M0,0 C40,10 90,-10 140,0 L140,84 C90,74 40,94 0,84 Z
+          "
+        />
+      </path>
+
+      <text
+        x="70"
+        y="46"
+        text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="30"
+        font-weight="800"
+        fill="#C62828"
+      >Perú</text>
+
+      <text
+        x="70"
+        y="74"
+        text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="30"
+        font-weight="800"
+        fill="#C62828"
+      >Federal</text>
+    </g>
+
+    <!-- BRAZO (saluda/gesticula) -->
+    <g id="arm">
+      <!-- ✅ Rotación real del brazo (SMIL) -->
+      <animateTransform
+        attributeName="transform"
+        type="rotate"
+        dur="2.2s"
+        repeatCount="indefinite"
+        values="0 165 275; -8 165 275; 0 165 275; -4 165 275; 0 165 275"
+        keyTimes="0;0.35;0.7;0.85;1"
+        calcMode="spline"
+        keySplines=".4 0 .2 1; .4 0 .2 1; .4 0 .2 1; .4 0 .2 1"
+      />
+
+      <!-- Mano cerca al palo -->
+      <path
+        d="M124 212
+           C110 210 104 220 104 232
+           C104 246 114 256 128 254
+           C140 252 146 242 146 230
+           C146 218 138 214 124 212 Z"
+        fill="#F4B183"
+        stroke="#0F172A"
+        stroke-width="3"
+      />
+
+      <!-- Antebrazo -->
+      <path
+        d="M142 244
+           C122 262 116 286 122 314
+           C128 342 156 350 170 332
+           C188 308 186 270 170 250
+           C160 238 152 236 142 244 Z"
+        fill="#F4B183"
+        stroke="#0F172A"
+        stroke-width="3"
+      />
+    </g>
+
+    <!-- Cabeza -->
+    <circle cx="250" cy="210" r="62" fill="#F7C59F" stroke="#0F172A" stroke-width="4"/>
+    <circle cx="220" cy="230" r="12" fill="#F28B82" opacity="0.35"/>
+    <circle cx="280" cy="230" r="12" fill="#F28B82" opacity="0.35"/>
+
+    <!-- Ojos + parpadeo (SMIL simple) -->
+    <g>
+      <ellipse id="eyeL" cx="228" cy="205" rx="10" ry="14" fill="#0F172A">
+        <animate attributeName="ry" dur="4.6s" repeatCount="indefinite" values="14;14;1.2;14;14" keyTimes="0;0.92;0.94;0.96;1"/>
+      </ellipse>
+      <ellipse id="eyeR" cx="272" cy="205" rx="10" ry="14" fill="#0F172A">
+        <animate attributeName="ry" dur="4.6s" repeatCount="indefinite" values="14;14;1.2;14;14" keyTimes="0;0.92;0.94;0.96;1"/>
+      </ellipse>
+      <circle cx="224" cy="200" r="3" fill="#FFFFFF"/>
+      <circle cx="268" cy="200" r="3" fill="#FFFFFF"/>
+    </g>
+
+    <!-- Ceja -->
+    <path d="M210 185 C220 175 234 175 244 182" stroke="#0F172A" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M256 182 C266 175 280 175 290 185" stroke="#0F172A" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+    <!-- Sonrisa -->
+    <path
+      d="M225 245
+         C240 270 260 270 275 245"
+      stroke="#0F172A"
+      stroke-width="6"
+      fill="none"
+      stroke-linecap="round"
+    />
+
+    <!-- Sombrero -->
+    <ellipse cx="250" cy="165" rx="90" ry="18" fill="#E6C28B" stroke="#0F172A" stroke-width="4"/>
+    <path
+      d="M185 165
+         C190 120 220 105 250 105
+         C280 105 310 120 315 165"
+      fill="#EAD3A1"
+      stroke="#0F172A"
+      stroke-width="4"
+      stroke-linejoin="round"
+    />
+    <rect x="195" y="132" width="110" height="16" rx="8" fill="#C62828"/>
+    <rect x="195" y="147" width="110" height="6" rx="3" fill="#1E88E5"/>
+    <rect x="195" y="153" width="110" height="6" rx="3" fill="#FBC02D"/>
+
+    <!-- Plumas -->
+    <g opacity="0.98">
+      <path d="M318 140 C355 125 360 165 330 175 C320 160 318 152 318 140 Z" fill="#1E88E5" stroke="#0F172A" stroke-width="3"/>
+      <path d="M310 145 C345 140 352 182 320 190 C312 175 310 160 310 145 Z" fill="#43A047" stroke="#0F172A" stroke-width="3"/>
+      <path d="M302 148 C332 150 335 195 304 198 C300 184 300 168 302 148 Z" fill="#C62828" stroke="#0F172A" stroke-width="3"/>
+    </g>
+
+    <!-- Poncho/cuerpo -->
+    <path
+      d="M160 290
+         C190 270 310 270 340 290
+         C372 312 382 360 372 430
+         C360 520 315 580 250 592
+         C185 580 140 520 128 430
+         C118 360 128 312 160 290 Z"
+      fill="#7A1C1C"
+      stroke="#0F172A"
+      stroke-width="5"
+    />
+
+    <!-- Mano derecha -->
+    <path
+      d="M330 355
+         C360 350 374 370 368 396
+         C360 430 324 430 314 408
+         C304 386 305 360 330 355 Z"
+      fill="#F7C59F"
+      stroke="#0F172A"
+      stroke-width="4"
+    />
+
+  </g>
+</svg>
