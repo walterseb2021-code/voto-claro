@@ -934,72 +934,49 @@ function renderSmart(words: BBoxWord[]) {
  * - LAYOUT: columnas
  * - PLAIN: texto “lineal” (suele ser mejor para planes narrativos)
  */
+// ✅ Cache del texto por página
+
+// ✅ Cache del PDF completo (para no leer el archivo 60 veces)
+const PDF_BUFFER_CACHE = new Map<string, Uint8Array>();
+
+/**
+ * ✅ NUEVO (Vercel-friendly): extraer texto con pdfjs-dist (NO usa pdftotext)
+ * Devuelve texto “lineal” tipo PDF-chat.
+ */
 async function extractPageText(pdfPath: string, pageNum: number) {
   const cacheKey = `${pdfPath}::${pageNum}`;
   const cached = PAGE_TEXT_CACHE.get(cacheKey);
   if (cached != null) return cached;
 
-  // A) BBOX (bueno para tablas)
-  let bboxOut = "";
-  try {
-    const xml = await runPdfToText(["-f", String(pageNum), "-l", String(pageNum), "-bbox-layout", pdfPath, "-"]);
-    const { words } = parseBboxXml(xml);
-    bboxOut = words.length ? renderSmart(words) : "";
-  } catch {
-    bboxOut = "";
+  // 1) Cargar PDF (desde disco) con cache
+  let data = PDF_BUFFER_CACHE.get(pdfPath);
+  if (!data) {
+    const fsPromises = await import("fs/promises");
+    const buf = await fsPromises.readFile(pdfPath);
+    data = new Uint8Array(buf);
+    PDF_BUFFER_CACHE.set(pdfPath, data);
   }
 
-  // B) LAYOUT (bueno para columnas)
-  let layoutOut = "";
-  try {
-    const raw = await runPdfToText(["-f", String(pageNum), "-l", String(pageNum), "-layout", pdfPath, "-"]);
-    layoutOut = reflowParagraphs(raw);
-  } catch {
-    layoutOut = "";
+  // 2) pdfjs-dist (legacy) para Node
+  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loadingTask = pdfjs.getDocument({ data });
+  const pdf = await loadingTask.promise;
+
+  if (pageNum < 1 || pageNum > pdf.numPages) {
+    throw new Error("Wrong page range");
   }
 
-  // C) PLAIN (mejor “PDF-chat” en texto corrido)
-  let plainOut = "";
-  try {
-    const raw = await runPdfToText(["-f", String(pageNum), "-l", String(pageNum), pdfPath, "-"]);
-    plainOut = reflowParagraphs(raw);
-  } catch {
-    plainOut = "";
-  }
+  // 3) Extraer texto de la página
+  const page = await pdf.getPage(pageNum);
+  const content = await page.getTextContent();
 
-  const sA = textQualityScore(bboxOut);
-  const sB = textQualityScore(layoutOut);
-  const sC = textQualityScore(plainOut);
+  const raw = (content.items || [])
+    .map((it: any) => (typeof it?.str === "string" ? it.str : ""))
+    .filter(Boolean)
+    .join(" ");
 
-  const tableB = isLikelyTabularText(layoutOut);
-  const tableC = isLikelyTabularText(plainOut);
-
-  // ✅ NUEVO: selector por “calidad real”
-  // - Si detectamos tabla, NO obligamos BBOX si es peor que layout/plain
-  // - Si NO es tabla, preferimos PLAIN, luego LAYOUT, luego BBOX
-  let out = "";
-
-  if (tableB || tableC) {
-    // candidata “mejor legible”
-    const bestScore = Math.max(sA, sB, sC);
-
-    // Si BBOX está MUY por debajo, no lo uses aunque haya “tabla”
-    const bboxTooBad = sA < bestScore - 35;
-
-    if (!bboxTooBad && sA >= sB && sA >= sC && bboxOut) {
-      out = bboxOut;
-    } else if (sB >= sC && layoutOut) {
-      out = layoutOut;
-    } else if (plainOut) {
-      out = plainOut;
-    } else {
-      out = bboxOut || layoutOut || plainOut || "";
-    }
-  } else {
-    if (sC >= sB && sC >= sA && plainOut) out = plainOut;
-    else if (sB >= sC && sB >= sA && layoutOut) out = layoutOut;
-    else out = bboxOut || layoutOut || plainOut || "";
-  }
+  // 4) Reflujo (usa tu helper actual)
+  const out = reflowParagraphs(raw || "");
 
   PAGE_TEXT_CACHE.set(cacheKey, out);
   return out;
