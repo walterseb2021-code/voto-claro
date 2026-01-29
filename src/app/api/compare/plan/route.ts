@@ -224,7 +224,12 @@ async function fetchPlan(req: Request, candidateId: string): Promise<PdfPagesApi
   const origin = new URL(req.url).origin; // ✅ siempre el mismo origen real del request
   const url = `${origin}/api/docs/plan?id=${encodeURIComponent(candidateId)}`;
 
-  const res = await fetch(url, { cache: "no-store" });
+const res = await fetch(url, {
+  cache: "no-store",
+  headers: {
+    cookie: req.headers.get("cookie") ?? "",
+  },
+});
 
   // ✅ leer como texto primero para evitar "Unexpected token <" si llega HTML
   const text = await res.text();
