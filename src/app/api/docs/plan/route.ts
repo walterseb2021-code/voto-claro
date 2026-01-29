@@ -6,6 +6,11 @@ import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { MOCK_CANDIDATES } from "@/lib/votoclaro/mockCandidates";
+import DOMMatrix from "dommatrix";
+
+if (!(globalThis as any).DOMMatrix) {
+  (globalThis as any).DOMMatrix = DOMMatrix as any;
+}
 
 /**
  * ✅ Cache en memoria para NO recalcular páginas repetidas (compare/plan llama muchas veces).
