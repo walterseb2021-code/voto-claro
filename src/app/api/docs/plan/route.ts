@@ -964,7 +964,7 @@ async function extractPageText(pdfPath: string, pageNum: number) {
 
   // 2) pdfjs-dist (legacy) para Node
   const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({ data });
+  const loadingTask = pdfjs.getDocument({ data, disableWorker: true });
   const pdf = await loadingTask.promise;
 
   if (pageNum < 1 || pageNum > pdf.numPages) {
