@@ -1,4 +1,4 @@
-// components/assistant/FederalitoAssistantPanel.tsx
+// src/componentes/asistente/FederalitoAssistantPanel.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -21,12 +21,13 @@ const LS_VOICE_MODE = "votoclaro_voice_mode_v1";
 const LS_VOICE_LANG = "votoclaro_voice_lang_v1";
 const LS_VOICE_HINT_SHOWN = "votoclaro_voice_hint_shown_v1";
 const LS_ASK_MODE = "votoclaro_assistant_mode_v1";
+
 // ✅ Panel flotante: posición persistente
 const LS_ASSIST_POS = "votoclaro_assistant_pos_v1";
 
 type PanelPos = { x: number; y: number };
 
-// ✅ TEMA 2 (Memoria corta): estado + persistencia
+// ✅ Memoria corta: estado + persistencia
 const LS_ASSIST_MEM = "votoclaro_assistant_memory_v1";
 
 type MemoryState = {
@@ -117,7 +118,13 @@ function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynt
 
     // Heurísticas suaves
     if (name.includes("male") || name.includes("hombre")) score += 6;
-    if (name.includes("juan") || name.includes("carlos") || name.includes("diego") || name.includes("andres")) score += 3;
+    if (
+      name.includes("juan") ||
+      name.includes("carlos") ||
+      name.includes("diego") ||
+      name.includes("andres")
+    )
+      score += 3;
 
     return { v, score };
   });
@@ -125,6 +132,7 @@ function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynt
   scored.sort((a, b) => b.score - a.score);
   return scored[0]?.v ?? null;
 }
+
 function humanizeForSpeech(input: string) {
   let s = String(input || "");
 
@@ -136,9 +144,9 @@ function humanizeForSpeech(input: string) {
 
   // 2) Reemplazar símbolos que suenan feo
   s = s
-    .replace(/[\/\\]+/g, " ")     // barras
-    .replace(/[\*\|_#]+/g, " ")   // asteriscos, pipes, etc.
-    .replace(/[-]{2,}/g, " ")     // guiones largos
+    .replace(/[\/\\]+/g, " ") // barras
+    .replace(/[\*\|_#]+/g, " ") // asteriscos, pipes, etc.
+    .replace(/[-]{2,}/g, " ") // guiones largos
     .replace(/\s{2,}/g, " ")
     .trim();
 
@@ -232,8 +240,7 @@ async function safeReadJson(res: Response) {
 function slugToName(slug: string) {
   return (slug || "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 }
-
-// ✅ Helpers Tema 2: follow-ups y contexto
+// ✅ Helpers: follow-ups y contexto
 function looksLikeFollowUp(q: string) {
   const t = normalize(q).trim();
   if (!t) return false;
@@ -246,9 +253,6 @@ function looksLikeFollowUp(q: string) {
     "y eso",
     "y esa",
     "y ese",
-    "y eso?",
-    "y esa?",
-    "y ese?",
     "cuando",
     "cuándo",
     "donde",
@@ -298,7 +302,7 @@ function buildContextualQuestion(rawQ: string, mem: MemoryState, candidateName: 
   if (!hasPrev) return q;
 
   // Si cambia de candidato, no “arrastramos” contexto
-  if (mem.lastCandidateId && mem.lastCandidateId !== mem.lastCandidateId) {
+  if (mem.lastCandidateName && candidateName && mem.lastCandidateName !== candidateName) {
     return q;
   }
 
@@ -350,8 +354,10 @@ function safeSaveMem(mem: MemoryState) {
 export default function FederalitoAssistantPanel() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
   const [open, setOpen] = useState(false);
-    // ✅ Panel flotante (draggable)
+
+  // ✅ Panel flotante (draggable)
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   const [pos, setPos] = useState<PanelPos>(() => {
@@ -415,8 +421,8 @@ export default function FederalitoAssistantPanel() {
     try {
       const raw = localStorage.getItem(LS_ASSIST_POS);
       if (!raw) setPos(defaultBottomRight());
-      // eslint-disable-next-line no-empty
     } catch {}
+
     // reajusta si el viewport cambia
     const onResize = () => setPos((p) => clampPos(p));
     window.addEventListener("resize", onResize);
@@ -429,19 +435,17 @@ export default function FederalitoAssistantPanel() {
       localStorage.setItem(LS_ASSIST_POS, JSON.stringify(pos));
     } catch {}
   }, [pos]);
-function isInteractiveTarget(el: any) {
-  const t = el as HTMLElement | null;
-  if (!t) return false;
-  return Boolean(
-    t.closest?.(
-      "button, a, input, select, textarea, label, [role='button'], [data-no-drag='1']"
-    )
-  );
-}
+
+  function isInteractiveTarget(el: any) {
+    const t = el as HTMLElement | null;
+    if (!t) return false;
+    return Boolean(
+      t.closest?.("button, a, input, select, textarea, label, [role='button'], [data-no-drag='1']")
+    );
+  }
 
   function onHeaderPointerDown(e: React.PointerEvent) {
     if (isInteractiveTarget(e.target)) return;
-    // solo arrastrar con click/touch principal
     if ((e as any).button != null && (e as any).button !== 0) return;
 
     const el = panelRef.current;
@@ -486,40 +490,17 @@ function isInteractiveTarget(el: any) {
   function resetPanelPos() {
     setPos(defaultBottomRight());
   }
+
+  // ✅ ÚNICA versión (sin duplicados)
   function resetAssistantChat() {
-  // Borra mensajes del asistente
-  setMsgs([
-    {
-      role: "system",
-      content:
-        "Hola, soy Federalito AI. Puedo ayudarte a usar la app y responder preguntas según la pestaña actual: Hoja de vida, Plan de gobierno o Actuar político.",
-    },
-  ]);
-
-  // Limpia lo que el usuario estaba escribiendo
-  setDraft("");
-
-  // Borra la memoria corta
-  setMem({});
-  try {
-    localStorage.removeItem("votoclaro_assistant_memory_v1");
-  } catch {}
-}
-
-  function resetAssistantChat() {
-    // 1) Borra el chat (mensajes)
     setMsgs([
       {
         role: "system",
         content:
-          "Hola, soy Federalito AI. Estoy aquí para ayudarte a usar la app y también responder preguntas según la pestaña actual: Hoja de vida (HV), Plan (PLAN) o Actuar político (NEWS).",
+          "Hola, soy Federalito AI. Puedo ayudarte a usar la app y responder preguntas según la pestaña actual: Hoja de vida, Plan de gobierno o Actuar político.",
       },
     ]);
-
-    // 2) Limpia el campo de escritura
     setDraft("");
-
-    // 3) Borra memoria corta (para que no arrastre contexto)
     setMem({});
     try {
       localStorage.removeItem(LS_ASSIST_MEM);
@@ -550,7 +531,7 @@ function isInteractiveTarget(el: any) {
     }
   });
 
-  // ✅ TEMA 2: Memoria corta (persistente)
+  // ✅ Memoria corta (persistente)
   const [mem, setMem] = useState<MemoryState>(() => {
     if (typeof window === "undefined") return {};
     return safeLoadMem();
@@ -579,7 +560,6 @@ function isInteractiveTarget(el: any) {
   const recognitionRef = useRef<any>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-
   // persist
   useEffect(() => {
     try {
@@ -589,7 +569,7 @@ function isInteractiveTarget(el: any) {
     } catch {}
   }, [voiceMode, voiceLang, askMode]);
 
-  // ✅ persist memory (Tema 2)
+  // ✅ persist memory
   useEffect(() => {
     safeSaveMem(mem);
   }, [mem]);
@@ -615,11 +595,12 @@ function isInteractiveTarget(el: any) {
     const m = p.match(/^\/candidate\/([^/?#]+)/i);
     const id = m?.[1] ? decodeURIComponent(m[1]) : "";
     setCandidateId(id);
+
     if (!id) {
       setCandidateName("");
       return;
     }
-    // intenta obtener full_name (si endpoint existe)
+
     let aborted = false;
     (async () => {
       try {
@@ -636,15 +617,15 @@ function isInteractiveTarget(el: any) {
       aborted = true;
     };
   }, [pathname]);
-// ✅ Auto-sincroniza el modo del asistente con el tab actual (HV / PLAN / NEWS)
-useEffect(() => {
-  const tab = String(searchParams?.get("tab") || "").toUpperCase();
 
-  if (tab === "PLAN") setAskMode("PLAN");
-  else if (tab === "NEWS") setAskMode("NEWS");
-  else if (tab === "HV") setAskMode("HV");
-  // si no hay tab, no forzamos nada
-}, [searchParams]);
+  // ✅ Auto-sincroniza el modo del asistente con el tab actual (HV / PLAN / NEWS)
+  useEffect(() => {
+    const tab = String(searchParams?.get("tab") || "").toUpperCase();
+
+    if (tab === "PLAN") setAskMode("PLAN");
+    else if (tab === "NEWS") setAskMode("NEWS");
+    else if (tab === "HV") setAskMode("HV");
+  }, [searchParams]);
 
   // helpers globales
   useEffect(() => {
@@ -660,7 +641,7 @@ useEffect(() => {
     };
   }, []);
 
-  // escuchar eventos guia (por si los usas desde otras pantallas)
+  // escuchar eventos guia
   useEffect(() => {
     async function onGuide(ev: Event) {
       const e = ev as CustomEvent<GuideEventDetail>;
@@ -726,7 +707,7 @@ useEffect(() => {
     }
   }
 
-  // ✅ TEMA 2: update memory al responder
+  // update memory al responder
   function updateMemAfterAnswer(params: {
     mode: AskMode;
     candidateId: string;
@@ -751,25 +732,23 @@ useEffect(() => {
     const rawQ = (question || "").trim();
     if (!rawQ) return;
 
-    // si es HV/PLAN/NEWS necesitamos estar en /candidate/[id]
-   if (!candidateId) {
-  const msg =
-    "Para ayudarte con un candidato, primero abre su ficha.\n" +
-    "Ve a la lista de candidatos, busca el nombre y haz clic para entrar.\n" +
-    "Ya dentro de la ficha, aquí podrás preguntar por: Hoja de Vida (HV), Plan o Actuar político.";
-  pushAssistant(msg);
-  await maybeSpeak(msg);
-  return;
-}
+    if (!candidateId) {
+      const msg =
+        "Para ayudarte con un candidato, primero abre su ficha.\n" +
+        "Ve a la lista de candidatos, busca el nombre y haz clic para entrar.\n" +
+        "Ya dentro de la ficha, aquí podrás preguntar por: Hoja de Vida (HV), Plan o Actuar político.";
+      pushAssistant(msg);
+      await maybeSpeak(msg);
+      return;
+    }
 
     const cname = (candidateName || slugToName(candidateId)).trim();
 
-    // ✅ TEMA 2: “enriquecer” preguntas de seguimiento sin que el usuario repita
     const enrichedQ = buildContextualQuestion(rawQ, mem, cname, askMode);
 
     setBusy(true);
     try {
-      // 1) HV / PLAN (PDF) → /api/ai/answer
+      // 1) HV / PLAN (PDF)
       if (askMode === "HV" || askMode === "PLAN") {
         const doc = askMode === "HV" ? "hv" : "plan";
         const res = await fetch("/api/ai/answer", {
@@ -809,13 +788,9 @@ useEffect(() => {
         return;
       }
 
-      // 2) NEWS (Actuar político) → /api/web/ask
+      // 2) NEWS (Actuar político)
       if (askMode === "NEWS") {
-        // ✅ En NEWS, la API ya espera "Nombre: pregunta"
         const finalQ = cname ? `${cname}: ${rawQ}` : rawQ;
-
-        // ✅ pero igual le pasamos enrichedQ si era follow-up (para anclar “eso/esa/ese”)
-        //    SIN duplicar el "Nombre:"; buildContextualQuestion ya incluye contexto.
         const finalToSend = looksLikeFollowUp(rawQ) ? enrichedQ : finalQ;
 
         const res = await fetch("/api/web/ask", {
@@ -853,7 +828,6 @@ useEffect(() => {
         const out = ans + topLinks;
         pushAssistant(out);
 
-        // voz: lee solo la respuesta (sin URLs)
         await maybeSpeak(ans);
 
         updateMemAfterAnswer({
@@ -881,7 +855,7 @@ useEffect(() => {
     askBackend(t);
   }
 
-  // 🎙️ setup SpeechRecognition (Web Speech)
+  // SpeechRecognition (Web Speech)
   function canUseSpeechRec() {
     const w = window as any;
     return !!(w.SpeechRecognition || w.webkitSpeechRecognition);
@@ -905,7 +879,6 @@ useEffect(() => {
     }
 
     try {
-      // si ya hay uno activo, lo paramos
       try {
         recognitionRef.current?.stop?.();
       } catch {}
@@ -942,7 +915,6 @@ useEffect(() => {
       rec.onend = () => {
         setListening(false);
         const q = (finalText || draft || "").trim();
-        // si quedó algo, lo enviamos automáticamente
         if (q) {
           setMsgs((prev) => [...prev, { role: "user", content: q }]);
           setDraft("");
@@ -966,7 +938,6 @@ useEffect(() => {
   }
 
   const fabLabel = useMemo(() => (open ? "Cerrar Federalito AI" : "Abrir Federalito AI"), [open]);
-
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
 
   return (
@@ -1007,21 +978,16 @@ useEffect(() => {
       </button>
 
       {/* Panel */}
-    {open ? (
-  <div
-    ref={panelRef}
-    className="fixed z-[70] w-[min(92vw,420px)]"
-    style={{ left: pos.x, top: pos.y }}
-  >
-    <div className="rounded-2xl border bg-white shadow-2xl overflow-hidden flex flex-col max-h-[75vh]">
-
+      {open ? (
+        <div ref={panelRef} className="fixed z-[70] w-[min(92vw,420px)]" style={{ left: pos.x, top: pos.y }}>
+          <div className="rounded-2xl border bg-white shadow-2xl overflow-hidden flex flex-col max-h-[75vh]">
             {/* Header */}
-          <div
-  className="px-4 py-3 flex items-center justify-between gap-3 bg-gradient-to-r from-green-700 to-green-600 text-white cursor-move select-none"
-  onPointerDown={onHeaderPointerDown}
-  onPointerMove={onHeaderPointerMove}
-  onPointerUp={onHeaderPointerUp}
->
+            <div
+              className="px-4 py-3 flex items-center justify-between gap-3 bg-gradient-to-r from-green-700 to-green-600 text-white cursor-move select-none"
+              onPointerDown={onHeaderPointerDown}
+              onPointerMove={onHeaderPointerMove}
+              onPointerUp={onHeaderPointerUp}
+            >
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/15 shrink-0">
                   <FederalitoAvatar className="w-full h-full" />
@@ -1035,31 +1001,31 @@ useEffect(() => {
                 </div>
               </div>
 
-           <div className="flex items-center gap-2">
-  <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation();
-      resetAssistantChat();
-    }}
-    className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold"
-    title="Reiniciar posición"
-  >
-    Reset
-  </button>
+              <div className="flex items-center gap-2">
+                {/* ✅ ahora sí: reset de POSICIÓN */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    resetPanelPos();
+                  }}
+                  className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold"
+                  title="Reiniciar posición"
+                >
+                  Reset
+                </button>
 
-  <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation();
-      setOpen(false);
-    }}
-    className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold"
-  >
-    Cerrar
-  </button>
-</div>
-
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                  }}
+                  className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
 
             {/* Controls */}
@@ -1089,7 +1055,6 @@ useEffect(() => {
                   <option value="qu">Quechua (si existe)</option>
                 </select>
 
-                {/* ✅ MODO: HV / PLAN / NEWS */}
                 <select
                   value={askMode}
                   onChange={(e) => setAskMode(e.target.value as AskMode)}
@@ -1128,6 +1093,16 @@ useEffect(() => {
                 >
                   {listening ? "🎙️ Escuchando…" : "🎙️ Hablar"}
                 </button>
+
+                {/* ✅ Botón para reiniciar CHAT (opcional pero útil) */}
+                <button
+                  type="button"
+                  onClick={resetAssistantChat}
+                  className="rounded-full px-3 py-1 text-[12px] font-extrabold border bg-white text-slate-800 hover:bg-slate-50"
+                  title="Reiniciar chat"
+                >
+                  Reiniciar chat
+                </button>
               </div>
 
               <div className="mt-2 text-[11px] text-slate-500">
@@ -1137,18 +1112,16 @@ useEffect(() => {
                 {candidateId ? "" : "Tip: entra a /candidate/[id] para que el asistente sepa qué candidato consultar."}
               </div>
 
-              {/* ✅ (Tema 2) mini indicador: memoria activa */}
               <div className="mt-2 text-[10px] text-slate-400">
                 Memoria corta: {mem?.lastUpdatedAt ? `ON (última: ${new Date(mem.lastUpdatedAt).toLocaleString()})` : "OFF"}
               </div>
             </div>
 
             {/* Body */}
-           <div
-  ref={listRef}
-  className="flex-1 overflow-auto p-4 space-y-3 bg-gradient-to-b from-green-50 via-white to-white"
->
-
+            <div
+              ref={listRef}
+              className="flex-1 overflow-auto p-4 space-y-3 bg-gradient-to-b from-green-50 via-white to-white"
+            >
               {msgs.map((m, i) => (
                 <div
                   key={i}
