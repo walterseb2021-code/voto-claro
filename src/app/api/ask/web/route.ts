@@ -74,7 +74,7 @@ async function fetchEvidence(url: string, title: string): Promise<EvidenceChunk 
     headers: {
       // evita bloqueos simples
       "User-Agent": "VotoClaroBot/1.0 (evidence-only)",
-      "Accept": "text/html,application/xhtml+xml",
+      Accept: "text/html,application/xhtml+xml",
     },
   });
 
@@ -140,8 +140,12 @@ Reglas estrictas:
     },
   };
 
- const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
-const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent`;
+   const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
+
+  // Endpoint correcto + API key (Gemini)
+  const endpoint =
+    `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent` +
+    `?key=${encodeURIComponent(apiKey)}`;
 
   const r = await fetch(endpoint, {
     method: "POST",
@@ -155,8 +159,7 @@ const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComp
   }
 
   const data: any = await r.json();
-  const text =
-    data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("") ?? "";
+  const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("") ?? "";
 
   return (text || "").trim();
 }
