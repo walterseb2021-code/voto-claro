@@ -25,44 +25,41 @@ function guideHoverOnce(text: string) {
 }
 
 export default function CambioConValentiaPage() {
-  const [hoverSpoken, setHoverSpoken] = useState(false);
+   const [hoverSpoken, setHoverSpoken] = useState(false);
   const [hoverEnabled, setHoverEnabled] = useState(false);
+  const [welcomeFinished, setWelcomeFinished] = useState(false);
 
-  // 1) Bienvenida automática en 2 partes (más estable, menos cortes)
+
+    // 1) Bienvenida automática (UN SOLO MENSAJE para evitar cortes de TTS)
+    // Bienvenida automática (bloquea cualquier otra voz hasta terminar)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const part1 =
+    const welcome =
       "Bienvenido a Perú Federal. " +
-      "Aquí nace un nuevo Perú: descentralización, gobierno eficaz y justicia social.";
-
-    const part2 =
+      "Aquí nace un nuevo Perú: descentralización, gobierno eficaz y justicia social. " +
       "El futuro no se espera, se construye. " +
       "Haz clic para conocer la propuesta y visitar la página oficial.";
 
-    // Mensaje 1 (abre y habla)
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
-        detail: { action: "SAY_AND_OPEN", text: part1, speak: true },
+        detail: {
+          action: "SAY_AND_OPEN",
+          text: welcome,
+          speak: true,
+          // 🔒 flag interno para Federalito (si existe)
+          blocking: true,
+        },
       })
     );
 
-    // Mensaje 2 (habla después de una pausa)
-    const t = setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent("votoclaro:guide", {
-          detail: { action: "SAY", text: part2, speak: true },
-        })
-      );
-    }, 1200);
+    // ⏱️ liberamos interacción SOLO después de un tiempo seguro
+    const unlock = setTimeout(() => {
+      setWelcomeFinished(true);
+      setHoverEnabled(true);
+    }, 6000); // tiempo largo a propósito (móvil)
 
-    return () => clearTimeout(t);
-  }, []);
-
-  // 2) Habilitar hover/touch después de 2.5s para no cortar la bienvenida
-  useEffect(() => {
-    const t = setTimeout(() => setHoverEnabled(true), 2500);
-    return () => clearTimeout(t);
+    return () => clearTimeout(unlock);
   }, []);
 
   function onHoverSpeak() {
