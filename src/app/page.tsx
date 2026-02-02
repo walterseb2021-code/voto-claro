@@ -255,12 +255,25 @@ export default function HomePage() {
         </div>
 
         <div className="mt-4">
-          <input
-            className="w-full border rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-sky-200"
-            placeholder="Escribe: 'Keiko', 'Acuña', 'López Aliaga'..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+         <input
+  className="
+    w-full
+    border border-green-200
+    rounded-xl
+    px-4 py-3
+    bg-white
+    text-slate-900
+    font-medium
+    placeholder:text-slate-500
+    focus:outline-none
+    focus:ring-2
+    focus:ring-green-200
+  "
+  placeholder="Escribe: 'Armando Massé', 'Acuña', 'López Aliaga'..."
+  value={q}
+  onChange={(e) => setQ(e.target.value)}
+/>
+
           {loading && <div className="text-sm mt-2 text-slate-500">Buscando...</div>}
         </div>
 
@@ -302,6 +315,76 @@ export default function HomePage() {
       </section>
 
       {/* FOOTER */}
+            {/* ✅ ACCESOS RÁPIDOS (debajo del buscador) */}
+      <section className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* 🗳️ Servicios al ciudadano */}
+        <Link
+          href="/ciudadano/servicios"
+          className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:bg-slate-50 transition"
+        >
+          <div className="flex items-start gap-3">
+            <div className="text-2xl leading-none">🗳️</div>
+            <div className="min-w-0">
+              <div className="text-base font-semibold text-slate-900">
+                Servicios al ciudadano
+              </div>
+              <p className="mt-1 text-sm text-slate-700">
+                Consulta tu local de votación, verifica si eres miembro de mesa,
+                revisa planes de gobierno, trámites oficiales y más.
+              </p>
+              <div className="mt-3 inline-flex items-center text-sm font-semibold text-green-700 group-hover:text-green-800">
+                Abrir servicios →
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* 🧠 Reflexionar antes de votar */}
+        <Link
+          href="/reflexion"
+          className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:bg-slate-50 transition"
+        >
+          <div className="flex items-start gap-3">
+            <div className="text-2xl leading-none">🧠</div>
+            <div className="min-w-0">
+              <div className="text-base font-semibold text-slate-900">
+                Reflexionar antes de votar
+              </div>
+              <p className="mt-1 text-sm text-slate-700">
+                Preguntas y reflexiones para pensar cuál es la realidad actual
+                del país, qué esperas del Estado, qué puedes aportar como
+                ciudadano, qué atributos debería tener quien gobierne y más.
+              </p>
+              <div className="mt-3 inline-flex items-center text-sm font-semibold text-green-700 group-hover:text-green-800">
+                Abrir reflexiones →
+              </div>
+            </div>
+          </div>
+        </Link>
+        {/* 🔥 Un cambio con valentía */}
+<Link
+  href="/cambio-con-valentia"
+  className="group rounded-2xl border border-green-700 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+>
+  <div className="flex items-start gap-3">
+    <div className="text-2xl leading-none">🔥</div>
+    <div className="min-w-0">
+      <div className="text-base font-extrabold text-slate-900">
+        UN CAMBIO CON VALENTÍA
+      </div>
+      <p className="mt-1 text-sm text-slate-800">
+        El futuro no se espera, se construye. Investiga, participa y descubre
+        la nueva propuesta del Partido Democrático Perú Federal.
+      </p>
+      <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+        Abrir página →
+      </div>
+    </div>
+  </div>
+</Link>
+
+      </section>
+
       <footer className="mt-6 text-xs text-slate-500">
         VotoClaro muestra información para ayudar a entender propuestas y antecedentes
         según documentos y fuentes. No reemplaza el criterio personal.

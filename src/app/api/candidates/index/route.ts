@@ -54,16 +54,30 @@ function partyIdFromName(partyName: string) {
  * No depende de /api/docs/plan/exists (evita fetch interno).
  */
 async function hasPlanPdfForCandidate(c: CandidateLite) {
-  const partyId = partyIdFromName(c.party_name);
-  if (!partyId) return false;
+  const baseDir = path.join(process.cwd(), "data", "docs", "partido");
 
-  const planPath = path.join(process.cwd(), "data", "docs", "partido", `${partyId}_plan.pdf`);
-  try {
-    await fs.access(planPath);
-    return true;
-  } catch {
-    return false;
+  // ✅ Opción A: por party_name => <partyId>_plan.pdf
+  const partyId = partyIdFromName(c.party_name);
+  if (partyId) {
+    const byParty = path.join(baseDir, `${partyId}_plan.pdf`);
+    try {
+      await fs.access(byParty);
+      return true;
+    } catch {}
   }
+
+  // ✅ Opción B: por id del candidato => <candidateId>_plan.pdf
+  // (esto salva casos donde el plan fue guardado con el id del candidato)
+  const cid = String(c.id || "").trim();
+  if (cid) {
+    const byCandidateId = path.join(baseDir, `${cid}_plan.pdf`);
+    try {
+      await fs.access(byCandidateId);
+      return true;
+    } catch {}
+  }
+
+  return false;
 }
 
 export async function GET(req: Request) {

@@ -80,6 +80,15 @@ const AXIS_KEYWORDS: Record<CompareAxis, Array<{ k: string; w: number }>> = {
     { k: "crimen", w: 3 },
     { k: "extors", w: 3 },
     { k: "polic", w: 2 },
+        { k: "orden interno", w: 2 },
+    { k: "narcot", w: 2 },
+    { k: "terror", w: 2 },
+    { k: "sicari", w: 2 },
+    { k: "trata", w: 2 },
+    { k: "frontera", w: 1 },
+    { k: "inteligencia", w: 1 },
+    { k: "penal", w: 1 },
+
     { k: "serenaz", w: 2 },
     { k: "homic", w: 2 },
     { k: "robo", w: 2 },
@@ -187,7 +196,7 @@ function scoreByAxis(axis: CompareAxis, questionTokens: string[], text: string) 
   const negCount = NEGATIVE_HINTS.reduce((acc, n) => (t.includes(norm(n)) ? acc + 1 : acc), 0);
   if (negCount > 0) score -= Math.min(10, negCount) * 1.25;
 
-  const hasSignal = strongHits >= 1 || tokenHits >= 2;
+  const hasSignal = strongHits >= 1 || tokenHits >= 1;
   if (!hasSignal) return 0;
 
   if (/\b(se|se\s+propone|propon|implementar|crearemos|promover|fortalecer|reducir|aumentar)\b/i.test(text))
@@ -416,7 +425,7 @@ function scorePageQuick(axis: CompareAxis, qTokens: string[], pageText: string) 
   const t = norm(pageText || "");
   let hits = 0;
   for (const tok of qTokens) if (tok && t.includes(tok)) hits++;
-  return hits >= 2 ? hits : 0;
+  return hits >= 1 ? hits : 0;
 }
 
 async function buildAnswerWithGemini(axis: CompareAxis, docLabel: string, question: string, pages: Array<{ page: number; text: string }>) {
@@ -508,8 +517,8 @@ function noPlanPayload(id: string, question: string, sideLabel: "a" | "b", reaso
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const idA = (searchParams.get("idA") ?? "").trim();
-    const idB = (searchParams.get("idB") ?? "").trim();
+    const idA = searchParams.get("idA") ?? searchParams.get("a");
+    const idB = searchParams.get("idB") ?? searchParams.get("b");
     const axisRaw = (searchParams.get("axis") ?? "ECO").trim().toUpperCase();
 
     const axis: CompareAxis = (["SEG", "ECO", "SAL", "EDU"] as const).includes(axisRaw as any) ? (axisRaw as CompareAxis) : "ECO";
@@ -526,92 +535,82 @@ export async function GET(req: Request) {
     const hasPlanA = aTry.ok;
     const hasPlanB = bTry.ok;
 
-    // ✅ 2) Si uno o ambos no tienen plan, igual responde el que sí tiene (sin "Pendiente...")
-    if (!hasPlanA || !hasPlanB) {
-      const aOut = hasPlanA
-        ? (() => {
-            const planA = (aTry as any).data as PdfPagesApiResponse;
-            return planA;
-          })()
-        : null;
+   // ✅ 2) Si uno o ambos no tienen plan, igual responde el que sí tiene (sin "Pendiente...")
+if (!hasPlanA || !hasPlanB) {
+  const aOut = hasPlanA ? ((aTry as any).data as PdfPagesApiResponse) : null;
+  const bOut = hasPlanB ? ((bTry as any).data as PdfPagesApiResponse) : null;
 
-      const bOut = hasPlanB
-        ? (() => {
-            const planB = (bTry as any).data as PdfPagesApiResponse;
-            return planB;
-          })()
-        : null;
+  let aPayload: any;
+  let bPayload: any;
 
-      let aPayload: any;
-      let bPayload: any;
-
-      if (aOut) {
-        const aBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, aOut.pages ?? []);
-        const aTitle = aOut.source?.title ?? "Plan de Gobierno (PDF)";
-        const aCitations: Source[] = (aBuilt.pages ?? []).map((p) => ({ title: aTitle, page: p }));
-        aPayload = { id: idA, answer: aBuilt.answer, citations: aCitations };
-      } else {
-        aPayload = noPlanPayload(idA, question, "a", "NO_PLAN_PDF");
-      }
-
-      if (bOut) {
-        const bBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, bOut.pages ?? []);
-        const bTitle = bOut.source?.title ?? "Plan de Gobierno (PDF)";
-        const bCitations: Source[] = (bBuilt.pages ?? []).map((p) => ({ title: bTitle, page: p }));
-        bPayload = { id: idB, answer: bBuilt.answer, citations: bCitations };
-      } else {
-        bPayload = noPlanPayload(idB, question, "b", "NO_PLAN_PDF");
-      }
-
-      return NextResponse.json(
-        {
-          axis,
-          a: aPayload,
-          b: bPayload,
-          debug: {
-            axis,
-            rule: "Compare plan: intenta /api/docs/plan; si falla, NO_PLAN_PDF. (No depende de exists).",
-            model: (process.env.GEMINI_MODEL ?? "gemini-1.5-flash").trim(),
-            hasPlanA,
-            hasPlanB,
-            errA: aTry.ok ? null : (aTry as any).error,
-            errB: bTry.ok ? null : (bTry as any).error,
-          },
-        },
-        { headers: { "Cache-Control": "no-store" } }
-      );
-    }
-
-    // ✅ 3) Si ambos tienen plan, comparación completa
-    const planA = (aTry as any).data as PdfPagesApiResponse;
-    const planB = (bTry as any).data as PdfPagesApiResponse;
-
-    const aBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, planA.pages ?? []);
-    const bBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, planB.pages ?? []);
-
-    const aTitle = planA.source?.title ?? "Plan de Gobierno (PDF)";
-    const bTitle = planB.source?.title ?? "Plan de Gobierno (PDF)";
-
+  if (aOut) {
+    const aBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, aOut.pages ?? []);
+    const aTitle = aOut.source?.title ?? "Plan de Gobierno (PDF)";
     const aCitations: Source[] = (aBuilt.pages ?? []).map((p) => ({ title: aTitle, page: p }));
-    const bCitations: Source[] = (bBuilt.pages ?? []).map((p) => ({ title: bTitle, page: p }));
+    aPayload = { id: idA, answer: aBuilt.answer, citations: aCitations };
+  } else {
+    aPayload = noPlanPayload(idA, question, "a", "NO_PLAN_PDF");
+  }
 
-    return NextResponse.json(
-      {
+  if (bOut) {
+    const bBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, bOut.pages ?? []);
+    const bTitle = bOut.source?.title ?? "Plan de Gobierno (PDF)";
+    const bCitations: Source[] = (bBuilt.pages ?? []).map((p) => ({ title: bTitle, page: p }));
+    bPayload = { id: idB, answer: bBuilt.answer, citations: bCitations };
+  } else {
+    bPayload = noPlanPayload(idB, question, "b", "NO_PLAN_PDF");
+  }
+
+  return NextResponse.json(
+    {
+      axis,
+      a: aPayload,
+      b: bPayload,
+      debug: {
         axis,
-        a: { id: idA, answer: aBuilt.answer, citations: aCitations },
-        b: { id: idB, answer: bBuilt.answer, citations: bCitations },
-        debug: {
-          axis,
-          rule:
-            "RAG por fragmentos (chunks) + chunking que respeta bullets + score flexible + fallback por página + Gemini (sin inventar) + citas por página.",
-          model: (process.env.GEMINI_MODEL ?? "gemini-1.5-flash").trim(),
-          hasPlanA,
-          hasPlanB,
-        },
+        rule: "Compare plan: intenta /api/docs/plan; si falla, NO_PLAN_PDF. (No depende de exists).",
+        model: (process.env.GEMINI_MODEL ?? "gemini-1.5-flash").trim(),
+        hasPlanA,
+        hasPlanB,
+        errA: aTry.ok ? null : (aTry as any).error,
+        errB: bTry.ok ? null : (bTry as any).error,
       },
-      { headers: { "Cache-Control": "no-store" } }
-    );
-  } catch (e: any) {
+    },
+    { headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+// ✅ 3) Si ambos tienen plan, comparación completa
+const planA = (aTry as any).data as PdfPagesApiResponse;
+const planB = (bTry as any).data as PdfPagesApiResponse;
+
+const aBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, planA.pages ?? []);
+const bBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, planB.pages ?? []);
+
+const aTitle = planA.source?.title ?? "Plan de Gobierno (PDF)";
+const bTitle = planB.source?.title ?? "Plan de Gobierno (PDF)";
+
+const aCitations: Source[] = (aBuilt.pages ?? []).map((p) => ({ title: aTitle, page: p }));
+const bCitations: Source[] = (bBuilt.pages ?? []).map((p) => ({ title: bTitle, page: p }));
+
+return NextResponse.json(
+  {
+    axis,
+    a: { id: idA, answer: aBuilt.answer, citations: aCitations },
+    b: { id: idB, answer: bBuilt.answer, citations: bCitations },
+    debug: {
+      axis,
+      rule:
+        "RAG por fragmentos (chunks) + chunking que respeta bullets + score flexible + fallback por página + Gemini (sin inventar) + citas por página.",
+      model: (process.env.GEMINI_MODEL ?? "gemini-1.5-flash").trim(),
+      hasPlanA,
+      hasPlanB,
+    },
+  },
+  { headers: { "Cache-Control": "no-store" } }
+);
+
+     } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Compare failed" }, { status: 500 });
   }
 }

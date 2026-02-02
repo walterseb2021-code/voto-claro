@@ -30,6 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
+      <head>
+        <meta charSet="utf-8" />
+      </head>
       <body
         className={[
           geistSans.variable,
@@ -44,9 +47,9 @@ export default function RootLayout({
         ].join(" ")}
       >
         <FederalitoSplash />
-       <Suspense fallback={null}>
-  <FederalitoAssistantPanel />
-</Suspense>
+        <Suspense fallback={null}>
+          <FederalitoAssistantPanel />
+        </Suspense>
 
         {children}
       </body>
@@ -59,7 +62,7 @@ export default function RootLayout({
  * - Al cargar: muestra PNG quieto (poster)
  * - Al hacer clic en “Entrar”: transición PNG → video + reproduce con voz
  * - Al terminar el video: cierra splash automáticamente
- * - “Saltar”: cierra instantáneo (y corta audio/video)
+ * - “Saltar”: c attachment (y corta audio/video)
  *
  * Requisitos:
  * - public/federalito.png       → "/federalito.png"
@@ -89,6 +92,9 @@ function FederalitoSplash() {
           alignItems: "center",
           justifyItems: "center",
           gap: 18,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+
         }}
       >
         {/* CONTENEDOR PRO (misma caja para PNG y video) */}
@@ -117,9 +123,11 @@ function FederalitoSplash() {
               inset: 0,
               width: "100%",
               height: "100%",
-              objectFit: "cover",
-              display: "block",
+              objectFit: "contain",
+              objectPosition: "center",
+              background: "rgba(0,0,0,.35)",
 
+              display: "block",
               opacity: 1,
               transition: "opacity 420ms ease",
               willChange: "opacity",
@@ -164,7 +172,22 @@ function FederalitoSplash() {
           />
         </div>
 
+        
         <div style={{ textAlign: "center", width: "min(760px, 92vw)" }}>
+          <div
+            style={{
+              fontSize: 14,
+              opacity: 0.9,
+              display: "inline-flex",
+              gap: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "6px 10px",
+              border: "1px solid rgba(255,255,255,.16)",
+              borderRadius: 999,
+              background: "rgba(255,255,255,.06)",
+            }}
+          ></div>
           <div
             style={{
               fontSize: 14,
@@ -183,9 +206,25 @@ function FederalitoSplash() {
             <span style={{ opacity: 0.8 }}>• guía de voto informado</span>
           </div>
 
-          <h1 style={{ marginTop: 12, fontSize: 36, lineHeight: "40px", fontWeight: 900 }}>
-            VOTO_CLARO
-          </h1>
+         <h1
+  style={{
+    position: "absolute",
+    top: "34vh",          // 👈 controla la altura del título
+    left: "50%",
+    transform: "translateX(-50%)",
+
+    fontSize: 36,
+    lineHeight: "40px",
+    fontWeight: 900,
+
+    zIndex: 20,           // 👈 SIEMPRE encima de imagen/video
+    color: "white",
+    textShadow: "0 4px 12px rgba(0,0,0,0.85)",
+    pointerEvents: "none",
+  }}
+>
+  VOTO_CLARO
+</h1>
 
           <p style={{ marginTop: 12, fontSize: 15, lineHeight: "22px", opacity: 0.92 }}>
             Bienvenido a <b>Voto Claro</b>. Aquí encontrarás documentos (Planes de Gobierno, Hojas de Vida e información de
@@ -240,6 +279,36 @@ function FederalitoSplash() {
           </div>
         </div>
       </div>
+
+      {/* ✅ FIX RESPONSIVE (NO rompe el script): SOLO afecta CELULAR */}
+           <style>{`
+        @media (max-width: 640px) {
+
+          /* 1) El “cuadro” donde vive Federalito: más chico en móvil */
+          .federalito-anim{
+            width: min(360px, 88vw) !important;
+            aspect-ratio: 4 / 5 !important;   /* menos alto que 9/16 */
+            max-height: 46vh !important;      /* evita que se coma toda la pantalla */
+              margin-top: 100px !important;      /* BAJA el cuadro en pantalla */
+              z-index: 0 !important;
+          }
+
+          /* 2) POSTER (PNG): mostrarlo completo (incluye bandera y brazo) */
+          #federalito-splash-poster{
+            object-fit: contain !important;
+            object-position: center top !important; /* prioriza la parte alta (bandera) */
+            background: rgba(0,0,0,.35) !important;
+          }
+
+          /* 3) VIDEO: bajar el zoom (1.35 era demasiado) + encuadre arriba */
+          #federalito-splash-video{
+            object-fit: cover !important;
+            object-position: 50% 12% !important;  /* sube el encuadre para que entre bandera */
+            transform: scale(1.08) !important;     /* zoom MUCHO más leve */
+            transform-origin: center !important;
+          }
+        }
+      `}</style>
 
       <Script
         id="federalito-splash-script"

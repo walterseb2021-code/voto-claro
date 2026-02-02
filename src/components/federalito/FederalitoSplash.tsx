@@ -51,6 +51,7 @@ export default function FederalitoSplash() {
       }}
     >
       <div
+       id="federalito-splash-card"
         style={{
           width: "min(980px, 100%)",
           borderRadius: 20,
@@ -73,6 +74,9 @@ export default function FederalitoSplash() {
               width: "100%",
               maxWidth: 360,
               height: "auto",
+              maxHeight: "42vh",
+              objectFit: "contain",
+              display: "block",
               borderRadius: 18,
               border: "1px solid rgba(255,255,255,.18)",
               background: "rgba(0,0,0,.25)",
@@ -153,6 +157,14 @@ export default function FederalitoSplash() {
           </div>
         </div>
       </div>
+            <style>{`
+        @media (max-width: 640px) {
+          #federalito-splash-card {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
     </div>
   );
 }

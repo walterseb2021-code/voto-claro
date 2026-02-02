@@ -175,8 +175,8 @@ export default function CandidatePage() {
   useEffect(() => {
     const path = window.location.pathname;
     const parts = path.split("/").filter(Boolean);
-    const maybeId = parts[1] ?? "";
-    setId(maybeId);
+   const rawId = parts[1] ?? "";
+setId(rawId ? decodeURIComponent(rawId) : "");
 
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get("tab");
@@ -455,6 +455,33 @@ export default function CandidatePage() {
 
       const compareData = data as CompareApiResponse;
       setCompareResult(compareData);
+      // ✅ Enviar la comparación al asistente para que pueda leerla con el botón 🔊
+try {
+  const axisLabel =
+    compareData.axis === "SEG"
+      ? "Seguridad"
+      : compareData.axis === "ECO"
+      ? "Economía y empleo"
+      : compareData.axis === "SAL"
+      ? "Salud"
+      : "Educación";
+
+  const aName = (compareProfiles?.[compareData.a.id]?.full_name || profile?.full_name || slugToName(compareData.a.id)).trim();
+  const bName = (compareProfiles?.[compareData.b.id]?.full_name || slugToName(compareData.b.id)).trim();
+
+  const textToRead =
+    `Comparación Plan vs Plan — Eje: ${axisLabel}.\n\n` +
+    `Candidato A: ${aName}.\n` +
+    `${compareData.a.answer}\n\n` +
+    `Candidato B: ${bName}.\n` +
+    `${compareData.b.answer}`;
+
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:page-read", {
+      detail: { text: textToRead },
+    })
+  );
+} catch {}
 
       const ids = `${compareData.a.id},${compareData.b.id}`;
       const pr = await fetch(`/api/candidates/profile?ids=${encodeURIComponent(ids)}`, { cache: "no-store" });
@@ -465,6 +492,25 @@ export default function CandidatePage() {
       setCompareLoading(false);
     }
   }
+function clearCompare() {
+  setCompareResult(null);
+  setCompareLoading(false);
+  setCompareProfiles({});
+
+  // opcional: dejar el eje en ECO (o no tocarlo)
+  // setCompareAxis("ECO");
+
+  // opcional: limpiar el candidato B (o mantenerlo)
+  // setCompareWith("");
+
+  // ✅ limpiar parámetros de URL (idB y axis)
+  try {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("idB");
+    params.delete("axis");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  } catch {}
+}
 
   const active = demo[tab];
   const aProfile = compareResult ? compareProfiles[compareResult.a.id] : null;
@@ -567,7 +613,7 @@ export default function CandidatePage() {
       </a>
 
       {/* Header candidato */}
-      <div className="mt-4 border border-green-100 bg-white rounded-2xl p-5 flex gap-4 items-start shadow-sm">
+      <div className="mt-4 border border-slate-200 bg-white rounded-2xl p-5 flex gap-4 items-start shadow-md">
         <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-200 shrink-0 border border-slate-100">
           {profile?.photo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -602,7 +648,7 @@ export default function CandidatePage() {
       </div>
 
       {/* Panel principal */}
-      <div className="mt-4 border border-green-100 bg-white rounded-2xl p-5 shadow-sm">
+      <div className="mt-4 border border-slate-200 bg-white rounded-2xl p-5 shadow-md">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="text-lg font-semibold text-slate-900">{active.title}</div>
           {tab === "NEWS" ? <EvidenceBadge kind="GUIDE" /> : <EvidenceBadge kind="WITH_EVIDENCE" />}
@@ -671,9 +717,22 @@ export default function CandidatePage() {
                 <div className="text-xs font-medium text-slate-700">Comparar con</div>
 
                 <select
-                  className="mt-1 w-full border border-green-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-200"
+                  className="mt-1 w-full border border-green-200 rounded-xl p-2 bg-white text-slate-900 appearance-none pr-10 focus:outline-none focus:ring-2 focus:ring-green-200 bg-[length:18px_18px] bg-no-repeat bg-[right_0.75rem_center] bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%230f172a%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%200%1%201.06.02L10%2010.94l3.71-3.71a.75.75%200%200%1%201.08%201.04l-4.25%204.25a.75.75%200%200%1-1.06%200L5.21%208.27a.75.75%200%200%1%200-1.06z%22%20clip-rule%3D%22evenodd%22/%3E%3C/svg%3E')]"
                   value={compareWith}
-                  onChange={(e) => setCompareWith(e.target.value)}
+                  onChange={(e) => {
+  const v = e.target.value;
+  setCompareWith(v);
+
+  // 🔑 guardar idB en la URL
+  const params = new URLSearchParams(window.location.search);
+  params.set("idB", v);
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}?${params.toString()}`
+  );
+}}
+
                 >
                   {loadingCandidates ? <option value={compareWith || ""}>Cargando...</option> : null}
 
@@ -693,9 +752,22 @@ export default function CandidatePage() {
               <div>
                 <div className="text-xs font-medium text-slate-700">Eje</div>
                 <select
-                  className="mt-1 w-full border border-green-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-200"
+                 className="mt-1 w-full border border-green-200 rounded-xl p-2 bg-white text-slate-900 appearance-none pr-10 focus:outline-none focus:ring-2 focus:ring-green-200 bg-[length:18px_18px] bg-no-repeat bg-[right_0.75rem_center] bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%230f172a%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%200%1%201.06.02L10%2010.94l3.71-3.71a.75.75%200%200%1%201.08%201.04l-4.25%204.25a.75.75%200%200%1-1.06%200L5.21%208.27a.75.75%200%200%1%200-1.06z%22%20clip-rule%3D%22evenodd%22/%3E%3C/svg%3E')]"
                   value={compareAxis}
-                  onChange={(e) => setCompareAxis(e.target.value as CompareAxis)}
+                  onChange={(e) => {
+  const v = e.target.value as CompareAxis;
+  setCompareAxis(v);
+
+  // 🔑 guardar axis en la URL
+  const params = new URLSearchParams(window.location.search);
+  params.set("axis", v);
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}?${params.toString()}`
+  );
+}}
+
                 >
                   <option value="SEG">Seguridad</option>
                   <option value="ECO">Economía y empleo</option>
@@ -704,11 +776,25 @@ export default function CandidatePage() {
                 </select>
               </div>
 
-              <div className="flex items-end">
-                <button onClick={runComparePlan} disabled={compareLoading || !id || !compareWith || compareWith === id} className={`w-full ${btnPrimary} ${btnPrimaryShine}`}>
-                  {compareLoading ? "Comparando..." : "Generar comparación"}
-                </button>
-              </div>
+              <div className="flex items-end gap-2">
+  <button
+    onClick={runComparePlan}
+    disabled={compareLoading || !id || !compareWith || compareWith === id}
+    className={`flex-1 ${btnPrimary} ${btnPrimaryShine}`}
+  >
+    {compareLoading ? "Comparando..." : "Generar comparación"}
+  </button>
+
+  <button
+    type="button"
+    onClick={clearCompare}
+    className={btnSecondary}
+    title="Limpiar comparación"
+  >
+    Limpiar
+  </button>
+</div>
+
             </div>
 
             {compareResult ? (
@@ -749,7 +835,7 @@ export default function CandidatePage() {
         <div className="mt-5">
           <div className="text-sm font-medium text-slate-900">Tu pregunta</div>
           <textarea
-            className="mt-2 w-full border border-green-200 rounded-xl p-3 min-h-[90px] bg-white focus:outline-none focus:ring-2 focus:ring-green-200"
+            className="mt-2 w-full border border-green-200 rounded-xl p-3 min-h-[90px] bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-200"
             placeholder="Escribe tu pregunta aquí..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}

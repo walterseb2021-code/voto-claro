@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
+/* =========================
+   Variables base (mejor contraste)
+   ========================= */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0f172a; /* slate-900 → más contraste */
+  --foreground-muted: #334155; /* slate-700 */
 }
 
 @theme inline {
@@ -12,17 +16,44 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* =========================
+   Modo oscuro (se mantiene)
+   ========================= */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground: #f1f5f9;
+    --foreground-muted: #cbd5f5;
   }
 }
 
+/* =========================
+   Base global
+   ========================= */
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.55;
+}
+
+/* =========================
+   Mejoras de legibilidad SOLO en móvil
+   ========================= */
+@media (max-width: 640px) {
+  body {
+    font-size: 15px;
+  }
+
+  p {
+    color: var(--foreground-muted);
+  }
+
+  h1,
+  h2,
+  h3 {
+    color: var(--foreground);
+  }
 }
 
 /* =========================
@@ -36,9 +67,9 @@ body {
 }
 
 @keyframes federalito-glow {
-  0%   { box-shadow: 0 10px 30px rgba(0,0,0,.10); }
-  50%  { box-shadow: 0 14px 38px rgba(16,185,129,.20); } /* verde suave */
-  100% { box-shadow: 0 10px 30px rgba(0,0,0,.10); }
+  0%   { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+  50%  { box-shadow: 0 14px 38px rgba(16,185,129,.28); }
+  100% { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
 }
 
 @keyframes federalito-shine {
@@ -48,14 +79,7 @@ body {
   100% { transform: translateX(120%) rotate(20deg); opacity: 0; }
 }
 
-/* Mini “bandera” animada (solo un ícono liviano) */
-@keyframes federalito-flag-wave {
-  0%   { transform: rotate(-6deg) translateY(0px); }
-  50%  { transform: rotate(6deg) translateY(-1px); }
-  100% { transform: rotate(-6deg) translateY(0px); }
-}
-
-/* Pulso CTA suave (invita a click) */
+/* Pulso CTA suave */
 @keyframes federalito-cta-pulse {
   0%   { transform: scale(1); }
   50%  { transform: scale(1.02); }
@@ -64,7 +88,9 @@ body {
 
 .federalito-anim {
   position: relative;
-  animation: federalito-float 2.8s ease-in-out infinite, federalito-glow 2.8s ease-in-out infinite;
+  animation:
+    federalito-float 2.8s ease-in-out infinite,
+    federalito-glow 2.8s ease-in-out infinite;
   will-change: transform, box-shadow;
 }
 
@@ -86,27 +112,10 @@ body {
   pointer-events: none;
 }
 
-/* Banderita “ondeando” (badge esquina) */
-.federalito-anim::before {
-  content: "🇵🇪";
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  font-size: 18px;
-  border-radius: 10px;
-  background: rgba(255,255,255,.92);
-  border: 1px solid rgba(0,0,0,.08);
-  box-shadow: 0 10px 25px rgba(0,0,0,.10);
-  transform-origin: 20% 70%;
-  animation: federalito-flag-wave 1.15s ease-in-out infinite;
-  pointer-events: none;
-}
+/* ❌ ELIMINADO: banderita 🇵🇪 */
+/* .federalito-anim::before { ... } */
 
-/* Si el avatar es clickeable: más “vida” al hover */
+/* Interacción */
 .federalito-anim.is-clickable {
   animation:
     federalito-float 2.8s ease-in-out infinite,
@@ -124,39 +133,13 @@ body {
   transform: translateY(0px) scale(0.99);
 }
 
-/* Accesibilidad: si el usuario pide menos movimiento */
+/* =========================
+   Accesibilidad
+   ========================= */
 @media (prefers-reduced-motion: reduce) {
   .federalito-anim,
-  .federalito-anim::before,
   .federalito-anim::after {
     animation: none !important;
     transition: none !important;
-  }
-}
-/* =========================
-   Bandera ondeando (solo bandera, NO todo el PNG)
-   ========================= */
-
-@media (prefers-reduced-motion: reduce) {
-  .federalito-flag {
-    animation: none !important;
-  }
-}
-
-.federalito-flag {
-  animation: federalito-flag-wave 1.6s ease-in-out infinite;
-  transform-origin: left center;
-}
-
-/* animación de la forma (path) */
-@keyframes federalito-flag-wave {
-  0% {
-    d: path("M20 20 C120 10 220 30 360 18 L360 130 C220 142 120 118 20 130 Z");
-  }
-  50% {
-    d: path("M20 20 C120 40 220 6 360 22 L360 130 C220 112 120 150 20 130 Z");
-  }
-  100% {
-    d: path("M20 20 C120 10 220 30 360 18 L360 130 C220 142 120 118 20 130 Z");
   }
 }

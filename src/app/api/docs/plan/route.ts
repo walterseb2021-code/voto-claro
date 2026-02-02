@@ -7,11 +7,55 @@ import path from "path";
 import { execFile } from "child_process";
 import { MOCK_CANDIDATES } from "@/lib/votoclaro/mockCandidates";
 import DOMMatrix from "dommatrix";
+import { Worker } from "node:worker_threads";
+
 
 if (!(globalThis as any).DOMMatrix) {
   (globalThis as any).DOMMatrix = DOMMatrix as any;
 }
+/*
+// ✅ Fix: pdfjs (fake worker) usa structuredClone y falla con DOMMatrix del polyfill
+const __nativeStructuredClone = globalThis.structuredClone;
 
+function __sanitizeForClone(v: any): any {
+  if (!v) return v;
+
+  // DOMMatrix del polyfill (no es clonable). Lo convertimos a objeto simple.
+  if (typeof v === "object" && v.constructor && v.constructor.name === "DOMMatrix") {
+    return {
+      a: (v as any).a, b: (v as any).b, c: (v as any).c,
+      d: (v as any).d, e: (v as any).e, f: (v as any).f,
+      is2D: (v as any).is2D,
+    };
+  }
+
+  if (Array.isArray(v)) return v.map(__sanitizeForClone);
+
+  // Typed arrays / ArrayBuffer: déjalos tal cual
+  if (ArrayBuffer.isView(v) || v instanceof ArrayBuffer) return v;
+
+  if (typeof v === "object") {
+    const out: any = {};
+    for (const k of Object.keys(v)) out[k] = __sanitizeForClone(v[k]);
+    return out;
+  }
+
+  return v;
+}
+
+if (typeof __nativeStructuredClone === "function") {
+  (globalThis as any).structuredClone = (value: any, options?: any) => {
+    try {
+      return __nativeStructuredClone(value, options);
+    } catch {
+      return __nativeStructuredClone(__sanitizeForClone(value), options);
+    }
+  };
+}
+*/
+
+// 🔒 Singleton de pdfjs (se carga UNA sola vez por instancia)
+let PDFJS_SINGLETON: any = null;
 /**
  * ✅ Cache en memoria para NO recalcular páginas repetidas (compare/plan llama muchas veces).
  * Clave: `${pdfPath}::${pageNum}`
@@ -962,16 +1006,27 @@ async function extractPageText(pdfPath: string, pageNum: number) {
     PDF_BUFFER_CACHE.set(pdfPath, data);
   }
 
-  // 2) pdfjs-dist (legacy) para Node
-  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({ data, disableWorker: true });
+  // 2) pdfjs-dist (legacy) para Node — singleton seguro
+let pdfjs: any = PDFJS_SINGLETON;
+
+if (!pdfjs) {
+  const nodeRequire = eval("require") as NodeRequire;
+  pdfjs = nodeRequire("pdfjs-dist/legacy/build/pdf.mjs");
+  PDFJS_SINGLETON = pdfjs;
+}
+try {
+  const loadingTask = pdfjs.getDocument({
+    data,
+    disableWorker: true,
+    workerPort: null as any,
+  });
+
   const pdf = await loadingTask.promise;
 
   if (pageNum < 1 || pageNum > pdf.numPages) {
     throw new Error("Wrong page range");
   }
 
-  // 3) Extraer texto de la página
   const page = await pdf.getPage(pageNum);
   const content = await page.getTextContent();
 
@@ -980,12 +1035,35 @@ async function extractPageText(pdfPath: string, pageNum: number) {
     .filter(Boolean)
     .join(" ");
 
-  // 4) Reflujo (usa tu helper actual)
   const out = reflowParagraphs(raw || "");
-
   PAGE_TEXT_CACHE.set(cacheKey, out);
   return out;
+} catch (e: any) {
+  const msg = String(e?.message ?? "");
+
+  // ✅ Fallback robusto: usa pdftotext si pdfjs falla (DataCloneError)
+  if (msg.includes("DataCloneError") || msg.includes("Cannot transfer object")) {
+    const txt = await runPdfToText([
+      "-f",
+      String(pageNum),
+      "-l",
+      String(pageNum),
+      "-enc",
+      "UTF-8",
+      "-layout",
+      pdfPath,
+      "-",
+    ]);
+
+    const out = reflowParagraphs(txt || "");
+    PAGE_TEXT_CACHE.set(cacheKey, out);
+    return out;
+  }
+
+  throw e;
 }
+} 
+
 function slugifyPartyName(name: string) {
   return name
     .toLowerCase()
@@ -1145,7 +1223,45 @@ async function inferPartyNameFromHv(candidateId: string): Promise<{ partyName: s
 
   return null;
 }
+function fixMojibake(input: string) {
+  if (!input) return input;
 
+  // Si ya está bien, no tocamos nada
+  // (típico mojibake: "Ã", "Â", "ÔÇ", "pa├", "Per├")
+  const looksBroken = /Ã|Â|ÔÇ|├|�|Per├|pa├|seg├|Econom├/g.test(input);
+  if (!looksBroken) return input;
+
+  // Intenta reparar: muchos extractores entregan texto en UTF-8 mal leído como Latin1.
+  try {
+    return Buffer.from(input, "latin1").toString("utf8");
+  } catch {
+    return input;
+  }
+}
+function sanitizePdfText(input: string): string {
+  if (!input) return input;
+
+  return input
+    // bullets y comillas raras típicas de PDF mal extraído
+    .replace(/ÔÇó/g, "•")
+    .replace(/ÔÇ£/g, "“")
+    .replace(/ÔÇØ/g, "”")
+    .replace(/ÔÇÖ/g, "’")
+    .replace(/ÔÇô/g, "—")
+    // caracteres de “mojibake” frecuentes
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã±/g, "ñ")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã/g, "É")
+    .replace(/Ã/g, "Í")
+    .replace(/Ã/g, "Ó")
+    .replace(/Ã/g, "Ú")
+    .replace(/Ã/g, "Ñ");
+}
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -1203,8 +1319,12 @@ expected_paths: [
 
     for (let p = 1; p <= maxPagesToTry; p++) {
       try {
-        const text = await extractPageText(pdfPath, p);
-        pages.push({ page: p, text });
+       const raw = await extractPageText(pdfPath, p);
+       const fixed = fixMojibake(raw);
+       const text = sanitizePdfText(fixed);
+
+       pages.push({ page: p, text });
+
       } catch (e: any) {
         const msg = String(e?.message ?? "");
         if (msg.includes("Wrong page range") || msg.includes("first page")) break;
@@ -1233,7 +1353,14 @@ expected_paths: [
       },
       { headers: { "Cache-Control": "no-store" } }
     );
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "Failed to extract text with pdftotext" }, { status: 500 });
+ } catch (e: any) {
+  return NextResponse.json(
+    {
+      error: e?.message ?? "DOCS_PLAN_FAILED",
+      stack: String(e?.stack ?? ""),
+    },
+     { status: 500 }
+    );
   }
 }
+
