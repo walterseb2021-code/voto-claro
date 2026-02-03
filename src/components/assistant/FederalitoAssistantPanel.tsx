@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import FederalitoAvatar from "@/components/federalito/FederalitoAvatar";
 import { REFLEXION_AXES } from "@/lib/reflexionContent";
 import {
@@ -707,8 +707,14 @@ async function handleCambioConValentia(
 }
 
 export default function FederalitoAssistantPanel() {
-  const searchParams = useSearchParams();
   const pathname = usePathname();
+
+  // ✅ Reemplazo de useSearchParams(): funciona en cliente y no rompe el build
+  const searchParams =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
+
   const compareCandidateId = getCompareIdFromSearchParams(searchParams);
     // ===============================
   // MODO ESPECIAL: /reflexion

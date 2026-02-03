@@ -4,9 +4,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Suspense } from "react";
+import FederalitoClientRoot from "@/components/assistant/FederalitoClientRoot";
 
 // ✅ Panel asistente (FAB + voz)
-import FederalitoAssistantPanel from "@/components/assistant/FederalitoAssistantPanel";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,12 +46,14 @@ export default function RootLayout({
           "text-slate-900",
         ].join(" ")}
       >
-        <FederalitoSplash />
-        <Suspense fallback={null}>
-          <FederalitoAssistantPanel />
-        </Suspense>
+     {/* ✅ Federalito SIEMPRE primero (listener garantizado) */}
+<FederalitoClientRoot />
 
-        {children}
+{/* Splash encima, pero NO antes del asistente */}
+<FederalitoSplash />
+
+{children}
+
       </body>
     </html>
   );
