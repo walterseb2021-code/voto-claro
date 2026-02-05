@@ -56,16 +56,17 @@ type MemoryState = {
 };
 
 function normalize(s: string) {
-  return (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function normalizeLite(s: string) {
   return (s || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim();
 }
+
 
 function answerFromReflexion(rawQ: string) {
   const q = normalize(rawQ);
@@ -348,28 +349,53 @@ async function speakText(
 
   const voice = pickBestVoice(voices, targetLang);
 
-  try {
-    window.speechSynthesis.cancel();
+// ✅ Preferir voces más naturales si existen (sin cambiar lógica general)
+let natural: SpeechSynthesisVoice | null = null;
 
-    const u = new SpeechSynthesisUtterance(msg);
-
-    u.lang = targetLang === "qu" ? "qu" : "es-PE";
-    u.rate = 1.02;
-    u.pitch = 0.78;
-    u.volume = 1;
-    if (voice) u.voice = voice;
-
-    return await new Promise((resolve) => {
-      u.onend = () => resolve({ ok: true, usedLang });
-      u.onerror = () => resolve({ ok: false, usedLang, reason: "utterance-error" });
-      window.speechSynthesis.speak(u);
-    });
-  } catch {
-    return { ok: false, usedLang, reason: "exception" };
+for (const v of voices) {
+  if (
+    (v.lang || "").toLowerCase().startsWith("es") &&
+    /google|microsoft|natural|neural/i.test(v.name || "")
+  ) {
+    natural = v;
+    break;
   }
 }
 
+try {
+  window.speechSynthesis.cancel();
+
+  const u = new SpeechSynthesisUtterance(msg);
+
+  // idioma
+  u.lang = targetLang === "qu" ? "qu" : "es-PE";
+
+  // ✅ usar la mejor voz disponible (sin ??)
+  if (natural) {
+    u.voice = natural;
+  } else if (voice) {
+    u.voice = voice;
+  }
+
+  // ✅ ajustes suaves para sonar más humana
+  u.rate = 0.96;
+  u.pitch = 1.05;
+  u.volume = 1;
+
+  return await new Promise((resolve) => {
+    u.onend = () => resolve({ ok: true, usedLang });
+    u.onerror = () => resolve({ ok: false, usedLang, reason: "utterance-error" });
+    window.speechSynthesis.speak(u);
+  });
+} catch {
+  return { ok: false, usedLang, reason: "exception" };
+}
+
+} // ✅ cierre de speakText (ESTA era la llave que faltaba)
+
 function splitForSpeech(text: string, maxLen = 220) {
+
+
   const s = humanizeForSpeech(String(text || "").trim());
   if (!s) return [];
 
@@ -408,14 +434,22 @@ function splitForSpeech(text: string, maxLen = 220) {
   return finalParts.filter(Boolean);
 }
 
-async function speakTextChunked(text: string, lang: VoiceLang) {
+async function speakTextChunked(
+  text: string,
+  lang: VoiceLang
+): Promise<{ ok: boolean; usedLang: "es-PE" | "qu" | "fallback-es"; reason?: string } | null> {
   const parts = splitForSpeech(text, 220);
-  if (!parts.length) return;
+  if (!parts.length) return null;
+
+  let last: { ok: boolean; usedLang: "es-PE" | "qu" | "fallback-es"; reason?: string } | null = null;
 
   for (const part of parts) {
     const r = await speakText(part, lang);
+    last = r;
     if (!r.ok) break;
   }
+
+  return last;
 }
 
 type AiAnswerResponse = {
@@ -1098,6 +1132,13 @@ export default function FederalitoAssistantPanel() {
       y: window.innerHeight - h - bottomPad,
     });
   }
+function safeResetFabPos() {
+  const next = defaultFabBottomRight();
+  setFabPos(next);
+  try {
+    localStorage.setItem(LS_ASSIST_FAB_POS, JSON.stringify(next));
+  } catch {}
+}
 
   function onFabPointerDown(e: React.PointerEvent) {
     if ((e as any).button != null && (e as any).button !== 0) return;
@@ -1439,29 +1480,36 @@ export default function FederalitoAssistantPanel() {
     safeSaveMem(mem);
   }, [mounted, mem]);
 
-  useEffect(() => {
+useEffect(() => {
+  try {
+    const already = sessionStorage.getItem("votoclaro_user_interacted_v1") === "1";
+    if (already) setUserInteracted(true);
+  } catch {}
+
+  function mark() {
+    setUserInteracted(true);
     try {
-      const already = sessionStorage.getItem("votoclaro_user_interacted_v1") === "1";
-      if (already) setUserInteracted(true);
+      sessionStorage.setItem("votoclaro_user_interacted_v1", "1");
     } catch {}
 
-    function mark() {
-      setUserInteracted(true);
-      try {
-        sessionStorage.setItem("votoclaro_user_interacted_v1", "1");
-      } catch {}
-      window.removeEventListener("pointerdown", mark);
-      window.removeEventListener("keydown", mark);
-    }
+    window.removeEventListener("pointerdown", mark);
+    window.removeEventListener("mousedown", mark);
+    window.removeEventListener("touchstart", mark);
+    window.removeEventListener("keydown", mark);
+  }
 
-    window.addEventListener("pointerdown", mark, { once: true });
-    window.addEventListener("keydown", mark, { once: true });
+  window.addEventListener("pointerdown", mark, { once: true });
+  window.addEventListener("mousedown", mark, { once: true });
+  window.addEventListener("touchstart", mark, { once: true });
+  window.addEventListener("keydown", mark, { once: true });
 
-    return () => {
-      window.removeEventListener("pointerdown", mark);
-      window.removeEventListener("keydown", mark);
-    };
-  }, []);
+  return () => {
+    window.removeEventListener("pointerdown", mark);
+    window.removeEventListener("mousedown", mark);
+    window.removeEventListener("touchstart", mark);
+    window.removeEventListener("keydown", mark);
+  };
+}, []);
 
   useEffect(() => {
     const p = String(pathname || "");
@@ -1540,18 +1588,14 @@ useEffect(() => {
       return;
     }
 
-    // ✅ Si aún no hay interacción, guardamos el texto para decirlo luego
-    if (!userInteracted) {
-      pendingGuideSpeakRef.current = text;
-      setMsgs((prev) => [
-        ...prev,
-        { role: "assistant", content: "Tip: toca la pantalla una vez para que pueda hablar en voz alta." },
-      ]);
-      return;
-    }
+  // ✅ Si aún no hay interacción, guardamos el texto para decirlo luego (sin abrir panel, sin tips)
+if (!userInteracted) {
+  pendingGuideSpeakRef.current = text;
+  return;
+}
 
     // ✅ Si todo está listo, hablamos ahora
-    await speakText(text, voiceLang);
+    await speakTextChunked(text, voiceLang);
     pendingGuideSpeakRef.current = null;
   }
 
@@ -1567,53 +1611,67 @@ useEffect(() => {
     if (!userInteracted) return;
 
     pendingGuideSpeakRef.current = null;
-    await speakText(pending, voiceLang);
+    await speakTextChunked(pending, voiceLang);
+
   }
 
   flushPending();
-}, [voiceMode, voiceLang, userInteracted, voiceLang]);
+}, [voiceMode, voiceLang, userInteracted]);
 
-  // ✅ MENSAJE AUTOMÁTICO AL ENTRAR A CADA VENTANA (sin abrir panel)
-  useEffect(() => {
-    try {
-      const key = `votoclaro_autoguide_seen:${String(pathname || "")}`;
-      const seen = sessionStorage.getItem(key) === "1";
-      if (seen) return;
-      sessionStorage.setItem(key, "1");
-    } catch {}
+ // ✅ MENSAJE AUTOMÁTICO AL ENTRAR A CADA VENTANA (sin abrir panel)
+// Regla PRO:
+// - Se lee 1 vez por sesión por cada ruta
+// - Inicio (/) NO vuelve a narrar al regresar
+useEffect(() => {
+  if (!mounted) return;
 
-    let text = "";
+  const p = String(pathname || "");
+  const isHome = p === "/" || p.startsWith("/#");
 
-    if (pathname === "/") {
-      text =
-        "Esta es la pantalla de inicio de VotoClaro. " +
-        "Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. " +
-        "Empieza buscando un candidato por su nombre.";
-    } else if (pathname.startsWith("/ciudadano/servicio") || pathname.startsWith("/ciudadano/servicios")) {
-      text =
-        "Estás en Servicios al ciudadano. " +
-        "Aquí encontrarás enlaces oficiales para consultar local de votación, miembro de mesa, multas y otros trámites electorales.";
-    } else if (pathname.startsWith("/reflexion")) {
-      text =
-        "Estás en Reflexionar antes de votar. " +
-        "Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación y seguridad.";
-    } else if (pathname.startsWith("/cambio-con-valentia")) {
-      text =
-        "Estás en Un cambio con valentía. " +
-        "Esta ventana muestra una propuesta política y te dirige a su sitio oficial para más información.";
-    }
+  // Clave estable por ruta
+  const key = `votoclaro_autoguide_seen:${isHome ? "/" : p}`;
 
-    if (text) {
-      // ✅ Delay mínimo: garantiza que el listener ya existe
-      setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent("votoclaro:guide", {
-            detail: { action: "SAY", text, speak: true },
-          })
-        );
-      }, 0);
-    }
-  }, [pathname]);
+  try {
+    const seen = sessionStorage.getItem(key) === "1";
+    if (seen) return; // ✅ ya se narró esta ruta en esta sesión
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // Si sessionStorage falla, igual continuamos (no bloquea)
+  }
+
+  let text = "";
+
+  if (isHome) {
+    text =
+      "Esta es la pantalla de inicio de VotoClaro. " +
+      "Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. " +
+      "Empieza buscando un candidato por su nombre.";
+  } else if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")) {
+    text =
+      "Estás en Servicios al ciudadano. " +
+      "Aquí encontrarás enlaces oficiales para consultar local de votación, miembro de mesa, multas y otros trámites electorales.";
+  } else if (p.startsWith("/reflexion")) {
+    text =
+      "Estás en Reflexionar antes de votar. " +
+      "Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación y seguridad.";
+  } else if (p.startsWith("/cambio-con-valentia")) {
+    text =
+      "Estás en Un cambio con valentía. " +
+      "Esta ventana muestra una propuesta política y te dirige a su sitio oficial para más información.";
+  } else {
+    return; // no hay texto para esta ruta
+  }
+
+  // ✅ Mandar evento para que el asistente lo muestre y lo hable si corresponde
+  setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: { action: "SAY", text, speak: true },
+      })
+    );
+  }, 0);
+}, [mounted, pathname]);
+
 
   useEffect(() => {
     function onPageRead(ev: Event) {
@@ -1686,12 +1744,12 @@ useEffect(() => {
       pushAssistant("Tip: toca cualquier parte de la pantalla y vuelve a intentar (bloqueo de audio del navegador).");
       return;
     }
-    await speakTextChunked(text, voiceLang);
+    const r = await speakTextChunked(text, voiceLang);
 
-    const r = { ok: true, usedLang: voiceLang === "qu" ? "qu" : ("es-PE" as any) };
-    if (voiceLang === "qu" && (r as any).usedLang === "fallback-es") {
-      pushAssistant("Nota: no detecté voz Quechua en este dispositivo. Estoy leyendo en Español (Perú) como respaldo.");
-    }
+if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
+  pushAssistant("Nota: no detecté voz Quechua en este dispositivo. Estoy leyendo en Español (Perú) como respaldo.");
+}
+
   }
 
   function updateMemAfterAnswer(params: {
@@ -1857,7 +1915,7 @@ useEffect(() => {
         "1) Buscar candidatos: escribe al menos 2 letras en “Buscar candidato”.\n" +
         "2) Abrir la ficha del candidato y revisar HV, Plan y Actuar político.\n" +
         "3) Entrar a accesos rápidos: Servicios al ciudadano, Reflexión y Un cambio con valentía.\n\n" +
-        "Tip: escribe un apellido (por ejemplo: “Acuña”, “López Aliaga”, “Keiko”) y abre la ficha."
+        "Tip: escribe un apellido (por ejemplo: “Armando Massé”, “López Aliaga”, “Keiko”) y abre la ficha."
       );
     }
 

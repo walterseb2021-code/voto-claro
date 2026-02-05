@@ -35,7 +35,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         photo: "/candidates/armando-joaquin-masse-fernandez.png",
         region: "PERÚ",
         profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+  "https://www.youtube.com/watch?v=JV07CFRt0G4",
 
       },
       {
@@ -46,7 +46,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         photo: "/candidates/virgilio-acuña-peralta.png",
         region: "PERÚ",
          profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+  "https://www.youtube.com/watch?v=vfVlvWNhMMk",
       },
     ],
   },
@@ -86,7 +86,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         photo: "/candidates/diana-doris-carhuamaca-garcia.png",
         region: "LIMA",
          profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+      "https://www.youtube.com/watch?v=XXXXXXXX",
       },
       {
         id: "agustin-huaman-varrera",
@@ -96,7 +96,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         photo: "/candidates/agustin-huaman-varrera.png",
         region: "LIMA",
          profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+  "https://www.youtube.com/watch?v=Li0H3QHfnA8",
       },
     ],
   },
@@ -121,7 +121,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         photo: "/candidates/jose-antonio-fernandez-cordova.png",
         region: "LIMA",
          profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+  "https://www.youtube.com/watch?v=Li0H3QHfnA8",
     },
     ],
   },
@@ -136,7 +136,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         photo: "/candidates/elizabeth-alfaro-espinoza.png",
         region: "ANCASH",
          profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+  "https://www.youtube.com/watch?v=Bw252-6kbiI",
       },
       {
         id: "jose-antonio-fernandez-cordova",
@@ -146,7 +146,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         photo: "/candidates/jose-antonio-fernandez-cordova.png",
         region: "ANCASH",
          profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+  "https://www.youtube.com/watch?v=aBEDDzyNxw0",
       },
     ],
   },

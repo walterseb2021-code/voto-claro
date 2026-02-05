@@ -102,7 +102,7 @@ export default function CambioConValentiaPage() {
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
         detail: {
-          action: "SAY_AND_OPEN",
+          action: "SAY",
           text: welcome,
           speak: true,
           // 🔒 flag interno para Federalito (si existe)

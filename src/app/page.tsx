@@ -50,10 +50,11 @@ function guideSay(text: string) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent("votoclaro:guide", {
-      detail: { action: "SAY_AND_OPEN", text, speak: true },
+      detail: { action: "SAY", text, speak: true },
     })
   );
 }
+
 
 export default function HomePage() {
   const router = useRouter();

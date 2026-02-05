@@ -1,12 +1,16 @@
 @import "tailwindcss";
 
 /* =========================
-   Variables base (mejor contraste)
+   Variables base (alto contraste)
    ========================= */
 :root {
   --background: #ffffff;
-  --foreground: #0f172a; /* slate-900 → más contraste */
-  --foreground-muted: #334155; /* slate-700 */
+
+  /* ✅ Regla: fondo claro => texto negro/oscuro */
+  --foreground: #000000;
+
+  /* ✅ “Muted” NO se permite en modo claro: igual al foreground */
+  --foreground-muted: var(--foreground);
 }
 
 @theme inline {
@@ -22,8 +26,12 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
-    --foreground: #f1f5f9;
-    --foreground-muted: #cbd5f5;
+
+    /* ✅ Fondo oscuro => texto claro */
+    --foreground: #ffffff;
+
+    /* ✅ En oscuro sí puede existir “muted” (pero sigue legible) */
+    --foreground-muted: #e5e7eb; /* gris claro fuerte (no apagado) */
   }
 }
 
@@ -38,21 +46,22 @@ body {
 }
 
 /* =========================
-   Mejoras de legibilidad SOLO en móvil
+   Legibilidad en móvil
    ========================= */
 @media (max-width: 640px) {
   body {
     font-size: 15px;
   }
 
+  /* ✅ Nada de gris: p hereda color del body */
   p {
-    color: var(--foreground-muted);
+    color: inherit;
   }
 
   h1,
   h2,
   h3 {
-    color: var(--foreground);
+    color: inherit;
   }
 }
 
@@ -61,28 +70,28 @@ body {
    ========================= */
 
 @keyframes federalito-float {
-  0%   { transform: translateY(0px) rotate(-0.6deg); }
-  50%  { transform: translateY(-6px) rotate(0.6deg); }
+  0% { transform: translateY(0px) rotate(-0.6deg); }
+  50% { transform: translateY(-6px) rotate(0.6deg); }
   100% { transform: translateY(0px) rotate(-0.6deg); }
 }
 
 @keyframes federalito-glow {
-  0%   { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
-  50%  { box-shadow: 0 14px 38px rgba(16,185,129,.28); }
+  0% { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+  50% { box-shadow: 0 14px 38px rgba(16,185,129,.28); }
   100% { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
 }
 
 @keyframes federalito-shine {
-  0%   { transform: translateX(-120%) rotate(20deg); opacity: 0; }
-  10%  { opacity: .35; }
-  50%  { opacity: .15; }
+  0% { transform: translateX(-120%) rotate(20deg); opacity: 0; }
+  10% { opacity: .35; }
+  50% { opacity: .15; }
   100% { transform: translateX(120%) rotate(20deg); opacity: 0; }
 }
 
 /* Pulso CTA suave */
 @keyframes federalito-cta-pulse {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.02); }
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
 
