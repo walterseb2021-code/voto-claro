@@ -1,9 +1,11 @@
 // src/app/candidate/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import EvidenceBadge from "@/components/ui/EvidenceBadge";
+import { useSearchParams } from "next/navigation";
+
 
 type CandidateProfile = {
   id: string;
@@ -147,6 +149,26 @@ type WebAskResponse = {
 function slugToName(slug: string) {
   return (slug || "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 }
+// ✅ Ajuste SOLO para pronunciación (NO afecta datos ni lógica)
+function nameForSpeech(name: string) {
+  return name
+    .replace(/\bJoaquin\b/gi, "Joaquín")
+    .replace(/\bJose\b/gi, "José")
+    .replace(/\bMaria\b/gi, "María")
+    .replace(/\bAndres\b/gi, "Andrés")
+    .replace(/\bRene\b/gi, "René")
+    .replace(/\bAngel\b/gi, "Ángel");
+}
+
+// ✅ Hablar SIN abrir el panel (regla PRO)
+function guideSayNoOpen(text: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: { action: "SAY", text, speak: true },
+    })
+  );
+}
 
 export default function CandidatePage() {
   const [id, setId] = useState<string>("");
@@ -171,6 +193,8 @@ export default function CandidatePage() {
   // ✅ Lista completa (desde /api/candidates/index)
   const [allCandidates, setAllCandidates] = useState<CandidateLite[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  // ✅ Para no repetir lectura en re-renders
+  const lastGuideKeyRef = useRef<string>("");
 
   useEffect(() => {
     const path = window.location.pathname;
@@ -212,13 +236,40 @@ setId(rawId ? decodeURIComponent(rawId) : "");
         normalized.sort((a, b) => a.full_name.localeCompare(b.full_name, "es", { sensitivity: "base" }));
         setAllCandidates(normalized);
 
-        const firstOther = normalized.find((c) => c.id !== id)?.id ?? "";
-        if (!compareWith || compareWith === id) {
-          if (firstOther) setCompareWith(firstOther);
-        } else {
-          const exists = normalized.some((c) => c.id === compareWith);
-          if (!exists && firstOther) setCompareWith(firstOther);
-        }
+       // 🔑 candidato preferido por defecto
+const preferredName = "armando joaquin masse fernandez";
+
+// buscar primero a Armando Massé
+const preferred = normalized.find(
+  (c) =>
+    c.id !== id &&
+    c.full_name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .includes(preferredName)
+);
+
+// fallback: primer candidato distinto al actual
+const firstOther = normalized.find((c) => c.id !== id);
+
+if (!compareWith || compareWith === id) {
+  if (preferred) {
+    setCompareWith(preferred.id);
+  } else if (firstOther) {
+    setCompareWith(firstOther.id);
+  }
+} else {
+  const exists = normalized.some((c) => c.id === compareWith);
+  if (!exists) {
+    if (preferred) {
+      setCompareWith(preferred.id);
+    } else if (firstOther) {
+      setCompareWith(firstOther.id);
+    }
+  }
+}
+
       } finally {
         if (!aborted) setLoadingCandidates(false);
       }
@@ -248,6 +299,36 @@ setId(rawId ? decodeURIComponent(rawId) : "");
       aborted = true;
     };
   }, [id]);
+  // ✅ Guía automática por pestaña (SIN abrir panel)
+  useEffect(() => {
+    if (!id) return;
+    if (loadingProfile) return;
+
+    const rawName = (profile?.full_name ?? "").trim() || slugToName(id);
+const name = nameForSpeech(rawName);
+
+    const key = `${id}::${tab}`;
+
+    // evitar repetir si React re-renderiza
+    if (lastGuideKeyRef.current === key) return;
+    lastGuideKeyRef.current = key;
+
+    const common =
+      `Estás en la ficha de ${name}. ` +
+      "Aquí tienes tres pestañas: Hoja de vida, Actuar político, y Plan de gobierno. ";
+
+    const text =
+      tab === "HV"
+        ? common +
+          "Ahora estás en Hoja de vida. Aquí puedes hacer preguntas y la respuesta se basa solo en el PDF de la Hoja de Vida, con páginas como evidencia. Si no hay evidencia en el PDF, te lo diré."
+        : tab === "NEWS"
+        ? common +
+          "Ahora estás en Actuar político. Aquí se consultan fuentes web confiables y se muestran enlaces. Si no hay evidencia suficiente, se indica explícitamente."
+        : common +
+          "Ahora estás en Plan de gobierno. Aquí puedes hacer preguntas y la respuesta se basa solo en el PDF del Plan de Gobierno, con páginas como evidencia. Si el dato no está en el PDF, se indicará que no hay evidencia suficiente.";
+
+    guideSayNoOpen(text);
+  }, [id, tab, loadingProfile, profile?.full_name]);
 
   const demo = useMemo(() => {
     return {
@@ -605,12 +686,27 @@ function clearCompare() {
     "rounded-full px-3 py-1 text-sm transition-all duration-150 " +
     "hover:bg-green-50 hover:border-green-300 hover:-translate-y-0.5 hover:shadow-sm " +
     "active:translate-y-0 active:scale-[0.99]";
+const searchParams = useSearchParams();
+const fromCambio = searchParams.get("from") === "cambio";
 
   return (
     <main className="min-h-screen p-6 max-w-6xl mx-auto bg-gradient-to-b from-green-50 via-white to-white">
-      <a href="/" className="text-sm underline text-green-800 hover:text-green-900">
-        ← Volver
-      </a>
+     <a
+  href="/"
+  className="inline-flex items-center rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 transition"
+>
+  ← Volver a inicio
+</a>
+
+{fromCambio ? (
+  <a
+    href="/cambio-con-valentia"
+    className="inline-flex items-center gap-2 mt-2 ml-6 rounded-xl px-4 py-2 border border-green-800 bg-green-700 text-white text-sm font-extrabold hover:bg-green-800 shadow-sm transition"
+  >
+    ← Un Cambio con Valentía
+  </a>
+) : null}
+
 
       {/* Header candidato */}
       <div className="mt-4 border border-slate-200 bg-white rounded-2xl p-5 flex gap-4 items-start shadow-md">
@@ -875,7 +971,18 @@ function clearCompare() {
             </div>
           ) : null}
         </div>
+           </div>
+
+      <div className="mt-8 flex justify-center">
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="inline-flex items-center rounded-xl bg-green-700 px-5 py-2 text-sm font-semibold text-white hover:bg-green-800 transition"
+        >
+          ↑ Subir
+        </button>
       </div>
+
     </main>
   );
 }

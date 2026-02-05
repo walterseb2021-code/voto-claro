@@ -29,6 +29,41 @@ useEffect(() => {
   window.addEventListener("scroll", onScroll, { passive: true });
   return () => window.removeEventListener("scroll", onScroll);
 }, []);
+// ✅ Narración al entrar SIN abrir Federalito
+useEffect(() => {
+  const axesList = axes
+    .slice(0, 9)
+    .map((a, i) => `${i + 1}) ${a.title}`)
+    .join("\n");
+
+  const text =
+    "Estás en Reflexionar antes de votar. " +
+    "Aquí eliges un eje temático y luego una pregunta para leer una reflexión.\n\n" +
+    "Ejes disponibles:\n" +
+    axesList +
+    "\n\n" +
+    "Para usarlo: toca un eje, luego una pregunta. " +
+    "Si quieres, dime por ejemplo: educación pregunta tres.";
+
+  // 🔒 1) Cerrar Federalito sí o sí
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: { action: "CLOSE" },
+    })
+  );
+
+  // 🎙️ 2) Narrar DESPUÉS (sin abrir panel)
+  const t = setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: { action: "SAY", text, speak: true },
+      })
+    );
+  }, 0);
+
+  return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const openAnswerRef = useRef<HTMLDivElement | null>(null);
 
@@ -52,8 +87,28 @@ useEffect(() => {
   );
 
   function goBackToAxes() {
+    stopVoice();
     setActiveAxisId(null);
     setOpenQuestionId(null);
+  }
+
+  function goBackToQuestions() {
+    stopVoice();
+    setOpenQuestionId(null);
+  }
+
+  function guideSay(text: string) {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: { action: "SAY", text, speak: true },
+      })
+    );
+  }
+  function stopVoice() {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
   }
 
   return (
@@ -70,11 +125,12 @@ useEffect(() => {
         </div>
 
         <Link
-          href="/"
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-600 bg-white text-green-700 text-sm font-semibold hover:bg-green-50 shadow-sm transition"
-        >
-          ← Volver al inicio
-        </Link>
+  href="/"
+  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-700 bg-green-600 text-white text-sm font-semibold hover:bg-green-700 shadow-md transition"
+>
+  ← Volver al inicio
+</Link>
+
       </div>
 
       {/* Nota */}
@@ -130,6 +186,16 @@ useEffect(() => {
             <p className="mt-2 text-sm md:text-base text-slate-800 leading-relaxed">
               {cierre}
             </p>
+              <div className="mt-4">
+    <button
+      type="button"
+      onClick={() => guideSay(cierre)}
+      className="rounded-xl px-4 py-2 border border-green-700 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+    >
+      🔊 Leer cierre
+    </button>
+  </div>
+
           </section>
         </section>
       ) : (
@@ -150,13 +216,25 @@ useEffect(() => {
               ) : null}
             </div>
 
-            <button
-              type="button"
-              onClick={goBackToAxes}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 shadow-sm transition"
-            >
-              ← Cambiar eje
-            </button>
+            <div className="flex items-center gap-2">
+  <button
+    type="button"
+    onClick={goBackToQuestions}
+    className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-700 bg-green-600 text-white text-sm font-semibold hover:bg-green-700 shadow-md transition"
+  >
+    ← Ver preguntas
+  </button>
+
+ <button
+  type="button"
+  onClick={goBackToAxes}
+  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-700 bg-green-600 text-white text-sm font-semibold hover:bg-green-700 shadow-md transition"
+>
+  ← Cambiar eje
+</button>
+
+</div>
+
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3">
@@ -169,7 +247,11 @@ useEffect(() => {
                 >
                   <button
                     type="button"
-                    onClick={() => setOpenQuestionId(isOpen ? null : q.id)}
+                    onClick={() => {
+  stopVoice();
+  setOpenQuestionId(isOpen ? null : q.id);
+}}
+
                     className="w-full text-left px-5 py-4 flex items-start justify-between gap-3 hover:bg-slate-50 transition"
                     aria-expanded={isOpen}
                   >
@@ -191,6 +273,20 @@ useEffect(() => {
   <div ref={openAnswerRef} className="px-5 pb-5">
     <div className="mt-1 text-sm md:text-base text-slate-800 whitespace-pre-line leading-relaxed">
       {q.reflection}
+    </div>
+    <div className="mt-4 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          const follow =
+            q.followups?.length ? `\n\nPara seguir reflexionando:\n- ${q.followups.join("\n- ")}` : "";
+          const textToRead = `Eje: ${activeAxis.title}\n\nPregunta ${idx + 1}:\n${q.question}\n\n${q.reflection}${follow}`;
+          guideSay(textToRead);
+        }}
+        className="rounded-xl px-4 py-2 border border-green-700 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+      >
+        🔊 Leer reflexión
+      </button>
     </div>
 
     {q.followups?.length ? (
@@ -220,6 +316,16 @@ useEffect(() => {
             <p className="mt-2 text-sm md:text-base text-slate-800 leading-relaxed">
               {cierre}
             </p>
+              <div className="mt-4">
+    <button
+      type="button"
+      onClick={() => guideSay(cierre)}
+      className="rounded-xl px-4 py-2 border border-green-700 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+    >
+      🔊 Leer cierre
+    </button>
+  </div>
+
           </section>
         </section>
       )}

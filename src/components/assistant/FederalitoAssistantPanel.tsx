@@ -1,4 +1,4 @@
-// src/componentes/asistente/FederalitoAssistantPanel.tsx
+// src/components/assistant/FederalitoAssistantPanel.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -27,7 +27,7 @@ type GuideEventDetail = {
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
 type VoiceMode = "OFF" | "ON";
-type VoiceLang = "es-PE" | "qu"; // qu = quechua (si existe voz instalada)
+type VoiceLang = "es-PE" | "qu";
 type AskMode = "HV" | "PLAN" | "NEWS";
 
 const LS_VOICE_MODE = "votoclaro_voice_mode_v1";
@@ -37,8 +37,10 @@ const LS_ASK_MODE = "votoclaro_assistant_mode_v1";
 
 // ✅ Panel flotante: posición persistente
 const LS_ASSIST_POS = "votoclaro_assistant_pos_v1";
-
 type PanelPos = { x: number; y: number };
+
+// ✅ FAB movible: posición persistente
+const LS_ASSIST_FAB_POS = "votoclaro_assistant_fab_pos_v1";
 
 // ✅ Memoria corta: estado + persistencia
 const LS_ASSIST_MEM = "votoclaro_assistant_memory_v1";
@@ -56,10 +58,18 @@ type MemoryState = {
 function normalize(s: string) {
   return (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
+
+function normalizeLite(s: string) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim();
+}
+
 function answerFromReflexion(rawQ: string) {
   const q = normalize(rawQ);
 
-  // Si el usuario pregunta algo muy corto o vacío:
   if (!q || q.length < 3) {
     return (
       "Estoy listo para ayudarte a reflexionar.\n\n" +
@@ -72,13 +82,12 @@ function answerFromReflexion(rawQ: string) {
     );
   }
 
-  // 1) Intento: buscar coincidencia con un eje (por título)
-  const axisHit = REFLEXION_AXES.find((a) => normalize(a.title).includes(q) || q.includes(normalize(a.title)));
+  const axisHit = REFLEXION_AXES.find(
+    (a) => normalize(a.title).includes(q) || q.includes(normalize(a.title))
+  );
 
   if (axisHit) {
-    const list = axisHit.questions
-      .map((qq, i) => `${i + 1}) ${qq.question}`)
-      .join("\n");
+    const list = axisHit.questions.map((qq, i) => `${i + 1}) ${qq.question}`).join("\n");
 
     return (
       `Eje: ${axisHit.title}\n` +
@@ -90,22 +99,16 @@ function answerFromReflexion(rawQ: string) {
     );
   }
 
-  // 2) Intento: buscar coincidencia en preguntas
-  const flat = REFLEXION_AXES.flatMap((a) =>
-    a.questions.map((qq) => ({ axis: a, q: qq }))
-  );
-
-  // score simple por “palabras” encontradas
+  const flat = REFLEXION_AXES.flatMap((a) => a.questions.map((qq) => ({ axis: a, q: qq })));
   const words = q.split(" ").filter((w) => w.length >= 4);
+
   let best: any = null;
   let bestScore = 0;
 
   for (const item of flat) {
     const t = normalize(item.q.question);
     let score = 0;
-    for (const w of words) {
-      if (t.includes(w)) score += 1;
-    }
+    for (const w of words) if (t.includes(w)) score += 1;
     if (score > bestScore) {
       bestScore = score;
       best = item;
@@ -113,15 +116,12 @@ function answerFromReflexion(rawQ: string) {
   }
 
   if (best && bestScore >= 1) {
-    const follow =
-      best.q.followups?.length
-        ? "\n\nPara seguir reflexionando:\n" + best.q.followups.map((f: string) => `- ${f}`).join("\n")
-        : "";
-
+    const follow = best.q.followups?.length
+      ? "\n\nPara seguir reflexionando:\n" + best.q.followups.map((f: string) => `- ${f}`).join("\n")
+      : "";
     return `Eje: ${best.axis.title}\n\nPregunta:\n${best.q.question}\n\nReflexión:\n${best.q.reflection}${follow}`;
   }
 
-  // 3) Si no entiende, ofrece menú de ejes
   const menu = REFLEXION_AXES.map((a) => `- ${a.title}`).join("\n");
   return (
     "No estoy seguro de a qué reflexión te refieres.\n\n" +
@@ -130,15 +130,14 @@ function answerFromReflexion(rawQ: string) {
     "\n\nO copia una frase exacta de la pregunta que quieres abrir."
   );
 }
+
 function answerFromCiudadanoServicio(rawQ: string) {
   const q = normalize(rawQ);
 
-  // ayuda general
   if (!q || q.length < 3 || q.includes("ayuda") || q.includes("guia") || q.includes("guía") || q.includes("como usar")) {
     return `${CIUDADANO_PAGE_GUIDE}\n\n${CIUDADANO_LEGAL_NOTE}`;
   }
 
-  // pedir listado
   if (
     q.includes("lista") ||
     q.includes("servicios") ||
@@ -147,10 +146,7 @@ function answerFromCiudadanoServicio(rawQ: string) {
     q.includes("leer todo") ||
     q.includes("todo")
   ) {
-    const list = CIUDADANO_SERVICES.map(
-      (s, i) => `${i + 1}) ${s.title} (${s.entity})`
-    ).join("\n");
-
+    const list = CIUDADANO_SERVICES.map((s, i) => `${i + 1}) ${s.title} (${s.entity})`).join("\n");
     return (
       "Servicios disponibles:\n" +
       list +
@@ -159,20 +155,14 @@ function answerFromCiudadanoServicio(rawQ: string) {
     );
   }
 
-  // si manda solo número
   const mNum = q.match(/^\s*(\d{1,2})\s*$/);
   if (mNum) {
     const n = Number(mNum[1]);
     const item = CIUDADANO_SERVICES[n - 1];
     if (!item) return "Ese número no existe en la lista. Dime un número válido.";
-    return (
-      `${item.title} (${item.entity})\n\n` +
-      `${item.description}\n\n` +
-      `Enlace oficial:\n${item.url}`
-    );
+    return `${item.title} (${item.entity})\n\n${item.description}\n\nEnlace oficial:\n${item.url}`;
   }
 
-  // filtro por entidad
   const wantsJNE = q.includes("jne");
   const wantsONPE = q.includes("onpe");
   const wantsRENIEC = q.includes("reniec");
@@ -183,29 +173,18 @@ function answerFromCiudadanoServicio(rawQ: string) {
       .map((s, i) => `${i + 1}) ${s.title}`)
       .join("\n");
 
-    return (
-      `Servicios de ${ent}:\n` +
-      list +
-      "\n\n" +
-      "Dime el nombre exacto del servicio o escribe “lista” para ver todo."
-    );
+    return `Servicios de ${ent}:\n${list}\n\nDime el nombre exacto del servicio o escribe “lista” para ver todo.`;
   }
 
-  // match por título / palabras clave
   const hit = CIUDADANO_SERVICES.find((s) => {
     const t = normalize(s.title);
     return t.includes(q) || q.includes(t);
   });
 
   if (hit) {
-    return (
-      `${hit.title} (${hit.entity})\n\n` +
-      `${hit.description}\n\n` +
-      `Enlace oficial:\n${hit.url}`
-    );
+    return `${hit.title} (${hit.entity})\n\n${hit.description}\n\nEnlace oficial:\n${hit.url}`;
   }
 
-  // match por palabras “sueltas”
   const words = q.split(" ").filter((w) => w.length >= 4);
   let best: any = null;
   let bestScore = 0;
@@ -213,9 +192,7 @@ function answerFromCiudadanoServicio(rawQ: string) {
   for (const s of CIUDADANO_SERVICES) {
     const t = normalize(`${s.title} ${s.description}`);
     let score = 0;
-    for (const w of words) {
-      if (t.includes(w)) score++;
-    }
+    for (const w of words) if (t.includes(w)) score++;
     if (score > bestScore) {
       bestScore = score;
       best = s;
@@ -223,11 +200,7 @@ function answerFromCiudadanoServicio(rawQ: string) {
   }
 
   if (best && bestScore >= 1) {
-    return (
-      `${best.title} (${best.entity})\n\n` +
-      `${best.description}\n\n` +
-      `Enlace oficial:\n${best.url}`
-    );
+    return `${best.title} (${best.entity})\n\n${best.description}\n\nEnlace oficial:\n${best.url}`;
   }
 
   return (
@@ -237,7 +210,11 @@ function answerFromCiudadanoServicio(rawQ: string) {
   );
 }
 
-async function handleCiudadanoServicio(rawQ: string, maybeSpeakFn: (t: string) => Promise<void>, pushFn: (t: string) => void) {
+async function handleCiudadanoServicio(
+  rawQ: string,
+  maybeSpeakFn: (t: string) => Promise<void>,
+  pushFn: (t: string) => void
+) {
   const out = answerFromCiudadanoServicio(rawQ);
   pushFn(out);
   await maybeSpeakFn(out);
@@ -251,7 +228,6 @@ function getVoicesSafe(): SpeechSynthesisVoice[] {
   }
 }
 
-// Espera a que el navegador “cargue” voces (Chrome a veces llega vacío al inicio)
 function waitVoices(timeoutMs = 1200): Promise<SpeechSynthesisVoice[]> {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -280,11 +256,6 @@ function waitVoices(timeoutMs = 1200): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-/**
- * Selección “más humana” posible SOLO con Web Speech.
- * - Español Perú: preferimos es-PE / es-419 / es-* (Google/Microsoft)
- * - Quechua: intentamos qu*, quz-PE, etc. (si existe en el SO)
- */
 function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynthesisVoice | null {
   if (!all.length) return null;
 
@@ -295,34 +266,23 @@ function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynt
 
     let score = 0;
 
-    // Motor (suele sonar mejor)
     if (name.includes("google")) score += 30;
     if (name.includes("microsoft")) score += 25;
-
-    // Preferir servicios locales
     if (local) score += 10;
 
-    // Idioma preferido
     if (lang === "es-PE") {
       if (vlang === "es-pe") score += 60;
       if (vlang.startsWith("es-")) score += 35;
       if (vlang.includes("es-419")) score += 25;
     } else {
-      // Quechua: qu / quz / etc (si existe)
       if (vlang.startsWith("qu")) score += 80;
-      if (vlang.includes("quz")) score += 80; // en Windows puede salir quz-PE
+      if (vlang.includes("quz")) score += 80;
       if (name.includes("quech")) score += 50;
       if (name.includes("quich")) score += 30;
     }
 
-    // Heurísticas suaves
     if (name.includes("male") || name.includes("hombre")) score += 6;
-    if (
-      name.includes("juan") ||
-      name.includes("carlos") ||
-      name.includes("diego") ||
-      name.includes("andres")
-    )
+    if (name.includes("juan") || name.includes("carlos") || name.includes("diego") || name.includes("andres"))
       score += 3;
 
     return { v, score };
@@ -331,39 +291,28 @@ function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynt
   scored.sort((a, b) => b.score - a.score);
   return scored[0]?.v ?? null;
 }
+
 function humanizeForSpeech(input: string) {
   let s = String(input || "");
 
-  // 0) Quitar emojis/símbolos que la voz lee feo
-  // ✅ -> "marca de verificación", 🎙️ -> "micrófono", etc.
   s = s.replace(/[✅✔️☑️]/g, "");
   s = s.replace(/[🎙️🔊]/g, "");
 
-  // 1) Quitar rutas /candidate/... y cosas técnicas
   s = s.replace(/\/candidate\/\[[^\]]+\]/gi, "la ficha del candidato");
   s = s.replace(/\/candidate\/[a-z0-9\-_]+/gi, "la ficha del candidato");
   s = s.replace(/\/api\/[a-z0-9\/\-_?=&]+/gi, "el servidor");
   s = s.replace(/https?:\/\/\S+/gi, "un enlace");
 
-  // 2) Quitar bullets y guiones al inicio de línea (la voz dice “menos”)
-  // - texto
-  // – texto
-  // — texto
-  // • texto
   s = s.replace(/^\s*[-–—−•]\s+/gm, "");
-
-  // 3) Si quedó un guion largo en medio (Pregunta 3 — Salud), lo cambiamos por pausa
   s = s.replace(/[—−]/g, ", ");
 
-  // 4) Reemplazar símbolos que suenan feo
   s = s
-    .replace(/[\/\\]+/g, " ") // barras
-    .replace(/[\*\|_#]+/g, " ") // asteriscos, pipes, etc.
-    .replace(/[-]{2,}/g, " ") // guiones largos repetidos
+    .replace(/[\/\\]+/g, " ")
+    .replace(/[\*\|_#]+/g, " ")
+    .replace(/[-]{2,}/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  // 5) Mejorar citas para voz/lectura: (p. 36) -> (página 36)
   s = s.replace(/\(p\.\s*(\d+)\)/gi, "(página $1)");
   s = s.replace(/\bp\.\s*(\d+)\b/gi, "página $1");
 
@@ -383,7 +332,6 @@ async function speakText(
 
   const voices = await waitVoices(1200);
 
-  // Si pidió quechua pero no hay, hacemos fallback a español
   let targetLang: VoiceLang = lang;
   let usedLang: "es-PE" | "qu" | "fallback-es" = lang === "qu" ? "qu" : "es-PE";
 
@@ -405,37 +353,28 @@ async function speakText(
 
     const u = new SpeechSynthesisUtterance(msg);
 
-    // idioma
-    if (targetLang === "qu") u.lang = "qu";
-    else u.lang = "es-PE";
-
-    // “joven”: un poco más rápido y menos grave
+    u.lang = targetLang === "qu" ? "qu" : "es-PE";
     u.rate = 1.02;
     u.pitch = 0.78;
     u.volume = 1;
-
     if (voice) u.voice = voice;
 
     return await new Promise((resolve) => {
       u.onend = () => resolve({ ok: true, usedLang });
       u.onerror = () => resolve({ ok: false, usedLang, reason: "utterance-error" });
-
       window.speechSynthesis.speak(u);
     });
   } catch {
     return { ok: false, usedLang, reason: "exception" };
   }
 }
+
 function splitForSpeech(text: string, maxLen = 220) {
   const s = humanizeForSpeech(String(text || "").trim());
   if (!s) return [];
 
-  // corta por saltos de línea / puntos / signos, intentando no cortar frases
   const parts: string[] = [];
-  const chunks = s
-    .split(/\n+/g)
-    .map((x) => x.trim())
-    .filter(Boolean);
+  const chunks = s.split(/\n+/g).map((x) => x.trim()).filter(Boolean);
 
   for (const c of chunks) {
     if (c.length <= maxLen) {
@@ -443,7 +382,6 @@ function splitForSpeech(text: string, maxLen = 220) {
       continue;
     }
 
-    // sub-split por signos
     const sentences = c.split(/(?<=[\.\!\?\:])\s+/g);
     let buf = "";
     for (const sent of sentences) {
@@ -457,7 +395,6 @@ function splitForSpeech(text: string, maxLen = 220) {
     if (buf) parts.push(buf.trim());
   }
 
-  // último fallback: si aún hay algo enorme, cortar duro
   const finalParts: string[] = [];
   for (const p of parts) {
     if (p.length <= maxLen) finalParts.push(p);
@@ -511,33 +448,21 @@ async function safeReadJson(res: Response) {
 function slugToName(slug: string) {
   return (slug || "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 }
+
 function inferAxisFromQuestion(q: string): "ECO" | "SEG" | "SAL" | "EDU" {
   const t = q.toLowerCase();
 
-  if (t.includes("seguridad") || t.includes("delinc") || t.includes("crimen") || t.includes("extors"))
-    return "SEG";
-
-  if (t.includes("salud") || t.includes("hospital") || t.includes("essalud") || t.includes("sis"))
-    return "SAL";
-
-  if (
-    t.includes("educ") ||
-    t.includes("coleg") ||
-    t.includes("escuel") ||
-    t.includes("univers") ||
-    t.includes("docente")
-  )
+  if (t.includes("seguridad") || t.includes("delinc") || t.includes("crimen") || t.includes("extors")) return "SEG";
+  if (t.includes("salud") || t.includes("hospital") || t.includes("essalud") || t.includes("sis")) return "SAL";
+  if (t.includes("educ") || t.includes("coleg") || t.includes("escuel") || t.includes("univers") || t.includes("docente"))
     return "EDU";
 
-  // por defecto
   return "ECO";
 }
 
 function prettyCitationsText(input: string) {
   let s = String(input || "");
-  // (p. 36) -> (página 36)
   s = s.replace(/\(p\.\s*(\d+)\)/gi, "(página $1)");
-  // p.36 / p. 36 -> página 36
   s = s.replace(/\bp\.\s*(\d+)\b/gi, "página $1");
   return s;
 }
@@ -546,11 +471,8 @@ function prettyCitationsText(input: string) {
 function looksLikeFollowUp(q: string) {
   const t = normalize(q).trim();
   if (!t) return false;
-
-  // corto y ambiguo => probablemente follow-up
   if (t.length <= 22) return true;
 
-  // patrones típicos
   const patterns = [
     "y eso",
     "y esa",
@@ -599,25 +521,22 @@ function buildContextualQuestion(rawQ: string, mem: MemoryState, candidateName: 
   const q = (rawQ || "").trim();
   if (!q) return q;
 
-  // Si no hay memoria previa útil, no tocamos nada
   const hasPrev = !!(mem?.lastQuestion || mem?.lastAnswer);
   if (!hasPrev) return q;
 
-  // Si cambia de candidato, no “arrastramos” contexto
   if (mem.lastCandidateName && candidateName && mem.lastCandidateName !== candidateName) {
     return q;
   }
 
-  // Solo contextualizamos cuando parece follow-up
   if (!looksLikeFollowUp(q)) return q;
 
-  const modeLabel = askMode === "HV" ? "Hoja de Vida (PDF)" : askMode === "PLAN" ? "Plan de Gobierno (PDF)" : "Actuar político (web)";
+  const modeLabel =
+    askMode === "HV" ? "Hoja de Vida (PDF)" : askMode === "PLAN" ? "Plan de Gobierno (PDF)" : "Actuar político (web)";
   const who = (candidateName || mem.lastCandidateName || "").trim();
 
   const prevQ = (mem.lastQuestion || "").trim();
   const prevA = (mem.lastAnswer || "").trim();
 
-  // Resumen micro (solo para anclar “eso/esa/ese”)
   const anchor =
     prevA && prevA.length > 0
       ? `Respuesta previa (resumen): ${prevA.slice(0, 220)}${prevA.length > 220 ? "…" : ""}`
@@ -625,7 +544,6 @@ function buildContextualQuestion(rawQ: string, mem: MemoryState, candidateName: 
       ? `Pregunta previa: ${prevQ.slice(0, 180)}${prevQ.length > 180 ? "…" : ""}`
       : "";
 
-  // Construir pregunta enriquecida SIN inventar: solo añade contexto de conversación
   const enriched =
     `${who ? who + " — " : ""}${modeLabel}.\n` +
     `Contexto: el usuario está haciendo una pregunta de seguimiento.\n` +
@@ -652,22 +570,17 @@ function safeSaveMem(mem: MemoryState) {
     localStorage.setItem(LS_ASSIST_MEM, JSON.stringify(mem || {}));
   } catch {}
 }
-function getCompareIdFromSearchParams(sp: any) {
-  const candidates = [
-    sp?.get("idB"),
-    sp?.get("b"),
-    sp?.get("compare"),
-    sp?.get("compareWith"),
-    sp?.get("vs"),
-  ].filter(Boolean) as string[];
 
+function getCompareIdFromSearchParams(sp: any) {
+  const candidates = [sp?.get("idB"), sp?.get("b"), sp?.get("compare"), sp?.get("compareWith"), sp?.get("vs")].filter(
+    Boolean
+  ) as string[];
   return (candidates[0] ?? "").trim();
 }
+
 function answerFromCambioConValentia(rawQ: string) {
   const q = normalize(rawQ);
 
-  // Casi cualquier input en esta página debe devolver el contenido real.
-  // Pero damos "guía" cuando preguntan algo tipo ayuda.
   const wantsGuide =
     !q ||
     q.length < 3 ||
@@ -682,17 +595,14 @@ function answerFromCambioConValentia(rawQ: string) {
     return `${CAMBIO_PAGE_GUIDE}\n\n${CAMBIO_PAGE_TITLE}\n\nEnlace:\n${CAMBIO_PAGE_LINK_URL}\n\n${CAMBIO_PAGE_PHRASE}`;
   }
 
-  // Si pide enlace
   if (q.includes("link") || q.includes("enlace") || q.includes("web") || q.includes("pagina") || q.includes("página")) {
     return `Enlace oficial:\n${CAMBIO_PAGE_LINK_URL}`;
   }
 
-  // Si pide leer/frase
   if (q.includes("leer") || q.includes("frase") || q.includes("mensaje") || q.includes("texto")) {
     return `${CAMBIO_PAGE_PHRASE}\n\nEnlace:\n${CAMBIO_PAGE_LINK_URL}`;
   }
 
-  // Default: repetir todo el contenido de la página (sin inventar)
   return `${CAMBIO_PAGE_TITLE}\n\nEnlace:\n${CAMBIO_PAGE_LINK_URL}\n\n${CAMBIO_PAGE_PHRASE}`;
 }
 
@@ -706,47 +616,577 @@ async function handleCambioConValentia(
   await maybeSpeakFn(out);
 }
 
+type PageCtx = "HOME" | "REFLEXION" | "CIUDADANO" | "CAMBIO" | "CANDIDATE" | "OTHER";
+
+function getPageCtx(pathname: string): PageCtx {
+  const p = String(pathname || "");
+  if (p === "/" || p.startsWith("/#")) return "HOME";
+  if (p.startsWith("/reflexion")) return "REFLEXION";
+  if (p.startsWith("/ciudadano/servicio")) return "CIUDADANO";
+  if (p.startsWith("/cambio-con-valentia")) return "CAMBIO";
+  if (p.startsWith("/candidate/")) return "CANDIDATE";
+  return "OTHER";
+}
+
+function hasProfanity(rawQ: string) {
+  const t = normalizeLite(rawQ);
+  if (!t) return false;
+
+  const bad = [
+    "idiota",
+    "imbecil",
+    "imbécil",
+    "estupido",
+    "estúpido",
+    "cojudo",
+    "cojuda",
+    "concha",
+    "mierda",
+    "carajo",
+    "puta",
+    "puto",
+    "ctm",
+    "csm",
+    "huevon",
+    "huevón",
+    "huevona",
+    "pendejo",
+    "pendeja",
+    "gil",
+  ].map(normalizeLite);
+
+  return bad.some((w) => w && t.includes(w));
+}
+
+function detectIntent(rawQ: string) {
+  const t = normalizeLite(rawQ);
+
+  const wantsHV =
+    t.includes("hoja de vida") ||
+    t.includes("hv") ||
+    (t.includes("vida") && t.includes("candidato"));
+
+  const wantsPLAN =
+    t.includes("plan") ||
+    t.includes("plan de gobierno") ||
+    t.includes("plan de trabajo") ||
+    t.includes("propuesta") ||
+    t.includes("promesa");
+
+  const wantsNEWS =
+    t.includes("actuar") ||
+    t.includes("noticia") ||
+    t.includes("noticias") ||
+    t.includes("investigacion") ||
+    t.includes("investigación") ||
+    t.includes("denuncia") ||
+    t.includes("caso");
+
+  const wantsREFLEXION =
+    t.includes("reflexion") ||
+    t.includes("reflexión") ||
+    (t.includes("pregunta") &&
+      (t.includes("salud") ||
+        t.includes("educ") ||
+        t.includes("segur") ||
+        t.includes("corrup") ||
+        t.includes("econom")));
+
+  const wantsCIUDADANO =
+    t.includes("servicio al ciudadano") ||
+    t.includes("servicios al ciudadano") ||
+    t.includes("miembro de mesa") ||
+    t.includes("local de votacion") ||
+    t.includes("local de votación") ||
+    t.includes("multas") ||
+    t.includes("reniec") ||
+    t.includes("jne") ||
+    t.includes("onpe");
+
+  const wantsCAMBIO =
+    t.includes("peru federal") ||
+    t.includes("perú federal") ||
+    t.includes("cambio con valentia") ||
+    t.includes("cambio con valentía");
+
+  const asksPartyDetails =
+    t.includes("partido") ||
+    t.includes("propuesta del partido") ||
+    t.includes("ideologia") ||
+    t.includes("ideología") ||
+    t.includes("programa") ||
+    t.includes("estatuto") ||
+    t.includes("milit");
+
+  // ✅ HOME: ayuda genérica
+  const wantsHOMEHELP =
+    t.includes("que hago") ||
+    t.includes("qué hago") ||
+    t.includes("como uso") ||
+    t.includes("cómo uso") ||
+    t.includes("como funciona") ||
+    t.includes("cómo funciona") ||
+    t.includes("ayuda") ||
+    t.includes("guia") ||
+    t.includes("guía") ||
+    t.includes("inicio") ||
+    t.includes("esta ventana") ||
+    t.includes("esta pagina") ||
+    t.includes("esta página");
+
+  // ✅ HOME: comparar candidatos / planes
+  const wantsCompare =
+    t.includes("compar") ||
+    t.includes("vs") ||
+    t.includes("versus") ||
+    (t.includes("difer") &&
+      (t.includes("candidato") ||
+        t.includes("plan") ||
+        t.includes("propuesta")));
+
+  // ✅ HOME: cómo votar / dónde voto
+  const wantsHowToVote =
+    t.includes("como votar") ||
+    t.includes("cómo votar") ||
+    t.includes("donde voto") ||
+    t.includes("dónde voto") ||
+    t.includes("mi local") ||
+    t.includes("local de vot") ||
+    t.includes("miembro de mesa") ||
+    t.includes("multa");
+
+  // ✅ HOME: búsqueda de candidatos / quién es
+  const wantsCandidateSearch =
+    t.includes("buscar candidato") ||
+    t.includes("busco candidato") ||
+    (t.includes("buscar") &&
+      (t.includes("candidato") || t.includes("nombre"))) ||
+    t.includes("quien es") ||
+    t.includes("quién es") ||
+    t.includes("quien postula") ||
+    t.includes("quién postula");
+
+  // ✅ HOME: navegación por tarjetas
+  const wantsNavigateHomeCards =
+    t.includes("servicios") ||
+    t.includes("reflex") ||
+    t.includes("cambio con valent") ||
+    t.includes("peru federal") ||
+    t.includes("perú federal");
+
+  return {
+    t,
+    wantsHV,
+    wantsPLAN,
+    wantsNEWS,
+    wantsREFLEXION,
+    wantsCIUDADANO,
+    wantsCAMBIO,
+    asksPartyDetails,
+    wantsHOMEHELP,
+    wantsCompare,
+    wantsHowToVote,
+    wantsCandidateSearch,
+    wantsNavigateHomeCards,
+  };
+}
+function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
+  const i = detectIntent(rawQ);
+
+  // ✅ HOME: nunca redirigir con mensaje genérico
+  if (ctx === "HOME") {
+    // Si es ayuda de inicio, lo maneja HOME local
+    if (
+      i.wantsHOMEHELP ||
+      i.wantsCandidateSearch ||
+      i.wantsCompare ||
+      i.wantsHowToVote ||
+      i.wantsNavigateHomeCards
+    ) {
+      return null;
+    }
+
+    // HOME fallback guiado (NUNCA Google)
+    return (
+      "Puedo ayudarte dentro de VotoClaro.\n\n" +
+      "Opciones disponibles:\n" +
+      "1) Buscar candidatos y abrir su ficha (HV, Plan, Actuar político).\n" +
+      "2) Servicios al ciudadano: local de votación, miembro de mesa, multas.\n" +
+      "3) Reflexionar antes de votar: preguntas por economía, salud, educación y seguridad.\n" +
+      "4) Un cambio con valentía: acceso a propuesta oficial.\n\n" +
+      "Dime qué opción te interesa o escribe, por ejemplo:\n" +
+      "“buscar candidato”, “dónde voto”, “reflexión sobre salud”, “plan de gobierno”."
+    );
+  }
+
+  // ===== resto de pantallas =====
+
+  if (i.wantsCAMBIO || i.asksPartyDetails) {
+    if (ctx === "CAMBIO") {
+      return (
+        "Para información detallada del partido o su propuesta oficial, lo mejor es visitar su web.\n\n" +
+        "👉 Abre el sitio oficial: https://perufederal.pe/\n\n" +
+        "Aquí en VotoClaro solo mostramos esta ventana como acceso rápido."
+      );
+    }
+    return (
+      "Ese tema corresponde a “UN CAMBIO CON VALENTÍA”.\n\n" +
+      "👉 Ve a: /cambio-con-valentia\n\n" +
+      "Ahí encontrarás el enlace oficial para conocer la propuesta."
+    );
+  }
+
+  if (i.wantsHV || i.wantsPLAN || i.wantsNEWS) {
+    if (ctx === "CANDIDATE") {
+      if (i.wantsHV) return "Esto es de Hoja de Vida. Cambia a la pestaña HV y pregúntame ahí.";
+      if (i.wantsPLAN) return "Esto es del Plan. Cambia a la pestaña Plan y pregúntame ahí.";
+      if (i.wantsNEWS) return "Esto es de Actuar político. Cambia a la pestaña Actuar político y pregúntame ahí.";
+    }
+
+    const which = i.wantsHV ? "Hoja de Vida (HV)" : i.wantsPLAN ? "Plan (PLAN)" : "Actuar político (NEWS)";
+    return (
+      `Eso corresponde a la ficha del candidato (${which}).\n\n` +
+      "👉 Ve al inicio (/), busca el candidato y entra a su ficha.\n" +
+      "Luego elige la pestaña HV / Plan / Actuar político y me preguntas ahí."
+    );
+  }
+
+  if (i.wantsREFLEXION) {
+    if (ctx === "REFLEXION") return null;
+    return (
+      "Eso corresponde a “Reflexionar antes de votar”.\n\n" +
+      "👉 Ve a: /reflexion\n\n" +
+      "Ahí puedo leerte preguntas y reflexiones sin inventar."
+    );
+  }
+
+  if (i.wantsCIUDADANO || i.wantsHowToVote) {
+    if (ctx === "CIUDADANO") return null;
+    return (
+      "Eso corresponde a “Servicios al ciudadano”.\n\n" +
+      "👉 Ve a: /ciudadano/servicio\n\n" +
+      "Ahí te guío por los enlaces oficiales (JNE, ONPE, RENIEC)."
+    );
+  }
+
+  // fallback fuera de HOME (controlado)
+  return (
+    "No puedo responder eso desde esta pantalla.\n\n" +
+    "Muévete a una de estas secciones:\n" +
+    "- Inicio: búsqueda de candidatos\n" +
+    "- Servicios al ciudadano\n" +
+    "- Reflexión antes de votar\n" +
+    "- Un cambio con valentía"
+  );
+}
+
+async function handleGlobalPolicyAndRedirect(params: {
+  pathname: string;
+  rawQ: string;
+  candidateId: string;
+  askMode: AskMode;
+  pushAssistant: (t: string) => void;
+  maybeSpeak: (t: string) => Promise<void>;
+}): Promise<{ handled: boolean }> {
+  const { pathname, rawQ, pushAssistant, maybeSpeak } = params;
+
+  if (hasProfanity(rawQ)) {
+    const msg =
+      "Este espacio es para informarse con respeto.\n\n" +
+      "Si deseas continuar, reformula tu pregunta sin insultos. " +
+      "Si vas a seguir con groserías, te recomiendo retirarte de la app.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return { handled: true };
+  }
+
+  const ctx = getPageCtx(pathname);
+  const redirect = buildRedirectMessage(ctx, rawQ);
+
+  // ✅ null => estás en pantalla correcta / o HOME help => NO interceptar
+  if (redirect === null) return { handled: false };
+
+  if (ctx === "CANDIDATE") {
+    const i = detectIntent(rawQ);
+    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS) {
+      pushAssistant(redirect);
+      await maybeSpeak(redirect);
+      return { handled: true };
+    }
+    return { handled: false };
+  }
+
+  const i = detectIntent(rawQ);
+
+  if (ctx === "REFLEXION") {
+    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsCIUDADANO || i.wantsCAMBIO || i.asksPartyDetails) {
+      pushAssistant(redirect);
+      await maybeSpeak(redirect);
+      return { handled: true };
+    }
+    return { handled: false };
+  }
+
+  if (ctx === "CIUDADANO") {
+    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsREFLEXION || i.wantsCAMBIO || i.asksPartyDetails) {
+      pushAssistant(redirect);
+      await maybeSpeak(redirect);
+      return { handled: true };
+    }
+    return { handled: false };
+  }
+
+  if (ctx === "CAMBIO") {
+    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsREFLEXION || i.wantsCIUDADANO || i.asksPartyDetails) {
+      pushAssistant(redirect);
+      await maybeSpeak(redirect);
+      return { handled: true };
+    }
+    return { handled: false };
+  }
+
+  if (ctx === "HOME" || ctx === "OTHER") {
+    const anyKnown =
+      i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsREFLEXION || i.wantsCIUDADANO || i.wantsCAMBIO || i.asksPartyDetails || i.wantsHOMEHELP;
+
+    // ✅ Si es HOMEHELP: no interceptamos (lo maneja HOME local abajo)
+    if (ctx === "HOME" && i.wantsHOMEHELP) return { handled: false };
+
+    if (!anyKnown) {
+      pushAssistant(redirect);
+      await maybeSpeak(redirect);
+      return { handled: true };
+    }
+
+    pushAssistant(redirect);
+    await maybeSpeak(redirect);
+    return { handled: true };
+  }
+
+  return { handled: false };
+}
+
 export default function FederalitoAssistantPanel() {
   const pathname = usePathname();
+  const isPitchPage = String(pathname || "").startsWith("/pitch");
 
-  // ✅ Reemplazo de useSearchParams(): funciona en cliente y no rompe el build
-  const searchParams =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : new URLSearchParams();
+  // ✅ Evita mismatch SSR/cliente (hydration)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  const compareCandidateId = getCompareIdFromSearchParams(searchParams);
-    // ===============================
-  // MODO ESPECIAL: /reflexion
-  // ===============================
-  const isReflexionPage = String(pathname || "").startsWith("/reflexion");
-    // ===============================
-  // MODO ESPECIAL: /ciudadano/servicio
-  // ===============================
+  // ✅ Al cambiar de ventana, cortar cualquier narración en curso
+  useEffect(() => {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    // Preferencias (voz/idioma/modo)
+    try {
+      const vm = localStorage.getItem(LS_VOICE_MODE) as VoiceMode | null;
+      if (vm === "ON" || vm === "OFF") setVoiceMode(vm);
+
+      const vl = localStorage.getItem(LS_VOICE_LANG) as VoiceLang | null;
+      if (vl === "es-PE" || vl === "qu") setVoiceLang(vl);
+
+      const am = localStorage.getItem(LS_ASK_MODE) as AskMode | null;
+      if (am === "HV" || am === "PLAN" || am === "NEWS") setAskMode(am);
+    } catch {}
+    hydratedPrefsRef.current = true;
+
+    // Memoria corta
+    try {
+      setMem(safeLoadMem());
+    } catch {
+      setMem({});
+    }
+    hydratedMemRef.current = true;
+  }, [mounted]);
+
+  const [searchParams, setSearchParams] = useState<URLSearchParams>(new URLSearchParams());
+
+  useEffect(() => {
+    try {
+      setSearchParams(new URLSearchParams(window.location.search));
+    } catch {
+      setSearchParams(new URLSearchParams());
+    }
+  }, [pathname]);
+
+  const compareCandidateId = useMemo(() => getCompareIdFromSearchParams(searchParams), [searchParams]);
+
   const isCiudadanoServicioPage = String(pathname || "").startsWith("/ciudadano/servicio");
   const isCambioConValentiaPage = String(pathname || "").startsWith(CAMBIO_PAGE_ROUTE);
 
   const [refAxisId, setRefAxisId] = useState<string | null>(null);
   const [refWaitingNumber, setRefWaitingNumber] = useState(false);
 
-
   const [open, setOpen] = useState(false);
 
   // ✅ Panel flotante (draggable)
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const hydratedPrefsRef = useRef(false);
+  const hydratedMemRef = useRef(false);
+  const hydratedPanelPosRef = useRef(false);
+  const hydratedFabPosRef = useRef(false);
 
-  const [pos, setPos] = useState<PanelPos>(() => {
-    if (typeof window === "undefined") return { x: 16, y: 16 };
-    try {
-      const raw = localStorage.getItem(LS_ASSIST_POS);
-      if (!raw) return { x: 16, y: 16 };
-      const p = JSON.parse(raw);
-      if (typeof p?.x === "number" && typeof p?.y === "number") return p;
-      return { x: 16, y: 16 };
-    } catch {
-      return { x: 16, y: 16 };
-    }
+  const [pos, setPos] = useState<PanelPos>({ x: 16, y: 16 });
+
+  // ✅ FAB movible (draggable)
+  const fabRef = useRef<HTMLDivElement | null>(null);
+  // ✅ FAB: márgenes seguros para no tapar contenido (barra inferior / safe area)
+  const FAB_EDGE_PAD = 12;
+  const FAB_BOTTOM_GUTTER = 88; // espacio extra para no tapar texto/barras inferiores
+
+  const [fabPos, setFabPos] = useState<PanelPos>({ x: 16, y: 16 });
+
+  const fabDragRef = useRef<{
+    dragging: boolean;
+    moved: boolean;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    startPosX: number;
+    startPosY: number;
+  }>({
+    dragging: false,
+    moved: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    startPosX: 0,
+    startPosY: 0,
   });
+
+  function clampFabPos(p: PanelPos): PanelPos {
+    if (typeof window === "undefined") return p;
+
+    const el = fabRef.current;
+    const w = el?.offsetWidth ?? 170;
+    const h = el?.offsetHeight ?? 56;
+
+    const padX = FAB_EDGE_PAD;
+    const padTop = FAB_EDGE_PAD;
+    const padBottom = FAB_EDGE_PAD + FAB_BOTTOM_GUTTER;
+
+    const maxX = Math.max(padX, window.innerWidth - w - padX);
+    const maxY = Math.max(padTop, window.innerHeight - h - padBottom);
+
+    return {
+      x: Math.min(Math.max(p.x, padX), maxX),
+      y: Math.min(Math.max(p.y, padTop), maxY),
+    };
+  }
+
+  function defaultFabBottomRight(): PanelPos {
+    if (typeof window === "undefined") return { x: 16, y: 16 };
+
+    const el = fabRef.current;
+    const w = el?.offsetWidth ?? 170;
+    const h = el?.offsetHeight ?? 56;
+
+    const pad = FAB_EDGE_PAD;
+    const bottomPad = FAB_EDGE_PAD + FAB_BOTTOM_GUTTER;
+
+    return clampFabPos({
+      x: window.innerWidth - w - pad,
+      y: window.innerHeight - h - bottomPad,
+    });
+  }
+
+  function onFabPointerDown(e: React.PointerEvent) {
+    if ((e as any).button != null && (e as any).button !== 0) return;
+
+    // NO activar drag aquí (para no matar el click)
+    fabDragRef.current.dragging = false;
+    fabDragRef.current.moved = false;
+    fabDragRef.current.pointerId = e.pointerId;
+    fabDragRef.current.startX = e.clientX;
+    fabDragRef.current.startY = e.clientY;
+    fabDragRef.current.startPosX = fabPos.x;
+    fabDragRef.current.startPosY = fabPos.y;
+
+    // ❌ NO setPointerCapture (esto rompía clicks en algunos casos)
+  }
+
+  function onFabPointerMove(e: React.PointerEvent) {
+    if (fabDragRef.current.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - fabDragRef.current.startX;
+    const dy = e.clientY - fabDragRef.current.startY;
+
+    // threshold para distinguir click vs drag
+    if (!fabDragRef.current.moved && Math.abs(dx) + Math.abs(dy) > 6) {
+      fabDragRef.current.moved = true;
+      fabDragRef.current.dragging = true;
+    }
+
+    if (!fabDragRef.current.dragging) return;
+
+    setFabPos(
+      clampFabPos({
+        x: fabDragRef.current.startPosX + dx,
+        y: fabDragRef.current.startPosY + dy,
+      })
+    );
+  }
+
+  function onFabPointerUp(e: React.PointerEvent) {
+    if (fabDragRef.current.pointerId !== e.pointerId) return;
+
+    const wasMoved = fabDragRef.current.moved;
+
+    fabDragRef.current.dragging = false;
+    fabDragRef.current.moved = false;
+    fabDragRef.current.pointerId = null;
+
+    // ✅ si NO se movió, esto fue un click real => toggle aquí (100% confiable)
+    if (!wasMoved) {
+      setOpen((v) => !v);
+    }
+  }
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_ASSIST_FAB_POS);
+
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.x === "number" && typeof parsed?.y === "number") {
+          setFabPos(clampFabPos(parsed));
+        } else {
+          setFabPos(defaultFabBottomRight());
+        }
+      } else {
+        setFabPos(defaultFabBottomRight());
+      }
+    } catch {
+      setFabPos(defaultFabBottomRight());
+    }
+
+    const onResize = () => {
+      setFabPos((p) => clampFabPos(p));
+      setPos((p) => clampPos(p));
+    };
+    hydratedFabPosRef.current = true;
+
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!hydratedFabPosRef.current) return;
+
+    try {
+      localStorage.setItem(LS_ASSIST_FAB_POS, JSON.stringify(fabPos));
+    } catch {}
+  }, [mounted, fabPos]);
 
   const dragRef = useRef<{
     dragging: boolean;
@@ -787,29 +1227,45 @@ export default function FederalitoAssistantPanel() {
     const pad = 16;
     return clampPos({
       x: window.innerWidth - w - pad,
-      y: window.innerHeight - h - (pad + 80), // deja espacio al FAB abajo
+      y: window.innerHeight - h - (pad + 80),
     });
   }
 
   useEffect(() => {
-    // si no hay posición guardada, colócalo abajo a la derecha al abrir por primera vez
+    if (!mounted) return;
+
     try {
       const raw = localStorage.getItem(LS_ASSIST_POS);
-      if (!raw) setPos(defaultBottomRight());
-    } catch {}
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.x === "number" && typeof parsed?.y === "number") {
+          setPos(clampPos(parsed));
+        } else {
+          setPos(defaultBottomRight());
+        }
+      } else {
+        setPos(defaultBottomRight());
+      }
+    } catch {
+      setPos(defaultBottomRight());
+    }
 
-    // reajusta si el viewport cambia
+    hydratedPanelPosRef.current = true;
+
     const onResize = () => setPos((p) => clampPos(p));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
+    if (!mounted) return;
+    if (!hydratedPanelPosRef.current) return;
+
     try {
       localStorage.setItem(LS_ASSIST_POS, JSON.stringify(pos));
     } catch {}
-  }, [pos]);
+  }, [mounted, pos]);
 
   function isInteractiveTarget(el: any) {
     const t = el as HTMLElement | null;
@@ -866,20 +1322,58 @@ export default function FederalitoAssistantPanel() {
     setPos(defaultBottomRight());
   }
 
-    // ✅ ÚNICA versión (sin duplicados)
+  function rectsOverlap(a: DOMRect, b: DOMRect) {
+    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+  }
+
+  function pickFabCornerAwayFromPanel(panelRect: DOMRect): PanelPos {
+    const el = fabRef.current;
+    const w = el?.offsetWidth ?? 170;
+    const h = el?.offsetHeight ?? 56;
+
+    const pad = FAB_EDGE_PAD;
+    const bottomPad = FAB_EDGE_PAD + FAB_BOTTOM_GUTTER;
+
+    // 4 esquinas candidatas (todas pasan por clamp)
+    const corners: PanelPos[] = [
+      { x: pad, y: pad }, // top-left
+      { x: window.innerWidth - w - pad, y: pad }, // top-right
+      { x: pad, y: window.innerHeight - h - bottomPad }, // bottom-left
+      { x: window.innerWidth - w - pad, y: window.innerHeight - h - bottomPad }, // bottom-right
+    ].map(clampFabPos);
+
+    const pcx = panelRect.left + panelRect.width / 2;
+    const pcy = panelRect.top + panelRect.height / 2;
+
+    // elegimos la esquina más lejos del centro del panel
+    let best = corners[0];
+    let bestD = -1;
+
+    for (const c of corners) {
+      const fx = c.x + w / 2;
+      const fy = c.y + h / 2;
+      const dx = fx - pcx;
+      const dy = fy - pcy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > bestD) {
+        bestD = d2;
+        best = c;
+      }
+    }
+
+    return best;
+  }
+
   function resetAssistantChat() {
-    // 1) Cortar voz si está hablando
     try {
       window.speechSynthesis?.cancel();
     } catch {}
 
-    // 2) Cortar micrófono si está escuchando
     try {
       recognitionRef.current?.stop?.();
     } catch {}
     setListening(false);
 
-    // 3) Reset UI/estado
     setBusy(false);
     setMsgs([
       {
@@ -890,48 +1384,20 @@ export default function FederalitoAssistantPanel() {
     ]);
     setDraft("");
 
-    // 4) Reset memoria (estado + storage)
     setMem({});
     try {
       localStorage.removeItem(LS_ASSIST_MEM);
     } catch {}
     setRefAxisId(null);
     setRefWaitingNumber(false);
-
   }
 
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>(() => {
-    try {
-      return (localStorage.getItem(LS_VOICE_MODE) as VoiceMode) || "OFF";
-    } catch {
-      return "OFF";
-    }
-  });
-
-  const [voiceLang, setVoiceLang] = useState<VoiceLang>(() => {
-    try {
-      return (localStorage.getItem(LS_VOICE_LANG) as VoiceLang) || "es-PE";
-    } catch {
-      return "es-PE";
-    }
-  });
-
-  const [askMode, setAskMode] = useState<AskMode>(() => {
-    try {
-      return (localStorage.getItem(LS_ASK_MODE) as AskMode) || "HV";
-    } catch {
-      return "HV";
-    }
-  });
-
-  // ✅ Memoria corta (persistente)
-  const [mem, setMem] = useState<MemoryState>(() => {
-    if (typeof window === "undefined") return {};
-    return safeLoadMem();
-  });
-
-  // ✅ el navegador solo permite TTS “bien” después de interacción del usuario
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>("OFF");
+  const [voiceLang, setVoiceLang] = useState<VoiceLang>("es-PE");
+  const [askMode, setAskMode] = useState<AskMode>("HV");
+  const [mem, setMem] = useState<MemoryState>({});
   const [userInteracted, setUserInteracted] = useState(false);
+  const pendingGuideSpeakRef = useRef<string | null>(null);
 
   const [msgs, setMsgs] = useState<Msg[]>(() => [
     {
@@ -940,51 +1406,63 @@ export default function FederalitoAssistantPanel() {
         "Hola, soy Federalito AI. Puedes elegir: Hoja de vida (HV), Plan (PLAN) o Actuar político (NEWS). También puedo escucharte con 🎙️ y responder con voz.",
     },
   ]);
-const [pageReadText, setPageReadText] = useState<string>("");
-const [pageReadAt, setPageReadAt] = useState<number>(0);
+
+  const [pageReadText, setPageReadText] = useState<string>("");
+  const [pageReadAt, setPageReadAt] = useState<number>(0);
 
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 🔎 detectar candidato desde ruta /candidate/[id]
   const [candidateId, setCandidateId] = useState<string>("");
   const [candidateName, setCandidateName] = useState<string>("");
 
-  // 🎙️ reconocimiento de voz
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  // persist
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
+    if (!mounted) return;
+    if (!hydratedPrefsRef.current) return;
+
     try {
       localStorage.setItem(LS_VOICE_MODE, voiceMode);
       localStorage.setItem(LS_VOICE_LANG, voiceLang);
       localStorage.setItem(LS_ASK_MODE, askMode);
     } catch {}
-  }, [voiceMode, voiceLang, askMode]);
+  }, [mounted, voiceMode, voiceLang, askMode]);
 
-  // ✅ persist memory
   useEffect(() => {
+    if (!mounted) return;
+    if (!hydratedMemRef.current) return;
     safeSaveMem(mem);
-  }, [mem]);
+  }, [mounted, mem]);
 
-  // “user gesture” detector
   useEffect(() => {
+    try {
+      const already = sessionStorage.getItem("votoclaro_user_interacted_v1") === "1";
+      if (already) setUserInteracted(true);
+    } catch {}
+
     function mark() {
       setUserInteracted(true);
+      try {
+        sessionStorage.setItem("votoclaro_user_interacted_v1", "1");
+      } catch {}
       window.removeEventListener("pointerdown", mark);
       window.removeEventListener("keydown", mark);
     }
+
     window.addEventListener("pointerdown", mark, { once: true });
     window.addEventListener("keydown", mark, { once: true });
+
     return () => {
       window.removeEventListener("pointerdown", mark);
       window.removeEventListener("keydown", mark);
     };
   }, []);
 
-  // detectar candidateId por pathname
   useEffect(() => {
     const p = String(pathname || "");
     const m = p.match(/^\/candidate\/([^/?#]+)/i);
@@ -1013,20 +1491,18 @@ const [pageReadAt, setPageReadAt] = useState<number>(0);
     };
   }, [pathname]);
 
-  // ✅ Auto-sincroniza el modo del asistente con el tab actual (HV / PLAN / NEWS)
   useEffect(() => {
     const tab = String(searchParams?.get("tab") || "").toUpperCase();
-
     if (tab === "PLAN") setAskMode("PLAN");
     else if (tab === "NEWS") setAskMode("NEWS");
     else if (tab === "HV") setAskMode("HV");
   }, [searchParams]);
 
-  // helpers globales
   useEffect(() => {
     (window as any).__federalitoAssistantOpen = () => setOpen(true);
     (window as any).__federalitoAssistantClose = () => setOpen(false);
     (window as any).__federalitoAssistantToggle = () => setOpen((v: boolean) => !v);
+
     return () => {
       try {
         delete (window as any).__federalitoAssistantOpen;
@@ -1036,99 +1512,188 @@ const [pageReadAt, setPageReadAt] = useState<number>(0);
     };
   }, []);
 
-  // escuchar eventos guia
-  useEffect(() => {
-    async function onGuide(ev: Event) {
-      const e = ev as CustomEvent<GuideEventDetail>;
-      const action = e.detail?.action ?? "SAY_AND_OPEN";
-      const text = (e.detail?.text ?? "").trim();
-      const speak = !!e.detail?.speak;
+// ✅ Listener primero (para no perder eventos)
+useEffect(() => {
+  async function onGuide(ev: Event) {
+    const e = ev as CustomEvent<GuideEventDetail>;
+    const action = e.detail?.action ?? "SAY";
+    const text = (e.detail?.text ?? "").trim();
+    const speak = !!e.detail?.speak;
 
-      if (action === "OPEN") setOpen(true);
-      if (action === "CLOSE") setOpen(false);
+    // ✅ Manejar acciones correctamente
+    if (action === "OPEN" || action === "SAY_AND_OPEN") setOpen(true);
+    if (action === "CLOSE") setOpen(false);
 
-      if (text) {
-        setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
-      }
+    // ✅ Siempre mostrar el texto en el chat si llegó texto
+    if (text) setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
 
-      if (action === "SAY_AND_OPEN") setOpen(true);
+    // ✅ Si no hay que hablar, terminamos aquí
+    if (!text || !speak) return;
 
-      if (text && speak && voiceMode === "ON" && userInteracted) {
-        const r = await speakText(text, voiceLang);
-
-        if (voiceLang === "qu" && r.usedLang === "fallback-es") {
-          try {
-            const shown = localStorage.getItem(LS_VOICE_HINT_SHOWN);
-            if (!shown) {
-              localStorage.setItem(LS_VOICE_HINT_SHOWN, "1");
-              setMsgs((prev) => [
-                ...prev,
-                {
-                  role: "assistant",
-                  content: "Nota: no encontré voz Quechua instalada. Estoy leyendo en Español (Perú) como respaldo.",
-                },
-              ]);
-            }
-          } catch {}
-        }
-      }
+    // ✅ Si la voz está OFF, guardamos el texto para decirlo luego
+    if (voiceMode !== "ON") {
+      pendingGuideSpeakRef.current = text;
+      setMsgs((prev) => [
+        ...prev,
+        { role: "assistant", content: "Tip: activa “Voz: ON” para que pueda hablar en voz alta." },
+      ]);
+      return;
     }
 
-    window.addEventListener("votoclaro:guide", onGuide as any);
-    return () => window.removeEventListener("votoclaro:guide", onGuide as any);
-  }, [voiceMode, voiceLang, userInteracted]);
-// ===============================
-// 📄 Escuchar contenido de la página (comparaciones, etc.)
-// ===============================
-useEffect(() => {
-  function onPageRead(ev: Event) {
-    const e = ev as CustomEvent<{ text?: string }>;
-    const txt = String(e.detail?.text ?? "").trim();
-    if (!txt) return;
+    // ✅ Si aún no hay interacción, guardamos el texto para decirlo luego
+    if (!userInteracted) {
+      pendingGuideSpeakRef.current = text;
+      setMsgs((prev) => [
+        ...prev,
+        { role: "assistant", content: "Tip: toca la pantalla una vez para que pueda hablar en voz alta." },
+      ]);
+      return;
+    }
 
-  setPageReadText(txt);
-setPageReadAt(Date.now());
-
-// ✅ Debug visual: confirma que llegó contenido de página
-setMsgs((prev) => [
-  ...prev,
-  { role: "assistant", content: "📄 Listo: tengo una comparación en pantalla para leer con 🔊 Leer." },
-]);
-
+    // ✅ Si todo está listo, hablamos ahora
+    await speakText(text, voiceLang);
+    pendingGuideSpeakRef.current = null;
   }
 
-  window.addEventListener("votoclaro:page-read", onPageRead as any);
-  return () =>
-    window.removeEventListener("votoclaro:page-read", onPageRead as any);
-}, []);
+  window.addEventListener("votoclaro:guide", onGuide as any);
+  return () => window.removeEventListener("votoclaro:guide", onGuide as any);
+}, [voiceMode, voiceLang, userInteracted]);
+// ✅ Si había un mensaje pendiente, hablar apenas sea posible
+useEffect(() => {
+  async function flushPending() {
+    const pending = pendingGuideSpeakRef.current;
+    if (!pending) return;
+    if (voiceMode !== "ON") return;
+    if (!userInteracted) return;
 
-  // autoscroll
+    pendingGuideSpeakRef.current = null;
+    await speakText(pending, voiceLang);
+  }
+
+  flushPending();
+}, [voiceMode, voiceLang, userInteracted, voiceLang]);
+
+  // ✅ MENSAJE AUTOMÁTICO AL ENTRAR A CADA VENTANA (sin abrir panel)
+  useEffect(() => {
+    try {
+      const key = `votoclaro_autoguide_seen:${String(pathname || "")}`;
+      const seen = sessionStorage.getItem(key) === "1";
+      if (seen) return;
+      sessionStorage.setItem(key, "1");
+    } catch {}
+
+    let text = "";
+
+    if (pathname === "/") {
+      text =
+        "Esta es la pantalla de inicio de VotoClaro. " +
+        "Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. " +
+        "Empieza buscando un candidato por su nombre.";
+    } else if (pathname.startsWith("/ciudadano/servicio") || pathname.startsWith("/ciudadano/servicios")) {
+      text =
+        "Estás en Servicios al ciudadano. " +
+        "Aquí encontrarás enlaces oficiales para consultar local de votación, miembro de mesa, multas y otros trámites electorales.";
+    } else if (pathname.startsWith("/reflexion")) {
+      text =
+        "Estás en Reflexionar antes de votar. " +
+        "Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación y seguridad.";
+    } else if (pathname.startsWith("/cambio-con-valentia")) {
+      text =
+        "Estás en Un cambio con valentía. " +
+        "Esta ventana muestra una propuesta política y te dirige a su sitio oficial para más información.";
+    }
+
+    if (text) {
+      // ✅ Delay mínimo: garantiza que el listener ya existe
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("votoclaro:guide", {
+            detail: { action: "SAY", text, speak: true },
+          })
+        );
+      }, 0);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    function onPageRead(ev: Event) {
+      const e = ev as CustomEvent<{ text?: string }>;
+      const txt = String(e.detail?.text ?? "").trim();
+      if (!txt) return;
+
+      setPageReadText(txt);
+      setPageReadAt(Date.now());
+
+      setMsgs((prev) => [...prev, { role: "assistant", content: "📄 Listo: tengo una comparación en pantalla para leer con 🔊 Leer." }]);
+    }
+
+    window.addEventListener("votoclaro:page-read", onPageRead as any);
+    return () => window.removeEventListener("votoclaro:page-read", onPageRead as any);
+  }, []);
   useEffect(() => {
     if (!open) return;
+
     const el = listRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTop = el.scrollHeight;
+
+    // foco al input al abrir
+    const raf = requestAnimationFrame(() => {
+      try {
+        inputRef.current?.focus?.();
+      } catch {}
+    });
+
+    return () => cancelAnimationFrame(raf);
   }, [open, msgs]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!open) return;
+
+    const raf = requestAnimationFrame(() => {
+      const fabEl = fabRef.current;
+      const panelEl = panelRef.current;
+      if (!fabEl || !panelEl) return;
+
+      const fabRect = fabEl.getBoundingClientRect();
+      const panelRect = panelEl.getBoundingClientRect();
+
+      if (!rectsOverlap(fabRect, panelRect)) return;
+
+      const next = pickFabCornerAwayFromPanel(panelRect);
+
+      setFabPos((prev) => {
+        // evita loops: solo cambia si realmente cambia
+        if (Math.abs(prev.x - next.x) < 1 && Math.abs(prev.y - next.y) < 1) return prev;
+        return next;
+      });
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [mounted, open, pos]);
 
   function pushAssistant(text: string) {
     setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
   }
 
   async function maybeSpeak(text: string) {
-    if (voiceMode !== "ON") return;
+    if (voiceMode !== "ON") {
+      pushAssistant("Tip: activa “Voz: ON” para que pueda leerte el contenido con 🔊 (solo necesitas hacerlo una vez).");
+      return;
+    }
+
     if (!userInteracted) {
       pushAssistant("Tip: toca cualquier parte de la pantalla y vuelve a intentar (bloqueo de audio del navegador).");
       return;
     }
     await speakTextChunked(text, voiceLang);
-const r = { ok: true, usedLang: voiceLang === "qu" ? "qu" : "es-PE" as any };
 
-    if (voiceLang === "qu" && r.usedLang === "fallback-es") {
+    const r = { ok: true, usedLang: voiceLang === "qu" ? "qu" : ("es-PE" as any) };
+    if (voiceLang === "qu" && (r as any).usedLang === "fallback-es") {
       pushAssistant("Nota: no detecté voz Quechua en este dispositivo. Estoy leyendo en Español (Perú) como respaldo.");
     }
   }
 
-  // update memory al responder
   function updateMemAfterAnswer(params: {
     mode: AskMode;
     candidateId: string;
@@ -1148,260 +1713,10 @@ const r = { ok: true, usedLang: voiceLang === "qu" ? "qu" : "es-PE" as any };
       lastUpdatedAt: Date.now(),
     }));
   }
-  function normalizeLite(s: string) {
-    return (s || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "")
-      .trim();
-  }
-type PageCtx = "HOME" | "REFLEXION" | "CIUDADANO" | "CAMBIO" | "CANDIDATE" | "OTHER";
-
-function getPageCtx(pathname: string) : PageCtx {
-  const p = String(pathname || "");
-  if (p === "/" || p.startsWith("/#")) return "HOME";
-  if (p.startsWith("/reflexion")) return "REFLEXION";
-  if (p.startsWith("/ciudadano/servicio")) return "CIUDADANO";
-  if (p.startsWith("/cambio-con-valentia")) return "CAMBIO";
-  if (p.startsWith("/candidate/")) return "CANDIDATE";
-  return "OTHER";
-}
-
-function hasProfanity(rawQ: string) {
-  const t = normalizeLite(rawQ);
-  if (!t) return false;
-
-  // Lista corta (no exhaustiva) de groserías/insultos comunes
-  const bad = [
-    "idiota",
-    "imbecil",
-    "imbécil",
-    "estupido",
-    "estúpido",
-    "cojudo",
-    "cojuda",
-    "concha",
-    "mierda",
-    "carajo",
-    "puta",
-    "puto",
-    "ctm",
-    "csm",
-    "huevon",
-    "huevón",
-    "huevona",
-    "huevona",
-    "pendejo",
-    "pendeja",
-    "gil",
-  ].map(normalizeLite);
-
-  return bad.some((w) => w && t.includes(w));
-}
-
-function detectIntent(rawQ: string) {
-  const t = normalizeLite(rawQ);
-
-  const wantsHV =
-    t.includes("hoja de vida") || t.includes("hv") || t.includes("vida") && t.includes("candidato");
-
-  const wantsPLAN =
-    t.includes("plan") || t.includes("plan de gobierno") || t.includes("plan de trabajo") || t.includes("propuesta") || t.includes("promesa");
-
-  const wantsNEWS =
-    t.includes("actuar") || t.includes("noticia") || t.includes("noticias") || t.includes("investigacion") || t.includes("investigación") || t.includes("denuncia") || t.includes("caso");
-
-  const wantsREFLEXION =
-    t.includes("reflexion") || t.includes("reflexión") || t.includes("pregunta") && (t.includes("salud") || t.includes("educ") || t.includes("segur") || t.includes("corrup") || t.includes("econom"));
-
-  const wantsCIUDADANO =
-    t.includes("servicio al ciudadano") ||
-    t.includes("servicios al ciudadano") ||
-    t.includes("miembro de mesa") ||
-    t.includes("local de votacion") ||
-    t.includes("local de votación") ||
-    t.includes("multas") ||
-    t.includes("reniec") ||
-    t.includes("jne") ||
-    t.includes("onpe");
-
-  const wantsCAMBIO =
-    t.includes("peru federal") || t.includes("perú federal") || t.includes("cambio con valentia") || t.includes("cambio con valentía");
-
-  const asksPartyDetails =
-    t.includes("partido") || t.includes("propuesta del partido") || t.includes("ideologia") || t.includes("ideología") || t.includes("programa") || t.includes("estatuto") || t.includes("milit");
-
-  return {
-    t,
-    wantsHV,
-    wantsPLAN,
-    wantsNEWS,
-    wantsREFLEXION,
-    wantsCIUDADANO,
-    wantsCAMBIO,
-    asksPartyDetails,
-  };
-}
-
-function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
-  const i = detectIntent(rawQ);
-
-  // Si pregunta por Perú Federal / partido desde cualquier lugar => preferir dirigir a página oficial o a nuestra ventana
-  if (i.wantsCAMBIO || i.asksPartyDetails) {
-    if (ctx === "CAMBIO") {
-      return (
-        "Para información detallada del partido o su propuesta oficial, lo mejor es visitar su web.\n\n" +
-        "👉 Abre el sitio oficial: https://perufederal.pe/\n\n" +
-        "Aquí en VotoClaro solo mostramos esta ventana como acceso rápido (imagen, frase y enlace)."
-      );
-    }
-    return (
-      "Ese tema corresponde a “UN CAMBIO CON VALENTÍA”.\n\n" +
-      "👉 Ve a: /cambio-con-valentia\n\n" +
-      "Ahí encontrarás el enlace oficial para conocer la propuesta."
-    );
-  }
-
-  // Preguntas sobre HV/PLAN/NEWS => dirigir a ficha candidato
-  if (i.wantsHV || i.wantsPLAN || i.wantsNEWS) {
-    if (ctx === "CANDIDATE") {
-      // Ya está en candidato, pero puede estar en tab distinto (lo resolvemos con guía)
-      if (i.wantsHV) return "Esto es de Hoja de Vida. En la ficha del candidato cambia a la pestaña HV y pregúntame ahí.";
-      if (i.wantsPLAN) return "Esto es del Plan. En la ficha del candidato cambia a la pestaña Plan y pregúntame ahí.";
-      if (i.wantsNEWS) return "Esto es de Actuar político. En la ficha del candidato cambia a la pestaña Actuar político y pregúntame ahí.";
-    }
-
-    // No está en candidato
-    const which = i.wantsHV ? "Hoja de Vida (HV)" : i.wantsPLAN ? "Plan (PLAN)" : "Actuar político (NEWS)";
-    return (
-      `Eso corresponde a la ficha del candidato (${which}).\n\n` +
-      "👉 Ve al inicio (/), busca el candidato y entra a su ficha.\n" +
-      "Luego elige la pestaña HV / Plan / Actuar político y me preguntas ahí."
-    );
-  }
-
-  // Reflexión
-  if (i.wantsREFLEXION) {
-    if (ctx === "REFLEXION") return null; // ya está en la ventana correcta
-    return (
-      "Eso corresponde a “Reflexionar antes de votar”.\n\n" +
-      "👉 Ve a: /reflexion\n\n" +
-      "Ahí puedo leerte preguntas y reflexiones sin inventar."
-    );
-  }
-
-  // Servicios al ciudadano
-  if (i.wantsCIUDADANO) {
-    if (ctx === "CIUDADANO") return null;
-    return (
-      "Eso corresponde a “Servicios al ciudadano”.\n\n" +
-      "👉 Ve a: /ciudadano/servicio\n\n" +
-      "Ahí te guío por los enlaces oficiales (JNE, ONPE, RENIEC)."
-    );
-  }
-
-  // Si está en /reflexion y pregunta por HV/PLAN/NEWS ya se cubrió arriba,
-  // pero si está en otras ventanas y pregunta algo sin intención clara => fallback
-  return (
-    "Ese tema no está dentro del alcance directo de esta pantalla.\n\n" +
-    "Si buscas información general, te recomiendo usar Google u otro buscador confiable.\n" +
-    "Y si es sobre candidatos o elecciones dentro de la app, dime exactamente qué necesitas (HV, Plan, Actuar político, Reflexión o Servicios)."
-  );
-}
-
-async function handleGlobalPolicyAndRedirect(params: {
-  pathname: string;
-  rawQ: string;
-  candidateId: string;
-  askMode: AskMode;
-  pushAssistant: (t: string) => void;
-  maybeSpeak: (t: string) => Promise<void>;
-}): Promise<{ handled: boolean }> {
-  const { pathname, rawQ, pushAssistant, maybeSpeak } = params;
-
-  // 1) Insultos / groserías
-  if (hasProfanity(rawQ)) {
-    const msg =
-      "Este espacio es para informarse con respeto.\n\n" +
-      "Si deseas continuar, reformula tu pregunta sin insultos. " +
-      "Si vas a seguir con groserías, te recomiendo retirarte de la app.";
-    pushAssistant(msg);
-    await maybeSpeak(msg);
-    return { handled: true };
-  }
-
-  // 2) Redirección por contexto
-  const ctx = getPageCtx(pathname);
-  const redirect = buildRedirectMessage(ctx, rawQ);
-
-  // Si redirect es null => significa “estás en la pantalla correcta” (no interceptar)
-  if (redirect === null) return { handled: false };
-
-  // Si estamos en candidato, dejamos que el backend responda salvo que el redirect sea de “cambia pestaña”
-  // (ya lo resolvimos arriba con mensajes específicos)
-  if (ctx === "CANDIDATE") {
-    const i = detectIntent(rawQ);
-    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS) {
-      pushAssistant(redirect);
-      await maybeSpeak(redirect);
-      return { handled: true };
-    }
-    return { handled: false };
-  }
-
-  // Si estamos en pantallas locales (REFLEXION/CIUDADANO/CAMBIO/HOME/OTHER),
-  // solo redirigimos cuando la intención NO corresponde a esa pantalla.
-  // Ejemplo: en CAMBIO, si preguntan HV/PLAN/NEWS => redirigir.
-  const i = detectIntent(rawQ);
-  if (ctx === "REFLEXION") {
-    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsCIUDADANO || i.wantsCAMBIO || i.asksPartyDetails) {
-      pushAssistant(redirect);
-      await maybeSpeak(redirect);
-      return { handled: true };
-    }
-    return { handled: false };
-  }
-
-  if (ctx === "CIUDADANO") {
-    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsREFLEXION || i.wantsCAMBIO || i.asksPartyDetails) {
-      pushAssistant(redirect);
-      await maybeSpeak(redirect);
-      return { handled: true };
-    }
-    return { handled: false };
-  }
-
-  if (ctx === "CAMBIO") {
-    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsREFLEXION || i.wantsCIUDADANO || i.asksPartyDetails) {
-      pushAssistant(redirect);
-      await maybeSpeak(redirect);
-      return { handled: true };
-    }
-    return { handled: false };
-  }
-
-  if (ctx === "HOME" || ctx === "OTHER") {
-    // En inicio, si no hay intención clara => fallback a buscador
-    const anyKnown = i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsREFLEXION || i.wantsCIUDADANO || i.wantsCAMBIO || i.asksPartyDetails;
-    if (!anyKnown) {
-      pushAssistant(redirect);
-      await maybeSpeak(redirect);
-      return { handled: true };
-    }
-
-    // Si sí hay intención, redirect te guía a la pantalla correcta
-    pushAssistant(redirect);
-    await maybeSpeak(redirect);
-    return { handled: true };
-  }
-
-  return { handled: false };
-}
 
   function matchRefAxisId(input: string): string | null {
     const t = normalizeLite(input);
 
-    // Mapeo “humano” -> id real del eje
     const rules: Array<[RegExp, string]> = [
       [/econom|emple|trabaj/, "eco"],
       [/salud|hospital|sis|essalud/, "salud"],
@@ -1414,16 +1729,12 @@ async function handleGlobalPolicyAndRedirect(params: {
       [/exterior|defensa|soberan|frontera|ciber/, "ext"],
     ];
 
-    for (const [re, id] of rules) {
-      if (re.test(t)) return id;
-    }
+    for (const [re, id] of rules) if (re.test(t)) return id;
     return null;
   }
 
   function parseQuestionNumber(input: string): number | null {
     const t = normalizeLite(input);
-
-    // “pregunta 5”, “p 5”, “5”
     const m = t.match(/(?:pregunta|p)?\s*(\d)\b/);
     if (!m) return null;
 
@@ -1436,10 +1747,8 @@ async function handleGlobalPolicyAndRedirect(params: {
     const q = (rawQ || "").trim();
     if (!q) return;
 
-    // Si el usuario dice solo "1..5"
     const onlyNumber = q.match(/^\s*[1-5]\s*$/) ? Number(q.trim()) : null;
 
-    // 1) Caso: venimos esperando número
     if (refWaitingNumber && refAxisId && onlyNumber) {
       const axis = REFLEXION_AXES.find((a) => a.id === refAxisId);
       const idx = onlyNumber - 1;
@@ -1456,9 +1765,7 @@ async function handleGlobalPolicyAndRedirect(params: {
         `✅ ${axis.title}\n` +
         `Pregunta ${onlyNumber}:\n${item.question}\n\n` +
         `${item.reflection}\n` +
-        (item.followups?.length
-          ? `\n\nPara seguir reflexionando:\n- ${item.followups.join("\n- ")}`
-          : "");
+        (item.followups?.length ? `\n\nPara seguir reflexionando:\n- ${item.followups.join("\n- ")}` : "");
 
       pushAssistant(out);
       await maybeSpeak(out);
@@ -1467,7 +1774,6 @@ async function handleGlobalPolicyAndRedirect(params: {
       return;
     }
 
-    // 2) Caso: "educacion pregunta 5" (o parecido)
     const axisFromText = matchRefAxisId(q);
     const nFromText = parseQuestionNumber(q);
 
@@ -1482,7 +1788,6 @@ async function handleGlobalPolicyAndRedirect(params: {
 
       setRefAxisId(axisFromText);
 
-      // Si también vino el número, respondemos directo
       if (nFromText) {
         const idx = nFromText - 1;
         const item = axis.questions?.[idx];
@@ -1499,9 +1804,7 @@ async function handleGlobalPolicyAndRedirect(params: {
           `✅ ${axis.title}\n` +
           `Pregunta ${nFromText}:\n${item.question}\n\n` +
           `${item.reflection}\n` +
-          (item.followups?.length
-            ? `\n\nPara seguir reflexionando:\n- ${item.followups.join("\n- ")}`
-            : "");
+          (item.followups?.length ? `\n\nPara seguir reflexionando:\n- ${item.followups.join("\n- ")}` : "");
 
         pushAssistant(out);
         await maybeSpeak(out);
@@ -1509,12 +1812,10 @@ async function handleGlobalPolicyAndRedirect(params: {
         return;
       }
 
-      // Si NO vino número: listamos las 5 y pedimos número
-      const list =
-        axis.questions
-          .slice(0, 5)
-          .map((qq, i) => `${i + 1}) ${qq.question}`)
-          .join("\n\n");
+      const list = axis.questions
+        .slice(0, 5)
+        .map((qq, i) => `${i + 1}) ${qq.question}`)
+        .join("\n\n");
 
       const msg =
         `Estás en el eje: ${axis.title}.\n\n` +
@@ -1527,15 +1828,12 @@ async function handleGlobalPolicyAndRedirect(params: {
       return;
     }
 
-    // 3) Si el usuario dice "pregunta 3" pero NO dijo eje (y no está esperando número)
     if (nFromText && refAxisId) {
-      // si ya hay eje guardado, usamos eso
       setRefWaitingNumber(true);
       await handleReflexion(String(nFromText));
       return;
     }
 
-    // 4) Mensaje de ayuda general
     const help =
       "Estoy en Reflexionar antes de votar.\n" +
       "Puedes decir por ejemplo:\n" +
@@ -1546,179 +1844,242 @@ async function handleGlobalPolicyAndRedirect(params: {
     await maybeSpeak(help);
   }
 
+  // ✅ Guía local HOME (para preguntas genéricas en inicio)
+  function answerFromHomeGeneric(rawQ: string) {
+    const t = normalizeLite(rawQ);
+    const i = detectIntent(rawQ);
+
+    // 1) Ayuda general en inicio (“qué hago aquí”)
+    if (i.wantsHOMEHELP) {
+      return (
+        "Estás en la pantalla de inicio.\n\n" +
+        "Aquí puedes:\n" +
+        "1) Buscar candidatos: escribe al menos 2 letras en “Buscar candidato”.\n" +
+        "2) Abrir la ficha del candidato y revisar HV, Plan y Actuar político.\n" +
+        "3) Entrar a accesos rápidos: Servicios al ciudadano, Reflexión y Un cambio con valentía.\n\n" +
+        "Tip: escribe un apellido (por ejemplo: “Acuña”, “López Aliaga”, “Keiko”) y abre la ficha."
+      );
+    }
+
+    // 2) Quiere comparar (orientación: primero entra a fichas + PLAN)
+    if (i.wantsCompare) {
+      return (
+        "Para comparar propuestas entre candidatos:\n\n" +
+        "1) Busca un candidato y entra a su ficha.\n" +
+        "2) Cambia a la pestaña “Plan”.\n" +
+        "3) Si tienes opción de comparar, elige el segundo candidato.\n" +
+        "4) Luego pregúntame: “compara seguridad”, “compara economía”, etc.\n\n" +
+        "Si me dices los 2 nombres, te digo cómo encontrarlos rápido en la lista."
+      );
+    }
+
+    // 3) Preguntas típicas de “cómo voto / dónde voto / multas” => redirige a Servicios
+    if (i.wantsHowToVote) {
+      return (
+        "Eso se resuelve en “Servicios al ciudadano”.\n\n" +
+        "👉 Ve a: /ciudadano/servicio\n\n" +
+        "Ahí tienes enlaces oficiales (JNE, ONPE, RENIEC) para:\n" +
+        "- local de votación\n" +
+        "- miembro de mesa\n" +
+        "- multas electorales\n" +
+        "- trámites y consultas"
+      );
+    }
+
+    // 4) Navegación rápida por tarjetas de inicio
+    if (i.wantsNavigateHomeCards) {
+      return (
+        "Desde inicio puedes entrar a:\n\n" +
+        "👉 /ciudadano/servicio  (local de votación, multas, miembro de mesa)\n" +
+        "👉 /reflexion  (preguntas por ejes: economía, salud, educación, seguridad)\n" +
+        "👉 /cambio-con-valentia  (acceso a web oficial de la propuesta)\n\n" +
+        "Dime cuál quieres abrir y te digo qué encontrarás allí."
+      );
+    }
+
+    // 5) Quiere buscar candidato / “quién es X” => instrucciones claras sin inventar
+    if (i.wantsCandidateSearch || t.includes("candidato") || t.includes("nombre") || t.includes("buscar")) {
+      return (
+        "Para buscar un candidato:\n" +
+        "- Escribe al menos 2 letras en el cuadro “Buscar candidato”.\n" +
+        "- Luego haz clic en el resultado para abrir la ficha.\n\n" +
+        "Dentro de la ficha puedes preguntar por:\n" +
+        "- HV (Hoja de Vida)\n" +
+        "- Plan de Gobierno\n" +
+        "- Actuar político\n\n" +
+        "Si me dices el nombre o apellido que buscas, te indico cómo escribirlo para encontrarlo más rápido."
+      );
+    }
+
+    // fallback (pero útil)
+    return (
+      "En inicio puedes buscar candidatos y abrir sus fichas.\n\n" +
+      "Si me dices:\n" +
+      "- “cómo busco un candidato”\n" +
+      "- “quiero ver el plan”\n" +
+      "- “dónde voto / multas / miembro de mesa”\n" +
+      "te guío al lugar correcto."
+    );
+  }
+
   async function askBackend(question: string) {
-  const rawQ = (question || "").trim();
-  if (!rawQ) return;
-  // =========================================
-  // ✅ POLÍTICA GLOBAL: insultos + redirección por contexto
-  // =========================================
-  const gate = await handleGlobalPolicyAndRedirect({
-    pathname: String(pathname || ""),
-    rawQ,
-    candidateId,
-    askMode,
-    pushAssistant,
-    maybeSpeak,
-  });
+    const rawQ = (question || "").trim();
+    if (!rawQ) return;
 
-  if (gate.handled) return;
+    const gate = await handleGlobalPolicyAndRedirect({
+      pathname: String(pathname || ""),
+      rawQ,
+      candidateId,
+      askMode,
+      pushAssistant,
+      maybeSpeak,
+    });
+    if (gate.handled) return;
 
-  // =========================================
-  // 🧠 MODO LOCAL: /reflexion (SIN Gemini)
-  // =========================================
-  const isReflexionPage = String(pathname || "").startsWith("/reflexion");
+    const isReflexionPage = String(pathname || "").startsWith("/reflexion");
+    if (isReflexionPage) {
+      await handleReflexion(rawQ);
+      return;
+    }
 
-if (isReflexionPage) {
-  await handleReflexion(rawQ);
-  return;
-}
-  // =========================================
-  // 🧠 MODO LOCAL: /cambio-con-valentia (SIN IA)
-  // =========================================
-  if (isCambioConValentiaPage) {
-    await handleCambioConValentia(rawQ, maybeSpeak, pushAssistant);
-    return;
-  }
+    if (isCambioConValentiaPage) {
+      await handleCambioConValentia(rawQ, maybeSpeak, pushAssistant);
+      return;
+    }
 
-  // =========================================
-  // 🧠 MODO LOCAL: /ciudadano/servicio (SIN Gemini)
-  // =========================================
-  if (isCiudadanoServicioPage) {
-    await handleCiudadanoServicio(rawQ, maybeSpeak, pushAssistant);
-    return;
-  }
+    if (isCiudadanoServicioPage) {
+      await handleCiudadanoServicio(rawQ, maybeSpeak, pushAssistant);
+      return;
+    }
 
-  // =========================================
-  // 🔒 MODO NORMAL: requiere candidato
-  // =========================================
-  if (!candidateId) {
-    const msg =
-      "Para ayudarte con un candidato, primero abre su ficha.\n" +
-      "Ve a la lista de candidatos, busca el nombre y haz clic para entrar.\n" +
-      "Ya dentro de la ficha, aquí podrás preguntar por: Hoja de Vida (HV), Plan o Actuar político.";
-    pushAssistant(msg);
-    await maybeSpeak(msg);
-    return;
-  }
+    // ✅ HOME: responder preguntas genéricas sin exigir candidato
+    if ((pathname === "/" || String(pathname || "").startsWith("/#")) && !candidateId) {
+      const out = answerFromHomeGeneric(rawQ);
+      pushAssistant(out);
+      await maybeSpeak(out);
+      return;
+    }
 
-  const cname = (candidateName || slugToName(candidateId)).trim();
-  const enrichedQ = buildContextualQuestion(rawQ, mem, cname, askMode);
-
-  setBusy(true);
-  try {
-    // 👉 aquí sigue TODO tu código actual (HV / PLAN / NEWS)
-
-      // 1) HV / PLAN (PDF)
-     // 1) HV / PLAN (PDF)
-if (askMode === "HV" || askMode === "PLAN") {
-  const doc = askMode === "HV" ? "hv" : "plan";
-
-  // ✅ Detectar si la pregunta pide comparación (simple)
-  const qNorm = normalize(rawQ);
-  const wantsCompare =
-    askMode === "PLAN" &&
-    !!compareCandidateId &&
-    (qNorm.includes("compara") ||
-      qNorm.includes("comparar") ||
-      qNorm.includes("vs") ||
-      qNorm.includes("versus") ||
-      qNorm.includes("diferencia") ||
-      qNorm.includes("diferencias"));
-
-  // ✅ Si es comparación PLAN vs PLAN => pegarle a /api/compare/plan
-  if (wantsCompare) {
-    // axis: si en tu UI ya lo tienes, úsalo; si no, default ECO
-    // (en el siguiente paso te doy el helper de axis)
-    const axis = inferAxisFromQuestion(rawQ);
-
-    const url =
-      `/api/compare/plan?axis=${encodeURIComponent(axis)}` +
-      `&idA=${encodeURIComponent(candidateId)}` +
-      `&idB=${encodeURIComponent(compareCandidateId)}`;
-
-    const res = await fetch(url, { cache: "no-store" });
-    const payload = await safeReadJson(res);
-
-    if (!res.ok) {
+    if (!candidateId) {
       const msg =
-        (payload as any)?._nonJson
-          ? "Error COMPARAR: el servidor devolvió una respuesta no-JSON. Revisa DevTools → Network → /api/compare/plan."
-          : `Error COMPARAR: ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
+        "Primero abre la ficha de un candidato.\n\n" +
+        "Cómo hacerlo:\n" +
+        "1) Ve al inicio.\n" +
+        "2) Escribe el nombre o apellido del candidato.\n" +
+        "3) Haz clic en el resultado para entrar a su ficha.\n\n" +
+        "Luego podrás preguntarme por:\n" +
+        "- Hoja de Vida (HV)\n" +
+        "- Plan de Gobierno\n" +
+        "- Actuar político";
+
       pushAssistant(msg);
       await maybeSpeak(msg);
       return;
     }
 
-    // el endpoint compare devuelve { a: {answer}, b:{answer}, axis... }
-    const aAnsRaw = String((payload as any)?.a?.answer ?? "").trim();
-    const bAnsRaw = String((payload as any)?.b?.answer ?? "").trim();
+    const cname = (candidateName || slugToName(candidateId)).trim();
+    const enrichedQ = buildContextualQuestion(rawQ, mem, cname, askMode);
 
-    const out =
-      `Comparación (Plan vs Plan) — Eje: ${axis}\n\n` +
-      `A) ${cname}\n${aAnsRaw}\n\n` +
-      `B) ${slugToName(compareCandidateId)}\n${bAnsRaw}`;
+    setBusy(true);
+    try {
+      if (askMode === "HV" || askMode === "PLAN") {
+        const doc = askMode === "HV" ? "hv" : "plan";
 
-    const outPretty = prettyCitationsText(out);
+        const qNorm = normalize(rawQ);
+        const wantsCompare =
+          askMode === "PLAN" &&
+          !!compareCandidateId &&
+          (qNorm.includes("compara") ||
+            qNorm.includes("comparar") ||
+            qNorm.includes("vs") ||
+            qNorm.includes("versus") ||
+            qNorm.includes("diferencia") ||
+            qNorm.includes("diferencias"));
 
-    pushAssistant(outPretty);
-    await maybeSpeak(outPretty);
+        if (wantsCompare) {
+          const axis = inferAxisFromQuestion(rawQ);
 
-    updateMemAfterAnswer({
-      mode: askMode,
-      candidateId,
-      candidateName: cname,
-      question: rawQ,
-      answer: outPretty,
-      answerHasLinks: false,
-    });
+          const url =
+            `/api/compare/plan?axis=${encodeURIComponent(axis)}` +
+            `&idA=${encodeURIComponent(candidateId)}` +
+            `&idB=${encodeURIComponent(compareCandidateId)}`;
 
-    return;
-  }
+          const res = await fetch(url, { cache: "no-store" });
+          const payload = await safeReadJson(res);
 
-  // ✅ Normal (HV o PLAN individual) => /api/ai/answer
-  const res = await fetch("/api/ai/answer", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-    body: JSON.stringify({ id: candidateId, doc, question: enrichedQ }),
-  });
+          if (!res.ok) {
+            const msg =
+              (payload as any)?._nonJson
+                ? "Error COMPARAR: el servidor devolvió una respuesta no-JSON. Revisa DevTools → Network → /api/compare/plan."
+                : `Error COMPARAR: ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
+            pushAssistant(msg);
+            await maybeSpeak(msg);
+            return;
+          }
 
-  const payload = await safeReadJson(res);
+          const aAnsRaw = String((payload as any)?.a?.answer ?? "").trim();
+          const bAnsRaw = String((payload as any)?.b?.answer ?? "").trim();
 
-  if (!res.ok) {
-    const msg =
-      (payload as any)?._nonJson
-        ? "Error IA: el servidor devolvió una respuesta no-JSON. Revisa DevTools → Network → /api/ai/answer."
-        : `Error IA: ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
-    pushAssistant(msg);
-    await maybeSpeak(msg);
-    return;
-  }
+          const out =
+            `Comparación (Plan vs Plan) — Eje: ${axis}\n\n` +
+            `A) ${cname}\n${aAnsRaw}\n\n` +
+            `B) ${slugToName(compareCandidateId)}\n${bAnsRaw}`;
 
-  const data = payload as AiAnswerResponse;
+          const outPretty = prettyCitationsText(out);
 
-  const ansRaw = String(
-    data?.answer ?? "No hay evidencia suficiente en las fuentes consultadas."
-  ).trim();
+          pushAssistant(outPretty);
+          await maybeSpeak(outPretty);
 
-  const ans = prettyCitationsText(ansRaw);
+          updateMemAfterAnswer({
+            mode: askMode,
+            candidateId,
+            candidateName: cname,
+            question: rawQ,
+            answer: outPretty,
+            answerHasLinks: false,
+          });
 
-  pushAssistant(ans);
-  await maybeSpeak(ans);
+          return;
+        }
 
-  updateMemAfterAnswer({
-    mode: askMode,
-    candidateId,
-    candidateName: cname,
-    question: rawQ,
-    answer: ans,
-    answerHasLinks: false,
-  });
+        const res = await fetch("/api/ai/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ id: candidateId, doc, question: enrichedQ }),
+        });
 
-  return;
-}
+        const payload = await safeReadJson(res);
 
-      // 2) NEWS (Actuar político)
+        if (!res.ok) {
+          const msg =
+            (payload as any)?._nonJson
+              ? "Error IA: el servidor devolvió una respuesta no-JSON. Revisa DevTools → Network → /api/ai/answer."
+              : `Error IA: ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
+          pushAssistant(msg);
+          await maybeSpeak(msg);
+          return;
+        }
+
+        const data = payload as AiAnswerResponse;
+        const ansRaw = String(data?.answer ?? "No hay evidencia suficiente en las fuentes consultadas.").trim();
+        const ans = prettyCitationsText(ansRaw);
+
+        pushAssistant(ans);
+        await maybeSpeak(ans);
+
+        updateMemAfterAnswer({
+          mode: askMode,
+          candidateId,
+          candidateName: cname,
+          question: rawQ,
+          answer: ans,
+          answerHasLinks: false,
+        });
+
+        return;
+      }
+
       if (askMode === "NEWS") {
         const finalQ = cname ? `${cname}: ${rawQ}` : rawQ;
         const finalToSend = looksLikeFollowUp(rawQ) ? enrichedQ : finalQ;
@@ -1778,14 +2139,13 @@ if (askMode === "HV" || askMode === "PLAN") {
 
   function sendTyped() {
     const t = draft.trim();
-    if (!t || busy) return;
+    if (!t || t.length < 2 || busy) return;
 
     setMsgs((prev) => [...prev, { role: "user", content: t }]);
     setDraft("");
     askBackend(t);
   }
 
-  // SpeechRecognition (Web Speech)
   function canUseSpeechRec() {
     const w = window as any;
     return !!(w.SpeechRecognition || w.webkitSpeechRecognition);
@@ -1836,8 +2196,8 @@ if (askMode === "HV" || askMode === "PLAN") {
         const code = String(e?.error ?? "");
         const msg =
           code === "not-allowed"
-            ? "No tengo permiso de micrófono. Dale permitir en el navegador y prueba otra vez."
-            : `Error micrófono: ${code || "desconocido"}`;
+            ? "No tengo permiso para usar el micrófono. Actívalo en el navegador y vuelve a intentar."
+            : "No pude usar el micrófono. Revisa permisos o prueba otro navegador.";
         pushAssistant(msg);
         setListening(false);
       };
@@ -1845,11 +2205,13 @@ if (askMode === "HV" || askMode === "PLAN") {
       rec.onend = () => {
         setListening(false);
         const q = (finalText || draft || "").trim();
-        if (q) {
-          setMsgs((prev) => [...prev, { role: "user", content: q }]);
-          setDraft("");
-          askBackend(q);
-        }
+
+        // evita enviar ruido muy corto
+        if (!q || q.length < 3) return;
+
+        setMsgs((prev) => [...prev, { role: "user", content: q }]);
+        setDraft("");
+        askBackend(q);
       };
 
       setListening(true);
@@ -1861,10 +2223,17 @@ if (askMode === "HV" || askMode === "PLAN") {
   }
 
   async function speakLastAssistant() {
-    const last = [...msgs].reverse().find((m) => m.role === "assistant")?.content ?? "";
-    if (!last) return;
+    // prioridad: comparación/lectura de pantalla reciente
+    const hasPageRead = pageReadText && Date.now() - pageReadAt < 5 * 60 * 1000;
+
+    const target = hasPageRead
+      ? pageReadText
+      : [...msgs].reverse().find((m) => m.role === "assistant")?.content ?? "";
+
+    if (!target) return;
+
     if (voiceMode !== "ON") setVoiceMode("ON");
-    await maybeSpeak(last);
+    await maybeSpeak(target);
   }
 
   const fabLabel = useMemo(() => (open ? "Cerrar Federalito AI" : "Abrir Federalito AI"), [open]);
@@ -1872,40 +2241,70 @@ if (askMode === "HV" || askMode === "PLAN") {
 
   return (
     <>
-      {/* FAB */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={[
-          "fixed z-[60] right-4 bottom-4 md:right-6 md:bottom-6",
-          "flex items-center gap-2 rounded-full border bg-white",
-          "shadow-lg px-3 py-2",
-          "hover:shadow-xl active:scale-[0.98] transition",
-          "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-200",
-          "hover:-translate-y-[2px]",
-          "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-        ].join(" ")}
-        aria-label={fabLabel}
-        title={fabLabel}
-      >
-        <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gray-100 shrink-0">
-          <FederalitoAvatar className="w-full h-full" />
-          <span
+      {/* ✅ FAB MOVIBLE */}
+      {!isPitchPage && (
+        <div
+          ref={fabRef}
+          className="fixed z-[60] touch-none"
+          style={
+            mounted
+              ? { left: fabPos.x, top: fabPos.y }
+              : { right: 16, bottom: 16, left: "auto", top: "auto" }
+          }
+          onPointerDown={onFabPointerDown}
+          onPointerMove={onFabPointerMove}
+          onPointerUp={onFabPointerUp}
+        >
+          <button
+            type="button"
             className={[
-              "absolute -top-1 -right-1",
-              "w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white",
-              "shadow-sm",
-              "animate-pulse motion-reduce:animate-none",
+              "flex items-center gap-2 rounded-full border bg-white",
+              "shadow-lg px-3 py-2",
+              "hover:shadow-xl active:scale-[0.98] transition",
+              "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-200",
+              "hover:-translate-y-[2px]",
+              "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+              "select-none",
             ].join(" ")}
-            aria-hidden="true"
-          />
-        </div>
+            aria-label={fabLabel}
+            title={fabLabel}
+          >
+            <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+              <FederalitoAvatar className="w-full h-full" />
+              <span
+                className={[
+                  "absolute -top-1 -right-1",
+                  "w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white",
+                  "shadow-sm",
+                  "animate-pulse motion-reduce:animate-none",
+                ].join(" ")}
+                aria-hidden="true"
+              />
+            </div>
 
-        <div className="text-left leading-[14px]">
-          <div className="text-[12px] font-extrabold text-slate-900">Federalito AI</div>
-          <div className="text-[11px] text-slate-600">{open ? `Modo: ${modeLabel}` : "Asistente / Guía"}</div>
+            <div className="text-left leading-[14px]">
+              <div className="text-[12px] font-extrabold text-slate-900">Federalito AI</div>
+              <div className="text-[11px] text-slate-600">{open ? `Modo: ${modeLabel}` : "Asistente / Guía"}</div>
+            </div>
+
+            <span
+              data-no-drag="1"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Si tu archivo original tenía safeResetFabPos(), se mantiene en tu base.
+                // Si NO existe, comenta esta línea.
+                // @ts-ignore
+                safeResetFabPos();
+              }}
+              className="ml-2 text-[11px] font-extrabold text-slate-600 hover:text-slate-900 cursor-pointer"
+              title="Reiniciar posición del botón"
+            >
+              ↺
+            </span>
+          </button>
         </div>
-      </button>
+      )}
 
       {/* Panel */}
       {open ? (
@@ -1932,15 +2331,13 @@ if (askMode === "HV" || askMode === "PLAN") {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* ✅ ahora sí: reset de POSICIÓN */}
                 <button
                   type="button"
                   onClick={(e) => {
-                  e.stopPropagation();
-                  resetPanelPos();
-                  resetAssistantChat();
-                }}
-
+                    e.stopPropagation();
+                    resetPanelPos();
+                    resetAssistantChat();
+                  }}
                   className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold"
                   title="Reiniciar posición"
                 >
@@ -1998,7 +2395,6 @@ if (askMode === "HV" || askMode === "PLAN") {
                   <option value="NEWS">Actuar político</option>
                 </select>
 
-                {/* 🔊 leer último */}
                 <button
                   type="button"
                   onClick={speakLastAssistant}
@@ -2008,7 +2404,6 @@ if (askMode === "HV" || askMode === "PLAN") {
                   🔊 Leer
                 </button>
 
-                {/* 🎙️ mic */}
                 <button
                   type="button"
                   onClick={() => {
@@ -2026,7 +2421,6 @@ if (askMode === "HV" || askMode === "PLAN") {
                   {listening ? "🎙️ Escuchando…" : "🎙️ Hablar"}
                 </button>
 
-                {/* ✅ Botón para reiniciar CHAT (opcional pero útil) */}
                 <button
                   type="button"
                   onClick={resetAssistantChat}
@@ -2045,32 +2439,28 @@ if (askMode === "HV" || askMode === "PLAN") {
               </div>
 
               <div className="mt-2 text-[10px] text-slate-400">
-                Memoria corta: {mem?.lastUpdatedAt ? `ON (última: ${new Date(mem.lastUpdatedAt).toLocaleString()})` : "OFF"}
+                Memoria corta:{" "}
+                {mem?.lastUpdatedAt ? `ON (última: ${new Date(mem.lastUpdatedAt).toLocaleString()})` : "OFF"}
               </div>
             </div>
 
             {/* Body */}
-            <div
-              ref={listRef}
-              className="flex-1 overflow-auto p-4 space-y-3 bg-gradient-to-b from-green-50 via-white to-white"
-            >
+            <div ref={listRef} className="flex-1 overflow-auto p-4 space-y-3 bg-gradient-to-b from-green-50 via-white to-white">
               {msgs.map((m, i) => (
-  <div
-    key={i}
-    className={[
-      "text-[14px] leading-[20px] whitespace-pre-wrap rounded-2xl px-4 py-3 border shadow-sm",
-      m.role === "user"
-        ? "ml-10 bg-green-700 text-white border-green-800"
-        : "mr-10 bg-white text-slate-900 border-slate-200",
-    ].join(" ")}
-  >
-    {m.content}
-  </div>
-))}
+                <div
+                  key={i}
+                  className={[
+                    "text-[14px] leading-[20px] whitespace-pre-wrap rounded-2xl px-4 py-3 border shadow-sm",
+                    m.role === "user" ? "ml-10 bg-green-700 text-white border-green-800" : "mr-10 bg-white text-slate-900 border-slate-200",
+                  ].join(" ")}
+                >
+                  {m.content}
+                </div>
+              ))}
 
               {busy ? (
                 <div className="mr-10 bg-green-50 border border-green-200 rounded-2xl px-3 py-2 text-[13px]">
-                  Procesando…
+                  Procesando respuesta…
                 </div>
               ) : null}
             </div>
@@ -2079,23 +2469,23 @@ if (askMode === "HV" || askMode === "PLAN") {
             <div className="p-3 border-t bg-white sticky bottom-0">
               <div className="flex gap-2">
                 <input
+                  ref={inputRef}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       sendTyped();
                     }
                   }}
                   placeholder={askMode === "NEWS" ? "Pregunta sobre actuar político…" : "Pregunta sobre HV/Plan…"}
                   className={[
-  "flex-1 rounded-xl border px-3 py-2 text-[14px] font-semibold",
-  "bg-slate-50 text-slate-900 placeholder:text-slate-500",
-  "border-slate-300 outline-none",
-  "focus:ring-4 focus:ring-green-200 focus:border-green-600",
-  "caret-green-700",
-].join(" ")}
-
+                    "flex-1 rounded-xl border px-3 py-2 text-[14px] font-semibold",
+                    "bg-slate-50 text-slate-900 placeholder:text-slate-500",
+                    "border-slate-300 outline-none",
+                    "focus:ring-4 focus:ring-green-200 focus:border-green-600",
+                    "caret-green-700",
+                  ].join(" ")}
                   disabled={busy}
                 />
                 <button

@@ -41,6 +41,35 @@ export default function ServiciosCiudadanoPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // ✅ Narración al entrar: contenido real de esta ventana (resumen + lista corta)
+  useEffect(() => {
+    const list = CIUDADANO_SERVICES
+      .slice(0, 6)
+      .map((s, i) => `${i + 1}) ${s.title}`)
+      .join("\n");
+
+    const text =
+      "Estás en Servicios al ciudadano. " +
+      "Aquí tienes enlaces oficiales para trámites electorales.\n\n" +
+      "Servicios principales:\n" +
+      list +
+      "\n\n" +
+      "Puedes tocar “Abrir sitio oficial” en cualquiera. " +
+      "Si quieres, también puedes pedirme: “lista”, o decir “multas”, “miembro de mesa” o “local de votación”.";
+    // ✅ Al entrar a esta ventana: NO dejar el panel abierto (evita que tape la pantalla)
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: { action: "CLOSE" },
+      })
+    );
+
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: { action: "SAY", text, speak: true },
+      })
+    );
+  }, []);
+
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
       {/* Header */}
@@ -56,11 +85,12 @@ export default function ServiciosCiudadanoPage() {
         </div>
 
         <Link
-          href="/"
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-600 bg-white text-green-700 text-sm font-semibold hover:bg-green-50 shadow-sm transition"
-        >
-          ← Volver al inicio
-        </Link>
+  href="/"
+  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-700 bg-green-600 text-white text-sm font-semibold hover:bg-green-700 shadow-md transition"
+>
+  ← Volver al inicio
+</Link>
+
       </div>
 
       {/* Aviso legal / aclaración */}
