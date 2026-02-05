@@ -1,0 +1,67 @@
+{
+  "candidate_full_name": "Roberto Helbert Sánchez Palomino",
+  "candidate_slug": "roberto-helbert-sanchez-palomino",
+  "generated_at": "2026-02-01",
+  "items": [
+    {
+      "id": "rhsp-2025-01-31-archivo-proceso-rebelion",
+      "title": "Corte Suprema archiva investigación penal por presunta rebelión contra Roberto Sánchez",
+      "date": "2025-01-31",
+      "source": {
+        "name": "La República",
+        "domain": "larepublica.pe"
+      },
+      "url": "https://larepublica.pe/politica/2025/01/31/exministro-de-comercio-roberto-sanchez-ya-no-sera-investigado-por-fallido-golpe-de-estado-hnews-2628800",
+      "topic": "proceso",
+      "snippet": "La Sala Penal Permanente de la Corte Suprema declaró fundada una excepción y archivó la acusación por presunta rebelión contra Roberto Sánchez Palomino relacionada al fallido golpe de Estado de diciembre de 2022, excluyéndolo como investigado." 
+    },
+    {
+      "id": "rhsp-2025-01-28-fiscalia-actuacion-golpe",
+      "title": "Fiscalía señala acciones de Roberto Sánchez en el intento de golpe de Estado de Pedro Castillo",
+      "date": "2025-01-28",
+      "source": {
+        "name": "El Comercio",
+        "domain": "elcomercio.pe"
+      },
+      "url": "https://elcomercio.pe/politica/justicia/roberto-sanchez-palomino-fiscalia-sobre-actuacion-del-congresista-en-golpe-de-estado-desplego-determinadas-acciones-pedro-castillo-ultimas-noticia/",
+      "topic": "investigacion",
+      "snippet": "El Ministerio Público detalló imputaciones contra el congresista Roberto Sánchez Palomino por presunta participación en reuniones previas al intento de golpe de Estado del 7 de diciembre de 2022, con elementos probatorios ofrecidos." 
+    },
+    {
+      "id": "rhsp-cargo-congresista",
+      "title": "Roberto Sánchez Palomino es congresista de la República por Juntos por el Perú",
+      "date": "2021-07-26",
+      "source": {
+        "name": "Congreso de la República",
+        "domain": "congreso.gob.pe"
+      },
+      "url": "https://www.congreso.gob.pe/congresistas2021/RobertoSanchez/",
+      "topic": "cargo",
+      "snippet": "Roberto Helbert Sánchez Palomino fue elegido congresista de la República para el periodo 2021-2026 por Lima Metropolitana representando al partido Juntos por el Perú." 
+    },
+    {
+      "id": "rhsp-cargo-ministro-mincetur",
+      "title": "Nombran a Roberto Sánchez Palomino Ministro de Comercio Exterior y Turismo",
+      "date": "2021-07-29",
+      "source": {
+        "name": "RPP Noticias",
+        "domain": "rpp.pe"
+      },
+      "url": "https://rpp.pe/politica/gobierno/roberto-sanchez-el-nuevo-ministro-de-comercio-exterior-y-turismo-perfil-noticia-1350014",
+      "topic": "cargo",
+      "snippet": "Roberto Sánchez Palomino juró como Ministro de Comercio Exterior y Turismo en el gobierno de Pedro Castillo, permaneciendo en el cargo hasta diciembre de 2022." 
+    },
+    {
+      "id": "rhsp-partido-juntos-por-el-peru",
+      "title": "Presidente del partido Juntos por el Perú",
+      "date": null,
+      "source": {
+        "name": "Wikipedia",
+        "domain": "wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/Roberto_S%C3%A1nchez_Palomino",
+      "topic": "partido",
+      "snippet": "Roberto Helbert Sánchez Palomino es psicólogo y político peruano, actual presidente del partido Juntos por el Perú desde octubre de 2017." 
+    }
+  ]
+}

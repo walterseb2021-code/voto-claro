@@ -1,0 +1,67 @@
+{
+  "candidate_full_name": "Armando Joaquín Massé Fernández",
+  "candidate_slug": "armando-joaquin-masse-fernandez",
+  "generated_at": "2026-02-01",
+  "items": [
+    {
+      "id": "ajmf-2015-07-14-investigacion-apdayc",
+      "title": "Fiscalía investiga a directivos de APDAYC por lavado de activos y administración fraudulenta",
+      "date": "2015-07-14",
+      "source": {
+        "name": "El Comercio",
+        "domain": "elcomercio.pe"
+      },
+      "url": "https://elcomercio.pe/lima/apdayc-fiscalia-investiga-directivos-lavado-activos-178149-noticia/",
+      "topic": "investigacion",
+      "snippet": "La 29° Fiscalía Provincial Penal de Lima abrió investigación contra Armando Massé y otros directivos de APDAYC por presunto lavado de activos y administración fraudulenta. La denuncia de Felipe Escobar acusaba a la asociación de adquirir radiofrecuencias e inmuebles con regalías de autores y compositores"
+    },
+    {
+      "id": "ajmf-2020-07-20-denuncia-dioxido",
+      "title": "Colegio Médico investiga a Armando Massé por recomendar dióxido de cloro y otras terapias sin evidencia",
+      "date": "2020-07-20",
+      "source": {
+        "name": "Salud con lupa",
+        "domain": "saludconlupa.com"
+      },
+      "url": "https://saludconlupa.com/series/desinformantes/armando-masse-fernandez/",
+      "topic": "denuncia",
+      "snippet": "Salud con lupa reporta que el Colegio Médico del Perú inició una investigación en 2020 contra Armando Massé y otros médicos por promover dióxido de cloro, ivermectina e hidroxicloroquina como tratamientos para la COVID-19, pese a la falta de evidencia científica y los riesgos para la salud"
+    },
+    {
+      "id": "ajmf-cargo-apdayc-1999-2018",
+      "title": "Presidente de la Asociación Peruana de Autores y Compositores (APDAYC)",
+      "date": null,
+      "source": {
+        "name": "Wikipedia",
+        "domain": "es.wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/Armando_Mass%C3%A9",
+      "topic": "cargo",
+      "snippet": "Armando Massé es médico y músico; dirigió la Asociación Peruana de Autores y Compositores entre 1999 y 2018, periodo en el que enfrentó denuncias por lavado de activos, estafa y administración fraudulenta relacionados con regalías de artistas"
+    },
+    {
+      "id": "ajmf-2020-candidatura-congreso",
+      "title": "Candidatura al Congreso 2020 con Somos Perú",
+      "date": "2020-01-01",
+      "source": {
+        "name": "Wikipedia",
+        "domain": "es.wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/Armando_Mass%C3%A9",
+      "topic": "partido",
+      "snippet": "Massé incursionó en política postulando al Congreso en las elecciones extraordinarias de 2020 por el partido Somos Perú, pero no alcanzó una curul"
+    },
+    {
+      "id": "ajmf-2025-12-27-candidatura-presidencial",
+      "title": "Armando Massé lanza candidatura presidencial con el Partido Democrático Federal",
+      "date": "2025-12-27",
+      "source": {
+        "name": "Wikipedia",
+        "domain": "es.wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/Armando_Mass%C3%A9",
+      "topic": "partido",
+      "snippet": "En 2025 Massé anunció su salida del programa Médicos en acción y formalizó su candidatura a la presidencia de la República para las elecciones de 2026 representando al Partido Democrático Federal"
+    }
+  ]
+}

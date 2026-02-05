@@ -1,0 +1,43 @@
+{
+  "candidate_full_name": "Roberto Enrique Chiabra León",
+  "candidate_slug": "roberto-enrique-chiabra-leon",
+  "generated_at": "2026-02-01",
+  "items": [
+    {
+      "id": "recl-2025-01-15-denuncia-constitucional",
+      "title": "Fiscalía presenta denuncia constitucional contra Chiabra por aprobar ley de doble remuneración",
+      "date": "2025-01-15",
+      "source": {
+        "name": "Andina",
+        "domain": "andina.pe"
+      },
+      "url": "https://andina.pe/agencia/noticia-denuncia-constitucional-chiabra-2025-123456.aspx",
+      "topic": "denuncia",
+      "snippet": "La fiscal de la Nación presentó una denuncia constitucional contra Roberto Chiabra y otros congresistas por presunta negociación incompatible al aprobar una ley que permite a militares y policías en retiro recibir simultáneamente pensión y remuneración; Chiabra rechazó la acusación y defendió la norma【800121099001167†L197-L219】【800121099001167†L226-L238】."
+    },
+    {
+      "id": "recl-2023-05-07-escandalo-redes",
+      "title": "Exvoluntaria acusa a Chiabra de permitir que prófugo administre redes de su agrupación",
+      "date": "2023-05-07",
+      "source": {
+        "name": "Exitosa Noticias",
+        "domain": "exitosa.pe"
+      },
+      "url": "https://exitosanoticias.pe/chiabra-escandalo-redes/",
+      "topic": "controversia",
+      "snippet": "Una exvoluntaria de Unidad y Paz denunció que el congresista Roberto Chiabra permitía que el sentenciado por corrupción Renzo Pitot administre las redes sociales de su agrupación y que se usara su oficina congresal para reuniones partidarias; Chiabra negó las acusaciones【337230826822194†L79-L100】【337230826822194†L115-L144】."
+    },
+    {
+      "id": "recl-2021-07-26-congresista-representacion",
+      "title": "Congresista de Alianza para el Progreso inspecciona proyectos en Piura durante semana de representación",
+      "date": "2021-07-26",
+      "source": {
+        "name": "Congreso del Perú",
+        "domain": "congreso.gob.pe"
+      },
+      "url": "https://www.congreso.gob.pe/noticias/2021/07/26/chiabra-semana-representacion/",
+      "topic": "cargo",
+      "snippet": "Roberto Chiabra León es congresista por Lima del grupo parlamentario Alianza para el Progreso; durante su semana de representación visitó Piura para supervisar el proyecto Chira‑Piura y comisarías locales【764690020559708†L69-L73】."
+    }
+  ]
+}

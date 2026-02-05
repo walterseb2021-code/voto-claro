@@ -157,7 +157,12 @@ function nameForSpeech(name: string) {
     .replace(/\bMaria\b/gi, "María")
     .replace(/\bAndres\b/gi, "Andrés")
     .replace(/\bRene\b/gi, "René")
-    .replace(/\bAngel\b/gi, "Ángel");
+    .replace(/\bAngel\b/gi, "Ángel")
+
+    // agrega aquí los que te fallen:
+    .replace(/\bSofia\b/gi, "Sofía")
+    .replace(/\bMasse\b/gi, "Massé")
+    .replace(/\bValentia\b/gi, "Valentía");
 }
 
 // ✅ Hablar SIN abrir el panel (regla PRO)
@@ -436,71 +441,123 @@ const name = nameForSpeech(rawName);
       }
       return;
     }
+function buildActuarAnswer(file: any, rawQ: string) {
+  const items = Array.isArray(file?.items) ? file.items : [];
+  if (!items.length) {
+    return (
+      "En el archivo local de Actuar Político de este candidato no tengo registros.\n\n" +
+      "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
+    );
+  }
 
-    // ✅ NEWS (Actuar político) ahora es REAL: /api/web/ask
-    if (tab === "NEWS") {
-      setBusy(true);
-      setAnswer("Consultando fuentes web (lista blanca)…");
+  const q = (rawQ || "").toLowerCase();
+
+  // Resumen rápido
+  if (q.includes("resumen")) {
+    const top = items
+      .filter((x: any) => !!x?.date)
+      .sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)))
+      .slice(0, 3);
+
+    return (
+      `Resumen de Actuar Político — ${file?.candidate_full_name || "Candidato"}\n` +
+      `Registros: ${items.length}\n\n` +
+      (top.length
+        ? top
+            .map(
+              (it: any) =>
+                `• ${it.date} — ${it.title}\n  Fuente: ${it?.source?.name} (${it?.source?.domain})\n  Link: ${it.url}`
+            )
+            .join("\n\n")
+        : "No hay ítems con fecha.")
+    );
+  }
+
+  // Búsqueda por palabra (título/snippet/topic)
+  const hits = items.filter((it: any) => {
+    const hay = `${it?.title || ""} ${it?.snippet || ""} ${it?.topic || ""}`.toLowerCase();
+    return q.length >= 3 && hay.includes(q);
+  });
+
+  const show = (hits.length ? hits : items)
+    .sort((a: any, b: any) => String(b?.date || "").localeCompare(String(a?.date || "")))
+    .slice(0, 6);
+
+  if (!show.length) {
+    return (
+      "En el archivo local de Actuar Político de este candidato no tengo un registro sobre ese tema.\n\n" +
+      "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
+    );
+  }
+
+  return (
+    `Actuar Político — ${file?.candidate_full_name || "Candidato"}\n\n` +
+    show
+      .map(
+        (it: any) =>
+          `• ${it?.date || "sin fecha"} — ${it?.title}\n  Fuente: ${it?.source?.name} (${it?.source?.domain})\n  Link: ${it?.url}\n  Nota: ${it?.snippet}`
+      )
+      .join("\n\n")
+  );
+}
+// ===== Actuar Político: lector de JSON local =====
+
+
+// ✅ NEWS (Actuar político) ahora es LOCAL: JSON en /public/actuar
+if (tab === "NEWS") {
+  setBusy(true);
+  setAnswer("Consultando archivo local (JSON)…");
+  setCitations([]);
+
+  try {
+    const url = `/actuar/${encodeURIComponent(id)}.json`;
+    const res = await fetch(url, { cache: "no-store" });
+
+    if (!res.ok) {
+      setAnswer(
+        "No encontré el archivo local de Actuar Político para este candidato.\n\n" +
+          `Archivo esperado: ${url}\n\n` +
+          "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
+      );
       setCitations([]);
-
-      try {
-        const candidateName = (profile?.full_name ?? "").trim() || slugToName(id);
-        const finalQ = candidateName ? `${candidateName}: ${q}` : q;
-
-        const res = await fetch("/api/web/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-          body: JSON.stringify({ q: finalQ, num: 4 }),
-        });
-
-        const payload = await safeReadJson(res);
-
-        if (!res.ok) {
-          if ((payload as any)?._nonJson) {
-            setAnswer(
-              "Error WEB: el servidor devolvió una respuesta no-JSON (posible error 500/404). " +
-                "Abre DevTools → Network → /api/web/ask y pega aquí el response."
-            );
-            setCitations([]);
-            return;
-          }
-          const msg = String((payload as any)?.error ?? (payload as any)?.message ?? "Error consultando /api/web/ask");
-          setAnswer(`Error WEB: ${msg}`);
-          setCitations([]);
-          return;
-        }
-
-        const data = payload as WebAskResponse;
-
-        const ans = String(data?.answer ?? "No hay evidencia suficiente en las fuentes consultadas.");
-        const srcs = Array.isArray(data?.sources) ? (data.sources as WebAskSource[]) : [];
-        const cits = Array.isArray(data?.citations) ? (data.citations as WebAskCitation[]) : [];
-
-        const mappedSources: Source[] = srcs.map((s) => ({
-          title: `${s.title} (${s.domain})`,
-          url: s.url,
-        }));
-
-        const quotesBlock =
-          cits.length > 0
-            ? "\n\nCitas (extractos):\n" +
-              cits
-                .slice(0, 6)
-                .map((c) => `- [Source #${c.source}] ${c.quote}${c.url ? ` (${c.url})` : ""}`)
-                .join("\n")
-            : "";
-
-        setAnswer(ans + quotesBlock);
-        setCitations(mappedSources);
-      } catch (e: any) {
-        setAnswer(`Error WEB: ${(e?.message ?? "desconocido").toString()}`);
-        setCitations([]);
-      } finally {
-        setBusy(false);
-      }
       return;
     }
+
+    const file: any = await res.json();
+
+    // ✅ Respuesta usando SOLO el JSON local
+    const out = buildActuarAnswer(file, q);
+    setAnswer(out);
+
+// ✅ Mostrar “Fuentes” como lista clickeable en la UI (cuando existan)
+const items = Array.isArray(file?.items) ? file.items : [];
+
+const entries: Array<[string, Source]> = items
+  .filter((it: any) => typeof it?.url === "string" && !!it?.source?.name)
+  .map((it: any) => [
+    it.url as string,
+    {
+      title: `${it.source.name}${it.source.domain ? ` (${it.source.domain})` : ""}`,
+      url: it.url as string,
+    },
+  ]);
+
+const mappedSources = Array.from(new Map<string, Source>(entries).values()).slice(0, 10);
+
+setCitations(mappedSources);
+
+  } catch (e: any) {
+    setAnswer(
+      "No pude leer el archivo local de Actuar Político.\n\n" +
+        "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
+    );
+    setCitations([]);
+  } finally {
+    setBusy(false);
+  }
+  return;
+}
+
 
     setAnswer("Pestaña no soportada.");
     setCitations([]);
@@ -573,7 +630,7 @@ try {
       setCompareLoading(false);
     }
   }
-function clearCompare() {
+  function clearCompare() {
   setCompareResult(null);
   setCompareLoading(false);
   setCompareProfiles({});
@@ -686,8 +743,8 @@ function clearCompare() {
     "rounded-full px-3 py-1 text-sm transition-all duration-150 " +
     "hover:bg-green-50 hover:border-green-300 hover:-translate-y-0.5 hover:shadow-sm " +
     "active:translate-y-0 active:scale-[0.99]";
-const searchParams = useSearchParams();
-const fromCambio = searchParams.get("from") === "cambio";
+    const searchParams = useSearchParams();
+    const fromCambio = searchParams.get("from") === "cambio";
 
   return (
     <main className="min-h-screen p-6 max-w-6xl mx-auto bg-gradient-to-b from-green-50 via-white to-white">

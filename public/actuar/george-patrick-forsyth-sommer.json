@@ -1,0 +1,67 @@
+{
+  "candidate_full_name": "George Patrick Forsyth Sommer",
+  "candidate_slug": "george-patrick-forsyth-sommer",
+  "generated_at": "2026-02-01",
+  "items": [
+    {
+      "id": "gpfs-2025-12-15-investigacion-colusion",
+      "title": "Poder Judicial amplía investigación contra George Forsyth por presunta colusión en La Victoria",
+      "date": "2025-12-15",
+      "source": {
+        "name": "CanalB",
+        "domain": "canalb.pe"
+      },
+      "url": "https://canalb.pe/noticias/poder-judicial-extiende-investigacion-george-forsyth-colusion-la-victoria",
+      "topic": "proceso",
+      "snippet": "El Poder Judicial decidió ampliar hasta mayo de 2026 la investigación preparatoria contra el candidato presidencial George Forsyth por presunto delito de colusión agravada en su gestión como alcalde de La Victoria, ante supuestos favores a empresas de una misma familia"
+    },
+    {
+      "id": "gpfs-2021-01-31-investigacion-amigo",
+      "title": "Fiscalía abre investigación a George Forsyth por contratar a su amigo Renzo Navarro con fondos municipales",
+      "date": "2021-01-31",
+      "source": {
+        "name": "LP Derecho",
+        "domain": "lpderecho.pe"
+      },
+      "url": "https://lpderecho.pe/george-forsyth-fiscalia-inicia-investigacion-beneficiar-amigo-cuantioso-contrato-municipal/",
+      "topic": "investigacion",
+      "snippet": "La Primera Fiscalía Anticorrupción de Lima inició diligencias contra George Forsyth por contratar a su socio y amigo Renzo Navarro por S/107 mil durante su periodo como alcalde. El contrato incluyó asesoría y gestión de agenda pese a la falta de experiencia del beneficiario"
+    },
+    {
+      "id": "gpfs-2020-10-13-publicidad-jne",
+      "title": "JNE archiva proceso sancionador por presunta publicidad electoral contra George Forsyth",
+      "date": "2020-10-13",
+      "source": {
+        "name": "La República",
+        "domain": "larepublica.pe"
+      },
+      "url": "https://larepublica.pe/politica/2020/10/13/george-forsyth-jne-archiva-proceso-sancionador-por-presunta-publicidad-electoral/",
+      "topic": "controversia",
+      "snippet": "El Jurado Nacional de Elecciones archivó un proceso sancionador contra el entonces alcalde George Forsyth por presuntamente difundir publicidad estatal sobre su candidatura. La decisión se tomó tras retirarse las publicaciones cuestionadas, aunque se le exhortó a respetar las normas"
+    },
+    {
+      "id": "gpfs-cargo-alcalde-victoria",
+      "title": "Alcalde del distrito de La Victoria y regidor municipal",
+      "date": null,
+      "source": {
+        "name": "Wikipedia",
+        "domain": "es.wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/George_Forsyth",
+      "topic": "cargo",
+      "snippet": "George Forsyth, exfutbolista y empresario, fue regidor del distrito de La Victoria (2011-2014) y luego alcalde (2019-2020). Renunció al cargo en octubre de 2020 para postular a la presidencia de la República"
+    },
+    {
+      "id": "gpfs-partido-victoria-nacional-somos-peru",
+      "title": "Candidaturas presidenciales y afiliaciones partidarias",
+      "date": null,
+      "source": {
+        "name": "Wikipedia",
+        "domain": "es.wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/George_Forsyth",
+      "topic": "partido",
+      "snippet": "Forsyth se inscribió en el partido Restauración Nacional en 2020, rebautizado como Victoria Nacional, y renunció a la alcaldía de La Victoria para ser candidato presidencial en 2021. Para las elecciones de 2026 se presenta como candidato de Somos Perú"
+    }
+  ]
+}

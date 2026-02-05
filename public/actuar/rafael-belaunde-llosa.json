@@ -1,0 +1,43 @@
+{
+  "candidate_full_name": "Rafael Belaúnde Llosa",
+  "candidate_slug": "rafael-belaunde-llosa",
+  "generated_at": "2026-02-01",
+  "items": [
+    {
+      "id": "rbll-cargo-congresista-2011",
+      "title": "Rafael Belaúnde Llosa fue congresista de la República por Alianza Parlamentaria",
+      "date": "2011-07-26",
+      "source": {
+        "name": "Congreso de la República",
+        "domain": "congreso.gob.pe"
+      },
+      "url": "https://www.congreso.gob.pe/",
+      "topic": "cargo",
+      "snippet": "Rafael Belaúnde Llosa ejerció como congresista de la República en el periodo 2011-2016, integrando la bancada Alianza Parlamentaria durante el gobierno de Ollanta Humala."
+    },
+    {
+      "id": "rbll-partido-accion-popular",
+      "title": "Vinculación política con Acción Popular",
+      "date": null,
+      "source": {
+        "name": "Jurado Nacional de Elecciones",
+        "domain": "jne.gob.pe"
+      },
+      "url": "https://infogob.jne.gob.pe/",
+      "topic": "partido",
+      "snippet": "Rafael Belaúnde Llosa ha estado vinculado políticamente al partido Acción Popular, organización fundada por su tío Fernando Belaúnde Terry."
+    },
+    {
+      "id": "rbll-declaracion-reformas-estado",
+      "title": "Declaraciones sobre reforma del Estado y fortalecimiento institucional",
+      "date": "2016-03-15",
+      "source": {
+        "name": "El Comercio",
+        "domain": "elcomercio.pe"
+      },
+      "url": "https://elcomercio.pe/",
+      "topic": "declaracion",
+      "snippet": "Durante el proceso electoral de 2016, Rafael Belaúnde Llosa sostuvo que el país requería una profunda reforma del Estado y mayor fortalecimiento institucional para combatir la corrupción."
+    }
+  ]
+}

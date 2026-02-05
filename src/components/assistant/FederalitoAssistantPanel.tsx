@@ -999,6 +999,231 @@ async function handleGlobalPolicyAndRedirect(params: {
 
   return { handled: false };
 }
+type ActuarSource = { name: string; domain: string };
+type ActuarItem = {
+  id: string;
+  title: string;
+  date: string | null;
+  source: ActuarSource;
+  url: string;
+  topic: string;
+  snippet: string;
+};
+
+type ActuarFile = {
+  candidate_full_name: string;
+  candidate_slug: string;
+  generated_at: string;
+  items: ActuarItem[];
+};
+
+function safeIsoDate(d: string | null) {
+  // null se manda al final
+  if (!d) return "";
+  return String(d).slice(0, 10);
+}
+
+function sortItemsNewest(items: ActuarItem[]) {
+  return [...items].sort((a, b) => {
+    const da = safeIsoDate(a.date);
+    const db = safeIsoDate(b.date);
+    if (da === db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return db.localeCompare(da);
+  });
+}
+
+function uniqueSources(items: ActuarItem[]) {
+  const seen = new Set<string>();
+  const out: ActuarSource[] = [];
+  for (const it of items) {
+    const key = `${it.source?.name || ""}__${it.source?.domain || ""}`.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: it.source.name, domain: it.source.domain });
+  }
+  return out;
+}
+
+function fmtItem(it: ActuarItem) {
+  const d = it.date ? it.date : "sin fecha";
+  const src = it.source?.name ? `${it.source.name} (${it.source.domain})` : "Fuente";
+  return `• ${d} — ${it.title}\n  Fuente: ${src}\n  Link: ${it.url}\n  Nota: ${it.snippet}`;
+}
+
+function buildActuarFallback(rawQ: string) {
+  return (
+    "En el archivo local de Actuar Político de este candidato no tengo un registro sobre ese tema.\n\n" +
+    "Para ampliar, puedes buscar en Internet en fuentes confiables (medios reconocidos, documentos oficiales o portales institucionales).\n\n" +
+    `Tu pregunta fue: "${rawQ}"`
+  );
+}
+
+function detectActuarIntent(rawQ: string) {
+  const t = normalizeLite(rawQ);
+
+  const wantsSummary =
+    t.includes("resumen") || t.includes("rapido") || t.includes("rápido") || t.includes("lo mas importante") || t.includes("lo más importante");
+
+  const wantsRecent =
+    t.includes("reciente") || t.includes("último") || t.includes("ultimo") || t.includes("novedad") || t.includes("novedades");
+
+  const wantsTimeline =
+    t.includes("cronologia") || t.includes("cronología") || t.includes("linea de tiempo") || t.includes("línea de tiempo") || t.includes("orden");
+
+  const wantsSources =
+    t.includes("fuente") || t.includes("fuentes") || t.includes("dominio") || t.includes("enlaces") || t.includes("links");
+
+  // topics
+  const wantsSentencia = t.includes("sentencia") || t.includes("fallo") || t.includes("tc") || t.includes("corte");
+  const wantsProceso = t.includes("proceso") || t.includes("caso") || t.includes("imput") || t.includes("acus") || t.includes("juicio");
+  const wantsInvestigacion = t.includes("investig") || t.includes("denuncia") || t.includes("fiscal") || t.includes("corrup");
+  const wantsControversia = t.includes("controvers") || t.includes("polém") || t.includes("polem") || t.includes("cuestion");
+  const wantsCargo = t.includes("cargo") || t.includes("alcald") || t.includes("gobern") || t.includes("congres") || t.includes("minist");
+  const wantsPartido = t.includes("partido") || t.includes("lider") || t.includes("lidera") || t.includes("presidenta") || t.includes("presidente");
+
+  return {
+    t,
+    wantsSummary,
+    wantsRecent,
+    wantsTimeline,
+    wantsSources,
+    wantsSentencia,
+    wantsProceso,
+    wantsInvestigacion,
+    wantsControversia,
+    wantsCargo,
+    wantsPartido,
+  };
+}
+
+function filterByTopic(items: ActuarItem[], topic: string) {
+  const tt = normalizeLite(topic);
+  return items.filter((it) => normalizeLite(it.topic).includes(tt));
+}
+
+function keywordSearch(items: ActuarItem[], q: string) {
+  const t = normalizeLite(q);
+  if (!t || t.length < 3) return [];
+  const words = t.split(/\s+/g).filter((w) => w.length >= 4);
+
+  // match por texto completo o por palabras largas
+  const hit = items.filter((it) => {
+    const hay = normalizeLite(`${it.title} ${it.snippet} ${it.topic} ${it.source?.name} ${it.source?.domain}`);
+    if (hay.includes(t)) return true;
+    if (words.length) return words.some((w) => hay.includes(w));
+    return false;
+  });
+
+  return hit;
+}
+
+function buildActuarAnswer(file: ActuarFile, rawQ: string) {
+  const items = Array.isArray(file?.items) ? file.items : [];
+  if (!items.length) return buildActuarFallback(rawQ);
+
+  const i = detectActuarIntent(rawQ);
+  const newest = sortItemsNewest(items);
+
+  // 1) Fuentes
+  if (i.wantsSources) {
+    const srcs = uniqueSources(items);
+    if (!srcs.length) return buildActuarFallback(rawQ);
+    return (
+      `Fuentes registradas para ${file.candidate_full_name}:\n\n` +
+      srcs.map((s) => `• ${s.name} — ${s.domain}`).join("\n") +
+      `\n\nTotal de ítems: ${items.length}`
+    );
+  }
+
+  // 2) Resumen rápido
+  if (i.wantsSummary) {
+    const counts: Record<string, number> = {};
+    for (const it of items) {
+      const k = (it.topic || "otro").trim();
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    const top3 = newest.filter((x) => !!x.date).slice(0, 3);
+    return (
+      `Resumen de Actuar Político — ${file.candidate_full_name}\n` +
+      `Generado: ${file.generated_at}\n` +
+      `Registros: ${items.length}\n\n` +
+      `Por temas:\n` +
+      Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `• ${k}: ${v}`)
+        .join("\n") +
+      `\n\nMás recientes:\n` +
+      (top3.length ? top3.map(fmtItem).join("\n\n") : "No hay ítems con fecha.")
+    );
+  }
+
+  // 3) Recientes
+  if (i.wantsRecent) {
+    const top = newest.filter((x) => !!x.date).slice(0, 6);
+    if (!top.length) return buildActuarFallback(rawQ);
+    return `Hechos más recientes — ${file.candidate_full_name}\n\n` + top.map(fmtItem).join("\n\n");
+  }
+
+  // 4) Cronología
+  if (i.wantsTimeline) {
+    const top = newest.slice(0, 10);
+    return `Cronología (más nuevo → más antiguo) — ${file.candidate_full_name}\n\n` + top.map(fmtItem).join("\n\n");
+  }
+
+  // 5) Filtros por “tema” (topics)
+  if (i.wantsSentencia) {
+    const hit = filterByTopic(items, "sentencia");
+    const top = sortItemsNewest(hit).slice(0, 6);
+    return top.length ? `Sentencias / fallos registrados — ${file.candidate_full_name}\n\n${top.map(fmtItem).join("\n\n")}` : buildActuarFallback(rawQ);
+  }
+
+  if (i.wantsProceso) {
+    const hit = filterByTopic(items, "proceso");
+    const top = sortItemsNewest(hit).slice(0, 6);
+    return top.length ? `Procesos / casos registrados — ${file.candidate_full_name}\n\n${top.map(fmtItem).join("\n\n")}` : buildActuarFallback(rawQ);
+  }
+
+  if (i.wantsInvestigacion) {
+    const hit = items.filter((it) => {
+      const t = normalizeLite(it.topic);
+      return t.includes("investig") || t.includes("denuncia");
+    });
+    const top = sortItemsNewest(hit).slice(0, 6);
+    return top.length ? `Investigaciones / denuncias registradas — ${file.candidate_full_name}\n\n${top.map(fmtItem).join("\n\n")}` : buildActuarFallback(rawQ);
+  }
+
+  if (i.wantsControversia) {
+    const hit = filterByTopic(items, "controversia");
+    const top = sortItemsNewest(hit).slice(0, 6);
+    return top.length ? `Controversias registradas — ${file.candidate_full_name}\n\n${top.map(fmtItem).join("\n\n")}` : buildActuarFallback(rawQ);
+  }
+
+  if (i.wantsCargo) {
+    const hit = items.filter((it) => {
+      const t = normalizeLite(it.topic);
+      return t.includes("cargo") || t.includes("gestion") || t.includes("gestión");
+    });
+    const top = sortItemsNewest(hit).slice(0, 6);
+    return top.length ? `Cargos / gestión registrada — ${file.candidate_full_name}\n\n${top.map(fmtItem).join("\n\n")}` : buildActuarFallback(rawQ);
+  }
+
+  if (i.wantsPartido) {
+    const hit = filterByTopic(items, "partido");
+    const top = sortItemsNewest(hit).slice(0, 6);
+    return top.length ? `Partido / liderazgo registrado — ${file.candidate_full_name}\n\n${top.map(fmtItem).join("\n\n")}` : buildActuarFallback(rawQ);
+  }
+
+  // 6) Búsqueda libre por palabras
+  const searchHits = keywordSearch(items, rawQ);
+  const top = sortItemsNewest(searchHits).slice(0, 6);
+  if (top.length) {
+    return `Coincidencias en Actuar Político — ${file.candidate_full_name}\n\n` + top.map(fmtItem).join("\n\n");
+  }
+
+  return buildActuarFallback(rawQ);
+}
 
 export default function FederalitoAssistantPanel() {
   const pathname = usePathname();
@@ -2138,58 +2363,49 @@ if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
         return;
       }
 
-      if (askMode === "NEWS") {
-        const finalQ = cname ? `${cname}: ${rawQ}` : rawQ;
-        const finalToSend = looksLikeFollowUp(rawQ) ? enrichedQ : finalQ;
+     if (askMode === "NEWS") {
+  // ✅ Actuar Político LOCAL: leer JSON del candidato (sin web)
+  const url = `/actuar/${encodeURIComponent(candidateId)}.json`;
 
-        const res = await fetch("/api/web/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-          body: JSON.stringify({ q: finalToSend, num: 4 }),
-        });
+  try {
+    const res = await fetch(url, { cache: "no-store" });
 
-        const payload = await safeReadJson(res);
+    if (!res.ok) {
+      const msg =
+        "No encontré el archivo local de Actuar Político para este candidato.\n\n" +
+        `Esperaba: ${url}\n\n` +
+        "Solución: verifica que el JSON exista en /public/actuar/ y que el nombre coincida con el slug del candidato.";
+      pushAssistant(msg);
+      await maybeSpeak(msg);
+      return;
+    }
 
-        if (!res.ok) {
-          const msg =
-            (payload as any)?._nonJson
-              ? "Error WEB: el servidor devolvió una respuesta no-JSON. Revisa DevTools → Network → /api/web/ask."
-              : `Error WEB: ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
-          pushAssistant(msg);
-          await maybeSpeak(msg);
-          return;
-        }
+    const file = (await res.json()) as ActuarFile;
 
-        const data = payload as WebAskResponse;
-        const ans = String(data?.answer ?? "No hay evidencia suficiente en las fuentes consultadas.").trim();
+    const out = buildActuarAnswer(file, rawQ);
+    pushAssistant(out);
+    await maybeSpeak(out);
 
-        const sources = Array.isArray(data?.sources) ? (data.sources as WebAskSource[]) : [];
-        const topLinks =
-          sources.length > 0
-            ? "\n\nFuentes:\n" +
-              sources
-                .slice(0, 6)
-                .map((s) => `- ${s.title} (${s.domain}) — ${s.url}`)
-                .join("\n")
-            : "";
+    updateMemAfterAnswer({
+      mode: askMode,
+      candidateId,
+      candidateName: cname,
+      question: rawQ,
+      answer: out,
+      answerHasLinks: true,
+    });
 
-        const out = ans + topLinks;
-        pushAssistant(out);
+    return;
+  } catch {
+    const msg =
+      "No pude leer el archivo local de Actuar Político.\n\n" +
+      "Puedes buscar más noticias en Internet en fuentes confiables (medios reconocidos, documentos oficiales o portales institucionales).";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+}
 
-        await maybeSpeak(ans);
-
-        updateMemAfterAnswer({
-          mode: askMode,
-          candidateId,
-          candidateName: cname,
-          question: rawQ,
-          answer: ans,
-          answerHasLinks: sources.length > 0,
-        });
-
-        return;
-      }
     } finally {
       setBusy(false);
     }
@@ -2203,6 +2419,13 @@ if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
     setDraft("");
     askBackend(t);
   }
+function sendQuick(q: string) {
+  if (busy) return;
+  const t = (q || "").trim();
+  if (!t) return;
+  setMsgs((prev) => [...prev, { role: "user", content: t }]);
+  askBackend(t);
+}
 
   function canUseSpeechRec() {
     const w = window as any;
@@ -2491,10 +2714,37 @@ if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
 
               <div className="mt-2 text-[11px] text-slate-500">
                 {askMode === "NEWS"
-                  ? "Actuar político: usa fuentes web (lista blanca) y muestra enlaces."
+                  ? "Actuar político: usa archivo local (JSON) y muestra fuentes/enlaces."
                   : "HV/Plan: responde solo con evidencia del PDF y cita páginas (p. X)."}{" "}
                 {candidateId ? "" : "Tip: entra a /candidate/[id] para que el asistente sepa qué candidato consultar."}
               </div>
+{askMode === "NEWS" ? (
+  <div className="mt-3 flex flex-wrap gap-2">
+    {[
+      "Resumen rápido",
+      "Hechos más recientes",
+      "Cronología",
+      "Procesos/casos",
+      "Sentencias/fallos",
+      "Investigaciones/denuncias",
+      "Controversias",
+            "Fuentes",
+      "Buscar: corrupción",
+      "Buscar: lavado de activos",
+      "No está en el archivo (¿cómo buscar en internet?)",
+    ].map((label) => (
+      <button
+        key={label}
+        type="button"
+        onClick={() => sendQuick(label)}
+        className="rounded-full border bg-white px-3 py-1 text-[12px] font-bold text-black hover:opacity-90 active:scale-[0.98] transition"
+        title="Preguntar"
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+) : null}
 
               <div className="mt-2 text-[10px] text-slate-400">
                 Memoria corta:{" "}

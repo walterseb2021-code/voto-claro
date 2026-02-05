@@ -1,0 +1,55 @@
+{
+  "candidate_full_name": "Mesías Antonio Guevara Amasifuén",
+  "candidate_slug": "mesias-antonio-guevara-amasifuen",
+  "generated_at": "2026-02-01",
+  "items": [
+    {
+      "id": "maga-2026-01-29-cierre-congreso",
+      "title": "Mesías Guevara plantea cerrar el Congreso y derogar leyes que favorecen la criminalidad",
+      "date": "2026-01-29",
+      "source": {
+        "name": "OjoPúblico",
+        "domain": "ojo-publico.com"
+      },
+      "url": "https://ojo-publico.com/politica/elecciones-2026/guevara-si-el-congreso-es-un-obstaculo-no-tendre-reparos-cerrarlo",
+      "topic": "declaracion",
+      "snippet": "En entrevista con OjoPúblico, el candidato presidencial Mesías Guevara (Partido Morado) señaló que solicitará facultades legislativas para derogar leyes que, según especialistas, favorecen la criminalidad y que cerraría el Congreso si este obstruye su gobierno"
+    },
+    {
+      "id": "maga-2024-01-18-nuevo-militante",
+      "title": "Mesías Guevara se suma al Partido Morado tras renunciar a Acción Popular",
+      "date": "2024-01-18",
+      "source": {
+        "name": "Gestión",
+        "domain": "gestion.pe"
+      },
+      "url": "https://gestion.pe/peru/politica/partido-morado-anuncia-a-mesias-guevara-como-nuevo-militante-tras-abandonar-accion-popular-exgobernador-regional-de-cajamarca-noticia/",
+      "topic": "partido",
+      "snippet": "El Partido Morado anunció que Mesías Guevara, exgobernador de Cajamarca, se incorporó como nuevo militante luego de abandonar Acción Popular. Guevara explicó que su renuncia obedeció a discrepancias con su bancada y cuestionó a algunos miembros sindicados como \"niños\" y \"mochasueldos\""
+    },
+    {
+      "id": "maga-2019-01-01-gobernador-cajamarca",
+      "title": "Elección y gestión de Mesías Guevara como gobernador regional de Cajamarca",
+      "date": "2019-01-01",
+      "source": {
+        "name": "Wikipedia",
+        "domain": "es.wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/Mes%C3%ADas_Guevara",
+      "topic": "cargo",
+      "snippet": "Fue elegido gobernador regional de Cajamarca en las elecciones regionales de 2018 y juramentó el 1 de enero de 2019. Su gestión culminó el 31 de diciembre de 2022; durante ese periodo mejoró infraestructura de salud y educación, digitalizó la región y pagó la deuda social"
+    },
+    {
+      "id": "maga-2014-11-30-presidente-accion-popular",
+      "title": "Congresista de la República y presidente de Acción Popular",
+      "date": "2014-11-30",
+      "source": {
+        "name": "Wikipedia",
+        "domain": "es.wikipedia.org"
+      },
+      "url": "https://es.wikipedia.org/wiki/Mes%C3%ADas_Guevara",
+      "topic": "cargo",
+      "snippet": "Mesías Guevara fue elegido congresista por Cajamarca para el periodo 2011-2016. En su labor parlamentaria impulsó leyes en telecomunicaciones y presidió la comisión Ancash. En noviembre de 2014 fue elegido presidente del partido Acción Popular, cargo que ejerció hasta 2018"
+    }
+  ]
+}
