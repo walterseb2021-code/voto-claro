@@ -348,8 +348,8 @@ const name = nameForSpeech(rawName);
         helper: "Modo WEB (real): busca en fuentes confiables (lista blanca) y responde SOLO si hay evidencia. Siempre muestra links.",
         suggested: [
           "Resume 3 hechos verificables con fuentes.",
-          "¿Qué controversias aparecen en medios confiables? (con enlace)",
-          "¿Hay investigaciones o procesos mencionados en medios? (con enlace)",
+          "Controversias políticas (con enlace)",
+          "Investigaciones o procesos (con enlace)",
         ],
       },
       PLAN: {
@@ -665,12 +665,13 @@ try {
     "focus:outline-none focus:ring-2 focus:ring-green-200";
 
   const chipIdle =
-    "border-green-200 bg-green-50/70 text-slate-800 " +
-    "hover:bg-green-100 hover:border-green-300";
+  "border-red-300 bg-green-50/70 text-slate-800 " +
+  "hover:bg-green-100 hover:border-red-400";
 
-  const chipActive =
-    "border-green-800 bg-gradient-to-r from-green-600 to-green-700 text-white " +
-    "shadow-md";
+const chipActive =
+  "border-green-800 bg-gradient-to-r from-green-600 to-green-700 text-white " +
+  "shadow-md ring-1 ring-red-300/60";
+
 
   function ChipBtn(props: { text: string; icon?: string; onClick: () => void }) {
     const active = question.trim() === props.text.trim();
@@ -678,14 +679,17 @@ try {
       <button
         type="button"
         onClick={props.onClick}
-        className={`${chipBase} ${active ? chipActive : chipIdle}`}
+       className={`${chipBase} ${active ? chipActive : chipIdle} max-w-full sm:max-w-none`}
+
         aria-pressed={active}
         title={props.text}
       >
         <span className={`${active ? "opacity-100" : "opacity-80"} text-[13px] leading-none`}>
           {props.icon ?? "💡"}
         </span>
-        <span className="whitespace-nowrap">{props.text}</span>
+       <span className="whitespace-normal break-words text-left leading-snug">
+  {props.text}
+</span>
 
         {/* ✅ micro “shine” en hover (solo visual) */}
         <span
@@ -801,7 +805,8 @@ try {
       </div>
 
       {/* Panel principal */}
-      <div className="mt-4 border border-slate-200 bg-white rounded-2xl p-5 shadow-md">
+      <div className="mt-4 border border-red-200 bg-white rounded-2xl p-5 shadow-md">
+
         <div className="flex items-center gap-2 flex-wrap">
           <div className="text-lg font-semibold text-slate-900">{active.title}</div>
           {tab === "NEWS" ? <EvidenceBadge kind="GUIDE" /> : <EvidenceBadge kind="WITH_EVIDENCE" />}
@@ -829,24 +834,24 @@ try {
 
             <div className="mt-2 flex flex-wrap gap-2">
   <ChipBtn
-    text="Resume las propuestas sobre seguridad ciudadana."
+    text="Propuestas sobre seguridad ciudadana."
     icon="🛡️"
-    onClick={() => setQuestion("Resume las propuestas sobre seguridad ciudadana.")}
+    onClick={() => setQuestion("Propuestas sobre seguridad ciudadana.")}
   />
   <ChipBtn
-    text="Resume las propuestas sobre economía y empleo."
+    text="Propuestas sobre economía y empleo."
     icon="💼"
-    onClick={() => setQuestion("Resume las propuestas sobre economía y empleo.")}
+    onClick={() => setQuestion("Propuestas sobre economía y empleo.")}
   />
   <ChipBtn
-    text="Resume las propuestas sobre salud."
+    text="Propuestas sobre salud."
     icon="🩺"
-    onClick={() => setQuestion("Resume las propuestas sobre salud.")}
+    onClick={() => setQuestion("Propuestas sobre salud.")}
   />
   <ChipBtn
-    text="Resume las propuestas sobre educación."
+    text="Propuestas sobre educación."
     icon="🎓"
-    onClick={() => setQuestion("Resume las propuestas sobre educación.")}
+    onClick={() => setQuestion("Propuestas sobre educación.")}
   />
 </div>
 
@@ -857,7 +862,8 @@ try {
         )}
 
         {tab === "PLAN" && (
-          <div className="mt-6 border border-green-100 bg-green-50/40 rounded-2xl p-4">
+        <div className="mt-6 border border-red-200 bg-red-50/40 rounded-2xl p-4">
+
             <div className="flex items-center gap-2 flex-wrap">
               <div className="text-sm font-semibold text-slate-900">Comparar 2 candidatos (Plan vs Plan)</div>
               <EvidenceBadge kind="WITH_EVIDENCE" />
@@ -952,7 +958,8 @@ try {
 
             {compareResult ? (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-green-100 bg-white rounded-xl p-3 shadow-sm">
+                <div className="border border-red-200 bg-white rounded-xl p-3 shadow-sm">
+
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <MiniProfileHeader title="Candidato A" profile={aProfile} />
                     <EvidenceBadge
@@ -966,7 +973,8 @@ try {
                   {compareResult.a.citations?.length ? <Sources sources={compareResult.a.citations} /> : null}
                 </div>
 
-                <div className="border border-green-100 bg-white rounded-xl p-3 shadow-sm">
+               <div className="border border-red-200 bg-white rounded-xl p-3 shadow-sm">
+
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <MiniProfileHeader title="Candidato B" profile={bProfile} />
                     <EvidenceBadge
