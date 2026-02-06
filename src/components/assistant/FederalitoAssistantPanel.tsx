@@ -256,6 +256,21 @@ function waitVoices(timeoutMs = 1200): Promise<SpeechSynthesisVoice[]> {
     check();
   });
 }
+// ✅ Cache simple de voces: evita llamar waitVoices() en cada chunk
+let _voicesCache: SpeechSynthesisVoice[] | null = null;
+let _voicesCacheAt = 0;
+
+async function getVoicesCached(timeoutMs = 1200): Promise<SpeechSynthesisVoice[]> {
+  const now = Date.now();
+
+  // si ya hay cache reciente (30s), úsalo
+  if (_voicesCache && now - _voicesCacheAt < 30_000) return _voicesCache;
+
+  const v = await waitVoices(timeoutMs);
+  _voicesCache = v;
+  _voicesCacheAt = now;
+  return v;
+}
 
 function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynthesisVoice | null {
   if (!all.length) return null;
@@ -294,7 +309,11 @@ function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynt
 }
 
 function humanizeForSpeech(input: string) {
-  let s = String(input || "");
+  // ✅ Limpieza global ANTES de cualquier replace
+  let s = cleanForSpeech(String(input ?? "")).normalize("NFC");
+
+  // (opcional pero recomendado) reemplaza NBSP por espacio normal
+  s = s.replace(/\u00A0/g, " ");
 
   s = s.replace(/[✅✔️☑️]/g, "");
   s = s.replace(/[🎙️🔊]/g, "");
@@ -313,6 +332,16 @@ function humanizeForSpeech(input: string) {
     .replace(/[-]{2,}/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
+      // ✅ VERSIÓN 2 (ultra segura):
+  // Suaviza la pausa SOLO en "debe + infinitivo"
+  // No afecta el resto del texto
+  s = s.replace(
+    /\b(debe)\s+(?=[a-záéíóúñ]{3,}(?:ar|er|ir)\b)/gi,
+    "$1 "
+  );
+
+  // ✅ Suavizar pausa SOLO para "debe + infinitivo"
+  s = s.replace(/\b(debe)\s+(?=[a-záéíóúñ]{3,}ir)\b/gi, "$1 ");
 
   s = s.replace(/\(p\.\s*(\d+)\)/gi, "(página $1)");
   s = s.replace(/\bp\.\s*(\d+)\b/gi, "página $1");
@@ -324,14 +353,19 @@ async function speakText(
   text: string,
   lang: VoiceLang
 ): Promise<{ ok: boolean; usedLang: "es-PE" | "qu" | "fallback-es"; reason?: string }> {
+
   const msg = humanizeForSpeech((text || "").trim());
+
+  // ✅ DEBUG del texto FINAL que realmente se habla
+  debugUnicode("SPEAK_MSG", msg);
+
   if (!msg) return { ok: false, usedLang: "fallback-es", reason: "empty" };
 
   if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") {
     return { ok: false, usedLang: "fallback-es", reason: "no-tts" };
   }
 
-  const voices = await waitVoices(1200);
+    const voices = await getVoicesCached(1200);
 
   let targetLang: VoiceLang = lang;
   let usedLang: "es-PE" | "qu" | "fallback-es" = lang === "qu" ? "qu" : "es-PE";
@@ -377,9 +411,12 @@ try {
     u.voice = voice;
   }
 
-  // ✅ ajustes suaves para sonar más humana
-  u.rate = 0.96;
-  u.pitch = 1.05;
+    // ✅ PRUEBA: NO forzar voz (que el navegador elija)
+  // u.voice = ...
+
+  // ✅ PRUEBA: parámetros neutros
+  u.rate = 1;
+  u.pitch = 1;
   u.volume = 1;
 
   return await new Promise((resolve) => {
@@ -394,44 +431,92 @@ try {
 } // ✅ cierre de speakText (ESTA era la llave que faltaba)
 
 function splitForSpeech(text: string, maxLen = 220) {
-
-
   const s = humanizeForSpeech(String(text || "").trim());
   if (!s) return [];
 
   const parts: string[] = [];
-  const chunks = s.split(/\n+/g).map((x) => x.trim()).filter(Boolean);
 
+  // 1) separar por saltos de línea
+  const chunks = s
+    .split(/\n+/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  // 2) dentro de cada chunk, separar por oraciones (puntuación)
   for (const c of chunks) {
-    if (c.length <= maxLen) {
-      parts.push(c);
-      continue;
-    }
+    const sentences = c.split(/(?<=[\.\!\?\:])\s+/g).map((x) => x.trim()).filter(Boolean);
 
-    const sentences = c.split(/(?<=[\.\!\?\:])\s+/g);
-    let buf = "";
     for (const sent of sentences) {
-      const candidate = (buf ? buf + " " : "") + sent;
-      if (candidate.length <= maxLen) buf = candidate;
-      else {
-        if (buf) parts.push(buf.trim());
-        buf = sent;
+      if (sent.length <= maxLen) {
+        parts.push(sent);
+        continue;
       }
+
+      // 3) si una oración es muy larga, partir SIN cortar palabras
+      let rest = sent;
+
+      while (rest.length > maxLen) {
+        const slice = rest.slice(0, maxLen);
+
+        // cortar en el último espacio dentro del límite
+        let cut = slice.lastIndexOf(" ");
+
+        // si no hay espacio razonable, intenta con coma/; dentro del límite
+        if (cut < 20) {
+          const comma = slice.lastIndexOf(", ");
+          const semi = slice.lastIndexOf("; ");
+          cut = Math.max(cut, comma, semi);
+        }
+
+        // si aún no hay, corte duro (caso raro: palabra larguísima sin espacios)
+        if (cut < 20) cut = maxLen;
+
+               let head = rest.slice(0, cut).trim();
+        let tail = rest.slice(cut).trim();
+
+        // ✅ Ultra específico: si el chunk queda solo "debe"
+        // y lo que sigue parece infinitivo, movemos "debe" al siguiente chunk
+        if (
+          /^debe$/i.test(head) &&
+          /^[a-záéíóúñ]{3,}(?:ar|er|ir)\b/i.test(tail)
+        ) {
+          tail = `${head} ${tail}`.trim();
+          head = "";
+        }
+
+        if (head) parts.push(head);
+        rest = tail;
+
+      }
+
+      if (rest) parts.push(rest);
     }
-    if (buf) parts.push(buf.trim());
   }
 
-  const finalParts: string[] = [];
-  for (const p of parts) {
-    if (p.length <= maxLen) finalParts.push(p);
-    else {
-      for (let i = 0; i < p.length; i += maxLen) {
-        finalParts.push(p.slice(i, i + maxLen).trim());
-      }
-    }
-  }
+  return parts.filter(Boolean);
+}
 
-  return finalParts.filter(Boolean);
+function cleanForSpeech(text: string) {
+  return String(text ?? "")
+    .replace(/\u00AD/g, "")  // soft hyphen
+    .replace(/\u200B/g, "")  // zero-width space
+    .replace(/\u200C/g, "")  // zero-width non-joiner
+    .replace(/\u200D/g, "")  // zero-width joiner
+    .replace(/\u2060/g, "")  // word joiner
+    .replace(/\uFEFF/g, "")  // BOM invisible
+    .replace(/\u00A0/g, " "); // NBSP -> espacio normal
+}
+function debugUnicode(label: string, s: string) {
+  try {
+    const codes = Array.from(s).map((c) => {
+      const cp = c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0");
+      const shown = c === " " ? "<SP>" : c;
+      return `U+${cp}(${shown})`;
+    });
+    console.log(`[${label}]`, codes.join(" "));
+  } catch (err) {
+    console.log(`[${label}] debugUnicode error`, err);
+  }
 }
 
 async function speakTextChunked(
@@ -441,6 +526,8 @@ async function speakTextChunked(
   const parts = splitForSpeech(text, 220);
   if (!parts.length) return null;
 
+  // ✅ Cancelar UNA sola vez por lectura completa (evita pausas largas entre partes)
+  
   let last: { ok: boolean; usedLang: "es-PE" | "qu" | "fallback-es"; reason?: string } | null = null;
 
   for (const part of parts) {
@@ -451,6 +538,7 @@ async function speakTextChunked(
 
   return last;
 }
+
 
 type AiAnswerResponse = {
   ok: boolean;
@@ -1790,20 +1878,25 @@ useEffect(() => {
   async function onGuide(ev: Event) {
     const e = ev as CustomEvent<GuideEventDetail>;
     const action = e.detail?.action ?? "SAY";
-    const text = (e.detail?.text ?? "").trim();
+
+    const raw = String(e.detail?.text ?? "");
+    const text = cleanForSpeech(raw).trim();
+
     const speak = !!e.detail?.speak;
 
-    // ✅ Manejar acciones correctamente
     if (action === "OPEN" || action === "SAY_AND_OPEN") setOpen(true);
-    if (action === "CLOSE") setOpen(false);
+        if (action === "CLOSE") setOpen(false);
 
-    // ✅ Siempre mostrar el texto en el chat si llegó texto
-    if (text) setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
+    if (text) {
+  setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
 
-    // ✅ Si no hay que hablar, terminamos aquí
+  // ✅ SOLO guarda para 🔊 Leer si hay texto real
+  setPageReadText(text);
+  setPageReadAt(Date.now());
+}
+
     if (!text || !speak) return;
 
-    // ✅ Si la voz está OFF, guardamos el texto para decirlo luego
     if (voiceMode !== "ON") {
       pendingGuideSpeakRef.current = text;
       setMsgs((prev) => [
@@ -1813,13 +1906,14 @@ useEffect(() => {
       return;
     }
 
-  // ✅ Si aún no hay interacción, guardamos el texto para decirlo luego (sin abrir panel, sin tips)
-if (!userInteracted) {
-  pendingGuideSpeakRef.current = text;
-  return;
-}
+    if (!userInteracted) {
+      pendingGuideSpeakRef.current = text;
+      return;
+    }
 
-    // ✅ Si todo está listo, hablamos ahora
+    // 👇 AQUÍ va el debug, JUSTO antes de hablar:
+    debugUnicode("GUIDE_TEXT", text);
+
     await speakTextChunked(text, voiceLang);
     pendingGuideSpeakRef.current = null;
   }
@@ -1827,6 +1921,8 @@ if (!userInteracted) {
   window.addEventListener("votoclaro:guide", onGuide as any);
   return () => window.removeEventListener("votoclaro:guide", onGuide as any);
 }, [voiceMode, voiceLang, userInteracted]);
+
+
 // ✅ Si había un mensaje pendiente, hablar apenas sea posible
 useEffect(() => {
   async function flushPending() {
@@ -1898,21 +1994,26 @@ useEffect(() => {
 }, [mounted, pathname]);
 
 
-  useEffect(() => {
-    function onPageRead(ev: Event) {
-      const e = ev as CustomEvent<{ text?: string }>;
-      const txt = String(e.detail?.text ?? "").trim();
-      if (!txt) return;
+useEffect(() => {
+  function onPageRead(ev: Event) {
+    const e = ev as CustomEvent<{ text?: string }>;
+    const raw = String(e.detail?.text ?? "");
+    const txt = cleanForSpeech(raw).trim();
+    if (!txt) return;
 
-      setPageReadText(txt);
-      setPageReadAt(Date.now());
+    setPageReadText(txt);
+    setPageReadAt(Date.now());
 
-      setMsgs((prev) => [...prev, { role: "assistant", content: "📄 Listo: tengo una comparación en pantalla para leer con 🔊 Leer." }]);
-    }
+    setMsgs((prev) => [
+      ...prev,
+      { role: "assistant", content: "📄 Listo: tengo una comparación en pantalla para leer con 🔊 Leer." },
+    ]);
+  }
 
-    window.addEventListener("votoclaro:page-read", onPageRead as any);
-    return () => window.removeEventListener("votoclaro:page-read", onPageRead as any);
-  }, []);
+  window.addEventListener("votoclaro:page-read", onPageRead as any);
+  return () => window.removeEventListener("votoclaro:page-read", onPageRead as any);
+}, []);
+
   useEffect(() => {
     if (!open) return;
 
@@ -1958,6 +2059,21 @@ useEffect(() => {
   function pushAssistant(text: string) {
     setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
   }
+  // ✅ DEBUG: muestra cómo se parte el texto antes de hablar (sin consola)
+  const DEBUG_TTS_PARTS = true;
+
+  function showTtsParts(label: string, input: string) {
+    if (!DEBUG_TTS_PARTS) return;
+
+    const parts = splitForSpeech(input, 220);
+
+    const lines = parts.map((p, i) => {
+      const visible = p.replace(/ /g, "␠");
+      return `${i + 1}) len=${p.length} |${visible}|`;
+    });
+
+    pushAssistant(`🧪 DEBUG TTS PARTS (${label})\n` + lines.join("\n"));
+  }
 
   async function maybeSpeak(text: string) {
     if (voiceMode !== "ON") {
@@ -1965,11 +2081,23 @@ useEffect(() => {
       return;
     }
 
-    if (!userInteracted) {
-      pushAssistant("Tip: toca cualquier parte de la pantalla y vuelve a intentar (bloqueo de audio del navegador).");
-      return;
-    }
-    const r = await speakTextChunked(text, voiceLang);
+      if (!userInteracted) {
+    // este click ES interacción válida
+    setUserInteracted(true);
+    try {
+      sessionStorage.setItem("votoclaro_user_interacted_v1", "1");
+    } catch {}
+  }
+
+       const cleaned = cleanForSpeech(text).trim();
+    if (!cleaned) return;
+
+    // ✅ DEBUG: ver chunks reales en el chat
+    showTtsParts("maybeSpeak", cleaned);
+
+    const r = await speakTextChunked(cleaned, voiceLang);
+
+
 
 if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
   pushAssistant("Nota: no detecté voz Quechua en este dispositivo. Estoy leyendo en Español (Perú) como respaldo.");
@@ -2503,19 +2631,51 @@ function sendQuick(q: string) {
     }
   }
 
-  async function speakLastAssistant() {
-    // prioridad: comparación/lectura de pantalla reciente
+async function speakLastAssistant() {
+  // prioridad: comparación/lectura de pantalla reciente
     const hasPageRead = pageReadText && Date.now() - pageReadAt < 5 * 60 * 1000;
 
-    const target = hasPageRead
-      ? pageReadText
-      : [...msgs].reverse().find((m) => m.role === "assistant")?.content ?? "";
+  // ✅ fallback: si no hay pageReadText, leer guía según ventana actual
+  const p = String(pathname || "");
+  const isHome = p === "/" || p.startsWith("/#");
 
-    if (!target) return;
+  const pageGuide =
+    isHome
+      ? "Esta es la pantalla de inicio de VotoClaro. Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. Empieza buscando un candidato por su nombre."
+      : p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")
+      ? "Estás en Servicios al ciudadano. Aquí encontrarás enlaces oficiales para consultar local de votación, miembro de mesa, multas y otros trámites electorales."
+      : p.startsWith("/reflexion")
+      ? "Estás en Reflexionar antes de votar. Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación y seguridad."
+      : p.startsWith("/cambio-con-valentia")
+      ? "Estás en Un cambio con valentía. Esta ventana muestra una propuesta política y te dirige a su sitio oficial para más información."
+      : "";
 
-    if (voiceMode !== "ON") setVoiceMode("ON");
-    await maybeSpeak(target);
+  const target =
+    (hasPageRead ? pageReadText : "") ||
+    [...msgs].reverse().find((m) => m.role === "assistant")?.content ||
+    pageGuide ||
+    "";
+
+  if (!target) return;
+
+  // ✅ si voz estaba OFF, prenderla y esperar 1 tick para que el estado se aplique
+  if (voiceMode !== "ON") {
+    setVoiceMode("ON");
+    await new Promise((r) => setTimeout(r, 0));
   }
+
+  // ✅ Este click ya es interacción del usuario: marcarla aquí
+  if (!userInteracted) {
+    setUserInteracted(true);
+    try {
+      sessionStorage.setItem("votoclaro_user_interacted_v1", "1");
+    } catch {}
+  }
+
+  // ✅ hablar directo (evita depender de maybeSpeak con estado viejo)
+  await speakTextChunked(target, voiceLang);
+ }
+
 
   const fabLabel = useMemo(() => (open ? "Cerrar Federalito AI" : "Abrir Federalito AI"), [open]);
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
@@ -2718,7 +2878,7 @@ function sendQuick(q: string) {
                   : "HV/Plan: responde solo con evidencia del PDF y cita páginas (p. X)."}{" "}
                 {candidateId ? "" : "Tip: entra a /candidate/[id] para que el asistente sepa qué candidato consultar."}
               </div>
-{askMode === "NEWS" ? (
+ {askMode === "NEWS" ? (
   <div className="mt-3 flex flex-wrap gap-2">
     {[
       "Resumen rápido",
@@ -2744,7 +2904,7 @@ function sendQuick(q: string) {
       </button>
     ))}
   </div>
-) : null}
+ ) : null}
 
               <div className="mt-2 text-[10px] text-slate-400">
                 Memoria corta:{" "}

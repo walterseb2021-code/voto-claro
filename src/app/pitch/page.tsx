@@ -257,10 +257,12 @@ function FederalitoSplash() {
 
     var KEY = "votoclaro_pitch_done_v1";
 
-    function goHome(){
-      try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
-      try{ window.location.assign("/?fromPitch=1"); }catch(e){ window.location.href = "/?fromPitch=1"; }
-    }
+   function goHome(){
+  try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
+  try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
+  try{ window.location.assign("/?fromPitch=1"); }catch(e){ window.location.href = "/?fromPitch=1"; }
+}
+
 
     function resetVisual(){
       try{ if(poster){ poster.style.opacity = "1"; poster.style.display = "block"; poster.style.pointerEvents = "none"; } }catch(e){}
