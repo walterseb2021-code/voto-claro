@@ -134,7 +134,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         cargo: "Senador Distrito Múltiple",
         dni: undefined,
         photo: "/candidates/elizabeth-alfaro-espinoza.png",
-        region: "ANCASH",
+        region: "ÁNCASH",
          profileLink:
   "https://www.youtube.com/watch?v=Bw252-6kbiI",
       },
@@ -144,7 +144,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         cargo: "Senador Distrito Múltiple",
         dni: undefined,
         photo: "/candidates/jose-antonio-fernandez-cordova.png",
-        region: "ANCASH",
+        region: "ÁNCASH",
          profileLink:
   "https://www.youtube.com/watch?v=aBEDDzyNxw0",
       },

@@ -136,25 +136,58 @@ export default function CambioConValentiaPage() {
   const [selectedRegion, setSelectedRegion] = useState<string>("TODAS");
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryValue>("PRESIDENCIAL");
+      
+  // ✅ Regiones reales POR CATEGORÍA (evita que el filtro "parezca roto")
+  const regionsForSelectedCategory = useMemo(() => {
+    const group =
+      CANDIDATE_GROUPS.find((g) => g.category === selectedCategory) ?? null;
 
-  const regionOptions = useMemo(() => {
+    const candidates = group?.candidates ?? [];
+
     const set = new Set<string>();
-    for (const g of CANDIDATE_GROUPS) {
-      for (const c of g.candidates) {
-        if (c.region) set.add(String(c.region).trim());
-      }
+    for (const c of candidates) {
+      const r = String((c as any).region ?? "").trim();
+      if (r) set.add(r);
     }
 
-    const regions = Array.from(set).filter(Boolean);
-
-    const hasNacional = regions.includes("NACIONAL");
-    const rest = regions.filter((r) => r !== "NACIONAL").sort((a, b) =>
+    // Limpieza/orden
+    const regions = Array.from(set).filter(Boolean).sort((a, b) =>
       a.localeCompare(b, "es")
     );
 
-    return hasNacional ? ["NACIONAL", ...rest] : rest;
-  }, []);
+    // Quitar NACIONAL de selector (porque en nacionales no aplica filtro)
+    return regions.filter((r) => r !== "NACIONAL");
+  }, [selectedCategory]);
 
+  // ✅ Fallback: si una categoría no trae regiones, usamos ALL_REGIONS
+  const regionOptions = useMemo(() => {
+    return regionsForSelectedCategory.length > 0
+      ? regionsForSelectedCategory
+      : ALL_REGIONS;
+  }, [regionsForSelectedCategory]);
+useEffect(() => {
+    // Categorías nacionales (ignoran distrito electoral)
+    const NATIONAL_CATEGORIES: CategoryValue[] = [
+      "PRESIDENCIAL",
+      "PARLAMENTO_ANDINO",
+      "SENADORES_DISTRITO_UNICO",
+    ];
+
+    // Si es nacional: siempre TODAS
+    if (NATIONAL_CATEGORIES.includes(selectedCategory)) {
+      if (selectedRegion !== "TODAS") setSelectedRegion("TODAS");
+      return;
+    }
+
+    // Si NO es nacional y la región actual no existe en la categoría, resetea
+    if (
+      selectedRegion !== "TODAS" &&
+      regionOptions.length > 0 &&
+      !regionOptions.includes(selectedRegion)
+    ) {
+      setSelectedRegion("TODAS");
+    }
+  }, [selectedCategory, selectedRegion, regionOptions]);
   const visibleCandidates = useMemo(() => {
     const group =
       CANDIDATE_GROUPS.find((g) => g.category === selectedCategory) ?? null;
@@ -851,16 +884,12 @@ useEffect(() => {
           >
             <option value="TODAS">Todos</option>
 
-            {(
-              selectedCategory === "SENADORES_DISTRITO_MULTIPLE" ||
-              selectedCategory === "DIPUTADOS"
-                ? ALL_REGIONS
-                : regionOptions
-            ).map((r) => (
+                       {regionOptions.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
             ))}
+
           </select>
         )}
       </div>
