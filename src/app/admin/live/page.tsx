@@ -84,6 +84,8 @@ function genPin4(): string {
 
 export default function AdminLivePage() {
   const router = useRouter();
+    const PROD_ORIGIN = "https://voto-claro.vercel.app";
+
   const origin =
     typeof window !== "undefined"
       ? window.location.origin
@@ -570,22 +572,23 @@ export default function AdminLivePage() {
                   </div>
 
                   <div className="mt-2 flex gap-2 flex-wrap">
-                    <Link
-                      href={`/panel/candidato/${selectedCandidate.id}`}
-                      className={btnSm}
-                      target="_blank"
-                    >
-                      Abrir panel
-                    </Link>
+                  <Link
+  href={`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`}
+  className={btnSm}
+  target="_blank"
+  rel="noreferrer"
+>
+  Abrir panel
+</Link>
+
                     <button
-                      type="button"
+  type="button"
+  onClick={() => copy(`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`)}
+  className={btnSm}
+>
+  Copiar link
+</button>
 
-                     onClick={() => copy(`${origin}/panel/candidato/${selectedCandidate.id}`)}
-
-                      className={btnSm}
-                    >
-                      Copiar link
-                    </button>
                   </div>
                 </div>
 
