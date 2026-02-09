@@ -59,7 +59,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         cargo: "Diputado",
         dni: undefined,
         photo: "/candidates/diana-doris-carhuamaca-garcia.png",
-        region: "LIMA",
+        region: "PERÚ",
          profileLink:
   "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
       },
@@ -69,7 +69,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         cargo: "Diputado",
         dni: undefined,
         photo: "/candidates/agustin-huaman-varrera.png",
-        region: "LIMA",
+        region: "PERÚ",
          profileLink:
   "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
       },
@@ -104,14 +104,14 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
     category: "SENADORES_DISTRITO_UNICO",
     candidates: [
       {
-        id: "elizabeth-alfaro-espinoza",
-        name: "elizabeth alfaro espinoza",
+        id: "luis-bernardo-guerrero-figueroa",
+        name: "Luis Bernardo Guerrero Figueroa",
         cargo: "Senador Distrito Único",
         dni: undefined,
-        photo: "/candidates/elizabeth-alfaro-espinoza.png",
-        region: "LIMA",
+        photo: "/candidates/luis-bernardo-guerrero-figueroa.png",
+        region: "PERÚ",
         profileLink:
-  "https://perufederal.pe/armando-masse-defendio-su-experiencia-como-lider-de-apdayc-resaltando-logros-financieros-y-administrativos/",
+  "https://www.youtube.com/watch?v=hkiPF1Rq7EM",
       },
       {
         id: "jose-antonio-fernandez-cordova",
@@ -119,7 +119,7 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
         cargo: "Senador Distrito Único",
         dni: undefined,
         photo: "/candidates/jose-antonio-fernandez-cordova.png",
-        region: "LIMA",
+        region: "PERÚ",
          profileLink:
   "https://www.youtube.com/watch?v=Li0H3QHfnA8",
     },
