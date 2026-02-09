@@ -84,6 +84,10 @@ function genPin4(): string {
 
 export default function AdminLivePage() {
   const router = useRouter();
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "https://voto-claro.vercel.app";
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
@@ -575,11 +579,9 @@ export default function AdminLivePage() {
                     </Link>
                     <button
                       type="button"
-                      onClick={() =>
-                        copy(
-                          `${window.location.origin}/panel/candidato/${selectedCandidate.id}`
-                        )
-                      }
+
+                     onClick={() => copy(`${origin}/panel/candidato/${selectedCandidate.id}`)}
+
                       className={btnSm}
                     >
                       Copiar link
