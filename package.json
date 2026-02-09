@@ -2,14 +2,14 @@
   "name": "voto-claro",
   "version": "0.1.0",
   "private": true,
-"scripts": {
-  "dev": "next dev",
-  "build": "next build",
-  "start": "next start",
-  "lint": "next lint src"
-},
-
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint src"
+  },
   "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
     "dommatrix": "^0.1.1",
     "next": "16.1.2",
     "pdf-parse": "^2.4.5",

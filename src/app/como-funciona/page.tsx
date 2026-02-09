@@ -25,7 +25,7 @@ export default function ComoFuncionaPage() {
 
     const t = setTimeout(() => {
       sendGuide(
-        "Bienvenido a Cómo funciona VotoClaro. Aquí aprenderás cómo usar la app, cómo te ayuda Federalito, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa."
+        "Bienvenido a Cómo funciona VOTO CLARO. Aquí aprenderás cómo usar la app, cómo te ayuda Federalito, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa."
       );
     }, 0);
 
@@ -36,19 +36,19 @@ export default function ComoFuncionaPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto bg-white">
+    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
      <header className="mb-6 relative">
   {/* ⬅ Volver a Inicio (arriba derecha) */}
   <div className="absolute right-0 top-0">
     <Link
       href="/"
-      className="rounded-xl px-4 py-2 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition shadow-md"
+     className="rounded-xl px-4 py-2 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition shadow-md border-2 border-red-500"
     >
       ⬅ Volver a Inicio
     </Link>
   </div>
 
-  <h1 className="text-3xl font-semibold text-slate-900">¿Cómo funciona VotoClaro?</h1>
+  <h1 className="text-3xl font-semibold text-slate-900">¿Cómo funciona VOTO CLARO?</h1>
   <p className="mt-2 text-slate-800 max-w-3xl">
     Esta ventana es la guía de uso. Si Federalito no habla automáticamente, haz un clic/toque en la pantalla y
     vuelve a intentar (es un bloqueo normal del navegador).
@@ -56,10 +56,10 @@ export default function ComoFuncionaPage() {
 </header>
 
       {/* 1) Qué es */}
-      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-        <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VotoClaro?</h2>
+      <section className="rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+       <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VOTO CLARO?</h2>
         <p className="mt-2 text-slate-800 text-sm">
-          VotoClaro es una app informativa para ayudarte a entender información pública antes de votar. No es un juego,
+          Voto Claro es una app informativa para ayudarte a entender información pública antes de votar. No es un juego,
           no es una red social y no reemplaza tu criterio.
         </p>
 
@@ -68,10 +68,10 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "VotoClaro es una app informativa para entender información pública antes de votar. No reemplaza tu criterio."
+                "Voto Claro es una app informativa para entender información pública antes de votar. No reemplaza tu criterio."
               )
-            }
-            className="rounded-xl px-4 py-2 border border-green-700 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+            } 
+           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
             🔊 Leer esta parte
           </button>
@@ -79,7 +79,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 2) Flujo de uso */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">2) ¿Cómo se usa la app? (flujo recomendado)</h2>
 
         <ol className="mt-3 space-y-3 text-sm text-slate-800 list-decimal pl-5">
@@ -109,7 +109,7 @@ export default function ComoFuncionaPage() {
                 "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre HV, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa evidencia y luego decide tú."
               )
             }
-            className="rounded-xl px-4 py-2 border border-green-700 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
             🔊 Leer el flujo
           </button>
@@ -117,7 +117,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 3) Qué hace Federalito */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+     <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">3) ¿Cómo te ayuda Federalito?</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -144,7 +144,7 @@ export default function ComoFuncionaPage() {
                 "Federalito te ayuda según la ventana en la que estás. Puede hablar si activas Voz: ON, puede escucharte con el micrófono si tu navegador lo permite, y si preguntas algo fuera de contexto te guía para ir a la ventana correcta."
               )
             }
-            className="rounded-xl px-4 py-2 border border-green-700 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
             🔊 Leer Federalito
           </button>
@@ -152,7 +152,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 4) Límites técnicos */}
-      <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-amber-50 p-5">
         <h2 className="text-lg font-bold text-slate-900">4) Límites técnicos (para evitar falsas expectativas)</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -192,11 +192,11 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 5) Política de uso */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+     <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">5) Política de uso (buen uso de la app)</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
-          Para que VotoClaro funcione bien y sea útil para todos, usa la app con respeto y dentro de su propósito:
+          Para que VOTO CLARO funcione bien y sea útil para todos, usa la app con respeto y dentro de su propósito:
           informarte.
         </p>
 
@@ -223,7 +223,7 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Política de uso: utiliza VotoClaro con respeto. No insultos ni lisuras. Pregunta dentro de lo que existe en la app. No ingeniería inversa ni intentos de atacar la app. No intentes forzar a Federalito a inventar o hablar fuera de contexto."
+               "Política de uso: utiliza VOTO CLARO con respeto. No insultos ni lisuras. Pregunta dentro de lo que existe en la app. No ingeniería inversa ni intentos de atacar la app. No intentes forzar a Federalito a inventar o hablar fuera de contexto."
               )
             }
             className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
@@ -234,26 +234,26 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 6) Qué hay en las secciones (resumen corto) */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">6) ¿Qué encontrarás en cada sección?</h2>
 
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl border p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
             <div className="font-bold text-slate-900">Inicio (/)</div>
             <div className="text-slate-800 mt-1">Buscar candidatos y entrar a su ficha.</div>
           </div>
 
-          <div className="rounded-xl border p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
             <div className="font-bold text-slate-900">Servicios al ciudadano</div>
             <div className="text-slate-800 mt-1">Enlaces oficiales: local de votación, multas, miembro de mesa.</div>
           </div>
 
-          <div className="rounded-xl border p-4">
+         <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
             <div className="font-bold text-slate-900">Reflexionar antes de votar</div>
             <div className="text-slate-800 mt-1">Preguntas por ejes: economía, salud, educación, seguridad.</div>
           </div>
 
-          <div className="rounded-xl border p-4">
+         <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
             <div className="font-bold text-slate-900">Un cambio con valentía</div>
             <div className="text-slate-800 mt-1">Acceso a propuesta y enlace oficial.</div>
           </div>
@@ -267,7 +267,7 @@ export default function ComoFuncionaPage() {
                 "Resumen de secciones: en Inicio buscas candidatos. En Servicios al ciudadano hay enlaces oficiales como local de votación y multas. En Reflexión hay preguntas por ejes. En Cambio con valentía hay una propuesta y enlace oficial."
               )
             }
-            className="rounded-xl px-4 py-2 border border-green-700 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
             🔊 Leer resumen de secciones
           </button>
@@ -275,11 +275,11 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 7) Transparencia y autoría */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
         <p className="mt-2 text-slate-800 text-sm">
           Esta aplicación fue desarrollada por encargo de un <b>Partido Político </b> como una
-          herramienta informativa. VotoClaro busca ayudar a entender información pública y{" "}
+          herramienta informativa. VOTO CLARO busca ayudar a entender información pública y{" "}
           <b>no reemplaza el criterio personal</b> del usuario.
         </p>
 
@@ -288,7 +288,7 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Transparencia: esta aplicación fue desarrollada por encargo del Partido Político Democrático Perú Federal como una herramienta informativa. VotoClaro no reemplaza tu criterio personal."
+               "Transparencia: esta aplicación fue desarrollada por encargo del Partido Político Democrático Perú Federal como una herramienta informativa. VOTO CLARO no reemplaza tu criterio personal."
               )
             }
             className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
@@ -303,7 +303,7 @@ export default function ComoFuncionaPage() {
   <button
     type="button"
     onClick={scrollTop}
-    className="rounded-full px-6 py-3 bg-green-700 text-white text-sm font-bold hover:bg-green-800 transition shadow-lg"
+   className="rounded-full px-6 py-3 bg-green-700 text-white text-sm font-bold hover:bg-green-800 transition shadow-lg border-2 border-red-500"
   >
     ⬆ Subir
   </button>

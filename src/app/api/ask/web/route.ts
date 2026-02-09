@@ -102,7 +102,7 @@ async function geminiAnswer(question: string, evidence: EvidenceChunk[]) {
 
   // Prompt duro: NO inventar, SOLO con evidencia, SIEMPRE citar URLs usadas
   const systemRules = `
-Eres un asistente de verificación para VotoClaro.
+Eres un asistente de verificación para VOTO CLARO.
 Reglas estrictas:
 - NO inventes datos.
 - SOLO puedes responder usando la evidencia proporcionada (extractos de fuentes).

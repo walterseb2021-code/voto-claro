@@ -16,9 +16,9 @@ export const CIUDADANO_PAGE_SUBTITLE =
   "Enlaces oficiales del Estado Peruano para consultas electorales, trámites y documentos públicos.";
 
 export const CIUDADANO_LEGAL_NOTE =
-  "⚠️ Nota importante: VotoClaro no pertenece ni representa a ninguna entidad del Estado. " +
+  "⚠️ Nota importante: VOTO CLARO no pertenece ni representa a ninguna entidad del Estado. " +
   "Los enlaces mostrados dirigen a páginas oficiales públicas administradas por JNE, ONPE y RENIEC. " +
-  "VotoClaro solo facilita el acceso informativo a estos sitios.";
+  "VOTO CLARO solo facilita el acceso informativo a estos sitios.";
 
 export const CIUDADANO_PAGE_GUIDE =
   "Guía rápida:\n" +

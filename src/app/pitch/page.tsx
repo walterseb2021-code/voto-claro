@@ -207,7 +207,7 @@ function FederalitoSplash() {
                 cursor: "pointer",
               }}
             >
-              Entrar a VotoClaro
+              Entrar a VOTO CLARO
             </button>
           </div>
 

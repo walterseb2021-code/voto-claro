@@ -930,7 +930,7 @@ function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
 
     // HOME fallback guiado (NUNCA Google)
     return (
-      "Puedo ayudarte dentro de VotoClaro.\n\n" +
+      "Puedo ayudarte dentro de VOTO CLARO.\n\n" +
       "Opciones disponibles:\n" +
       "1) Buscar candidatos y abrir su ficha (HV, Plan, Actuar político).\n" +
       "2) Servicios al ciudadano: local de votación, miembro de mesa, multas.\n" +
@@ -948,7 +948,7 @@ function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
       return (
         "Para información detallada del partido o su propuesta oficial, lo mejor es visitar su web.\n\n" +
         "👉 Abre el sitio oficial: https://perufederal.pe/\n\n" +
-        "Aquí en VotoClaro solo mostramos esta ventana como acceso rápido."
+        "Aquí en VOTO CLARO solo mostramos esta ventana como acceso rápido."
       );
     }
     return (
@@ -1964,7 +1964,7 @@ useEffect(() => {
 
   if (isHome) {
     text =
-      "Esta es la pantalla de inicio de VotoClaro. " +
+      "Esta es la pantalla de inicio de VOTO CLARO. " +
       "Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. " +
       "Empieza buscando un candidato por su nombre.";
   } else if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")) {
@@ -2641,7 +2641,7 @@ async function speakLastAssistant() {
 
   const pageGuide =
     isHome
-      ? "Esta es la pantalla de inicio de VotoClaro. Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. Empieza buscando un candidato por su nombre."
+      ? "Esta es la pantalla de inicio de VOTO CLARO. Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. Empieza buscando un candidato por su nombre."
       : p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")
       ? "Estás en Servicios al ciudadano. Aquí encontrarás enlaces oficiales para consultar local de votación, miembro de mesa, multas y otros trámites electorales."
       : p.startsWith("/reflexion")

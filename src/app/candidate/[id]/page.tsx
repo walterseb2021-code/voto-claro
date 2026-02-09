@@ -375,7 +375,7 @@ const name = nameForSpeech(rawName);
     const q = question.trim();
 
     if (isPrivacyBlocked(q)) {
-      setAnswer("Consulta bloqueada: tema de vida privada no pertinente a evaluación política en VotoClaro.");
+     setAnswer("Consulta bloqueada: tema de vida privada no pertinente a evaluación política en VOTO CLARO.");
       setCitations([]);
       return;
     }
@@ -1032,7 +1032,7 @@ const chipActive =
 
           {!citations.length && answer !== "—" ? (
             <div className="mt-2 text-xs text-slate-500">
-              Si no aparecen páginas o fuentes, VotoClaro lo marca como <b>“Sin evidencia”</b>.
+              Si no aparecen páginas o fuentes, VOTO CLARO lo marca como <b>“Sin evidencia”</b>.
             </div>
           ) : null}
         </div>

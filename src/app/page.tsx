@@ -141,15 +141,15 @@ export default function HomePage() {
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
       {/* HERO */}
-      <section className="rounded-3xl border shadow-sm overflow-hidden bg-white">
+      <section className="rounded-3xl border-[6px] border-red-600 shadow-sm overflow-hidden bg-white">
         {/* Banner superior (SIN imagen, como pediste) */}
         <div className="p-6 md:p-8 bg-gradient-to-br from-sky-50 via-white to-white">
           <div className="flex flex-col gap-6">
             <div className="min-w-0">
               {/* Título */}
               <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900">
-                VotoClaro
-              </h1>
+               VOTO CLARO
+               </h1>
 
               {/* Pills (verde claro de fondo, texto verde oscuro) */}
               <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -175,7 +175,7 @@ export default function HomePage() {
                       "Paso 1: Busca. Escribe al menos 2 letras del nombre del candidato que buscas y abre su ficha para ver Hoja de Vida, Plan de gobierno y actuar político."
                     )
                   }
-                  className="text-left rounded-2xl border border-green-200 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                  className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">1) Busca</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -190,7 +190,7 @@ export default function HomePage() {
                       "Paso 2: Verifica. En la ficha revisa Hoja de Vida y Plan de Gobierno. Si no hay páginas o fuentes, lo marcaremos como sin evidencia."
                     )
                   }
-                  className="text-left rounded-2xl border border-green-200 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                 className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">2) Verifica</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -205,7 +205,7 @@ export default function HomePage() {
                       "Paso 3: Decide. Antes de votar, revisa la evidencia: Hoja de vida, Plan y Actuar político. Luego decide con criterio: coherencia, viabilidad y conducta pública."
                     )
                   }
-                  className="text-left rounded-2xl border border-green-200 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                 className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">3) Decide</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -223,7 +223,7 @@ export default function HomePage() {
                       "Vamos a empezar. Escribe el nombre del candidato y entra a su ficha. Luego cambia entre HV, Plan y Actuar político."
                     )
                   }
-                  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border border-green-800 bg-gradient-to-r from-green-700 to-green-800 text-white text-sm font-semibold hover:from-green-800 hover:to-green-900 shadow-md hover:shadow-lg transition"
+                 className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 bg-gradient-to-r from-green-700 to-green-800 text-white text-sm font-semibold hover:from-green-800 hover:to-green-900 shadow-md hover:shadow-lg transition"
                 >
                   🔎 Empezar búsqueda
                 </button>
@@ -232,11 +232,11 @@ export default function HomePage() {
   type="button"
   onClick={() => {
     guideSay(
-      "Vamos a la sección Cómo funciona. Ahí te explicaré paso a paso cómo usar VotoClaro."
+     "Vamos a la sección Cómo funciona. Ahí te explicaré paso a paso cómo usar VOTO CLARO."
     );
     setTimeout(() => router.push("/como-funciona"), NAV_DELAY_MS);
   }}
-  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-800 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 shadow-sm transition"
+ className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 shadow-sm transition"
 >
   🧭 Cómo funciona
 </button>
@@ -248,7 +248,7 @@ export default function HomePage() {
                       "Recuerda: un voto responsable empieza con información verificable. Primero busca, luego verifica, y recién al final decide."
                     )
                   }
-                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-200 bg-green-50 text-slate-900 text-sm hover:bg-green-100"
+                 className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-400 bg-green-50 text-slate-900 text-sm hover:bg-green-100"
                 >
                   “Un voto responsable empieza con información verificable.”
                 </button>
@@ -263,12 +263,13 @@ export default function HomePage() {
       </section>
 
       {/* BUSCADOR */}
-      <section id="buscar" className="mt-6 border rounded-2xl p-6 bg-white shadow-sm">
+      <section id="buscar" className="mt-6 border-[6px] border-red-600 rounded-2xl p-6 bg-white shadow-sm">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900">
-              Buscar candidato
-            </h2>
+           <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
+  Buscar candidato
+</h2>
+
             <p className="text-sm text-slate-800 mt-1">
               Escribe al menos 2 letras del candidato que buscas. Abre la ficha para consultar Hoja de
               Vida (HV), Plan de Gobierno y Actuar Político.
@@ -283,7 +284,7 @@ export default function HomePage() {
           <input
             className="
               w-full
-              border border-green-900
+              border-2 border-red-600
               rounded-xl
               px-4 py-3
               bg-green-800
@@ -342,7 +343,7 @@ export default function HomePage() {
     );
     setTimeout(() => router.push("/ciudadano/servicios"), NAV_DELAY_MS);
   }}
-  className="group text-left w-full rounded-2xl border border-green-200 bg-green-50 p-5 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+ className="group text-left w-full rounded-2xl border-[6px] border-red-600 bg-green-50 p-5 shadow-sm hover:shadow-md hover:bg-green-100 transition"
 >
 
           <div className="flex items-start gap-3">
@@ -369,7 +370,7 @@ export default function HomePage() {
     );
     setTimeout(() => router.push("/reflexion"), NAV_DELAY_MS);
   }}
-  className="group text-left w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:bg-slate-50 transition"
+ className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
 >
 
           <div className="flex items-start gap-3">
@@ -396,7 +397,7 @@ export default function HomePage() {
     );
     setTimeout(() => router.push("/cambio-con-valentia"), NAV_DELAY_MS);
   }}
-  className="group text-left w-full md:col-span-2 rounded-2xl border border-green-300 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+  className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
 >
 
           <div className="flex items-start gap-3">
@@ -416,7 +417,7 @@ export default function HomePage() {
       </section>
 
       <footer className="mt-6 text-xs text-slate-700">
-        VotoClaro muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
+        VOTO CLARO muestra información muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
         reemplaza el criterio personal.
       </footer>
     </main>

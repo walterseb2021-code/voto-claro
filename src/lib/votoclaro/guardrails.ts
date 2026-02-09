@@ -55,7 +55,7 @@ export function guardrailsCheck(question: string): GuardrailDecision {
       return {
         ok: false,
         reason:
-          "Esta pregunta se refiere a aspectos de la vida privada que no guardan relación directa con el ejercicio de la función pública. VotoClaro no responde este tipo de consultas.",
+          "Esta pregunta se refiere a aspectos de la vida privada que no guardan relación directa con el ejercicio de la función pública. VOTO CLARO no responde este tipo de consultas.",
       };
     }
   }

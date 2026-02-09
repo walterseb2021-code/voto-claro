@@ -18,10 +18,10 @@ type PdfPagesApiResponse = {
 };
 
 function axisToQuestion(axis: CompareAxis) {
-  if (axis === "SEG") return "Resume las propuestas sobre seguridad ciudadana.";
-  if (axis === "SAL") return "Resume las propuestas sobre salud.";
-  if (axis === "EDU") return "Resume las propuestas sobre educación.";
-  return "Resume las propuestas sobre economía y empleo.";
+  if (axis === "SEG") return "Propuestas sobre seguridad ciudadana.";
+  if (axis === "SAL") return "Propuestas sobre salud.";
+  if (axis === "EDU") return "Propuestas sobre educación.";
+  return "Propuestas sobre economía y empleo.";
 }
 
 function norm(s: string) {

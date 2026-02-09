@@ -15,7 +15,7 @@ type ServiceLink = {
 /**
  * ⚠️ IMPORTANTE
  * Estos enlaces pertenecen a entidades oficiales del Estado Peruano.
- * VotoClaro NO ofrece, gestiona ni intermedia estos servicios.
+ * VOTO CLARO NO ofrece, gestiona ni intermedia estos servicios.
  * Únicamente facilita el acceso a páginas públicas oficiales.
  */
 
@@ -95,9 +95,9 @@ export default function ServiciosCiudadanoPage() {
 
       {/* Aviso legal / aclaración */}
       <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        ⚠️ <b>Nota importante:</b> VotoClaro no pertenece ni representa a ninguna
+        ⚠️ <b>Nota importante:</b> VOTO CLARO no pertenece ni representa a ninguna
         entidad del Estado. Los enlaces mostrados dirigen a páginas oficiales
-        públicas administradas por JNE, ONPE y RENIEC. VotoClaro solo facilita el
+        públicas administradas por JNE, ONPE y RENIEC. VOTO CLARO solo facilita el
         acceso informativo a estos sitios.
       </div>
 

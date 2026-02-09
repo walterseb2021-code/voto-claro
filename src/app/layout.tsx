@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VotoClaro",
+  title: "Voto Claro",
   description: "Información verificable de candidatos: HV, plan y actuar político.",
 };
 

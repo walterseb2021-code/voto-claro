@@ -88,7 +88,7 @@ export default function FederalitoSplash() {
         <div style={{ padding: 22 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
             <div>
-              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 0.2 }}>VotoClaro</div>
+              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 0.2 }}>VOTO CLARO</div>
               <div style={{ opacity: 0.9, marginTop: 6 }}>
                 Con Federalito AI: vota <b>responsable</b> y <b>con evidencia</b>.
               </div>

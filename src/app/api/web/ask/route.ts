@@ -792,7 +792,7 @@ async function geminiAnswerStrict(question: string, sources: WebSource[]) {
     .join("\n\n");
 
   const systemRules =
-    `Eres un asistente de verificación para VotoClaro (Perú).` +
+    `Eres un asistente de verificación para VOTO CLARO (Perú).` +
     `\nReglas estrictas:` +
     `\n1) SOLO puedes afirmar cosas explícitamente sustentadas en el texto (SOURCE #).` +
     `\n2) Si no hay evidencia suficiente, responde EXACTAMENTE: "${NO_EVIDENCE}".` +
@@ -855,7 +855,7 @@ async function geminiAnswerSummary(question: string, sources: WebSource[]) {
     .join("\n\n");
 
   const systemRules =
-    `Eres un resumidor informativo para VotoClaro (Perú).` +
+    `Eres un resumidor informativo para VOTO CLARO (Perú).` +
     `\nReglas:` +
     `\n1) SOLO usa el contenido provisto en SOURCE # (nada externo).` +
     `\n2) Si el contenido NO responde la pregunta, responde EXACTAMENTE: "${NO_EVIDENCE}".` +
@@ -925,8 +925,7 @@ export async function POST(req: Request) {
           q,
           mode,
           answer:
-            "Consulta bloqueada: vida privada (familia/sexualidad) no pertinente a evaluación política en VotoClaro.",
-          citations: [],
+           "Consulta bloqueada: vida privada (familia/sexualidad) no pertinente a evaluación política en VOTO CLARO.",
           sources: [],
           rule: "No se responde sobre familia/vida sexual u otros aspectos íntimos.",
         },
