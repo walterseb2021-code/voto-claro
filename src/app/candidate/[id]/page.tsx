@@ -22,9 +22,10 @@ function Sources({ sources }: { sources: Source[] }) {
   return (
     <div className="mt-3">
       <div className="text-sm font-semibold text-slate-900">Fuentes</div>
-      <ul className="mt-2 text-sm list-disc pl-5 text-slate-800">
+     <ul className="mt-2 text-sm list-disc pl-5 text-slate-800 break-words [overflow-wrap:anywhere]">
         {sources.map((s, i) => (
-          <li key={i}>
+          <li key={i} className="break-words [overflow-wrap:anywhere]">
+
             {s.title}
             {s.page != null ? ` (p. ${s.page})` : ""}
             {s.url ? (
@@ -180,7 +181,7 @@ function getEvidenceKind(answer: string, citations: Source[]) {
   return "NO_EVIDENCE" as const;
 }
 
-// ✅ Respuesta esperada de /api/web/ask
+// ✅ Respuesta esperada de /api/web/ask (se deja por compatibilidad)
 type WebAskCitation = { source: number; url: string; quote: string };
 type WebAskSource = { source: number; title: string; url: string; domain: string };
 type WebAskResponse = {
@@ -197,6 +198,7 @@ type WebAskResponse = {
 function slugToName(slug: string) {
   return (slug || "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 }
+
 // ✅ Ajuste SOLO para pronunciación (NO afecta datos ni lógica)
 function nameForSpeech(name: string) {
   return name
@@ -206,8 +208,6 @@ function nameForSpeech(name: string) {
     .replace(/\bAndres\b/gi, "Andrés")
     .replace(/\bRene\b/gi, "René")
     .replace(/\bAngel\b/gi, "Ángel")
-
-    // agrega aquí los que te fallen:
     .replace(/\bSofia\b/gi, "Sofía")
     .replace(/\bMasse\b/gi, "Massé")
     .replace(/\bValentia\b/gi, "Valentía");
@@ -220,6 +220,168 @@ function guideSayNoOpen(text: string) {
     new CustomEvent("votoclaro:guide", {
       detail: { action: "SAY", text, speak: true },
     })
+  );
+}
+
+// ✅ Fix rápido de texto con mojibake (Ã¡, Ã©, Ã±) + casos con "�"
+function fixMojibake(input: any) {
+  const s0 = String(input ?? "");
+
+  // 1) Primero arreglar casos donde ya apareció el carácter reemplazo "�"
+  let s = s0
+    .replace(/Joaqu�n/gi, "Joaquín")
+    .replace(/Mass�/gi, "Massé")
+    .replace(/Fern�ndez/gi, "Fernández")
+    .replace(/Rep�blica/gi, "República")
+    .replace(/Per�/gi, "Perú")
+    .replace(/anunci�/gi, "anunció")
+    .replace(/formaliz�/gi, "formalizó")
+    .replace(/inici�/gi, "inició")
+    .replace(/investigaci�n/gi, "investigación")
+    .replace(/Fiscal�a/gi, "Fiscalía")
+    .replace(/asociaci�n/gi, "asociación")
+    .replace(/regal�as/gi, "regalías")
+    .replace(/pol�tica/gi, "política")
+    .replace(/m�dicos/gi, "médicos")
+    .replace(/acci�n/gi, "acción")
+    .replace(/cient�fica/gi, "científica");
+
+  // 2) Luego arreglar mojibake clásico SOLO si “huele” a mojibake
+  if (!/[ÃÂâ€]/.test(s)) return s;
+
+  return s
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã±/g, "ñ")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ã/g, "Í")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ãš/g, "Ú")
+    .replace(/Ã‘/g, "Ñ")
+    .replace(/Ã¼/g, "ü")
+    .replace(/Ãœ/g, "Ü")
+    .replace(/Â¿/g, "¿")
+    .replace(/Â¡/g, "¡")
+    .replace(/Â /g, " ")
+    .replace(/â€œ/g, "“")
+    .replace(/â€/g, "”")
+    .replace(/â€˜/g, "‘")
+    .replace(/â€™/g, "’")
+    .replace(/â€“/g, "–")
+    .replace(/â€”/g, "—");
+}
+
+function normalizeCandidateSlug(input: string) {
+  let s = String(input ?? "").trim();
+
+  // decode %20 etc. (si viene de URL)
+  try {
+    s = decodeURIComponent(s);
+  } catch {}
+
+  // Normaliza unicode + quita tildes/diacríticos
+  s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // ñ/Ñ -> n
+  s = s.replace(/ñ/gi, "n");
+
+  // minúsculas
+  s = s.toLowerCase();
+
+  // separadores comunes -> espacio
+  s = s.replace(/[_/]+/g, " ");
+
+  // quita todo excepto letras/números/espacios/guiones
+  s = s.replace(/[^a-z0-9\s-]+/g, " ");
+
+  // colapsa espacios y guiones y convierte a slug con "-"
+  s = s.replace(/\s+/g, " ").trim();
+  s = s.replace(/\s/g, "-");
+  s = s.replace(/-+/g, "-");
+
+  return s;
+}
+
+// ✅ Deep fix: recorre TODO el JSON y arregla cualquier string
+function deepFixMojibake(value: any): any {
+  if (typeof value === "string") return fixMojibake(value);
+
+  if (Array.isArray(value)) {
+    return value.map(deepFixMojibake);
+  }
+
+  if (value && typeof value === "object") {
+    const out: any = {};
+    for (const k of Object.keys(value)) {
+      out[k] = deepFixMojibake(value[k]);
+    }
+    return out;
+  }
+
+  return value;
+}
+
+function buildActuarAnswer(file: any, rawQ: string) {
+  const items = Array.isArray(file?.items) ? file.items : [];
+  if (!items.length) {
+    return (
+      "En el archivo local de Actuar Político de este candidato no tengo registros.\n\n" +
+      "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
+    );
+  }
+
+  const q = (rawQ || "").toLowerCase();
+
+  // Resumen rápido
+  if (q.includes("resumen")) {
+    const top = items
+      .filter((x: any) => !!x?.date)
+      .sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)))
+      .slice(0, 3);
+
+    return (
+      `Resumen de Actuar Político — ${file?.candidate_full_name || "Candidato"}\n` +
+      `Registros: ${items.length}\n\n` +
+      (top.length
+        ? top
+            .map(
+              (it: any) =>
+                `• ${it.date} — ${fixMojibake(it.title)}\n  Fuente: ${fixMojibake(it?.source?.name)} (${fixMojibake(it?.source?.domain)})\n  Link: ${it.url}`
+            )
+            .join("\n\n")
+        : "No hay ítems con fecha.")
+    );
+  }
+
+  // Búsqueda por palabra (título/snippet/topic)
+  const hits = items.filter((it: any) => {
+    const hay = `${it?.title || ""} ${it?.snippet || ""} ${it?.topic || ""}`.toLowerCase();
+    return q.length >= 3 && hay.includes(q);
+  });
+
+  const show = (hits.length ? hits : items)
+    .sort((a: any, b: any) => String(b?.date || "").localeCompare(String(a?.date || "")))
+    .slice(0, 6);
+
+  if (!show.length) {
+    return (
+      "En el archivo local de Actuar Político de este candidato no tengo un registro sobre ese tema.\n\n" +
+      "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
+    );
+  }
+
+  return (
+    `Actuar Político — ${file?.candidate_full_name || "Candidato"}\n\n` +
+    show
+      .map(
+        (it: any) =>
+          `• ${it?.date || "sin fecha"} — ${fixMojibake(it?.title)}\n  Fuente: ${fixMojibake(it?.source?.name)} (${fixMojibake(it?.source?.domain)})\n  Link: ${it?.url}\n  Nota: ${fixMojibake(it?.snippet)}`
+      )
+      .join("\n\n")
   );
 }
 
@@ -246,6 +408,7 @@ export default function CandidatePage() {
   // ✅ Lista completa (desde /api/candidates/index)
   const [allCandidates, setAllCandidates] = useState<CandidateLite[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+
   // ✅ Para no repetir lectura en re-renders
   const lastGuideKeyRef = useRef<string>("");
 
@@ -435,6 +598,79 @@ export default function CandidatePage() {
       return;
     }
 
+    // ✅ NEWS (Actuar político) — JSON LOCAL en /public/actuar
+    if (tab === "NEWS") {
+      setBusy(true);
+      setAnswer("Consultando archivo local (JSON)…");
+      setCitations([]);
+
+      try {
+        const rawId = String(id ?? "");
+        const normalizedId = normalizeCandidateSlug(rawId);
+
+        // 1) Intento directo (compatibilidad con lo ya existente)
+        let url = `/actuar/${encodeURIComponent(rawId)}.json`;
+        let res = await fetch(url, { cache: "no-store" });
+
+        // 2) Fallback normalizado (acentos / mayúsculas / ñ / espacios)
+        if (!res.ok && normalizedId && normalizedId !== rawId) {
+          url = `/actuar/${encodeURIComponent(normalizedId)}.json`;
+          res = await fetch(url, { cache: "no-store" });
+        }
+
+        if (!res.ok) {
+          setAnswer(
+            "No encontré el archivo local de Actuar Político para este candidato.\n\n" +
+              `Archivo esperado: ${url}\n\n` +
+              "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
+          );
+          setCitations([]);
+          return;
+        }
+
+        // ✅ AQUÍ ya NO falla: file existe dentro del try
+        const file: any = await res.json();
+
+        // ✅ Arreglar TODO el JSON (tildes, mojibake, etc.)
+        const fixedFile: any = deepFixMojibake(file);
+
+        // ✅ Normalizar slug interno
+        if (fixedFile?.candidate_slug) {
+          fixedFile.candidate_slug = normalizeCandidateSlug(fixedFile.candidate_slug);
+        }
+
+        // ✅ Respuesta usando SOLO el JSON local
+        const out = buildActuarAnswer(fixedFile, q);
+        setAnswer(out);
+
+        // ✅ Mostrar “Fuentes” como lista clickeable en la UI (cuando existan)
+        const items = Array.isArray(fixedFile?.items) ? fixedFile.items : [];
+
+        const entries: Array<[string, Source]> = items
+          .filter((it: any) => typeof it?.url === "string" && !!it?.source?.name)
+          .map((it: any) => [
+            it.url as string,
+            {
+              title: `${fixMojibake(it.source.name)}${it.source.domain ? ` (${fixMojibake(it.source.domain)})` : ""}`,
+              url: it.url as string,
+            },
+          ]);
+
+        const mappedSources = Array.from(new Map<string, Source>(entries).values()).slice(0, 10);
+        setCitations(mappedSources);
+      } catch (e: any) {
+        setAnswer(
+          "No pude leer el archivo local de Actuar Político.\n\n" +
+            "Detalle técnico: " +
+            String(e?.message ?? e)
+        );
+        setCitations([]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     // ✅ HV y PLAN ahora van a IA (Gemini) vía /api/ai/answer
     if (tab === "HV" || tab === "PLAN") {
       setBusy(true);
@@ -478,205 +714,8 @@ export default function CandidatePage() {
         setAnswer(data.answer || "No hay evidencia suficiente en las fuentes consultadas.");
         setCitations(Array.isArray(data.citations) ? data.citations : []);
       } catch (e: any) {
-        setAnswer(`Error IA: ${(e?.message ?? "desconocido").toString()}`);
-        setCitations([]);
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-// ✅ Fix rápido de texto con mojibake (Ã¡, Ã©, Ã±, etc.)
-// ✅ Fix de texto:
-// - mojibake clásico: Ã¡ Ã© Ã± Â° etc.
-// - UTF-8 roto: "Ã" + letra (ej. "JoaquÃn") => suele ser "í" perdido
-// ✅ Fix de texto con mojibake (Ã¡, Ã©, Ã±) + casos con "�" (carácter reemplazo)
-function fixMojibake(input: any) {
-  const s0 = String(input ?? "");
-
-  // 1) Primero arreglar casos donde ya apareció el carácter reemplazo "�"
-  // (esto ocurre cuando el JSON no está en UTF-8 y el navegador lo decodifica mal)
-  // OJO: son reemplazos "por palabra" (seguros), no genéricos.
-  let s = s0
-    .replace(/Joaqu�n/gi, "Joaquín")
-    .replace(/Mass�/gi, "Massé")
-    .replace(/Fern�ndez/gi, "Fernández")
-    .replace(/Rep�blica/gi, "República")
-    .replace(/Per�/gi, "Perú")
-    .replace(/anunci�/gi, "anunció")
-    .replace(/formaliz�/gi, "formalizó")
-    .replace(/inici�/gi, "inició")
-    .replace(/investigaci�n/gi, "investigación")
-    .replace(/Fiscal�a/gi, "Fiscalía")
-    .replace(/asociaci�n/gi, "asociación")
-    .replace(/regal�as/gi, "regalías")
-    .replace(/pol�tica/gi, "política")
-    .replace(/m�dicos/gi, "médicos")
-    .replace(/acci�n/gi, "acción")
-    .replace(/cient�fica/gi, "científica");
-
-  // 2) Luego arreglar mojibake clásico (Ã¡, Ã©, Â¿, etc.)
-  // Solo aplicar si “huele” a mojibake para no tocar texto normal
-  if (!/[ÃÂâ€]/.test(s)) return s;
-
-  return s
-    // Tildes y ñ
-    .replace(/Ã¡/g, "á")
-    .replace(/Ã©/g, "é")
-    .replace(/Ã­/g, "í")
-    .replace(/Ã³/g, "ó")
-    .replace(/Ãº/g, "ú")
-    .replace(/Ã±/g, "ñ")
-    .replace(/Ã/g, "Á")
-    .replace(/Ã‰/g, "É")
-    .replace(/Ã/g, "Í")
-    .replace(/Ã“/g, "Ó")
-    .replace(/Ãš/g, "Ú")
-    .replace(/Ã‘/g, "Ñ")
-    // Ü / ü
-    .replace(/Ã¼/g, "ü")
-    .replace(/Ãœ/g, "Ü")
-    // Signos de apertura
-    .replace(/Â¿/g, "¿")
-    .replace(/Â¡/g, "¡")
-    // Espacios raros
-    .replace(/Â /g, " ")
-    // Comillas y guiones típicos
-    .replace(/â€œ/g, "“")
-    .replace(/â€/g, "”")
-    .replace(/â€˜/g, "‘")
-    .replace(/â€™/g, "’")
-    .replace(/â€“/g, "–")
-    .replace(/â€”/g, "—");
-}
-
-// ✅ Deep fix: recorre TODO el JSON y arregla cualquier string
-function deepFixMojibake(value: any): any {
-  if (typeof value === "string") return fixMojibake(value);
-
-  if (Array.isArray(value)) {
-    return value.map(deepFixMojibake);
-  }
-
-  if (value && typeof value === "object") {
-    const out: any = {};
-    for (const k of Object.keys(value)) {
-      out[k] = deepFixMojibake(value[k]);
-    }
-    return out;
-  }
-
-  return value;
-}
-
-    function buildActuarAnswer(file: any, rawQ: string) {
-      const items = Array.isArray(file?.items) ? file.items : [];
-      if (!items.length) {
-        return (
-          "En el archivo local de Actuar Político de este candidato no tengo registros.\n\n" +
-          "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
-        );
-      }
-
-      const q = (rawQ || "").toLowerCase();
-
-      // Resumen rápido
-      if (q.includes("resumen")) {
-        const top = items
-          .filter((x: any) => !!x?.date)
-          .sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)))
-          .slice(0, 3);
-
-        return (
-          `Resumen de Actuar Político — ${file?.candidate_full_name || "Candidato"}\n` +
-          `Registros: ${items.length}\n\n` +
-          (top.length
-            ? top
-                .map(
-                  (it: any) =>
-                    `• ${it.date} — ${fixMojibake(it.title)}\n  Fuente: ${fixMojibake(it?.source?.name)} (${fixMojibake(it?.source?.domain)})\n  Link: ${it.url}`
-                )
-                .join("\n\n")
-            : "No hay ítems con fecha.")
-        );
-      }
-
-      // Búsqueda por palabra (título/snippet/topic)
-      const hits = items.filter((it: any) => {
-        const hay = `${it?.title || ""} ${it?.snippet || ""} ${it?.topic || ""}`.toLowerCase();
-        return q.length >= 3 && hay.includes(q);
-      });
-
-      const show = (hits.length ? hits : items)
-        .sort((a: any, b: any) => String(b?.date || "").localeCompare(String(a?.date || "")))
-        .slice(0, 6);
-
-      if (!show.length) {
-        return (
-          "En el archivo local de Actuar Político de este candidato no tengo un registro sobre ese tema.\n\n" +
-          "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
-        );
-      }
-
-      return (
-        `Actuar Político — ${file?.candidate_full_name || "Candidato"}\n\n` +
-        show
-          .map(
-            (it: any) =>
-             `• ${it?.date || "sin fecha"} — ${fixMojibake(it?.title)}\n  Fuente: ${fixMojibake(it?.source?.name)} (${fixMojibake(it?.source?.domain)})\n  Link: ${it?.url}\n  Nota: ${fixMojibake(it?.snippet)}`
-          )
-          .join("\n\n")
-      );
-    }
-
-    // ✅ NEWS (Actuar político) ahora es LOCAL: JSON en /public/actuar
-    if (tab === "NEWS") {
-      setBusy(true);
-      setAnswer("Consultando archivo local (JSON)…");
-      setCitations([]);
-
-      try {
-        const url = `/actuar/${encodeURIComponent(id)}.json`;
-        const res = await fetch(url, { cache: "no-store" });
-
-        if (!res.ok) {
-          setAnswer(
-            "No encontré el archivo local de Actuar Político para este candidato.\n\n" +
-              `Archivo esperado: ${url}\n\n` +
-              "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
-          );
-          setCitations([]);
-          return;
-        }
-
-       const file: any = await res.json();
-
-// ✅ Arreglar TODO el JSON (títulos, snippets, nombres, fuentes, etc.)
-const fixedFile: any = deepFixMojibake(file);
-
-// ✅ Respuesta usando SOLO el JSON local (ya corregido)
-const out = buildActuarAnswer(fixedFile, q);
-setAnswer(out);
-
-// ✅ Mostrar “Fuentes” como lista clickeable en la UI (cuando existan)
-const items = Array.isArray(fixedFile?.items) ? fixedFile.items : [];
-
-        const entries: Array<[string, Source]> = items
-          .filter((it: any) => typeof it?.url === "string" && !!it?.source?.name)
-          .map((it: any) => [
-            it.url as string,
-            {
-             title: `${fixMojibake(it.source.name)}${it.source.domain ? ` (${fixMojibake(it.source.domain)})` : ""}`,
-              url: it.url as string,
-            },
-          ]);
-
-        const mappedSources = Array.from(new Map<string, Source>(entries).values()).slice(0, 10);
-
-        setCitations(mappedSources);
-      } catch (e: any) {
         setAnswer(
-          "No pude leer el archivo local de Actuar Político.\n\n" +
-            "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
+          "Error IA: " + String(e?.message ?? e ?? "desconocido") + " | id=" + String(id ?? "")
         );
         setCitations([]);
       } finally {
@@ -1106,7 +1145,10 @@ const items = Array.isArray(fixedFile?.items) ? fixedFile.items : [];
             <EvidenceBadge kind={answerKind} page={citations.find((s) => typeof s.page === "number")?.page} size="sm" />
           </div>
 
-          <p className="mt-2 text-sm whitespace-pre-wrap text-slate-800">{answer}</p>
+         <p className="mt-2 text-sm whitespace-pre-wrap text-slate-800 break-words [overflow-wrap:anywhere]">
+  {answer}
+</p>
+
           {citations.length ? <Sources sources={citations} /> : null}
 
           {!citations.length && answer !== "—" ? (
