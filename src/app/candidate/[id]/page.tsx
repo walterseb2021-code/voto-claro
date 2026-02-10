@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import EvidenceBadge from "@/components/ui/EvidenceBadge";
 import { useSearchParams } from "next/navigation";
 
-
 type CandidateProfile = {
   id: string;
   full_name: string;
@@ -22,8 +21,8 @@ type Source = { title: string; url?: string; page?: number };
 function Sources({ sources }: { sources: Source[] }) {
   return (
     <div className="mt-3">
-      <div className="text-sm font-medium text-slate-900">Fuentes</div>
-      <ul className="mt-2 text-sm list-disc pl-5 text-slate-700">
+      <div className="text-sm font-semibold text-slate-900">Fuentes</div>
+      <ul className="mt-2 text-sm list-disc pl-5 text-slate-800">
         {sources.map((s, i) => (
           <li key={i}>
             {s.title}
@@ -31,7 +30,12 @@ function Sources({ sources }: { sources: Source[] }) {
             {s.url ? (
               <>
                 {" — "}
-                <a className="underline text-green-700 hover:text-green-800" href={s.url} target="_blank" rel="noreferrer">
+                <a
+                  className="underline text-green-800 hover:text-green-900"
+                  href={s.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   abrir
                 </a>
               </>
@@ -64,27 +68,65 @@ type CandidateLite = {
 
 function isPrivacyBlocked(q: string) {
   const t = q.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  const sexual = ["sexual", "sexo", "intim", "amante", "infidel", "porn", "prostit", "orientacion", "gay", "lesb", "bisex", "trans"];
-  const family = ["esposa", "esposo", "hijo", "hija", "familia", "novia", "novio", "pareja", "matrimonio", "divorcio", "padre", "madre", "hermano", "hermana"];
+  const sexual = [
+    "sexual",
+    "sexo",
+    "intim",
+    "amante",
+    "infidel",
+    "porn",
+    "prostit",
+    "orientacion",
+    "gay",
+    "lesb",
+    "bisex",
+    "trans",
+  ];
+  const family = [
+    "esposa",
+    "esposo",
+    "hijo",
+    "hija",
+    "familia",
+    "novia",
+    "novio",
+    "pareja",
+    "matrimonio",
+    "divorcio",
+    "padre",
+    "madre",
+    "hermano",
+    "hermana",
+  ];
   return sexual.some((k) => t.includes(k)) || family.some((k) => t.includes(k));
 }
 
-function MiniProfileHeader({ title, profile }: { title: string; profile: CandidateProfile | null | undefined }) {
+function MiniProfileHeader({
+  title,
+  profile,
+}: {
+  title: string;
+  profile: CandidateProfile | null | undefined;
+}) {
   const name = profile?.full_name ?? title;
   const party = profile?.party_name ?? "";
   const photo = profile?.photo_url ?? null;
 
   return (
     <div className="flex items-center gap-3">
-      <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-200 shrink-0 border border-slate-100">
+      <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-200 shrink-0 border border-red-200">
         {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={photo} alt={name} className="w-full h-full object-cover" />
         ) : null}
       </div>
       <div className="min-w-0">
-        <div className="text-sm font-semibold truncate text-slate-900">{name}</div>
-        {party ? <div className="text-xs text-slate-600 truncate">{party}</div> : null}
+        <div className="text-sm font-semibold truncate text-slate-900">
+          {name}
+        </div>
+        {party ? (
+          <div className="text-xs text-slate-700 truncate">{party}</div>
+        ) : null}
       </div>
     </div>
   );
@@ -113,7 +155,13 @@ function toUserFriendlyAiError(payload: any) {
   if (!msg) return "Error IA: respuesta inválida del servidor.";
 
   const norm = msg.toLowerCase();
-  if (norm.includes("gemini") && (norm.includes("api key") || norm.includes("key") || norm.includes("unauthorized") || norm.includes("401"))) {
+  if (
+    norm.includes("gemini") &&
+    (norm.includes("api key") ||
+      norm.includes("key") ||
+      norm.includes("unauthorized") ||
+      norm.includes("401"))
+  ) {
     return "Error IA: falta o es inválida GEMINI_API_KEY en .env.local. Colócala y reinicia `npm run dev`.";
   }
   if (norm.includes("quota") || norm.includes("rate") || norm.includes("limit")) {
@@ -204,8 +252,8 @@ export default function CandidatePage() {
   useEffect(() => {
     const path = window.location.pathname;
     const parts = path.split("/").filter(Boolean);
-   const rawId = parts[1] ?? "";
-setId(rawId ? decodeURIComponent(rawId) : "");
+    const rawId = parts[1] ?? "";
+    setId(rawId ? decodeURIComponent(rawId) : "");
 
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get("tab");
@@ -241,40 +289,39 @@ setId(rawId ? decodeURIComponent(rawId) : "");
         normalized.sort((a, b) => a.full_name.localeCompare(b.full_name, "es", { sensitivity: "base" }));
         setAllCandidates(normalized);
 
-       // 🔑 candidato preferido por defecto
-const preferredName = "armando joaquin masse fernandez";
+        // 🔑 candidato preferido por defecto
+        const preferredName = "armando joaquin masse fernandez";
 
-// buscar primero a Armando Massé
-const preferred = normalized.find(
-  (c) =>
-    c.id !== id &&
-    c.full_name
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "")
-      .includes(preferredName)
-);
+        // buscar primero a Armando Massé
+        const preferred = normalized.find(
+          (c) =>
+            c.id !== id &&
+            c.full_name
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/\p{Diacritic}/gu, "")
+              .includes(preferredName)
+        );
 
-// fallback: primer candidato distinto al actual
-const firstOther = normalized.find((c) => c.id !== id);
+        // fallback: primer candidato distinto al actual
+        const firstOther = normalized.find((c) => c.id !== id);
 
-if (!compareWith || compareWith === id) {
-  if (preferred) {
-    setCompareWith(preferred.id);
-  } else if (firstOther) {
-    setCompareWith(firstOther.id);
-  }
-} else {
-  const exists = normalized.some((c) => c.id === compareWith);
-  if (!exists) {
-    if (preferred) {
-      setCompareWith(preferred.id);
-    } else if (firstOther) {
-      setCompareWith(firstOther.id);
-    }
-  }
-}
-
+        if (!compareWith || compareWith === id) {
+          if (preferred) {
+            setCompareWith(preferred.id);
+          } else if (firstOther) {
+            setCompareWith(firstOther.id);
+          }
+        } else {
+          const exists = normalized.some((c) => c.id === compareWith);
+          if (!exists) {
+            if (preferred) {
+              setCompareWith(preferred.id);
+            } else if (firstOther) {
+              setCompareWith(firstOther.id);
+            }
+          }
+        }
       } finally {
         if (!aborted) setLoadingCandidates(false);
       }
@@ -284,7 +331,7 @@ if (!compareWith || compareWith === id) {
     return () => {
       aborted = true;
     };
-  }, [id, tab]);
+  }, [id, tab, compareWith]);
 
   useEffect(() => {
     let aborted = false;
@@ -304,13 +351,14 @@ if (!compareWith || compareWith === id) {
       aborted = true;
     };
   }, [id]);
+
   // ✅ Guía automática por pestaña (SIN abrir panel)
   useEffect(() => {
     if (!id) return;
     if (loadingProfile) return;
 
     const rawName = (profile?.full_name ?? "").trim() || slugToName(id);
-const name = nameForSpeech(rawName);
+    const name = nameForSpeech(rawName);
 
     const key = `${id}::${tab}`;
 
@@ -345,12 +393,8 @@ const name = nameForSpeech(rawName);
       },
       NEWS: {
         title: "Actuar político (con fuentes)",
-        helper: "Modo WEB (real): busca en fuentes confiables (lista blanca) y responde SOLO si hay evidencia. Siempre muestra links.",
-        suggested: [
-          "Resume 3 hechos verificables con fuentes.",
-          "Controversias políticas (con enlace)",
-          "Investigaciones o procesos (con enlace)",
-        ],
+        helper: "Modo LOCAL (real): responde usando SOLO el JSON local del candidato. Siempre muestra links del registro.",
+        suggested: ["resumen", "controversias", "investigaciones"],
       },
       PLAN: {
         title: "Plan de gobierno",
@@ -375,7 +419,7 @@ const name = nameForSpeech(rawName);
     const q = question.trim();
 
     if (isPrivacyBlocked(q)) {
-     setAnswer("Consulta bloqueada: tema de vida privada no pertinente a evaluación política en VOTO CLARO.");
+      setAnswer("Consulta bloqueada: tema de vida privada no pertinente a evaluación política en VOTO CLARO.");
       setCitations([]);
       return;
     }
@@ -441,123 +485,205 @@ const name = nameForSpeech(rawName);
       }
       return;
     }
-function buildActuarAnswer(file: any, rawQ: string) {
-  const items = Array.isArray(file?.items) ? file.items : [];
-  if (!items.length) {
-    return (
-      "En el archivo local de Actuar Político de este candidato no tengo registros.\n\n" +
-      "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
-    );
-  }
+// ✅ Fix rápido de texto con mojibake (Ã¡, Ã©, Ã±, etc.)
+// ✅ Fix de texto:
+// - mojibake clásico: Ã¡ Ã© Ã± Â° etc.
+// - UTF-8 roto: "Ã" + letra (ej. "JoaquÃn") => suele ser "í" perdido
+// ✅ Fix de texto con mojibake (Ã¡, Ã©, Ã±) + casos con "�" (carácter reemplazo)
+function fixMojibake(input: any) {
+  const s0 = String(input ?? "");
 
-  const q = (rawQ || "").toLowerCase();
+  // 1) Primero arreglar casos donde ya apareció el carácter reemplazo "�"
+  // (esto ocurre cuando el JSON no está en UTF-8 y el navegador lo decodifica mal)
+  // OJO: son reemplazos "por palabra" (seguros), no genéricos.
+  let s = s0
+    .replace(/Joaqu�n/gi, "Joaquín")
+    .replace(/Mass�/gi, "Massé")
+    .replace(/Fern�ndez/gi, "Fernández")
+    .replace(/Rep�blica/gi, "República")
+    .replace(/Per�/gi, "Perú")
+    .replace(/anunci�/gi, "anunció")
+    .replace(/formaliz�/gi, "formalizó")
+    .replace(/inici�/gi, "inició")
+    .replace(/investigaci�n/gi, "investigación")
+    .replace(/Fiscal�a/gi, "Fiscalía")
+    .replace(/asociaci�n/gi, "asociación")
+    .replace(/regal�as/gi, "regalías")
+    .replace(/pol�tica/gi, "política")
+    .replace(/m�dicos/gi, "médicos")
+    .replace(/acci�n/gi, "acción")
+    .replace(/cient�fica/gi, "científica");
 
-  // Resumen rápido
-  if (q.includes("resumen")) {
-    const top = items
-      .filter((x: any) => !!x?.date)
-      .sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)))
-      .slice(0, 3);
+  // 2) Luego arreglar mojibake clásico (Ã¡, Ã©, Â¿, etc.)
+  // Solo aplicar si “huele” a mojibake para no tocar texto normal
+  if (!/[ÃÂâ€]/.test(s)) return s;
 
-    return (
-      `Resumen de Actuar Político — ${file?.candidate_full_name || "Candidato"}\n` +
-      `Registros: ${items.length}\n\n` +
-      (top.length
-        ? top
-            .map(
-              (it: any) =>
-                `• ${it.date} — ${it.title}\n  Fuente: ${it?.source?.name} (${it?.source?.domain})\n  Link: ${it.url}`
-            )
-            .join("\n\n")
-        : "No hay ítems con fecha.")
-    );
-  }
-
-  // Búsqueda por palabra (título/snippet/topic)
-  const hits = items.filter((it: any) => {
-    const hay = `${it?.title || ""} ${it?.snippet || ""} ${it?.topic || ""}`.toLowerCase();
-    return q.length >= 3 && hay.includes(q);
-  });
-
-  const show = (hits.length ? hits : items)
-    .sort((a: any, b: any) => String(b?.date || "").localeCompare(String(a?.date || "")))
-    .slice(0, 6);
-
-  if (!show.length) {
-    return (
-      "En el archivo local de Actuar Político de este candidato no tengo un registro sobre ese tema.\n\n" +
-      "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
-    );
-  }
-
-  return (
-    `Actuar Político — ${file?.candidate_full_name || "Candidato"}\n\n` +
-    show
-      .map(
-        (it: any) =>
-          `• ${it?.date || "sin fecha"} — ${it?.title}\n  Fuente: ${it?.source?.name} (${it?.source?.domain})\n  Link: ${it?.url}\n  Nota: ${it?.snippet}`
-      )
-      .join("\n\n")
-  );
+  return s
+    // Tildes y ñ
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã±/g, "ñ")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ã/g, "Í")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ãš/g, "Ú")
+    .replace(/Ã‘/g, "Ñ")
+    // Ü / ü
+    .replace(/Ã¼/g, "ü")
+    .replace(/Ãœ/g, "Ü")
+    // Signos de apertura
+    .replace(/Â¿/g, "¿")
+    .replace(/Â¡/g, "¡")
+    // Espacios raros
+    .replace(/Â /g, " ")
+    // Comillas y guiones típicos
+    .replace(/â€œ/g, "“")
+    .replace(/â€/g, "”")
+    .replace(/â€˜/g, "‘")
+    .replace(/â€™/g, "’")
+    .replace(/â€“/g, "–")
+    .replace(/â€”/g, "—");
 }
-// ===== Actuar Político: lector de JSON local =====
 
+// ✅ Deep fix: recorre TODO el JSON y arregla cualquier string
+function deepFixMojibake(value: any): any {
+  if (typeof value === "string") return fixMojibake(value);
 
-// ✅ NEWS (Actuar político) ahora es LOCAL: JSON en /public/actuar
-if (tab === "NEWS") {
-  setBusy(true);
-  setAnswer("Consultando archivo local (JSON)…");
-  setCitations([]);
+  if (Array.isArray(value)) {
+    return value.map(deepFixMojibake);
+  }
 
-  try {
-    const url = `/actuar/${encodeURIComponent(id)}.json`;
-    const res = await fetch(url, { cache: "no-store" });
+  if (value && typeof value === "object") {
+    const out: any = {};
+    for (const k of Object.keys(value)) {
+      out[k] = deepFixMojibake(value[k]);
+    }
+    return out;
+  }
 
-    if (!res.ok) {
-      setAnswer(
-        "No encontré el archivo local de Actuar Político para este candidato.\n\n" +
-          `Archivo esperado: ${url}\n\n` +
-          "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
+  return value;
+}
+
+    function buildActuarAnswer(file: any, rawQ: string) {
+      const items = Array.isArray(file?.items) ? file.items : [];
+      if (!items.length) {
+        return (
+          "En el archivo local de Actuar Político de este candidato no tengo registros.\n\n" +
+          "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
+        );
+      }
+
+      const q = (rawQ || "").toLowerCase();
+
+      // Resumen rápido
+      if (q.includes("resumen")) {
+        const top = items
+          .filter((x: any) => !!x?.date)
+          .sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)))
+          .slice(0, 3);
+
+        return (
+          `Resumen de Actuar Político — ${file?.candidate_full_name || "Candidato"}\n` +
+          `Registros: ${items.length}\n\n` +
+          (top.length
+            ? top
+                .map(
+                  (it: any) =>
+                    `• ${it.date} — ${fixMojibake(it.title)}\n  Fuente: ${fixMojibake(it?.source?.name)} (${fixMojibake(it?.source?.domain)})\n  Link: ${it.url}`
+                )
+                .join("\n\n")
+            : "No hay ítems con fecha.")
+        );
+      }
+
+      // Búsqueda por palabra (título/snippet/topic)
+      const hits = items.filter((it: any) => {
+        const hay = `${it?.title || ""} ${it?.snippet || ""} ${it?.topic || ""}`.toLowerCase();
+        return q.length >= 3 && hay.includes(q);
+      });
+
+      const show = (hits.length ? hits : items)
+        .sort((a: any, b: any) => String(b?.date || "").localeCompare(String(a?.date || "")))
+        .slice(0, 6);
+
+      if (!show.length) {
+        return (
+          "En el archivo local de Actuar Político de este candidato no tengo un registro sobre ese tema.\n\n" +
+          "Para ampliar, puedes buscar más noticias en Internet en fuentes confiables."
+        );
+      }
+
+      return (
+        `Actuar Político — ${file?.candidate_full_name || "Candidato"}\n\n` +
+        show
+          .map(
+            (it: any) =>
+             `• ${it?.date || "sin fecha"} — ${fixMojibake(it?.title)}\n  Fuente: ${fixMojibake(it?.source?.name)} (${fixMojibake(it?.source?.domain)})\n  Link: ${it?.url}\n  Nota: ${fixMojibake(it?.snippet)}`
+          )
+          .join("\n\n")
       );
-      setCitations([]);
-      return;
     }
 
-    const file: any = await res.json();
+    // ✅ NEWS (Actuar político) ahora es LOCAL: JSON en /public/actuar
+    if (tab === "NEWS") {
+      setBusy(true);
+      setAnswer("Consultando archivo local (JSON)…");
+      setCitations([]);
 
-    // ✅ Respuesta usando SOLO el JSON local
-    const out = buildActuarAnswer(file, q);
-    setAnswer(out);
+      try {
+        const url = `/actuar/${encodeURIComponent(id)}.json`;
+        const res = await fetch(url, { cache: "no-store" });
+
+        if (!res.ok) {
+          setAnswer(
+            "No encontré el archivo local de Actuar Político para este candidato.\n\n" +
+              `Archivo esperado: ${url}\n\n` +
+              "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
+          );
+          setCitations([]);
+          return;
+        }
+
+       const file: any = await res.json();
+
+// ✅ Arreglar TODO el JSON (títulos, snippets, nombres, fuentes, etc.)
+const fixedFile: any = deepFixMojibake(file);
+
+// ✅ Respuesta usando SOLO el JSON local (ya corregido)
+const out = buildActuarAnswer(fixedFile, q);
+setAnswer(out);
 
 // ✅ Mostrar “Fuentes” como lista clickeable en la UI (cuando existan)
-const items = Array.isArray(file?.items) ? file.items : [];
+const items = Array.isArray(fixedFile?.items) ? fixedFile.items : [];
 
-const entries: Array<[string, Source]> = items
-  .filter((it: any) => typeof it?.url === "string" && !!it?.source?.name)
-  .map((it: any) => [
-    it.url as string,
-    {
-      title: `${it.source.name}${it.source.domain ? ` (${it.source.domain})` : ""}`,
-      url: it.url as string,
-    },
-  ]);
+        const entries: Array<[string, Source]> = items
+          .filter((it: any) => typeof it?.url === "string" && !!it?.source?.name)
+          .map((it: any) => [
+            it.url as string,
+            {
+             title: `${fixMojibake(it.source.name)}${it.source.domain ? ` (${fixMojibake(it.source.domain)})` : ""}`,
+              url: it.url as string,
+            },
+          ]);
 
-const mappedSources = Array.from(new Map<string, Source>(entries).values()).slice(0, 10);
+        const mappedSources = Array.from(new Map<string, Source>(entries).values()).slice(0, 10);
 
-setCitations(mappedSources);
-
-  } catch (e: any) {
-    setAnswer(
-      "No pude leer el archivo local de Actuar Político.\n\n" +
-        "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
-    );
-    setCitations([]);
-  } finally {
-    setBusy(false);
-  }
-  return;
-}
-
+        setCitations(mappedSources);
+      } catch (e: any) {
+        setAnswer(
+          "No pude leer el archivo local de Actuar Político.\n\n" +
+            "Si este tema no está registrado aquí, puedes buscar más noticias en Internet en fuentes confiables."
+        );
+        setCitations([]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
 
     setAnswer("Pestaña no soportada.");
     setCitations([]);
@@ -593,33 +719,38 @@ setCitations(mappedSources);
 
       const compareData = data as CompareApiResponse;
       setCompareResult(compareData);
+
       // ✅ Enviar la comparación al asistente para que pueda leerla con el botón 🔊
-try {
-  const axisLabel =
-    compareData.axis === "SEG"
-      ? "Seguridad"
-      : compareData.axis === "ECO"
-      ? "Economía y empleo"
-      : compareData.axis === "SAL"
-      ? "Salud"
-      : "Educación";
+      try {
+        const axisLabel =
+          compareData.axis === "SEG"
+            ? "Seguridad"
+            : compareData.axis === "ECO"
+            ? "Economía y empleo"
+            : compareData.axis === "SAL"
+            ? "Salud"
+            : "Educación";
 
-  const aName = (compareProfiles?.[compareData.a.id]?.full_name || profile?.full_name || slugToName(compareData.a.id)).trim();
-  const bName = (compareProfiles?.[compareData.b.id]?.full_name || slugToName(compareData.b.id)).trim();
+        const aName = (
+          compareProfiles?.[compareData.a.id]?.full_name ||
+          profile?.full_name ||
+          slugToName(compareData.a.id)
+        ).trim();
+        const bName = (compareProfiles?.[compareData.b.id]?.full_name || slugToName(compareData.b.id)).trim();
 
-  const textToRead =
-    `Comparación Plan vs Plan — Eje: ${axisLabel}.\n\n` +
-    `Candidato A: ${aName}.\n` +
-    `${compareData.a.answer}\n\n` +
-    `Candidato B: ${bName}.\n` +
-    `${compareData.b.answer}`;
+        const textToRead =
+          `Comparación Plan vs Plan — Eje: ${axisLabel}.\n\n` +
+          `Candidato A: ${aName}.\n` +
+          `${compareData.a.answer}\n\n` +
+          `Candidato B: ${bName}.\n` +
+          `${compareData.b.answer}`;
 
-  window.dispatchEvent(
-    new CustomEvent("votoclaro:page-read", {
-      detail: { text: textToRead },
-    })
-  );
-} catch {}
+        window.dispatchEvent(
+          new CustomEvent("votoclaro:page-read", {
+            detail: { text: textToRead },
+          })
+        );
+      } catch {}
 
       const ids = `${compareData.a.id},${compareData.b.id}`;
       const pr = await fetch(`/api/candidates/profile?ids=${encodeURIComponent(ids)}`, { cache: "no-store" });
@@ -630,25 +761,20 @@ try {
       setCompareLoading(false);
     }
   }
+
   function clearCompare() {
-  setCompareResult(null);
-  setCompareLoading(false);
-  setCompareProfiles({});
+    setCompareResult(null);
+    setCompareLoading(false);
+    setCompareProfiles({});
 
-  // opcional: dejar el eje en ECO (o no tocarlo)
-  // setCompareAxis("ECO");
-
-  // opcional: limpiar el candidato B (o mantenerlo)
-  // setCompareWith("");
-
-  // ✅ limpiar parámetros de URL (idB y axis)
-  try {
-    const params = new URLSearchParams(window.location.search);
-    params.delete("idB");
-    params.delete("axis");
-    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  } catch {}
-}
+    // ✅ limpiar parámetros de URL (idB y axis)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("idB");
+      params.delete("axis");
+      window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    } catch {}
+  }
 
   const active = demo[tab];
   const aProfile = compareResult ? compareProfiles[compareResult.a.id] : null;
@@ -657,21 +783,17 @@ try {
   const compareOptions: CandidateLite[] = allCandidates.length > 0 ? allCandidates.filter((c) => c.id !== id) : [];
 
   const answerKind = getEvidenceKind(answer, citations);
-    // ✅ Chips “cálidos” (preguntas sugeridas / ejes) con estado seleccionado
+
+  // ✅ Chips “cálidos” (preguntas sugeridas / ejes) con estado seleccionado
   const chipBase =
-    "group inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium " +
+    "group relative inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium " +
     "border transition-all duration-200 select-none " +
     "hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.99] " +
     "focus:outline-none focus:ring-2 focus:ring-green-200";
 
-  const chipIdle =
-  "border-red-300 bg-green-50/70 text-slate-800 " +
-  "hover:bg-green-100 hover:border-red-400";
-
-const chipActive =
-  "border-green-800 bg-gradient-to-r from-green-600 to-green-700 text-white " +
-  "shadow-md ring-1 ring-red-300/60";
-
+  const chipIdle = "border-red-300 bg-green-50/70 text-slate-800 hover:bg-green-100 hover:border-red-400";
+  const chipActive =
+    "border-green-900 bg-gradient-to-r from-green-700 to-green-800 text-white shadow-md ring-1 ring-red-300/60";
 
   function ChipBtn(props: { text: string; icon?: string; onClick: () => void }) {
     const active = question.trim() === props.text.trim();
@@ -679,115 +801,98 @@ const chipActive =
       <button
         type="button"
         onClick={props.onClick}
-       className={`${chipBase} ${active ? chipActive : chipIdle} max-w-full sm:max-w-none`}
-
+        className={`${chipBase} ${active ? chipActive : chipIdle} max-w-full sm:max-w-none`}
         aria-pressed={active}
         title={props.text}
       >
         <span className={`${active ? "opacity-100" : "opacity-80"} text-[13px] leading-none`}>
           {props.icon ?? "💡"}
         </span>
-       <span className="whitespace-normal break-words text-left leading-snug">
-  {props.text}
-</span>
-
-        {/* ✅ micro “shine” en hover (solo visual) */}
-        <span
-          className={
-            "pointer-events-none absolute opacity-0 group-hover:opacity-100 transition-opacity duration-200 " +
-            (active ? "" : "")
-          }
-        />
+        <span className="whitespace-normal break-words text-left leading-snug">{props.text}</span>
       </button>
     );
   }
 
-  // ✅ estilos (opción 1)
-  const tabBase = "border rounded-xl px-4 py-2 text-sm font-semibold transition";
-  const tabOn = "bg-green-700 text-white border-green-700 shadow-sm";
-  const tabOff = "bg-white text-slate-800 border-slate-200 hover:border-green-300 hover:bg-green-50";
+  // ✅ Tabs: estilo A-8 (borde rojo grueso, activo verde oscuro)
+  const tabBase =
+    "rounded-xl px-4 py-2 text-sm font-extrabold transition border-2";
+  const tabOn =
+    "bg-green-800 text-white border-green-900 shadow-md";
+  const tabOff =
+    "bg-white text-slate-900 border-red-400 hover:border-red-600 hover:bg-green-50";
 
-   // ✅ Botón principal: “invita a clic”
-  // - hover: sube un poquito + crece leve
-  // - active: baja + reduce leve
-  // - shine: brillo diagonal
-  // - pulse: pulso sutil (solo este)
+  // ✅ Botones consistentes
   const btnPrimary =
     "group relative inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white " +
-    "border border-green-800 bg-gradient-to-r from-green-600 to-green-700 " +
+    "border border-green-900 bg-green-800 " +
     "shadow-md transition-all duration-200 " +
-    "hover:from-green-700 hover:to-green-800 hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.01] " +
+    "hover:bg-green-900 hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.01] " +
     "active:translate-y-0 active:scale-[0.99] " +
     "focus:outline-none focus:ring-2 focus:ring-green-200 " +
-    "disabled:opacity-60 disabled:cursor-not-allowed " +
-    "motion-safe:animate-[pulse_2.2s_ease-in-out_infinite] " +
-    "overflow-hidden";
+    "disabled:opacity-60 disabled:cursor-not-allowed overflow-hidden";
 
-  // ✅ Shine (brillo) usando pseudo-elemento via Tailwind arbitrary
-  // (se activa en hover)
   const btnPrimaryShine =
     "after:content-[''] after:absolute after:inset-0 after:-translate-x-[120%] after:skew-x-[-20deg] " +
-    "after:bg-gradient-to-r after:from-transparent after:via-white/30 after:to-transparent " +
-    "after:transition-transform after:duration-500 " +
-    "group-hover:after:translate-x-[120%]";
+    "after:bg-gradient-to-r after:from-transparent after:via-white/25 after:to-transparent " +
+    "after:transition-transform after:duration-500 group-hover:after:translate-x-[120%]";
 
-  // ✅ Botón secundario: elegante, también “clickeable” pero sin pulso
   const btnSecondary =
-    "group relative inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold " +
-    "border border-green-600 bg-white text-green-700 " +
+    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold " +
+    "border border-red-700 bg-white text-red-700 " +
     "shadow-sm transition-all duration-200 " +
-    "hover:bg-green-50 hover:shadow-md hover:-translate-y-0.5 " +
+    "hover:bg-red-50 hover:shadow-md hover:-translate-y-0.5 " +
     "active:translate-y-0 active:scale-[0.99] " +
     "focus:outline-none focus:ring-2 focus:ring-green-200 " +
     "disabled:opacity-60 disabled:cursor-not-allowed";
 
-  // ✅ Pills (preguntas sugeridas) con “rebote” suave al hover
-  const pill =
-    "inline-flex items-center border border-green-200 bg-white text-slate-800 " +
-    "rounded-full px-3 py-1 text-sm transition-all duration-150 " +
-    "hover:bg-green-50 hover:border-green-300 hover:-translate-y-0.5 hover:shadow-sm " +
-    "active:translate-y-0 active:scale-[0.99]";
-    const searchParams = useSearchParams();
-    const fromCambio = searchParams.get("from") === "cambio";
+  const searchParams = useSearchParams();
+  const fromCambio = searchParams.get("from") === "cambio";
+
+  // ✅ Estilo global de bloques (A-8)
+  const WRAP = "rounded-2xl border-[6px] border-red-700 bg-green-50 shadow-sm";
+  const PANEL = `${WRAP} p-5`;
+  const PANEL_WHITE = "bg-white";
 
   return (
-    <main className="min-h-screen p-6 max-w-6xl mx-auto bg-gradient-to-b from-green-50 via-white to-white">
-     <a
-  href="/"
-  className="inline-flex items-center rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 transition"
->
-  ← Volver a inicio
-</a>
+    <main className="min-h-screen p-6 max-w-6xl mx-auto bg-gradient-to-b from-green-100 via-green-50 to-green-100">
+      {/* Top nav */}
+      <div className="flex flex-wrap items-center gap-3">
+        <a href="/" className={`${btnPrimary} ${btnPrimaryShine}`}>
+          ← Volver a inicio
+        </a>
 
-{fromCambio ? (
-  <a
-    href="/cambio-con-valentia"
-    className="inline-flex items-center gap-2 mt-2 ml-6 rounded-xl px-4 py-2 border border-green-800 bg-green-700 text-white text-sm font-extrabold hover:bg-green-800 shadow-sm transition"
-  >
-    ← Un Cambio con Valentía
-  </a>
-) : null}
-
+        {fromCambio ? (
+          <a href="/cambio-con-valentia" className={`${btnPrimary} ${btnPrimaryShine}`}>
+            ← Un Cambio con Valentía
+          </a>
+        ) : null}
+      </div>
 
       {/* Header candidato */}
-      <div className="mt-4 border border-slate-200 bg-white rounded-2xl p-5 flex gap-4 items-start shadow-md">
-        <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-200 shrink-0 border border-slate-100">
-          {profile?.photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
-          ) : null}
-        </div>
-
-        <div className="flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="text-xl font-semibold text-slate-900">{loadingProfile ? "Cargando..." : profile?.full_name ?? "Candidato"}</div>
-            <EvidenceBadge kind="GUIDE" />
-            <EvidenceBadge kind="WITH_EVIDENCE" />
-            <EvidenceBadge kind="NO_EVIDENCE" />
+      <div className={`mt-4 ${PANEL}`}>
+        <div className="flex gap-4 items-start">
+          <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-red-300">
+            {profile?.photo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
+            ) : null}
           </div>
 
-          <div className="text-sm text-slate-600">{profile?.party_name ?? ""}</div>
-          <p className="text-sm mt-2 text-slate-700">{profile?.hv_summary ?? ""}</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-xl font-extrabold text-slate-900">
+                {loadingProfile ? "Cargando..." : profile?.full_name ?? "Candidato"}
+              </div>
+              <EvidenceBadge kind="GUIDE" />
+              <EvidenceBadge kind="WITH_EVIDENCE" />
+              <EvidenceBadge kind="NO_EVIDENCE" />
+            </div>
+
+            <div className="text-sm text-slate-800 font-semibold">{profile?.party_name ?? ""}</div>
+            {profile?.hv_summary ? (
+              <p className="text-sm mt-2 text-slate-800">{profile?.hv_summary ?? ""}</p>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -805,93 +910,72 @@ const chipActive =
       </div>
 
       {/* Panel principal */}
-      <div className="mt-4 border border-red-200 bg-white rounded-2xl p-5 shadow-md">
-
+      <div className={`mt-4 ${PANEL} ${PANEL_WHITE}`}>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="text-lg font-semibold text-slate-900">{active.title}</div>
+          <div className="text-lg font-extrabold text-slate-900">{active.title}</div>
           {tab === "NEWS" ? <EvidenceBadge kind="GUIDE" /> : <EvidenceBadge kind="WITH_EVIDENCE" />}
         </div>
 
-        <p className="mt-2 text-sm text-slate-700">{active.helper}</p>
+        <p className="mt-2 text-sm text-slate-800">{active.helper}</p>
 
         <div className="mt-4">
-          <div className="text-sm font-medium text-slate-900">Preguntas sugeridas</div>
-         <div className="mt-2 flex flex-wrap gap-2">
-  {active.suggested.map((s) => (
-    <ChipBtn
-      key={s}
-      text={s}
-      icon={tab === "PLAN" ? "📄" : tab === "HV" ? "🧾" : "📰"}
-      onClick={() => setQuestion(s)}
-    />
-  ))}
-</div>
+          <div className="text-sm font-semibold text-slate-900">Preguntas sugeridas</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {active.suggested.map((s) => (
+              <ChipBtn
+                key={s}
+                text={s}
+                icon={tab === "PLAN" ? "📄" : tab === "HV" ? "🧾" : "📰"}
+                onClick={() => setQuestion(s)}
+              />
+            ))}
+          </div>
         </div>
 
         {tab === "PLAN" && (
           <div className="mt-6">
-            <div className="text-sm font-medium text-slate-900">Resumen por ejes (Plan de Gobierno)</div>
+            <div className="text-sm font-semibold text-slate-900">Resumen por ejes (Plan de Gobierno)</div>
 
             <div className="mt-2 flex flex-wrap gap-2">
-  <ChipBtn
-    text="Propuestas sobre seguridad ciudadana."
-    icon="🛡️"
-    onClick={() => setQuestion("Propuestas sobre seguridad ciudadana.")}
-  />
-  <ChipBtn
-    text="Propuestas sobre economía y empleo."
-    icon="💼"
-    onClick={() => setQuestion("Propuestas sobre economía y empleo.")}
-  />
-  <ChipBtn
-    text="Propuestas sobre salud."
-    icon="🩺"
-    onClick={() => setQuestion("Propuestas sobre salud.")}
-  />
-  <ChipBtn
-    text="Propuestas sobre educación."
-    icon="🎓"
-    onClick={() => setQuestion("Propuestas sobre educación.")}
-  />
-</div>
+              <ChipBtn text="Propuestas sobre seguridad ciudadana." icon="🛡️" onClick={() => setQuestion("Propuestas sobre seguridad ciudadana.")} />
+              <ChipBtn text="Propuestas sobre economía y empleo." icon="💼" onClick={() => setQuestion("Propuestas sobre economía y empleo.")} />
+              <ChipBtn text="Propuestas sobre salud." icon="🩺" onClick={() => setQuestion("Propuestas sobre salud.")} />
+              <ChipBtn text="Propuestas sobre educación." icon="🎓" onClick={() => setQuestion("Propuestas sobre educación.")} />
+            </div>
 
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-slate-700">
               Este resumen se genera únicamente a partir del Plan de Gobierno (PDF) y siempre cita páginas. Si no hay evidencia, se indicará explícitamente.
             </p>
           </div>
         )}
 
         {tab === "PLAN" && (
-        <div className="mt-6 border border-red-200 bg-red-50/40 rounded-2xl p-4">
-
+          <div className={`mt-6 ${WRAP} p-4 bg-green-100`}>
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="text-sm font-semibold text-slate-900">Comparar 2 candidatos (Plan vs Plan)</div>
+              <div className="text-sm font-extrabold text-slate-900">Comparar 2 candidatos (Plan vs Plan)</div>
               <EvidenceBadge kind="WITH_EVIDENCE" />
             </div>
 
-            <p className="mt-1 text-xs text-slate-600">Comparación basada solo en PDFs. Si no hay evidencia en un plan, se indica explícitamente.</p>
+            <p className="mt-1 text-xs text-slate-800">
+              Comparación basada solo en PDFs. Si no hay evidencia en un plan, se indica explícitamente.
+            </p>
 
             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <div className="text-xs font-medium text-slate-700">Comparar con</div>
+                <div className="text-xs font-semibold text-slate-800">Comparar con</div>
 
                 <select
-                  className="mt-1 w-full border border-green-200 rounded-xl p-2 bg-white text-slate-900 appearance-none pr-10 focus:outline-none focus:ring-2 focus:ring-green-200 bg-[length:18px_18px] bg-no-repeat bg-[right_0.75rem_center] bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%230f172a%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%200%1%201.06.02L10%2010.94l3.71-3.71a.75.75%200%200%1%201.08%201.04l-4.25%204.25a.75.75%200%200%1-1.06%200L5.21%208.27a.75.75%200%200%1%200-1.06z%22%20clip-rule%3D%22evenodd%22/%3E%3C/svg%3E')]"
+                  className="mt-1 w-full border-2 border-red-400 rounded-xl p-2 bg-white text-slate-900 appearance-none pr-10 focus:outline-none focus:ring-2 focus:ring-green-200"
                   value={compareWith}
                   onChange={(e) => {
-  const v = e.target.value;
-  setCompareWith(v);
+                    const v = e.target.value;
+                    setCompareWith(v);
 
-  // 🔑 guardar idB en la URL
-  const params = new URLSearchParams(window.location.search);
-  params.set("idB", v);
-  window.history.replaceState(
-    null,
-    "",
-    `${window.location.pathname}?${params.toString()}`
-  );
-}}
-
+                    // 🔑 guardar idB en la URL
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("idB", v);
+                    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+                  }}
                 >
                   {loadingCandidates ? <option value={compareWith || ""}>Cargando...</option> : null}
 
@@ -904,29 +988,26 @@ const chipActive =
                 </select>
 
                 {!loadingCandidates && allCandidates.length === 0 ? (
-                  <div className="mt-1 text-[11px] text-red-700">No se pudo cargar /api/candidates/index. Revisa consola/network.</div>
+                  <div className="mt-1 text-[11px] text-red-700">
+                    No se pudo cargar /api/candidates/index. Revisa consola/network.
+                  </div>
                 ) : null}
               </div>
 
               <div>
-                <div className="text-xs font-medium text-slate-700">Eje</div>
+                <div className="text-xs font-semibold text-slate-800">Eje</div>
                 <select
-                 className="mt-1 w-full border border-green-200 rounded-xl p-2 bg-white text-slate-900 appearance-none pr-10 focus:outline-none focus:ring-2 focus:ring-green-200 bg-[length:18px_18px] bg-no-repeat bg-[right_0.75rem_center] bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%230f172a%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%200%1%201.06.02L10%2010.94l3.71-3.71a.75.75%200%200%1%201.08%201.04l-4.25%204.25a.75.75%200%200%1-1.06%200L5.21%208.27a.75.75%200%200%1%200-1.06z%22%20clip-rule%3D%22evenodd%22/%3E%3C/svg%3E')]"
+                  className="mt-1 w-full border-2 border-red-400 rounded-xl p-2 bg-white text-slate-900 appearance-none pr-10 focus:outline-none focus:ring-2 focus:ring-green-200"
                   value={compareAxis}
                   onChange={(e) => {
-  const v = e.target.value as CompareAxis;
-  setCompareAxis(v);
+                    const v = e.target.value as CompareAxis;
+                    setCompareAxis(v);
 
-  // 🔑 guardar axis en la URL
-  const params = new URLSearchParams(window.location.search);
-  params.set("axis", v);
-  window.history.replaceState(
-    null,
-    "",
-    `${window.location.pathname}?${params.toString()}`
-  );
-}}
-
+                    // 🔑 guardar axis en la URL
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("axis", v);
+                    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+                  }}
                 >
                   <option value="SEG">Seguridad</option>
                   <option value="ECO">Economía y empleo</option>
@@ -936,30 +1017,23 @@ const chipActive =
               </div>
 
               <div className="flex items-end gap-2">
-  <button
-    onClick={runComparePlan}
-    disabled={compareLoading || !id || !compareWith || compareWith === id}
-    className={`flex-1 ${btnPrimary} ${btnPrimaryShine}`}
-  >
-    {compareLoading ? "Comparando..." : "Generar comparación"}
-  </button>
+                <button
+                  onClick={runComparePlan}
+                  disabled={compareLoading || !id || !compareWith || compareWith === id}
+                  className={`flex-1 ${btnPrimary} ${btnPrimaryShine}`}
+                >
+                  {compareLoading ? "Comparando..." : "Generar comparación"}
+                </button>
 
-  <button
-    type="button"
-    onClick={clearCompare}
-    className={btnSecondary}
-    title="Limpiar comparación"
-  >
-    Limpiar
-  </button>
-</div>
-
+                <button type="button" onClick={clearCompare} className={btnSecondary} title="Limpiar comparación">
+                  Limpiar
+                </button>
+              </div>
             </div>
 
             {compareResult ? (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-red-200 bg-white rounded-xl p-3 shadow-sm">
-
+                <div className={`${WRAP} p-4 bg-white`}>
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <MiniProfileHeader title="Candidato A" profile={aProfile} />
                     <EvidenceBadge
@@ -973,8 +1047,7 @@ const chipActive =
                   {compareResult.a.citations?.length ? <Sources sources={compareResult.a.citations} /> : null}
                 </div>
 
-               <div className="border border-red-200 bg-white rounded-xl p-3 shadow-sm">
-
+                <div className={`${WRAP} p-4 bg-white`}>
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <MiniProfileHeader title="Candidato B" profile={bProfile} />
                     <EvidenceBadge
@@ -993,10 +1066,10 @@ const chipActive =
         )}
 
         {/* Pregunta */}
-        <div className="mt-5">
-          <div className="text-sm font-medium text-slate-900">Tu pregunta</div>
+        <div className="mt-6">
+          <div className="text-sm font-semibold text-slate-900">Tu pregunta</div>
           <textarea
-            className="mt-2 w-full border border-green-200 rounded-xl p-3 min-h-[90px] bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-200"
+            className="mt-2 w-full border-2 border-red-400 rounded-xl p-3 min-h-[90px] bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-200"
             placeholder="Escribe tu pregunta aquí..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -1004,7 +1077,13 @@ const chipActive =
 
           <div className="mt-3 flex gap-2 flex-wrap">
             <button onClick={consult} disabled={busy} className={`${btnPrimary} ${btnPrimaryShine}`}>
-              {busy ? "Consultando..." : tab === "HV" ? "Consultar (HV real)" : tab === "PLAN" ? "Consultar (PLAN real)" : "Consultar (Actuar político)"}
+              {busy
+                ? "Consultando..."
+                : tab === "HV"
+                ? "Consultar (HV real)"
+                : tab === "PLAN"
+                ? "Consultar (PLAN real)"
+                : "Consultar (Actuar político)"}
             </button>
 
             <button
@@ -1021,9 +1100,9 @@ const chipActive =
         </div>
 
         {/* Respuesta */}
-        <div className="mt-5">
+        <div className="mt-6">
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="text-sm font-medium text-slate-900">Respuesta</div>
+            <div className="text-sm font-semibold text-slate-900">Respuesta</div>
             <EvidenceBadge kind={answerKind} page={citations.find((s) => typeof s.page === "number")?.page} size="sm" />
           </div>
 
@@ -1031,23 +1110,22 @@ const chipActive =
           {citations.length ? <Sources sources={citations} /> : null}
 
           {!citations.length && answer !== "—" ? (
-            <div className="mt-2 text-xs text-slate-500">
+            <div className="mt-2 text-xs text-slate-700">
               Si no aparecen páginas o fuentes, VOTO CLARO lo marca como <b>“Sin evidencia”</b>.
             </div>
           ) : null}
         </div>
-           </div>
+      </div>
 
       <div className="mt-8 flex justify-center">
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="inline-flex items-center rounded-xl bg-green-700 px-5 py-2 text-sm font-semibold text-white hover:bg-green-800 transition"
+          className={`${btnPrimary} ${btnPrimaryShine} px-5`}
         >
           ↑ Subir
         </button>
       </div>
-
     </main>
   );
 }
