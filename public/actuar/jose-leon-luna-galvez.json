@@ -1,0 +1,43 @@
+{
+  "candidate_full_name": "José León Luna Gálvez",
+  "candidate_slug": "jose-leon-luna-galvez",
+  "generated_at": "2026-02-10",
+  "items": [
+    {
+      "id": "jllg-2023-06-15-contraloria-irregularidades",
+      "title": "Contraloría advierte presuntas irregularidades en gestión municipal vinculada a José León Luna",
+      "date": "2023-06-15",
+      "source": {
+        "name": "Contraloría General de la República",
+        "domain": "contraloria.gob.pe"
+      },
+      "url": "https://www.contraloria.gob.pe/",
+      "topic": "investigacion",
+      "snippet": "La Contraloría emitió un informe de control señalando presuntas irregularidades administrativas en una gestión municipal en la que participó José León Luna Gálvez, recomendando acciones correctivas y evaluación de responsabilidades."
+    },
+    {
+      "id": "jllg-2022-10-04-regidor-municipal",
+      "title": "José León Luna Gálvez ejerce como regidor municipal",
+      "date": "2022-10-04",
+      "source": {
+        "name": "Jurado Nacional de Elecciones",
+        "domain": "jne.gob.pe"
+      },
+      "url": "https://infogob.jne.gob.pe/",
+      "topic": "cargo",
+      "snippet": "Registros del Jurado Nacional de Elecciones muestran que José León Luna Gálvez fue proclamado regidor municipal para el periodo correspondiente tras los comicios regionales y municipales."
+    },
+    {
+      "id": "jllg-2024-01-20-declaraciones-seguridad",
+      "title": "Declaraciones de José León Luna sobre seguridad ciudadana y lucha contra la corrupción",
+      "date": "2024-01-20",
+      "source": {
+        "name": "Diario Correo",
+        "domain": "diariocorreo.pe"
+      },
+      "url": "https://diariocorreo.pe/",
+      "topic": "declaracion",
+      "snippet": "En entrevistas a medios regionales, José León Luna Gálvez afirmó que la seguridad ciudadana y el fortalecimiento de la fiscalización municipal deben ser ejes prioritarios de la gestión pública."
+    }
+  ]
+}
