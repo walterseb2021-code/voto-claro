@@ -14,6 +14,7 @@ type Candidate = {
 
 const PITCH_DONE_KEY = "votoclaro_pitch_done_v1";
 const NAV_DELAY_MS = 10400; // ✅ tiempo para que Federalito termine antes de navegar
+const DOUBLE_CLICK_WINDOW_MS = 280; // ✅ ventana para detectar 2 clics y entrar directo
 
 function FederalitoAvatar({ size = 140 }: { size?: number }) {
   return (
@@ -55,7 +56,6 @@ function guideSay(text: string) {
   );
 }
 
-
 export default function HomePage() {
   const router = useRouter();
 
@@ -68,6 +68,64 @@ export default function HomePage() {
 
   const canSearch = useMemo(() => q.trim().length >= 2, [q]);
   const searchRef = useRef<HTMLElement | null>(null);
+
+  // ✅ Timers para 1 clic vs 2 clics (NO romper UX)
+  const clickTimersRef = useRef<Record<string, number | null>>({});
+  const navTimersRef = useRef<Record<string, number | null>>({});
+
+  function stopVoice() {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
+  }
+
+  function clearTimers(key: string) {
+    const t1 = clickTimersRef.current[key];
+    const t2 = navTimersRef.current[key];
+    if (typeof t1 === "number") window.clearTimeout(t1);
+    if (typeof t2 === "number") window.clearTimeout(t2);
+    clickTimersRef.current[key] = null;
+    navTimersRef.current[key] = null;
+  }
+
+  /**
+   * ✅ 1 clic: (espera ventana de doble click) -> narra -> navega con delay largo
+   * ✅ 2 clics rápidos: entra directo SIN narración
+   */
+  function handleSmartNavigate(opts: {
+    key: string;
+    href: string;
+    speech: string;
+    preventDefault?: boolean;
+    e?: React.MouseEvent;
+  }) {
+    const { key, href, speech, e, preventDefault } = opts;
+
+    if (preventDefault && e) e.preventDefault();
+
+    // Si ya hubo 1er clic y llega el 2do dentro de la ventana => entrar directo
+    if (clickTimersRef.current[key]) {
+      clearTimers(key);
+      stopVoice();
+      router.push(href);
+      return;
+    }
+
+    // Primer clic: armamos ventana corta para detectar el segundo clic
+    clearTimers(key);
+
+    clickTimersRef.current[key] = window.setTimeout(() => {
+      // Si nadie hizo segundo clic, recién aquí narramos y programamos navegación
+      clickTimersRef.current[key] = null;
+
+      guideSay(speech);
+
+      navTimersRef.current[key] = window.setTimeout(() => {
+        navTimersRef.current[key] = null;
+        router.push(href);
+      }, NAV_DELAY_MS);
+    }, DOUBLE_CLICK_WINDOW_MS);
+  }
 
   // ✅ Gate PRO: si aún no se salió de /pitch en esta sesión, mandar a /pitch
   useEffect(() => {
@@ -125,6 +183,14 @@ export default function HomePage() {
     };
   }, [q, canSearch]);
 
+  // ✅ Limpieza al salir de Home (evita timers colgados)
+  useEffect(() => {
+    return () => {
+      Object.keys(clickTimersRef.current).forEach((k) => clearTimers(k));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function goToSearch() {
     const el = searchRef.current;
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -148,8 +214,8 @@ export default function HomePage() {
             <div className="min-w-0">
               {/* Título */}
               <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900">
-               VOTO CLARO
-               </h1>
+                VOTO CLARO
+              </h1>
 
               {/* Pills (verde claro de fondo, texto verde oscuro) */}
               <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -190,7 +256,7 @@ export default function HomePage() {
                       "Paso 2: Verifica. En la ficha revisa Hoja de Vida y Plan de Gobierno. Si no hay páginas o fuentes, lo marcaremos como sin evidencia."
                     )
                   }
-                 className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                  className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">2) Verifica</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -205,7 +271,7 @@ export default function HomePage() {
                       "Paso 3: Decide. Antes de votar, revisa la evidencia: Hoja de vida, Plan y Actuar político. Luego decide con criterio: coherencia, viabilidad y conducta pública."
                     )
                   }
-                 className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                  className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">3) Decide</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -223,23 +289,28 @@ export default function HomePage() {
                       "Vamos a empezar. Escribe el nombre del candidato y entra a su ficha. Luego cambia entre HV, Plan y Actuar político."
                     )
                   }
-                 className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 bg-gradient-to-r from-green-700 to-green-800 text-white text-sm font-semibold hover:from-green-800 hover:to-green-900 shadow-md hover:shadow-lg transition"
+                  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 bg-gradient-to-r from-green-700 to-green-800 text-white text-sm font-semibold hover:from-green-800 hover:to-green-900 shadow-md hover:shadow-lg transition"
                 >
                   🔎 Empezar búsqueda
                 </button>
 
+                {/* ✅ SMART: 1 clic explica / 2 clics entra directo */}
                 <button
-  type="button"
-  onClick={() => {
-    guideSay(
-     "Vamos a la sección Cómo funciona. Ahí te explicaré paso a paso cómo usar VOTO CLARO."
-    );
-    setTimeout(() => router.push("/como-funciona"), NAV_DELAY_MS);
-  }}
- className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 shadow-sm transition"
->
-  🧭 Cómo funciona
-</button>
+                  type="button"
+                  onClick={(e) =>
+                    handleSmartNavigate({
+                      key: "como-funciona",
+                      href: "/como-funciona",
+                      speech:
+                        "Vamos a la sección Cómo funciona. Ahí te explicaré paso a paso cómo usar VOTO CLARO.",
+                      preventDefault: true,
+                      e,
+                    })
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 shadow-sm transition"
+                >
+                  🧭 Cómo funciona
+                </button>
 
                 <button
                   type="button"
@@ -248,14 +319,14 @@ export default function HomePage() {
                       "Recuerda: un voto responsable empieza con información verificable. Primero busca, luego verifica, y recién al final decide."
                     )
                   }
-                 className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-400 bg-green-50 text-slate-900 text-sm hover:bg-green-100"
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-400 bg-green-50 text-slate-900 text-sm hover:bg-green-100"
                 >
                   “Un voto responsable empieza con información verificable.”
                 </button>
               </div>
 
               <div className="mt-4 text-[11px] text-slate-800">
-                Nota: la guía interactiva está abajo a la derecha (FederalitoGuide).
+                Tip: <b>1 clic</b> explica, <b>2 clics</b> entra directo.
               </div>
             </div>
           </div>
@@ -266,9 +337,9 @@ export default function HomePage() {
       <section id="buscar" className="mt-6 border-[6px] border-red-600 rounded-2xl p-6 bg-white shadow-sm">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-           <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
-  Buscar candidato
-</h2>
+            <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
+              Buscar candidato
+            </h2>
 
             <p className="text-sm text-slate-800 mt-1">
               Escribe al menos 2 letras del candidato que buscas. Abre la ficha para consultar Hoja de
@@ -334,18 +405,21 @@ export default function HomePage() {
 
       {/* ✅ ACCESOS RÁPIDOS */}
       <section className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-       <Link
-  href="/ciudadano/servicios"
-  onClick={(e) => {
-    e.preventDefault();
-    guideSay(
-      "Vas a entrar a Servicios al ciudadano. Allí verás enlaces oficiales para consultar local de votación, miembro de mesa, multas y trámites electorales."
-    );
-    setTimeout(() => router.push("/ciudadano/servicios"), NAV_DELAY_MS);
-  }}
- className="group text-left w-full rounded-2xl border-[6px] border-red-600 bg-green-50 p-5 shadow-sm hover:shadow-md hover:bg-green-100 transition"
->
-
+        {/* ✅ SMART LINK: 1 clic explica / 2 clics entra directo */}
+        <Link
+          href="/ciudadano/servicios"
+          onClick={(e) =>
+            handleSmartNavigate({
+              key: "servicios",
+              href: "/ciudadano/servicios",
+              speech:
+                "Vas a entrar a Servicios al ciudadano. Allí verás enlaces oficiales para consultar local de votación, miembro de mesa, multas y trámites electorales.",
+              preventDefault: true,
+              e,
+            })
+          }
+          className="group text-left w-full rounded-2xl border-[6px] border-red-600 bg-green-50 p-5 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+        >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">🗳️</div>
             <div className="min-w-0">
@@ -361,18 +435,21 @@ export default function HomePage() {
           </div>
         </Link>
 
-       <Link
-  href="/reflexion"
-  onClick={(e) => {
-    e.preventDefault();
-    guideSay(
-      "Vas a entrar a Reflexionar antes de votar. Allí encontrarás ejes como economía, salud, educación y seguridad, con preguntas y reflexiones para decidir mejor."
-    );
-    setTimeout(() => router.push("/reflexion"), NAV_DELAY_MS);
-  }}
- className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
->
-
+        {/* ✅ SMART LINK */}
+        <Link
+          href="/reflexion"
+          onClick={(e) =>
+            handleSmartNavigate({
+              key: "reflexion",
+              href: "/reflexion",
+              speech:
+                "Vas a entrar a Reflexionar antes de votar. Allí encontrarás ejes como economía, salud, educación y seguridad, con preguntas y reflexiones para decidir mejor.",
+              preventDefault: true,
+              e,
+            })
+          }
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+        >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">🧠</div>
             <div className="min-w-0">
@@ -388,18 +465,21 @@ export default function HomePage() {
           </div>
         </Link>
 
-       <Link
-  href="/cambio-con-valentia"
-  onClick={(e) => {
-    e.preventDefault();
-    guideSay(
-      "Vas a entrar a Un cambio con valentía. Esta ventana muestra una propuesta y un acceso al sitio oficial del partido político democrático perú federal para ampliar la información."
-    );
-    setTimeout(() => router.push("/cambio-con-valentia"), NAV_DELAY_MS);
-  }}
-  className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
->
-
+        {/* ✅ SMART LINK */}
+        <Link
+          href="/cambio-con-valentia"
+          onClick={(e) =>
+            handleSmartNavigate({
+              key: "cambio",
+              href: "/cambio-con-valentia",
+              speech:
+                "Vas a entrar a Un cambio con valentía. Esta ventana muestra una propuesta y un acceso al sitio oficial del partido político democrático perú federal para ampliar la información.",
+              preventDefault: true,
+              e,
+            })
+          }
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+        >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">🔥</div>
             <div className="min-w-0">
