@@ -7,6 +7,26 @@ import { supabase } from "@/lib/supabaseClient";
 
 type AccessState = "CHECKING" | "GRANTED" | "DENIED";
 
+// 🎨 COLORES (según tu imagen)
+// ✅ Color base EXACTO (según Paint): R=83 G=129 B=39
+const BG_GREEN = "rgb(83,129,39)";
+
+// ✨ Jaspeado amarillo MUY tenue (mismo para interior y exterior)
+// ⚠️ IMPORTANTE: en CSS, el ÚLTIMO fondo es el "de abajo".
+// Por eso luego lo aplicamos como: `${BG_JASPE_SOFT}, ${BG_GREEN}`
+const BG_JASPE_SOFT =
+  "radial-gradient(1200px 800px at 20% 10%, rgba(255,255,140,.07), transparent 45%)," +
+  "radial-gradient(900px 700px at 80% 20%, rgba(255,245,120,.06), transparent 50%)," +
+  "radial-gradient(1000px 900px at 50% 90%, rgba(255,235,110,.05), transparent 55%)";
+
+const PANEL_BG = "rgba(255,255,255,.78)";
+const TEXT_DARK = "#0f172a";
+const TITLE_BLACK = "#0b0b0b";
+const RED_BORDER = "#b91c1c";
+const BTN_BG = "#14532d"; // verde oscuro
+const BTN_BG_2 = "#166534"; // verde oscuro (variante)
+const BTN_TEXT = "#ffffff";
+
 export default function PitchPage() {
   const [access, setAccess] = React.useState<AccessState>("CHECKING");
 
@@ -58,10 +78,32 @@ export default function PitchPage() {
 
   if (access === "CHECKING") {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-black text-white px-6">
-        <div className="max-w-md w-full text-center">
-          <div className="text-xl font-extrabold">VOTO_CLARO</div>
-          <div className="mt-2 text-sm opacity-80">Validando acceso…</div>
+      <main
+        className="min-h-screen flex items-center justify-center px-6"
+        style={{ background: BG_GREEN, color: TEXT_DARK }}
+      >
+        <div
+          className="max-w-md w-full text-center rounded-2xl"
+          style={{
+            background: PANEL_BG,
+            border: `3px solid ${RED_BORDER}`,
+            padding: 18,
+            boxShadow: "0 18px 50px rgba(0,0,0,.25)",
+          }}
+        >
+          <div
+            className="text-xl font-extrabold"
+            style={{
+              color: TITLE_BLACK,
+              WebkitTextStroke: `1px ${RED_BORDER}`,
+              textShadow: "0 4px 12px rgba(0,0,0,.15)",
+            }}
+          >
+            VOTO_CLARO
+          </div>
+          <div className="mt-2 text-sm" style={{ color: TEXT_DARK, fontWeight: 700 }}>
+            Validando acceso…
+          </div>
         </div>
       </main>
     );
@@ -69,10 +111,31 @@ export default function PitchPage() {
 
   if (access === "DENIED") {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-black text-white px-6">
-        <div className="max-w-md w-full text-center">
-          <div className="text-xl font-extrabold">Acceso no autorizado</div>
-          <p className="mt-3 text-sm opacity-85 leading-relaxed">
+      <main
+        className="min-h-screen flex items-center justify-center px-6"
+        style={{ background: BG_GREEN, color: TEXT_DARK }}
+      >
+        <div
+          className="max-w-md w-full text-center rounded-2xl"
+          style={{
+            background: PANEL_BG,
+            border: `3px solid ${RED_BORDER}`,
+            padding: 18,
+            boxShadow: "0 18px 50px rgba(0,0,0,.25)",
+          }}
+        >
+          <div
+            className="text-xl font-extrabold"
+            style={{
+              color: TITLE_BLACK,
+              WebkitTextStroke: `1px ${RED_BORDER}`,
+              textShadow: "0 4px 12px rgba(0,0,0,.15)",
+            }}
+          >
+            Acceso no autorizado
+          </div>
+
+          <p className="mt-3 text-sm leading-relaxed" style={{ color: TEXT_DARK, fontWeight: 700 }}>
             Este enlace de prueba fue desactivado o no es válido.
             <br />
             Solicita un nuevo enlace al administrador.
@@ -80,7 +143,14 @@ export default function PitchPage() {
 
           <a
             href="/"
-            className="inline-flex mt-5 items-center justify-center rounded-xl px-4 py-2 bg-white text-black font-extrabold text-sm"
+            className="inline-flex mt-5 items-center justify-center rounded-xl px-4 py-2 text-sm"
+            style={{
+              background: BTN_BG,
+              color: BTN_TEXT,
+              fontWeight: 900,
+              border: `2px solid ${RED_BORDER}`,
+              boxShadow: "0 10px 25px rgba(0,0,0,.20)",
+            }}
           >
             Ir al inicio
           </a>
@@ -115,8 +185,12 @@ function FederalitoSplash() {
         inset: 0,
         zIndex: 9999,
         display: "block",
-        background: "linear-gradient(180deg, rgba(0,0,0,.92), rgba(0,0,0,.82))",
-        color: "white",
+
+        // ✅ ORDEN CORRECTO: primero jaspe (arriba), luego color base (abajo)
+        // Esto evita el blanco y deja todo uniforme
+        background: `${BG_JASPE_SOFT}, ${BG_GREEN}`,
+
+        color: TEXT_DARK,
       }}
     >
       <div
@@ -139,15 +213,19 @@ function FederalitoSplash() {
             width: "min(520px, 92vw)",
             borderRadius: 22,
             overflow: "hidden",
-            border: "1px solid rgba(255,255,255,.18)",
+            border: "none",
             boxShadow: "0 20px 60px rgba(0,0,0,.35)",
-            background: "rgba(255,255,255,.06)",
+
+            // ✅ MISMO fondo EXACTO que el exterior (jaspe + base)
+            background: `${BG_JASPE_SOFT}, ${BG_GREEN}`,
+
             position: "relative",
             aspectRatio: "9 / 16",
             zIndex: 0,
             pointerEvents: "none",
           }}
         >
+          {/* ⚠️ NO TOCAR IMAGEN */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             id="federalito-splash-poster"
@@ -161,7 +239,10 @@ function FederalitoSplash() {
               width: "100%",
               height: "100%",
               objectFit: "contain",
-              background: "rgba(0,0,0,.35)",
+
+              // ✅ IMPORTANTE: transparente para que el verde interior = exterior
+              background: "transparent",
+
               display: "block",
               opacity: 1,
               transition: "opacity 420ms ease",
@@ -211,41 +292,58 @@ function FederalitoSplash() {
             position: "relative",
             zIndex: 10,
             pointerEvents: "auto",
+            background: PANEL_BG,
+            border: `3px solid ${RED_BORDER}`,
+            borderRadius: 18,
+            padding: "14px 14px",
+            boxShadow: "0 18px 50px rgba(0,0,0,.22)",
           }}
         >
           <div
             style={{
               fontSize: 14,
-              opacity: 0.9,
+              opacity: 0.98,
               display: "inline-flex",
               gap: 8,
               alignItems: "center",
               justifyContent: "center",
               padding: "6px 10px",
-              border: "1px solid rgba(255,255,255,.16)",
+              border: `2px solid ${RED_BORDER}`,
               borderRadius: 999,
-              background: "rgba(255,255,255,.06)",
+              background: "rgba(255,255,255,.70)",
+              color: TEXT_DARK,
+              fontWeight: 800,
             }}
           >
-            <span style={{ fontWeight: 700 }}>Federalito AI</span>
-            <span style={{ opacity: 0.8 }}>• guía de voto informado</span>
+            <span style={{ fontWeight: 900 }}>Federalito AI</span>
+            <span style={{ opacity: 0.85, fontWeight: 800 }}>• guía de voto informado</span>
           </div>
 
           <h1
             style={{
-              marginTop: 16,
+              marginTop: 14,
               fontSize: 42,
               lineHeight: "46px",
               fontWeight: 900,
-              color: "white",
+              color: TITLE_BLACK,
               textAlign: "center",
-              textShadow: "0 4px 12px rgba(0,0,0,0.85)",
+              WebkitTextStroke: `1px ${RED_BORDER}`,
+              textShadow: "0 6px 14px rgba(0,0,0,0.18)",
             }}
           >
             VOTO_CLARO
           </h1>
 
-          <p style={{ marginTop: 12, fontSize: 15, lineHeight: "22px", opacity: 0.92 }}>
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 15,
+              lineHeight: "22px",
+              opacity: 1,
+              color: TEXT_DARK,
+              fontWeight: 700,
+            }}
+          >
             Bienvenido a <b>Voto Claro</b>. Aquí encontrarás documentos (Planes de Gobierno, Hojas de Vida e información de
             fuentes confiables).
             <br />
@@ -254,7 +352,16 @@ function FederalitoSplash() {
             promete.
           </p>
 
-          <p style={{ marginTop: 10, fontSize: 15, lineHeight: "22px", opacity: 0.92 }}>
+          <p
+            style={{
+              marginTop: 10,
+              fontSize: 15,
+              lineHeight: "22px",
+              opacity: 1,
+              color: TEXT_DARK,
+              fontWeight: 800,
+            }}
+          >
             <i>“Un voto responsable empieza con información verificable.”</i>
           </p>
 
@@ -263,13 +370,15 @@ function FederalitoSplash() {
               id="federalito-splash-skip"
               type="button"
               style={{
-                border: "1px solid rgba(255,255,255,.22)",
-                background: "rgba(255,255,255,.08)",
-                color: "white",
+                border: `2px solid ${RED_BORDER}`,
+                background: BTN_BG,
+                color: BTN_TEXT,
+                fontWeight: 900,
                 borderRadius: 12,
-                padding: "10px 12px",
+                padding: "10px 14px",
                 fontSize: 13,
                 cursor: "pointer",
+                boxShadow: "0 10px 25px rgba(0,0,0,.20)",
               }}
             >
               Saltar
@@ -279,22 +388,25 @@ function FederalitoSplash() {
               id="federalito-splash-continue"
               type="button"
               style={{
-                border: "none",
-                background: "white",
-                color: "black",
+                border: `2px solid ${RED_BORDER}`,
+                background: BTN_BG_2,
+                color: BTN_TEXT,
+                fontWeight: 900,
                 borderRadius: 12,
                 padding: "10px 14px",
                 fontSize: 13,
-                fontWeight: 700,
                 cursor: "pointer",
+                boxShadow: "0 10px 25px rgba(0,0,0,.20)",
               }}
             >
               Entrar a VOTO CLARO
             </button>
           </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 1, color: "#0b1220", fontWeight: 700 }}>
             La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar “Saltar” si no deseas ver la presentación.
+
+            
           </div>
         </div>
       </div>

@@ -46,7 +46,8 @@ export default function FederalitoSplash() {
         alignItems: "center",
         justifyContent: "center",
         padding: 24,
-        background: "linear-gradient(180deg, rgba(0,0,0,.92), rgba(0,0,0,.82))",
+        background: "rgb(85,134,45)",
+
         color: "white",
       }}
     >
