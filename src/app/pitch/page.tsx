@@ -3,19 +3,102 @@
 
 import Script from "next/script";
 import React from "react";
+import { supabase } from "@/lib/supabaseClient";
+
+type AccessState = "CHECKING" | "GRANTED" | "DENIED";
 
 export default function PitchPage() {
+  const [access, setAccess] = React.useState<AccessState>("CHECKING");
+
+  React.useEffect(() => {
+    let alive = true;
+
+    async function checkAccess() {
+      try {
+        if (typeof window === "undefined") return;
+
+        const url = new URL(window.location.href);
+        const token = (url.searchParams.get("t") ?? "").trim();
+
+        // ✅ Requiere token en la URL
+        if (!token) {
+          if (alive) setAccess("DENIED");
+          return;
+        }
+
+        // ✅ Validar token en Supabase (solo si está activo)
+        const { data, error } = await supabase
+          .from("votoclaro_public_links")
+          .select("id")
+          .eq("route", "/pitch")
+          .eq("token", token)
+          .eq("is_active", true)
+          .limit(1);
+
+        if (error) {
+          console.error("[Pitch] token check error:", error);
+          if (alive) setAccess("DENIED");
+          return;
+        }
+
+        const ok = Array.isArray(data) && data.length > 0;
+        if (alive) setAccess(ok ? "GRANTED" : "DENIED");
+      } catch (e) {
+        console.error("[Pitch] token check exception:", e);
+        if (alive) setAccess("DENIED");
+      }
+    }
+
+    checkAccess();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (access === "CHECKING") {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-black text-white px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="text-xl font-extrabold">VOTO_CLARO</div>
+          <div className="mt-2 text-sm opacity-80">Validando acceso…</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (access === "DENIED") {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-black text-white px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="text-xl font-extrabold">Acceso no autorizado</div>
+          <p className="mt-3 text-sm opacity-85 leading-relaxed">
+            Este enlace de prueba fue desactivado o no es válido.
+            <br />
+            Solicita un nuevo enlace al administrador.
+          </p>
+
+          <a
+            href="/"
+            className="inline-flex mt-5 items-center justify-center rounded-xl px-4 py-2 bg-white text-black font-extrabold text-sm"
+          >
+            Ir al inicio
+          </a>
+        </div>
+      </main>
+    );
+  }
+
   return <FederalitoSplash />;
 }
 
 /**
  * ✅ Splash profesional:
  * - Vive SOLO en /pitch
- * - En /pitch SIEMPRE se muestra
+ * - En /pitch SIEMPRE se muestra (si el token es válido)
  * - Solo navega a / cuando el usuario hace clic (Saltar/Entrar) o termina el video
  */
 function FederalitoSplash() {
-  // ✅ Bloquear scroll del body mientras el splash está activo
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -50,7 +133,6 @@ function FederalitoSplash() {
           overflow: "hidden",
         }}
       >
-        {/* CONTENEDOR PRO (misma caja para PNG y video) */}
         <div
           className="federalito-anim"
           style={{
@@ -257,12 +339,11 @@ function FederalitoSplash() {
 
     var KEY = "votoclaro_pitch_done_v1";
 
-   function goHome(){
-  try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
-  try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
-  try{ window.location.assign("/?fromPitch=1"); }catch(e){ window.location.href = "/?fromPitch=1"; }
-}
-
+    function goHome(){
+      try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
+      try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
+      try{ window.location.assign("/?fromPitch=1"); }catch(e){ window.location.href = "/?fromPitch=1"; }
+    }
 
     function resetVisual(){
       try{ if(poster){ poster.style.opacity = "1"; poster.style.display = "block"; poster.style.pointerEvents = "none"; } }catch(e){}

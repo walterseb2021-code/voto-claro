@@ -41,9 +41,19 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
       {
         id: "virgilio-acuña-peralta",
         name: "virgilio acuña peralta",
-        cargo: "Vicepresidente",
+        cargo: "Primer Vicepresidente",
         dni: undefined,
         photo: "/candidates/virgilio-acuña-peralta.png",
+        region: "PERÚ",
+         profileLink:
+  "https://www.youtube.com/watch?v=vfVlvWNhMMk",
+      },
+       {
+        id: "lydia-lourdes-diaz-pablo",
+        name: "Lydia Lourdes Díaz Pablo",
+        cargo: "Segunda Vicepresidente",
+        dni: undefined,
+        photo: "/candidates/lydia-lourdes-diaz-pablo.png",
         region: "PERÚ",
          profileLink:
   "https://www.youtube.com/watch?v=vfVlvWNhMMk",

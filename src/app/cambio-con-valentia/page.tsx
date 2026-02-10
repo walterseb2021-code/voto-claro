@@ -79,6 +79,26 @@ const ALL_REGIONS = [
   "PERUANOS EN EL EXTERIOR",
 ];
 // ===============================
+// 🔎 Normalización de regiones
+// ===============================
+function normRegion(input: string) {
+  return String(input ?? "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+const CANON_REGION_BY_NORM = new Map<string, string>(
+  ALL_REGIONS.map((r) => [normRegion(r), r])
+);
+
+function toCanonRegion(r: string) {
+  const n = normRegion(r);
+  return CANON_REGION_BY_NORM.get(n) ?? String(r ?? "").trim().toUpperCase();
+}
+
+// ===============================
 // ✅ EN VIVO (Demo PRO con localStorage)
 // ===============================
 type LivePlatform = "YOUTUBE" | "FACEBOOK" | "TIKTOK" | "OTRA";
@@ -146,18 +166,16 @@ export default function CambioConValentiaPage() {
 
     const set = new Set<string>();
     for (const c of candidates) {
-      const r = String((c as any).region ?? "").trim();
-      if (r) set.add(r);
+      const raw = String((c as any).region ?? "").trim();
+      if (!raw) continue;
+
+      const canon = toCanonRegion(raw);
+      if (canon && canon !== "NACIONAL") set.add(canon);
     }
 
-    // Limpieza/orden
-    const regions = Array.from(set).filter(Boolean).sort((a, b) =>
-      a.localeCompare(b, "es")
-    );
-
-    // Quitar NACIONAL de selector (porque en nacionales no aplica filtro)
-    return regions.filter((r) => r !== "NACIONAL");
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
   }, [selectedCategory]);
+
 
   // ✅ Fallback: si una categoría no trae regiones, usamos ALL_REGIONS
   const regionOptions = useMemo(() => {
@@ -183,7 +201,7 @@ useEffect(() => {
     if (
       selectedRegion !== "TODAS" &&
       regionOptions.length > 0 &&
-      !regionOptions.includes(selectedRegion)
+            !regionOptions.some((r) => normRegion(r) === normRegion(selectedRegion))
     ) {
       setSelectedRegion("TODAS");
     }
@@ -208,7 +226,8 @@ useEffect(() => {
     // Para Diputados y Senadores Distrito Múltiple
     if (selectedRegion === "TODAS") return candidates;
 
-    return candidates.filter((c) => String(c.region).trim() === selectedRegion);
+      return candidates.filter((c) => normRegion(String(c.region)) === normRegion(selectedRegion));
+
   }, [selectedCategory, selectedRegion]);
 
   useEffect(() => {
