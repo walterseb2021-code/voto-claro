@@ -1011,7 +1011,12 @@ let pdfjs: any = PDFJS_SINGLETON;
 
 if (!pdfjs) {
   const nodeRequire = eval("require") as NodeRequire;
-  pdfjs = nodeRequire("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs = nodeRequire("pdfjs-dist/build/pdf");
+try {
+  pdfjs.GlobalWorkerOptions.workerSrc =
+    `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+} catch {}
+
   PDFJS_SINGLETON = pdfjs;
 }
 try {
