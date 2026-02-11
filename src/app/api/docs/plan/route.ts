@@ -1006,19 +1006,26 @@ async function extractPageText(pdfPath: string, pageNum: number) {
     PDF_BUFFER_CACHE.set(pdfPath, data);
   }
 
-  // 2) pdfjs-dist (legacy) para Node — singleton seguro
-let pdfjs: any = PDFJS_SINGLETON;
+// 2) pdfjs-dist para Node — singleton async seguro (Vercel-friendly)
+//    OJO: pdfjs-dist es ESM (.mjs). En Vercel NO debe cargarse con require().
+let PDFJS_SINGLETON: any = null;
+let PDFJS_SINGLETON_PROMISE: Promise<any> | null = null;
 
-if (!pdfjs) {
-  const nodeRequire = eval("require") as NodeRequire;
-  pdfjs = nodeRequire("pdfjs-dist/build/pdf");
-try {
-  pdfjs.GlobalWorkerOptions.workerSrc =
-    `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-} catch {}
+async function getPdfjs() {
+  if (PDFJS_SINGLETON) return PDFJS_SINGLETON;
 
-  PDFJS_SINGLETON = pdfjs;
+  if (!PDFJS_SINGLETON_PROMISE) {
+    PDFJS_SINGLETON_PROMISE = import("pdfjs-dist/legacy/build/pdf.mjs").then((m: any) => {
+      PDFJS_SINGLETON = m?.default ?? m;
+      return PDFJS_SINGLETON;
+    });
+  }
+
+  return PDFJS_SINGLETON_PROMISE;
 }
+
+const pdfjs: any = await getPdfjs();
+
 try {
   const loadingTask = pdfjs.getDocument({
     data,
