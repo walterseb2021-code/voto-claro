@@ -8,6 +8,8 @@ import { execFile } from "child_process";
 import { MOCK_CANDIDATES } from "@/lib/votoclaro/mockCandidates";
 import DOMMatrix from "dommatrix";
 import { Worker } from "node:worker_threads";
+import { pathToFileURL } from "url";
+
 
 
 if (!(globalThis as any).DOMMatrix) {
@@ -1015,10 +1017,27 @@ async function getPdfjs() {
   if (PDFJS_SINGLETON) return PDFJS_SINGLETON;
 
   if (!PDFJS_SINGLETON_PROMISE) {
-    PDFJS_SINGLETON_PROMISE = import("pdfjs-dist/legacy/build/pdf.mjs").then((m: any) => {
-      PDFJS_SINGLETON = m?.default ?? m;
-      return PDFJS_SINGLETON;
-    });
+  PDFJS_SINGLETON_PROMISE = import("pdfjs-dist/legacy/build/pdf.mjs").then((m: any) => {
+  const pdfjs = m?.default ?? m;
+
+  // ✅ FIX Vercel: el fake worker busca un chunk que no existe.
+  // Le damos la ruta REAL del worker dentro de node_modules.
+  try {
+    const workerFsPath = path.join(
+      process.cwd(),
+      "node_modules",
+      "pdfjs-dist",
+      "legacy",
+      "build",
+      "pdf.worker.mjs"
+    );
+    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerFsPath).href;
+  } catch {}
+
+  PDFJS_SINGLETON = pdfjs;
+  return PDFJS_SINGLETON;
+});
+
   }
 
   return PDFJS_SINGLETON_PROMISE;
