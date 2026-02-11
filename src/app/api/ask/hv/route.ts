@@ -4,8 +4,6 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-
 
 type Hit = { page: number; score: number; text: string };
 
@@ -56,23 +54,15 @@ function hvPdfPathFromId(candidateId: string) {
 function runPdfToText(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const exe = "C:\\poppler\\poppler-25.12.0\\Library\\bin\\pdftotext.exe";
-
-    // ✅ Si existe en Windows, úsalo (mantiene tu comportamiento actual)
-    if (process.platform === "win32" && fs.existsSync(exe)) {
-      execFile(
-        exe,
-        args,
-        { windowsHide: true, maxBuffer: 50 * 1024 * 1024, encoding: "utf8" },
-        (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr || err.message));
-          resolve(stdout || "");
-        }
-      );
-      return;
-    }
-
-    // ❌ Si NO existe (ej: Vercel), que el caller use el fallback PDFJS
-    reject(new Error("PDFTOTEXT_NOT_AVAILABLE"));
+    execFile(
+      exe,
+      args,
+      { windowsHide: true, maxBuffer: 50 * 1024 * 1024, encoding: "utf8" },
+      (err, stdout, stderr) => {
+        if (err) return reject(new Error(stderr || err.message));
+        resolve(stdout || "");
+      }
+    );
   });
 }
 
@@ -85,37 +75,8 @@ function cleanText(s: string) {
 }
 
 async function extractPageText(pdfPath: string, pageNum: number) {
-  try {
-    const stdout = await runPdfToText([
-      "-f",
-      String(pageNum),
-      "-l",
-      String(pageNum),
-      "-layout",
-      pdfPath,
-      "-",
-    ]);
-    return cleanText(stdout);
-  } catch (e: any) {
-    // ✅ Fallback para Vercel / Linux (sin poppler)
-    const msg = String(e?.message ?? "");
-    if (msg.includes("PDFTOTEXT_NOT_AVAILABLE") || msg.includes("ENOENT")) {
-      const data = new Uint8Array(fs.readFileSync(pdfPath));
-      const doc = await pdfjsLib.getDocument({ data }).promise;
-
-      if (pageNum < 1 || pageNum > doc.numPages) return "";
-
-      const page = await doc.getPage(pageNum);
-      const content = await page.getTextContent();
-
-      const text = (content.items as any[])
-        .map((it) => (typeof it?.str === "string" ? it.str : ""))
-        .join(" ");
-
-      return cleanText(text);
-    }
-    throw e;
-  }
+  const stdout = await runPdfToText(["-f", String(pageNum), "-l", String(pageNum), "-layout", pdfPath, "-"]);
+  return cleanText(stdout);
 }
 
 function tokenize(q: string) {
