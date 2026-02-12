@@ -188,6 +188,7 @@ function __sanitizeCloneOptions(options: any) {
   return { ...(options as any), transfer: uniq };
 }
 
+
 if (typeof __nativeStructuredClone === "function") {
   (globalThis as any).structuredClone = (value: any, options?: any) => {
     try {
