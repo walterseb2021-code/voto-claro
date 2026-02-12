@@ -8,6 +8,83 @@ import { execFile } from "child_process";
 import { MOCK_CANDIDATES } from "@/lib/votoclaro/mockCandidates";
 import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "url";
+// ✅ DOMMatrix shim (clonable) para pdfjs en Vercel/Node
+// Evita usar el paquete "dommatrix" (puede causar DataCloneError con structuredClone)
+class DOMMatrixShim {
+  a: number; b: number; c: number; d: number; e: number; f: number;
+  is2D: boolean;
+
+  constructor(init?: any) {
+    // valores por defecto (identidad)
+    this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
+    this.is2D = true;
+
+    if (!init) return;
+
+    // Si viene como array [a,b,c,d,e,f]
+    if (Array.isArray(init) && init.length >= 6) {
+      this.a = Number(init[0]) || 0;
+      this.b = Number(init[1]) || 0;
+      this.c = Number(init[2]) || 0;
+      this.d = Number(init[3]) || 0;
+      this.e = Number(init[4]) || 0;
+      this.f = Number(init[5]) || 0;
+      return;
+    }
+
+    // Si viene como objeto {a,b,c,d,e,f}
+    if (typeof init === "object") {
+      if (typeof init.a === "number") this.a = init.a;
+      if (typeof init.b === "number") this.b = init.b;
+      if (typeof init.c === "number") this.c = init.c;
+      if (typeof init.d === "number") this.d = init.d;
+      if (typeof init.e === "number") this.e = init.e;
+      if (typeof init.f === "number") this.f = init.f;
+    }
+  }
+
+  static fromMatrix(m: any) {
+    return new DOMMatrixShim(m);
+  }
+
+  multiply(other: any) {
+    const m = new DOMMatrixShim(other);
+    // [a c e; b d f; 0 0 1]
+    const a = this.a * m.a + this.c * m.b;
+    const b = this.b * m.a + this.d * m.b;
+    const c = this.a * m.c + this.c * m.d;
+    const d = this.b * m.c + this.d * m.d;
+    const e = this.a * m.e + this.c * m.f + this.e;
+    const f = this.b * m.e + this.d * m.f + this.f;
+    return new DOMMatrixShim({ a, b, c, d, e, f });
+  }
+
+  inverse() {
+    const det = this.a * this.d - this.b * this.c;
+    if (!det) return new DOMMatrixShim(); // fallback identidad
+
+    const a = this.d / det;
+    const b = -this.b / det;
+    const c = -this.c / det;
+    const d = this.a / det;
+    const e = (this.c * this.f - this.d * this.e) / det;
+    const f = (this.b * this.e - this.a * this.f) / det;
+    return new DOMMatrixShim({ a, b, c, d, e, f });
+  }
+
+  transformPoint(p: any) {
+    const x = Number(p?.x ?? 0);
+    const y = Number(p?.y ?? 0);
+    return {
+      x: this.a * x + this.c * y + this.e,
+      y: this.b * x + this.d * y + this.f,
+    };
+  }
+}
+
+if (!(globalThis as any).DOMMatrix) {
+  (globalThis as any).DOMMatrix = DOMMatrixShim as any;
+}
 
 
 // ✅ Fix: pdfjs (fake worker) usa structuredClone y falla con DOMMatrix del polyfill
@@ -1066,25 +1143,35 @@ async function extractPageText(pdfPath: string, pageNum: number) {
 const pdfjs: any = await (async () => {
   // ✅ PROMISE global (si no existe aún, créala una vez)
   if (!(globalThis as any).__PDFJS_SINGLETON_PROMISE) {
-    (globalThis as any).__PDFJS_SINGLETON_PROMISE = import("pdfjs-dist/legacy/build/pdf.mjs").then((m: any) => {
-      const pdfjs = m?.default ?? m;
+  (globalThis as any).__PDFJS_SINGLETON_PROMISE = (async () => {
+    // ✅ GARANTÍA: definir DOMMatrix/DOMMatrixReadOnly ANTES de importar pdfjs
+    if (!(globalThis as any).DOMMatrix) {
+      (globalThis as any).DOMMatrix = DOMMatrixShim as any;
+    }
+    if (!(globalThis as any).DOMMatrixReadOnly) {
+      (globalThis as any).DOMMatrixReadOnly = (globalThis as any).DOMMatrix as any;
+    }
 
-      // ✅ FIX Vercel: ruta real del worker (aunque usemos disableWorker)
-      try {
-        const workerFsPath = path.join(
-          process.cwd(),
-          "node_modules",
-          "pdfjs-dist",
-          "legacy",
-          "build",
-          "pdf.worker.mjs"
-        );
-        pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerFsPath).href;
-      } catch {}
+    const m: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdfjs = m?.default ?? m;
 
-      return pdfjs;
-    });
-  }
+    // (Opcional) workerSrc no debería ser necesario si disableWorker=true
+    // pero lo dejamos sin romper tu lógica actual
+    try {
+      const workerFsPath = path.join(
+        process.cwd(),
+        "node_modules",
+        "pdfjs-dist",
+        "legacy",
+        "build",
+        "pdf.worker.mjs"
+      );
+      pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerFsPath).href;
+    } catch {}
+
+    return pdfjs;
+  })();
+}
 
   return (globalThis as any).__PDFJS_SINGLETON_PROMISE;
 })();
