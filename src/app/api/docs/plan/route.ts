@@ -69,19 +69,26 @@ const PAGE_TEXT_CACHE = new Map<string, string>();
  */
 const DEBUG_TABULAR = false;
 
-function getPdfToTextExe() {
+function getPdfToTextExe(): string | null {
   const fromEnv = process.env.PDFTOTEXT_PATH?.trim();
   if (fromEnv) return fromEnv;
 
+  // Solo Windows local con Poppler instalado
   if (process.platform === "win32") {
     return "C:\\poppler\\poppler-25.12.0\\Library\\bin\\pdftotext.exe";
   }
-  return "pdftotext";
+
+  // En Linux/Vercel no asumimos que exista
+  return null;
 }
+
 
 function runPdfToText(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const exe = getPdfToTextExe();
+if (!exe) {
+  throw new Error("pdftotext no disponible en este entorno (Vercel/Linux).");
+}
 
     execFile(
       exe,
@@ -1064,26 +1071,32 @@ try {
 } catch (e: any) {
   const msg = String(e?.message ?? "");
 
-  // ✅ Fallback robusto: usa pdftotext si pdfjs falla (DataCloneError)
-  if (msg.includes("DataCloneError") || msg.includes("Cannot transfer object")) {
-    const txt = await runPdfToText([
-      "-f",
-      String(pageNum),
-      "-l",
-      String(pageNum),
-      "-enc",
-      "UTF-8",
-      "-layout",
-      pdfPath,
-      "-",
-    ]);
+// ✅ Fallback controlado: solo usar pdftotext si realmente existe
+const pdftotextExe = getPdfToTextExe();
 
-    const out = reflowParagraphs(txt || "");
-    PAGE_TEXT_CACHE.set(cacheKey, out);
-    return out;
-  }
+if (
+  pdftotextExe &&
+  (msg.includes("DataCloneError") || msg.includes("Cannot transfer object"))
+) {
+  const txt = await runPdfToText([
+    "-f",
+    String(pageNum),
+    "-l",
+    String(pageNum),
+    "-enc",
+    "UTF-8",
+    "-layout",
+    pdfPath,
+    "-",
+  ]);
 
-  throw e;
+  const out = reflowParagraphs(txt || "");
+  PAGE_TEXT_CACHE.set(cacheKey, out);
+  return out;
+}
+
+throw e;
+
 }
 } 
 
