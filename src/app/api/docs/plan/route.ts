@@ -6,15 +6,9 @@ import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { MOCK_CANDIDATES } from "@/lib/votoclaro/mockCandidates";
-import DOMMatrix from "dommatrix";
 import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "url";
 
-
-
-if (!(globalThis as any).DOMMatrix) {
-  (globalThis as any).DOMMatrix = DOMMatrix as any;
-}
 
 // ✅ Fix: pdfjs (fake worker) usa structuredClone y falla con DOMMatrix del polyfill
 const __nativeStructuredClone = globalThis.structuredClone;
