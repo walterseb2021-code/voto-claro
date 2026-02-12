@@ -1010,40 +1010,32 @@ async function extractPageText(pdfPath: string, pageNum: number) {
 
 // 2) pdfjs-dist para Node — singleton async seguro (Vercel-friendly)
 //    OJO: pdfjs-dist es ESM (.mjs). En Vercel NO debe cargarse con require().
-let PDFJS_SINGLETON: any = null;
-let PDFJS_SINGLETON_PROMISE: Promise<any> | null = null;
+const pdfjs: any = await (async () => {
+  // ✅ PROMISE global (si no existe aún, créala una vez)
+  if (!(globalThis as any).__PDFJS_SINGLETON_PROMISE) {
+    (globalThis as any).__PDFJS_SINGLETON_PROMISE = import("pdfjs-dist/legacy/build/pdf.mjs").then((m: any) => {
+      const pdfjs = m?.default ?? m;
 
-async function getPdfjs() {
-  if (PDFJS_SINGLETON) return PDFJS_SINGLETON;
+      // ✅ FIX Vercel: ruta real del worker (aunque usemos disableWorker)
+      try {
+        const workerFsPath = path.join(
+          process.cwd(),
+          "node_modules",
+          "pdfjs-dist",
+          "legacy",
+          "build",
+          "pdf.worker.mjs"
+        );
+        pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerFsPath).href;
+      } catch {}
 
-  if (!PDFJS_SINGLETON_PROMISE) {
-  PDFJS_SINGLETON_PROMISE = import("pdfjs-dist/legacy/build/pdf.mjs").then((m: any) => {
-  const pdfjs = m?.default ?? m;
-
-  // ✅ FIX Vercel: el fake worker busca un chunk que no existe.
-  // Le damos la ruta REAL del worker dentro de node_modules.
-  try {
-    const workerFsPath = path.join(
-      process.cwd(),
-      "node_modules",
-      "pdfjs-dist",
-      "legacy",
-      "build",
-      "pdf.worker.mjs"
-    );
-    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerFsPath).href;
-  } catch {}
-
-  PDFJS_SINGLETON = pdfjs;
-  return PDFJS_SINGLETON;
-});
-
+      return pdfjs;
+    });
   }
 
-  return PDFJS_SINGLETON_PROMISE;
-}
+  return (globalThis as any).__PDFJS_SINGLETON_PROMISE;
+})();
 
-const pdfjs: any = await getPdfjs();
 
 try {
   const loadingTask = pdfjs.getDocument({
@@ -1296,32 +1288,71 @@ function sanitizePdfText(input: string): string {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const candidateId = (searchParams.get("id") ?? "").trim();
+   const anyId = (searchParams.get("id") ?? "").trim();
+   const candidateId = anyId; // ✅ siempre definido (si id era partySlug, igual queda como input)
+let mock: any = null;       // ✅ lo usaremos en party_resolution sin romper scope
 
-    if (!candidateId) {
-      return NextResponse.json({ error: "Missing id" }, { status: 400 });
-    }
+if (!anyId) {
+  return NextResponse.json(
 
-    const mock = MOCK_CANDIDATES.find((c) => c.id === candidateId) ?? null;
-    let partyName: string | null = mock?.party_name ?? null;
+    { error: "Falta parámetro 'id' en la URL." },
+    { status: 400 }
+  );
+}
 
-    let inferredFromHv: { partyName: string; hvPage: number } | null = null;
-    if (!partyName) {
-      inferredFromHv = await inferPartyNameFromHv(candidateId);
-      partyName = inferredFromHv?.partyName ?? null;
-    }
+// ✅ PRO: id puede ser candidateId o partyId
+const resolved = resolvePartyIdFromAnyId(anyId);
 
-    if (!partyName) {
-      return NextResponse.json(
-        {
-          error: "No se pudo determinar el partido del candidato (ni por mock ni por HV).",
-          rule: "Sin partido identificado no se puede cargar el plan.",
-        },
-        { status: 404 }
-      );
-    }
+// Si resolvePartyIdFromAnyId no logró nada, tratamos como candidateId para inferir desde HV
+let partyId: string | null = resolved.partyId;
 
-  const partyId = slugifyPartyName(partyName);
+let partyName: string | null = null;
+let inferredFromHv: { partyName: string; hvPage: number } | null = null;
+
+// Si el id era candidateId, buscamos partido por mock/HV
+if (resolved.reason !== "ASSUME_PARTY_ID") {
+
+  const candidateId = anyId;
+
+ mock = MOCK_CANDIDATES.find((c) => c.id === candidateId) ?? null;
+partyName = mock?.party_name ?? null;
+
+  if (!partyName) {
+    inferredFromHv = await inferPartyNameFromHv(candidateId);
+    partyName = inferredFromHv?.partyName ?? null;
+  }
+
+  if (!partyName && !partyId) {
+   return NextResponse.json(
+
+      {
+        error:
+          "No se pudo determinar el partido del candidato (ni por mock ni por HV).",
+        rule: "Sin partido identificado no se puede cargar el plan.",
+        debug: { anyId, resolved },
+      },
+      { status: 404 }
+    );
+  }
+
+  if (!partyId && partyName) partyId = slugifyPartyName(partyName);
+} else {
+  // ✅ id ya era partyId
+  partyName = null;
+}
+
+if (!partyId) {
+  return NextResponse.json(
+
+    {
+      error: "No se pudo resolver partyId.",
+      debug: { anyId, resolved },
+    },
+    { status: 404 }
+  );
+}
+
+// partyId ya viene resuelto arriba (candidateId o partyId directo)
 const pdfPath = planPdfPathFromPartyId(partyId);
 
 if (!pdfPath) {
@@ -1345,23 +1376,23 @@ expected_paths: [
       );
     }
 
-    const maxPagesToTry = 60;
-    const pages: Array<{ page: number; text: string }> = [];
+const maxPagesToTry = 60;
+const pages: Array<{ page: number; text: string }> = [];
 
-    for (let p = 1; p <= maxPagesToTry; p++) {
-      try {
-       const raw = await extractPageText(pdfPath, p);
-       const fixed = fixMojibake(raw);
-       const text = sanitizePdfText(fixed);
+for (let p = 1; p <= maxPagesToTry; p++) {
+  try {
+    const raw = await extractPageText(pdfPath, p);
+    const fixed = fixMojibake(raw);
+    const text = sanitizePdfText(fixed).trim();
 
-       pages.push({ page: p, text });
+    if (text) pages.push({ page: p, text });
 
-      } catch (e: any) {
-        const msg = String(e?.message ?? "");
-        if (msg.includes("Wrong page range") || msg.includes("first page")) break;
-        throw e;
-      }
-    }
+  } catch (e: any) {
+    const msg = String(e?.message ?? "");
+    if (msg.includes("Wrong page range") || msg.includes("first page")) break;
+    throw e;
+  }
+}
 
     return NextResponse.json(
       {
