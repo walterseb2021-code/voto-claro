@@ -160,11 +160,32 @@ function __sanitizeCloneOptions(options: any) {
   const transfer = (options as any).transfer;
   if (!Array.isArray(transfer)) return options;
 
-  // Dejamos solo transferibles reales
-  const safeTransfer = transfer.filter(__isTransferable);
+  // ✅ Regla clave en Node: NO transfieras el "view" (Uint8Array),
+  // transfieres su ArrayBuffer subyacente (view.buffer).
+  const expanded = transfer
+    .map((x: any) => {
+      try {
+        if (ArrayBuffer.isView(x)) return x.buffer; // <- el fix real
+        return x;
+      } catch {
+        return x;
+      }
+    })
+    .filter(Boolean);
 
-  // Importante: reconstruimos options con transfer limpio
-  return { ...(options as any), transfer: safeTransfer };
+  // ✅ Filtra solo los realmente transferibles
+  const safeTransfer = expanded.filter(__isTransferable);
+
+  // ✅ Dedup (mismo buffer repetido rompe a veces)
+  const uniq: any[] = [];
+  const seen = new Set<any>();
+  for (const x of safeTransfer) {
+    if (seen.has(x)) continue;
+    seen.add(x);
+    uniq.push(x);
+  }
+
+  return { ...(options as any), transfer: uniq };
 }
 
 if (typeof __nativeStructuredClone === "function") {
