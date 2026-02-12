@@ -1,0 +1,37 @@
+{
+  "kind": "PLAN",
+  "candidate_id": "cesar-acuna-peralta-p",
+  "candidate_full_name": "César Acuña Peralta",
+  "axes": {
+    "SEG": {
+      "found": true,
+      "title": "Seguridad",
+      "summary": "Plan enfatiza que la seguridad es prerequisito del desarrollo. Propone una estrategia nacional integrada que reduce homicidios y extorsiones mediante inteligencia avanzada, análisis de datos y cooperación internacional; integra la política de seguridad al Centro de Gobierno y a oficinas sectoriales desconcentradas; crea el Ministerio de Defensa y Seguridad Interna fusionando FF.AA. y PNP y fortalece la DINI; rediseña el SINASEC con metas e indicadores y articula gobiernos regionales y locales; implementa una plataforma nacional de inteligencia criminal con IA y corredores urbanos seguros; fortalece la policía de proximidad y moderniza el sistema penitenciario mediante APP y OXI; además, reforma el sistema de justicia para atraer profesionales y eliminar provisionalidades【329016338162880†L219-L356】."
+    },
+    "ECO": {
+      "found": true,
+      "title": "Economía",
+      "summary": "Defiende la estabilidad macroeconómica con política fiscal responsable y coordinación con el BCR para mantener baja inflación y tipo de cambio estable; fija metas de crecimiento anual superior al 6% desde 2027 y exportaciones que superen los US$ 100 mil millones. Plantea un agresivo plan de promoción de inversiones adjudicando US$ 80 mil millones en proyectos APP y en activos mediante ProInversión, con road shows presidenciales, oficinas comerciales especializadas y nuevos convenios de doble tributación; favorece la inversión en fronteras modificando restricciones constitucionales. Impulsa la formalización empresarial y laboral simplificando regulaciones, digitalizando trámites y estableciendo impuestos progresivos; propone un régimen simplificado para microempresas y una reforma tributaria progresiva. Fortalece a las MYPE mediante compras públicas masivas, reforma de programas productivos y acceso a financiamiento, y promueve la diversificación productiva y agroexportadora【329016338162880†L708-L865】."
+    },
+    "SAL": {
+      "found": true,
+      "title": "Salud",
+      "summary": "Reconoce que la cobertura de aseguramiento no asegura acceso real. Se propone garantizar el acceso efectivo a los servicios mediante la modernización del primer nivel de atención (Plan Mil) que mejora más de mil centros de salud con infraestructura, equipamiento y recursos humanos. Establece historias clínicas digitales interoperables y portables, y fortalece la gobernanza con políticas de integridad y lucha anticorrupción, separando las funciones financiadora y prestadora en EsSalud y reforzando SUSALUD. Promueve alianzas público‑privadas y obras por impuestos para la construcción de hospitales y la replicación de modelos como la Torre Trecca; impulsa el uso de inteligencia artificial en diagnóstico y logística y amplia programas logísticos de distribución de medicinas como Salog【329016338162880†L1443-L1548】."
+    },
+    "EDU": {
+      "found": true,
+      "title": "Educación",
+      "summary": "Planea reestructurar el Ministerio de Educación y fortalecer las direcciones regionales (DRE) y UGEL, con una ventanilla única interoperable y una carrera directiva basada en mérito. Reformará los currículos a través de un Currículo Nacional Básico y Currículos Institucionales; implementará evaluación docente y carrera basada en resultados; fortalecerá la educación inicial y la educación básica especial. Propone certificación obligatoria de inglés y competencias en inteligencia artificial y la implementación de educación secundaria técnica en colegios públicos. Fomenta la educación técnica superior en alianza con empresas y academia, alinea a MINEDU y SUNEDU para brindar información sobre instituciones de educación superior, impulsa certificaciones técnicas con empresas privadas, reorganiza los CETPROS y aplica el Marco Nacional de Cualificaciones priorizando becas técnicas en Pronabec【329016338162880†L1550-L1593】."
+    },
+    "TEC": {
+      "found": true,
+      "title": "Tecnología e Innovación",
+      "summary": "El plan impulsa un Estado digital con escuelas inteligentes, plataforma nacional de telemedicina con IA, digitalización total de trámites públicos e identidad digital universal. Propone un Centro Nacional de Ciberseguridad y Red de Comunicaciones Críticas, así como una Brigada Nacional de Ciberpolicía y uso de blockchain para seguridad y transparencia. Crea la figura del Zar de Tecnología e Infraestructura Digital para liderar la digitalización, ciberseguridad e innovación; plantea centros de datos soberanos, cobertura 5G y satélites para conectar zonas rurales, y redes de transporte y energía inteligentes. Establece un Centro de Fusión de Inteligencia para integrar Policía, FF.AA. y sector privado, utiliza IA y big data para detectar patrones criminales y protege infraestructura crítica. Promueve compras centralizadas de tecnología, clusters de innovación, formación masiva en IA y ciberseguridad, incubadoras de startups y exportación tecnológica, incluyendo ejes transversales de educación digital desde primaria, gobierno abierto, telemedicina e inclusión social con sostenibilidad energética【329016338162880†L1676-L1798】."
+    },
+    "JUS": {
+      "found": true,
+      "title": "Justicia y Anticorrupción",
+      "summary": "Implementa una estrategia de lucha contra la corrupción basada en inteligencia artificial y análisis predictivo para identificar riesgos; crea una procuraduría anticorrupción y moderniza las contrataciones públicas con herramientas digitales y transparencia. Propone ampliar los plazos de prescripción para evitar impunidad y reformar normas contrarias al interés anticorrupción. Rediseña el sistema de justicia eliminando provisionalidades y fortaleciendo la independencia fiscal; aumenta presupuesto, profesionaliza la gestión y refuerza la coordinación entre Policía, Ministerio Público y Poder Judicial para garantizar investigaciones eficientes y una judicatura independiente【329016338162880†L316-L335】【329016338162880†L367-L396】."
+    }
+  }
+}

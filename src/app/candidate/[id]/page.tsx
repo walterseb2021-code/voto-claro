@@ -671,58 +671,302 @@ export default function CandidatePage() {
       return;
     }
 
-    // ✅ HV y PLAN ahora van a IA (Gemini) vía /api/ai/answer
-    if (tab === "HV" || tab === "PLAN") {
-      setBusy(true);
-      setAnswer(tab === "HV" ? "Consultando Hoja de Vida con IA (PDF)…" : "Consultando Plan de Gobierno con IA (PDF)…");
+  // ✅ HV y PLAN: primero JSON LOCAL (/public/hv | /public/plan). Si no existe → fallback IA (/api/ai/answer)
+if (tab === "HV" || tab === "PLAN") {
+  setBusy(true);
+  setAnswer("Consultando archivo local (JSON)…");
+  setCitations([]);
+
+  const rawId = String(id ?? "");
+  const normalizedId = normalizeCandidateSlug(rawId);
+
+  const folder = tab === "HV" ? "hv" : "plan"; // /public/hv | /public/plan
+  const doc = tab === "HV" ? "hv" : "plan";
+
+  // util mínimo (local al bloque): tokens para “buscar evidencia” en texto
+  const stop = new Set([
+    "que","qué","de","del","la","el","los","las","un","una","y","o","en","por","para","con","sin","sobre",
+    "es","son","fue","ser","se","su","sus","al","a","mi","tu","tus","me","te","lo","le","les","como","cómo",
+    "cual","cuál","cuáles","quien","quién","quiénes","cuando","cuándo","donde","dónde","porque","porqué"
+  ]);
+
+  function tokenize(input: string) {
+    return String(input ?? "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-z0-9\s]+/g, " ")
+      .split(/\s+/)
+      .map((x) => x.trim())
+      .filter((x) => x.length >= 4 && !stop.has(x));
+  }
+
+  function snippet(text: string, max = 420) {
+    const s = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (s.length <= max) return s;
+    return s.slice(0, max).trim() + "…";
+  }
+
+  try {
+    // 1) Intento directo por rawId (compatibilidad)
+    let url = `/${folder}/${encodeURIComponent(rawId)}.json`;
+    let res = await fetch(url, { cache: "no-store" });
+
+    // 2) Fallback normalizado (acentos / mayúsculas / ñ / espacios)
+    if (!res.ok && normalizedId && normalizedId !== rawId) {
+      url = `/${folder}/${encodeURIComponent(normalizedId)}.json`;
+      res = await fetch(url, { cache: "no-store" });
+    }
+
+    // ✅ Si existe JSON → responder LOCAL
+    if (res.ok) {
+      const fileRaw: any = await res.json();
+      const file: any = deepFixMojibake(fileRaw);
+
+    // =========================
+// ✅ PLAN desde JSON local (axes)
+// Formato esperado:
+// { axes: { SEG|ECO|SAL|EDU: { found, title, summary } } }
+// =========================
+if (tab === "PLAN") {
+  const axes = file?.axes && typeof file.axes === "object" ? file.axes : null;
+
+  if (!axes) {
+    setAnswer(
+      "Encontré el JSON local del Plan, pero no contiene `axes`.\n\n" +
+        `Archivo leído: ${url}`
+    );
+    setCitations([]);
+    return;
+  }
+
+  // Normalizar pregunta
+  const q0 = String(q ?? "");
+  const qn = q0
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+
+  // 1) Si el usuario eligió un eje desde chips (o lo menciona), respondemos ese eje
+  let axis: CompareAxis | null = null;
+
+  if (qn.includes("seguridad")) axis = "SEG";
+  else if (qn.includes("econom") || qn.includes("empleo") || qn.includes("trabajo")) axis = "ECO";
+  else if (qn.includes("salud") || qn.includes("hospital") || qn.includes("medic")) axis = "SAL";
+  else if (qn.includes("educ") || qn.includes("coleg") || qn.includes("univers")) axis = "EDU";
+
+  // También soporta que el usuario escriba "SEG", "ECO", etc.
+  if (!axis) {
+    if (/\bseg\b/.test(qn)) axis = "SEG";
+    else if (/\beco\b/.test(qn)) axis = "ECO";
+    else if (/\bsal\b/.test(qn)) axis = "SAL";
+    else if (/\bedu\b/.test(qn)) axis = "EDU";
+  }
+
+  // 2) Si pregunta "resumen", damos resumen de los 4 ejes
+  if (qn.includes("resumen") || qn.includes("ejes") || qn.includes("plan completo")) {
+    const order: CompareAxis[] = ["SEG", "ECO", "SAL", "EDU"];
+
+    const parts = order.map((k) => {
+      const a = (axes as any)?.[k];
+      const title = fixMojibake(a?.title ?? k);
+      const found = !!a?.found;
+      const sum = fixMojibake(a?.summary ?? "");
+
+      if (!found || !sum.trim()) return `• ${title}: No hay evidencia suficiente en el plan.`;
+      return `• ${title}: ${sum.trim()}`;
+    });
+
+    setAnswer("Plan de Gobierno (JSON local) — resumen por ejes:\n\n" + parts.join("\n\n"));
+    setCitations([{ title: "Plan de Gobierno (JSON local)" }]);
+    return;
+  }
+
+  // 3) Si detectamos un eje -> devolvemos ese eje
+  if (axis) {
+    const a = (axes as any)?.[axis];
+    const title = fixMojibake(a?.title ?? axis);
+    const found = !!a?.found;
+    const sum = fixMojibake(a?.summary ?? "");
+
+    if (!found || !sum.trim()) {
+      setAnswer(`No hay evidencia suficiente en el Plan (JSON local) para el eje: ${title}.`);
       setCitations([]);
-
-      try {
-        const doc = tab === "HV" ? "hv" : "plan";
-
-        const res = await fetch("/api/ai/answer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-          body: JSON.stringify({ id, doc, question: q }),
-        });
-
-        const payload = await safeReadJson(res);
-
-        if (!res.ok) {
-          if ((payload as any)?._nonJson) {
-            setAnswer(
-              "Error IA: el servidor devolvió una respuesta no-JSON (posible error 500/404). " +
-                "Abre DevTools → Network → /api/ai/answer y pega aquí el response."
-            );
-            setCitations([]);
-            return;
-          }
-          setAnswer(toUserFriendlyAiError(payload));
-          setCitations([]);
-          return;
-        }
-
-        const data = payload as AiAnswerResponse;
-
-        if (!data?.ok) {
-          setAnswer(toUserFriendlyAiError(data));
-          setCitations([]);
-          return;
-        }
-
-        setAnswer(data.answer || "No hay evidencia suficiente en las fuentes consultadas.");
-        setCitations(Array.isArray(data.citations) ? data.citations : []);
-      } catch (e: any) {
-        setAnswer(
-          "Error IA: " + String(e?.message ?? e ?? "desconocido") + " | id=" + String(id ?? "")
-        );
-        setCitations([]);
-      } finally {
-        setBusy(false);
-      }
       return;
     }
+
+    setAnswer(`Plan de Gobierno (JSON local) — ${title}\n\n${sum.trim()}`);
+    setCitations([{ title: "Plan de Gobierno (JSON local)" }]);
+    return;
+  }
+
+  // 4) Si no detecta eje, intentamos match básico en summaries (tokens)
+  const tokens = tokenize(q0);
+
+  const order: CompareAxis[] = ["SEG", "ECO", "SAL", "EDU"];
+  const scored = order
+    .map((k) => {
+      const a = (axes as any)?.[k];
+      const txt = String(a?.summary ?? "");
+      const hay = txt
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "");
+      const score = tokens.reduce((acc, t) => acc + (hay.includes(t) ? 1 : 0), 0);
+      return { k, a, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) {
+    setAnswer("No hay evidencia suficiente en el Plan (JSON local) para esa pregunta.");
+    setCitations([]);
+    return;
+  }
+
+  const best = scored[0];
+  const title = fixMojibake(best?.a?.title ?? best.k);
+  const sum = fixMojibake(best?.a?.summary ?? "").trim();
+
+  if (!sum) {
+    setAnswer("No hay evidencia suficiente en el Plan (JSON local) para esa pregunta.");
+    setCitations([]);
+    return;
+  }
+
+  setAnswer(`Plan de Gobierno (JSON local) — ${title}\n\n${sum}`);
+  setCitations([{ title: "Plan de Gobierno (JSON local)" }]);
+  return;
+}
+
+      // =========================
+      // ✅ HV desde JSON local
+      // =========================
+      if (tab === "HV") {
+        // Flatten simple (key-path → value) para buscar evidencia en campos
+        const entries: Array<{ path: string; value: string }> = [];
+
+        function walk(v: any, path: string) {
+          if (v == null) return;
+
+          if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+            const str = String(v).trim();
+            if (str) entries.push({ path, value: str });
+            return;
+          }
+
+          if (Array.isArray(v)) {
+            v.forEach((it, idx) => walk(it, `${path}[${idx}]`));
+            return;
+          }
+
+          if (typeof v === "object") {
+            for (const k of Object.keys(v)) {
+              walk(v[k], path ? `${path}.${k}` : k);
+            }
+          }
+        }
+
+        walk(file, "");
+
+        if (!entries.length) {
+          setAnswer(
+            "Encontré el JSON local de Hoja de Vida, pero no pude extraer campos de texto.\n\n" +
+              `Archivo leído: ${url}`
+          );
+          setCitations([]);
+          return;
+        }
+
+        const tokens = tokenize(q);
+
+        // Resumen si piden resumen o no hay tokens
+        if (q.toLowerCase().includes("resumen") || tokens.length === 0) {
+          const top = entries.slice(0, 10).map((e) => `• ${e.path}: ${snippet(e.value, 160)}`);
+          setAnswer(
+            "Hoja de Vida (JSON local) — resumen de campos:\n\n" +
+              top.join("\n")
+          );
+          setCitations([{ title: "Hoja de Vida (JSON local)" }]);
+          return;
+        }
+
+        const scored = entries
+          .map((e) => {
+            const hay = `${e.path} ${e.value}`
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/\p{Diacritic}/gu, "");
+            const score = tokens.reduce((acc, t) => acc + (hay.includes(t) ? 1 : 0), 0);
+            return { e, score };
+          })
+          .filter((x) => x.score > 0)
+          .sort((a, b) => b.score - a.score);
+
+        if (!scored.length) {
+          setAnswer("No hay evidencia suficiente en la Hoja de Vida (JSON local) para esa pregunta.");
+          setCitations([]);
+          return;
+        }
+
+        const picked = scored.slice(0, 8).map((x) => x.e);
+
+        setAnswer(
+          "Hoja de Vida (JSON local) — evidencia encontrada:\n\n" +
+            picked.map((e) => `• ${e.path}: ${snippet(e.value, 260)}`).join("\n")
+        );
+
+        setCitations([{ title: "Hoja de Vida (JSON local)" }]);
+        return;
+      }
+    }
+
+    // ❗Si NO existe JSON → fallback IA como antes (sin romper flujo actual)
+    setAnswer(tab === "HV" ? "Consultando Hoja de Vida con IA (PDF)…" : "Consultando Plan de Gobierno con IA (PDF)…");
+    setCitations([]);
+
+    const resIA = await fetch("/api/ai/answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ id, doc, question: q }),
+    });
+
+    const payload = await safeReadJson(resIA);
+
+    if (!resIA.ok) {
+      if ((payload as any)?._nonJson) {
+        setAnswer(
+          "Error IA: el servidor devolvió una respuesta no-JSON (posible error 500/404). " +
+            "Abre DevTools → Network → /api/ai/answer y pega aquí el response."
+        );
+        setCitations([]);
+        return;
+      }
+      setAnswer(toUserFriendlyAiError(payload));
+      setCitations([]);
+      return;
+    }
+
+    const data = payload as AiAnswerResponse;
+
+    if (!data?.ok) {
+      setAnswer(toUserFriendlyAiError(data));
+      setCitations([]);
+      return;
+    }
+
+    setAnswer(data.answer || "No hay evidencia suficiente en las fuentes consultadas.");
+    setCitations(Array.isArray(data.citations) ? data.citations : []);
+  } catch (e: any) {
+    setAnswer("Error: " + String(e?.message ?? e ?? "desconocido") + " | id=" + String(id ?? ""));
+    setCitations([]);
+  } finally {
+    setBusy(false);
+  }
+
+  return;
+}
 
     setAnswer("Pestaña no soportada.");
     setCitations([]);

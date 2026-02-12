@@ -1,0 +1,107 @@
+{
+  "meta": {
+    "formato": "JNE - Hoja de Vida",
+    "proceso_electoral": "Elecciones Generales 2026",
+    "anio": 2025,
+    "fecha_registro": "20/12/2025 16:03:42"
+  },
+  "datos_personales": {
+    "dni": "17903382",
+    "sexo": "MASCULINO",
+    "apellidos": {
+      "paterno": "ACUÑA",
+      "materno": "PERALTA"
+    },
+    "nombres": "CESAR",
+    "fecha_nacimiento": "1952-08-11",
+    "lugar_nacimiento": {
+      "pais": "PERU",
+      "departamento": "CAJAMARCA",
+      "provincia": "CHOTA",
+      "distrito": "TACABAMBA"
+    },
+    "domicilio": {
+      "departamento": "LA LIBERTAD",
+      "provincia": "TRUJILLO",
+      "distrito": "VICTOR LARCO HERRERA"
+    },
+    "organizacion_politica": "ALIANZA PARA EL PROGRESO",
+    "cargo_postula": "PRESIDENTE DE LA REPUBLICA",
+    "circunscripcion": "UNICO NACIONAL"
+  },
+  "experiencia_laboral": [
+    {
+      "empresa": "UNIVERSIDAD CESAR VALLEJO",
+      "cargo": "ASESOR",
+      "ruc": null,
+      "direccion": "AV ALFREDO MENDIOLA N° 632",
+      "desde": 2019,
+      "hasta": 2025,
+      "ubicacion": {
+        "pais": "PERU",
+        "departamento": "LIMA",
+        "provincia": "LIMA",
+        "distrito": "LOS OLIVOS"
+      }
+    },
+    {
+      "empresa": "GOBIERNO REGIONAL DE LA LIBERTAD",
+      "cargo": "GOBERNADOR REGIONAL",
+      "ruc": null,
+      "direccion": "CAL. BAQUIJANO Y CARRILLO ALTURA CUADRA 18 NRO. 00 PARTE ALTA ESPERANZA",
+      "desde": 2023,
+      "hasta": 2025,
+      "ubicacion": {
+        "pais": "PERU",
+        "departamento": "LA LIBERTAD",
+        "provincia": null,
+        "distrito": null
+      }
+    },
+    {
+      "empresa": "UNIVERSIDAD CESAR VALLEJO",
+      "cargo": "PRESIDENTE DEL DIRECTORIO",
+      "ruc": null,
+      "direccion": "AV LARCO N° 170 URB SAN ANDRES 5TA ETAPA",
+      "desde": 1999,
+      "hasta": 2019,
+      "ubicacion": {
+        "pais": "PERU",
+        "departamento": "LA LIBERTAD",
+        "provincia": "TRUJILLO",
+        "distrito": "VICTOR LARCO HERRERA"
+      }
+    }
+  ],
+  "formacion_academica": {
+    "educacion_basica": {
+      "primaria": { "concluida": true },
+      "secundaria": { "concluida": true }
+    },
+    "universitaria": [],
+    "posgrado": []
+  },
+  "trayectoria_partidaria": {
+    "cargos_partidarios": [
+      {
+        "organizacion": "ALIANZA PARA EL PROGRESO",
+        "cargo": "PRESIDENTE Y FUNDADOR",
+        "desde": 2001,
+        "hasta": "ACTUALIDAD"
+      }
+    ],
+    "renuncias": []
+  },
+  "sentencias_penales": [],
+  "ingresos_2024": {
+    "renta_cuarta_categoria": 572941.00,
+    "otros_ingresos": 109685.00,
+    "total_ingresos": 682626.00
+  },
+  "bienes": {
+    "inmuebles_total_registros": 0,
+    "vehiculos_total": 0,
+    "valor_total_bienes_muebles": 0.00
+  },
+  "acciones_participaciones": []
+}

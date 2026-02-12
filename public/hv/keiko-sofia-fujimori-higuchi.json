@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "formato": "JNE - Hoja de Vida",
+    "proceso_electoral": "Elecciones Generales 2026",
+    "anio": 2025,
+    "fecha_registro": "19/12/2025 16:50:46"
+  },
+  "datos_personales": {
+    "dni": "10001088",
+    "sexo": "FEMENINO",
+    "apellidos": {
+      "paterno": "FUJIMORI",
+      "materno": "HIGUCHI"
+    },
+    "nombres": "KEIKO SOFIA",
+    "fecha_nacimiento": "1975-05-25",
+    "lugar_nacimiento": {
+      "pais": "PERU",
+      "departamento": "LIMA",
+      "provincia": "LIMA",
+      "distrito": "JESUS MARIA"
+    },
+    "domicilio": {
+      "departamento": "LIMA",
+      "provincia": "LIMA",
+      "distrito": "LIMA"
+    },
+    "organizacion_politica": "FUERZA POPULAR",
+    "cargo_postula": "PRESIDENTE DE LA REPUBLICA",
+    "circunscripcion": "UNICO NACIONAL"
+  },
+  "experiencia_laboral": [
+    {
+      "empresa": "PARTIDO POLÍTICO FUERZA POPULAR",
+      "cargo": "PRESIDENTA",
+      "ruc": null,
+      "direccion": "PARQUE HERNÁN VELARDE 38, SANTA BEATRIZ",
+      "desde": 2013,
+      "hasta": 2025,
+      "ubicacion": {
+        "pais": "PERU",
+        "departamento": "LIMA",
+        "provincia": "LIMA",
+        "distrito": "LIMA"
+      }
+    }
+  ],
+  "formacion_academica": {
+    "educacion_basica": {
+      "primaria": { "concluida": true },
+      "secundaria": { "concluida": true }
+    },
+    "universitaria": [],
+    "posgrado": []
+  },
+  "trayectoria_partidaria": {
+    "cargos_partidarios": [
+      {
+        "organizacion": "FUERZA POPULAR",
+        "cargo": "PRESIDENTA",
+        "desde": 2010,
+        "hasta": "ACTUALIDAD"
+      }
+    ],
+    "renuncias": []
+  },
+  "sentencias_penales": [],
+  "ingresos_2024": {
+    "renta_cuarta_categoria": 0.00,
+    "otros_ingresos": 0.00,
+    "total_ingresos": 0.00
+  },
+  "bienes": {
+    "inmuebles_total_registros": 0,
+    "vehiculos_total": 0,
+    "valor_total_bienes_muebles": 0.00
+  },
+  "acciones_participaciones": []
+}

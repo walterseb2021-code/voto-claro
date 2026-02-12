@@ -1,0 +1,172 @@
+{
+  "meta": {
+    "formato": "JNE - Hoja de Vida",
+    "proceso_electoral": "Elecciones Generales 2026",
+    "anio": 2025,
+    "fecha_registro": "21/12/2025 05:58:15"
+  },
+  "datos_personales": {
+    "dni": "08255194",
+    "sexo": "MASCULINO",
+    "apellidos": {
+      "paterno": "MASSE",
+      "materno": "FERNANDEZ"
+    },
+    "nombres": "ARMANDO JOAQUIN",
+    "fecha_nacimiento": "1959-06-13",
+    "lugar_nacimiento": {
+      "pais": "PERU",
+      "departamento": "LIMA",
+      "provincia": "LIMA",
+      "distrito": "LIMA"
+    },
+    "domicilio": {
+      "departamento": "LIMA",
+      "provincia": "LIMA",
+      "distrito": "SANTIAGO DE SURCO"
+    },
+    "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+    "cargo_postula": "PRESIDENTE DE LA REPUBLICA",
+    "circunscripcion": "UNICO NACIONAL"
+  },
+  "experiencia_laboral": [
+    {
+      "empresa": "CENTRO MEDICO DE GUARDIA",
+      "cargo": "MEDICO",
+      "ruc": "20601489415",
+      "direccion": "AV. AVIACION 4882-4884",
+      "desde": 2016,
+      "hasta": 2025,
+      "ubicacion": {
+        "pais": "PERU",
+        "departamento": "LIMA",
+        "provincia": "LIMA",
+        "distrito": "SANTIAGO DE SURCO"
+      }
+    },
+    {
+      "empresa": "APDAYC",
+      "cargo": "PRESIDENTE / SECRETARIO GENERAL",
+      "ruc": "20100538203",
+      "direccion": "AV. PETIT THOUARS 5038",
+      "desde": 1999,
+      "hasta": 2025,
+      "ubicacion": {
+        "pais": "PERU",
+        "departamento": "LIMA",
+        "provincia": null,
+        "distrito": null
+      }
+    }
+  ],
+  "formacion_academica": {
+    "educacion_basica": {
+      "primaria": { "concluida": true },
+      "secundaria": { "concluida": true }
+    },
+    "universitaria": [
+      {
+        "universidad": "UNIVERSIDAD INCA GARCILASO DE LA VEGA",
+        "grado": "ABOGADO",
+        "anio": 2007
+      },
+      {
+        "universidad": "UNIVERSIDAD INCA GARCILASO DE LA VEGA",
+        "grado": "BACHILLER EN DERECHO Y CIENCIAS POLITICAS",
+        "anio": 2006
+      },
+      {
+        "universidad": "UNIVERSIDAD NACIONAL MAYOR DE SAN MARCOS",
+        "grado": "MEDICO CIRUJANO",
+        "anio": 1988
+      }
+    ],
+    "posgrado": [
+      {
+        "universidad": "PONTIFICIA UNIVERSIDAD CATOLICA DEL PERU",
+        "especializacion": "MAGISTER EN ADMINISTRACION ESTRATEGICA DE EMPRESAS",
+        "grado_obtenido": "MAESTRO"
+      },
+      {
+        "universidad": "PONTIFICIA UNIVERSIDAD CATOLICA DEL PERU",
+        "especializacion": "MAESTRIA EN PROPIEDAD INTELECTUAL Y COMPETENCIA"
+      },
+      {
+        "universidad": "UNIVERSIDAD EUROPEA DE MADRID",
+        "especializacion": "MAGISTER DERECHO DIGITAL TECNOLOGICO"
+      }
+    ]
+  },
+  "trayectoria_partidaria": {
+    "cargos_partidarios": [
+      {
+        "organizacion": "PARTIDO DEMOCRATICO FEDERAL",
+        "cargo": "COMISION POLITICA - MIEMBRO",
+        "desde": 2023,
+        "hasta": "ACTUALIDAD"
+      },
+      {
+        "organizacion": "PARTIDO DEMOCRATICO FEDERAL",
+        "cargo": "FUNDADOR",
+        "desde": 2023,
+        "hasta": "ACTUALIDAD"
+      }
+    ],
+    "renuncias": [
+      {
+        "organizacion": "ARMANDO EL PROGRESO",
+        "anio": 2007
+      }
+    ]
+  },
+  "sentencias_penales": [
+    {
+      "expediente": "610-2003",
+      "fecha_sentencia": "2006-10-10",
+      "organo_judicial": "TREINTAISIETEAVO JUZGADO PENAL DE LIMA",
+      "delito": "CONTRA EL PATRIMONIO",
+      "fallo": "SOBRESEIDA",
+      "cumplimiento": "PENA CUMPLIDA"
+    },
+    {
+      "expediente": "12424-2015",
+      "fecha_sentencia": "2019-10-02",
+      "organo_judicial": "DECIMO SEGUNDO JUZGADO PENAL DE LIMA",
+      "delito": "FRAUDE EN LA ADMINISTRACION DE LAS PERSONAS JURIDICAS",
+      "fallo": "ABSOLUTO / ARCHIVADO",
+      "cumplimiento": "PENA CUMPLIDA"
+    }
+  ],
+  "ingresos_2024": {
+    "renta_cuarta_categoria": 572941.00,
+    "otros_ingresos": 109685.00,
+    "total_ingresos": 682626.00
+  },
+  "bienes": {
+    "inmuebles_total_registros": 15,
+    "vehiculos_total": 5,
+    "valor_total_bienes_muebles": 91500.00
+  },
+  "acciones_participaciones": [
+    {
+      "empresa": "PRODUCCIONES IEMPSA SAC",
+      "porcentaje": 79.99
+    },
+    {
+      "empresa": "DISVENSA - DISCOS Y VENTAS S.A.",
+      "porcentaje": 61.74
+    },
+    {
+      "empresa": "RANCHO PANCHO SAC",
+      "porcentaje": 50
+    },
+    {
+      "empresa": "AMSSE",
+      "porcentaje": 50
+    },
+    {
+      "empresa": "MEDICO DE GUARDIA SAC",
+      "porcentaje": 99
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "PLAN",
+  "candidate_id": "armando-joaquin-masse-fernandez",
+  "candidate_full_name": "Armando Joaquín Massé Fernández",
+  "axes": {
+    "SEG": {
+      "found": true,
+      "title": "Seguridad",
+      "summary": "Propone crear una Guardia Nacional Federal con entrenamiento especializado para combatir la delincuencia organizada y recuperar las calles, asegurando una justicia rápida y firme"
+    },
+    "ECO": {
+      "found": true,
+      "title": "Economía",
+      "summary": "Su modelo de Estado federal busca transformar las regiones en estados federados; cada región retendrá el 70 % de sus impuestos para reinversión directa sin pasar por el MEF, impulsando la autonomía y el desarrollo regional"
+    },
+    "SAL": {
+      "found": true,
+      "title": "Salud",
+      "summary": "Plantea un ‘Shock de salud’ liderado por médicos, con digitalización total de historias clínicas y construcción de hospitales regionales de alta complejidad con autonomía administrativa"
+    },
+    "EDU": {
+      "found": true,
+      "title": "Educación",
+      "summary": "Aboga por una profunda reforma del Estado federal para eliminar la burocracia centralista y permitir que cada región administre sus propios recursos para salud, educación y seguridad"
+    }
+  }
+}
