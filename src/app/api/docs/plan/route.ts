@@ -15,7 +15,7 @@ import { pathToFileURL } from "url";
 if (!(globalThis as any).DOMMatrix) {
   (globalThis as any).DOMMatrix = DOMMatrix as any;
 }
-/*
+
 // ✅ Fix: pdfjs (fake worker) usa structuredClone y falla con DOMMatrix del polyfill
 const __nativeStructuredClone = globalThis.structuredClone;
 
@@ -54,7 +54,7 @@ if (typeof __nativeStructuredClone === "function") {
     }
   };
 }
-*/
+
 
 // 🔒 Singleton de pdfjs (se carga UNA sola vez por instancia)
 let PDFJS_SINGLETON: any = null;
