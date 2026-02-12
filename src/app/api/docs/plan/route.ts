@@ -22,14 +22,33 @@ const __nativeStructuredClone = globalThis.structuredClone;
 function __sanitizeForClone(v: any): any {
   if (!v) return v;
 
-  // DOMMatrix del polyfill (no es clonable). Lo convertimos a objeto simple.
-  if (typeof v === "object" && v.constructor && v.constructor.name === "DOMMatrix") {
+ // DOMMatrix / DOMMatrixReadOnly / "matrix-like" (no clonable en serverless). Lo convertimos a objeto simple.
+if (typeof v === "object") {
+  const name = (v as any)?.constructor?.name ?? "";
+
+  const isDomMatrixFamily = typeof name === "string" && name.startsWith("DOMMatrix");
+
+  const isMatrixLike =
+    (v as any) &&
+    typeof (v as any).a === "number" &&
+    typeof (v as any).b === "number" &&
+    typeof (v as any).c === "number" &&
+    typeof (v as any).d === "number" &&
+    typeof (v as any).e === "number" &&
+    typeof (v as any).f === "number";
+
+  if (isDomMatrixFamily || isMatrixLike) {
     return {
-      a: (v as any).a, b: (v as any).b, c: (v as any).c,
-      d: (v as any).d, e: (v as any).e, f: (v as any).f,
-      is2D: (v as any).is2D,
+      a: (v as any).a,
+      b: (v as any).b,
+      c: (v as any).c,
+      d: (v as any).d,
+      e: (v as any).e,
+      f: (v as any).f,
+      is2D: (v as any).is2D ?? true,
     };
   }
+}
 
   if (Array.isArray(v)) return v.map(__sanitizeForClone);
 
