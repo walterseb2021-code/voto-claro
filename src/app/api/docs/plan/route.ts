@@ -64,16 +64,49 @@ if (typeof v === "object") {
   return v;
 }
 
+function __isTransferable(x: any) {
+  try {
+    // ArrayBuffer / SharedArrayBuffer
+    if (x instanceof ArrayBuffer) return true;
+    if (typeof SharedArrayBuffer !== "undefined" && x instanceof SharedArrayBuffer) return true;
+
+    // TypedArray/DataView -> su buffer es transferible, pero en transfer list puede venir el view o el buffer
+    if (ArrayBuffer.isView(x)) return true;
+
+    // MessagePort (Node)
+    const name = x?.constructor?.name ?? "";
+    if (name === "MessagePort") return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function __sanitizeCloneOptions(options: any) {
+  if (!options || typeof options !== "object") return options;
+
+  const transfer = (options as any).transfer;
+  if (!Array.isArray(transfer)) return options;
+
+  // Dejamos solo transferibles reales
+  const safeTransfer = transfer.filter(__isTransferable);
+
+  // Importante: reconstruimos options con transfer limpio
+  return { ...(options as any), transfer: safeTransfer };
+}
+
 if (typeof __nativeStructuredClone === "function") {
   (globalThis as any).structuredClone = (value: any, options?: any) => {
     try {
       return __nativeStructuredClone(value, options);
     } catch {
-      return __nativeStructuredClone(__sanitizeForClone(value), options);
+      const safeValue = __sanitizeForClone(value);
+      const safeOptions = __sanitizeCloneOptions(options);
+      return __nativeStructuredClone(safeValue, safeOptions);
     }
   };
 }
-
 
 // 🔒 Singleton de pdfjs (se carga UNA sola vez por instancia)
 let PDFJS_SINGLETON: any = null;
