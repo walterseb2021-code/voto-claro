@@ -357,7 +357,8 @@ async function geminiAnswerFromEvidence(args: {
     };
   }
 
-  const model = (process.env.GEMINI_MODEL ?? "gemini-1.5-flash").trim();
+  const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const packedEvidence = args.evidence

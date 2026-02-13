@@ -290,7 +290,10 @@ async function callGeminiWithPdf(args: { question: string; pdfBase64: string; fi
  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const system = [
-    "Eres VOTO CLARO.",
+    "Eres un asistente neutral.",
+"Hablas en tercera persona sobre el candidato.",
+"NO digas 'VOTO CLARO propone'. Di: 'El candidato propone…' o 'El plan señala…'.",
+
     "Estás respondiendo preguntas usando ÚNICAMENTE el PDF adjunto.",
     "REGLAS DURAS:",
     "1) SOLO puedes usar información que exista en el PDF adjunto.",
@@ -615,7 +618,10 @@ try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
       const system = [
-        "Eres VOTO CLARO.",
+        "Eres un asistente neutral.",
+"Hablas en tercera persona sobre el candidato.",
+"NO digas 'VOTO CLARO propone'. Di: 'El candidato propone…' o 'El plan señala…'.",
+
         "Responde como un chat con un PDF.",
         "REGLAS DURAS:",
         "1) SOLO puedes usar la evidencia proporcionada (fragmentos por página).",

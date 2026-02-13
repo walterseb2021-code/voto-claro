@@ -142,16 +142,19 @@ Reglas estrictas:
 
    const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
 
-  // Endpoint correcto + API key (Gemini)
-  const endpoint =
-    `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent` +
-    `?key=${encodeURIComponent(apiKey)}`;
+ // ✅ Endpoint REST recomendado (v1beta) + API key por header
+const endpoint =
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-  const r = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+const r = await fetch(endpoint, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "x-goog-api-key": apiKey,
+  },
+  body: JSON.stringify(body),
+});
+
 
   if (!r.ok) {
     const txt = await r.text();

@@ -598,10 +598,22 @@ type WebAskResponse = {
 };
 
 async function safeReadJson(res: Response) {
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return await res.json();
+  // ✅ Siempre leemos como texto primero.
+  // Así evitamos errores raros de res.json() cuando el servidor devuelve HTML, texto,
+  // o un JSON inválido (o truncado) en producción.
   const text = await res.text();
-  return { _nonJson: true, text: text.slice(0, 5000) };
+
+  // Intento de parseo seguro
+  try {
+    // Si viene vacío, lo tratamos como no-JSON
+    if (!text || !text.trim()) return { _nonJson: true, text: "" };
+
+    const parsed = JSON.parse(text);
+    return parsed;
+  } catch {
+    // No era JSON válido (por ejemplo HTML de error 500)
+    return { _nonJson: true, text: text.slice(0, 5000) };
+  }
 }
 
 function slugToName(slug: string) {

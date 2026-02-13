@@ -55,6 +55,9 @@ export default function PitchPage() {
           .eq("token", token)
           .eq("is_active", true)
           .limit(1);
+console.log("[Pitch][DEBUG] token:", token);
+console.log("[Pitch][DEBUG] data:", data);
+console.log("[Pitch][DEBUG] error:", error);
 
         if (error) {
           console.error("[Pitch] token check error:", error);
