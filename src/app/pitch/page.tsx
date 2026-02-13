@@ -48,7 +48,8 @@ export default function PitchPage() {
 
         // ✅ Validar token en Supabase (solo si está activo)
         const { data, error } = await supabase
-          .from("votoclaro_public_links")
+          .from("enlaces públicos de votoclaro")
+
           .select("id")
           .eq("route", "/pitch")
           .eq("token", token)
