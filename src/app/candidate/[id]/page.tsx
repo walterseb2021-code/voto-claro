@@ -2078,7 +2078,8 @@ return;
 
             {compareResult ? (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className={`${WRAP} p-4 bg-white`}>
+                <div className={`${WRAP} p-4 bg-white min-w-0 overflow-hidden`}>
+
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <MiniProfileHeader title="Candidato A" profile={aProfile} />
                     <EvidenceBadge
@@ -2088,11 +2089,15 @@ return;
                     />
                   </div>
 
-                  <p className="mt-3 text-sm whitespace-pre-wrap text-slate-800">{compareResult.a.answer}</p>
+                  <p className="mt-3 text-sm whitespace-pre-wrap text-slate-800 break-words [overflow-wrap:anywhere]">
+  {compareResult.a.answer}
+</p>
+
                   {compareResult.a.citations?.length ? <Sources sources={compareResult.a.citations} /> : null}
                 </div>
 
-                <div className={`${WRAP} p-4 bg-white`}>
+                <div className={`${WRAP} p-4 bg-white min-w-0 overflow-hidden`}>
+
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <MiniProfileHeader title="Candidato B" profile={bProfile} />
                     <EvidenceBadge
@@ -2102,7 +2107,10 @@ return;
                     />
                   </div>
 
-                  <p className="mt-3 text-sm whitespace-pre-wrap text-slate-800">{compareResult.b.answer}</p>
+                 <p className="mt-3 text-sm whitespace-pre-wrap text-slate-800 break-words [overflow-wrap:anywhere]">
+  {compareResult.b.answer}
+</p>
+
                   {compareResult.b.citations?.length ? <Sources sources={compareResult.b.citations} /> : null}
                 </div>
               </div>
