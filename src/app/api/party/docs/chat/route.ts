@@ -1,3 +1,4 @@
+// src/app/api/party/docs/chat/route.ts
 import { NextResponse } from "next/server";
 import { loadPartyDocsFromPublic } from "@/lib/partyDocs/loadPartyDocs";
 import { retrieveRelevantChunks } from "@/lib/partyDocs/retrieve";
@@ -16,9 +17,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Falta question" }, { status: 400 });
     }
 
-    // 1) Cargar docs JSON oficiales desde /public/party/<partyId>/docs/*.json
+    // 1) Cargar docs JSON oficiales
     const docs = await loadPartyDocsFromPublic(partyId);
-
     if (!docs.length) {
       return NextResponse.json(
         { ok: false, error: `No hay docs JSON en /public/party/${partyId}/docs/` },
@@ -26,11 +26,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Recuperar solo lo relevante (evita mandar TODO al modelo)
+    // 2) Recuperar chunks relevantes
     const chunks = retrieveRelevantChunks(docs, question);
-
-    // Si por alguna razón no matchea nada, damos un mínimo contexto “de soporte”
-    // (principios + secciones), pero sin reventar tokens.
     const context =
       chunks.length > 0
         ? chunks
@@ -42,17 +39,26 @@ export async function POST(req: Request) {
         : docs
             .slice(0, 3)
             .map((d, i) => {
-              const principles = (d.principles || []).slice(0, 4).map((p) => `- ${p.principle}`).join("\n");
-              const sections = (d.sections || []).slice(0, 4).map((s) => `- ${s.name}: ${s.summary}`).join("\n");
-              return `${i + 1}) [${d.title}]\nPrincipios:\n${principles || "- (sin principios)"}\n\nSecciones:\n${
-                sections || "- (sin secciones)"
-              }`;
+              const principles = (d.principles || [])
+                .slice(0, 4)
+                .map((p: any) => `- ${p.principle}`)
+                .join("\n");
+              const sections = (d.sections || [])
+                .slice(0, 4)
+                .map((s: any) => `- ${s.name}: ${s.summary}`)
+                .join("\n");
+
+              return `${i + 1}) [${d.title}]
+Principios:
+${principles || "- (sin principios)"}
+
+Secciones:
+${sections || "- (sin secciones)"}`;
             })
             .join("\n\n");
 
-    // 3) API key
+    // 3) Key SOLO server-side
     const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
-
     if (!apiKey) {
       return NextResponse.json({ ok: false, error: "Falta GEMINI_API_KEY" }, { status: 500 });
     }
@@ -88,38 +94,26 @@ CONTEXTO OFICIAL (docs del partido):
 ${context}
 `.trim();
 
-    // 5) Llamada a Gemini
-async function callGemini(model: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    // 5) Llamada Gemini con fallback por 403
+    async function callGemini(model: string) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        model
+      )}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  return fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}` }] }],
-      generationConfig: { temperature: mode === "STRICT" ? 0.2 : 0.6 },
-    }),
-  });
-}
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}` }] }],
+          generationConfig: { temperature: mode === "STRICT" ? 0.2 : 0.6 }
+        })
+      });
+    }
 
-// 1) Intento principal
-let resp = await callGemini("gemini-2.5-flash");
-
-// 2) Si en producción 2.5 da 403, degradamos a 1.5-flash para no romper el bloque
-if (resp.status === 403) {
-  resp = await callGemini("gemini-1.5-flash");
-}
-
-const data = await resp.json().catch(() => ({}));
-
-if (!resp.ok) {
-  return NextResponse.json(
-    { ok: false, error: `Gemini error HTTP ${resp.status}`, raw: data },
-    { status: 502 }
-  );
-}
+    let resp = await callGemini("gemini-2.5-flash");
+    if (resp.status === 403) {
+      resp = await callGemini("gemini-1.5-flash");
+    }
 
     const data = await resp.json().catch(() => ({}));
 
