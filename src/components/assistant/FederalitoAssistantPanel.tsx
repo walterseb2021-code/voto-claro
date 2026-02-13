@@ -506,6 +506,43 @@ function cleanForSpeech(text: string) {
     .replace(/\uFEFF/g, "")  // BOM invisible
     .replace(/\u00A0/g, " "); // NBSP -> espacio normal
 }
+
+function fixMojibakeBasic(input: string) {
+  let s = String(input ?? "");
+
+  // casos más comunes ES
+  s = s
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã±/g, "ñ")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ã/g, "Í")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ãš/g, "Ú")
+    .replace(/Ã‘/g, "Ñ")
+    .replace(/Ã¼/g, "ü")
+    .replace(/Ãœ/g, "Ü")
+    .replace(/â€œ/g, "“")
+    .replace(/â€/g, "”")
+    .replace(/â€˜/g, "‘")
+    .replace(/â€™/g, "’")
+    .replace(/â€“/g, "–")
+    .replace(/â€”/g, "—")
+    .replace(/â€¢/g, "•")
+    .replace(/Â/g, ""); // típico “Â ” antes de espacios
+
+  return s.normalize("NFC");
+}
+
+function cleanForChat(input: string) {
+  // Quita invisibles + arregla mojibake
+  return fixMojibakeBasic(cleanForSpeech(String(input ?? "")).trim());
+}
+
 function debugUnicode(label: string, s: string) {
   try {
     const codes = Array.from(s).map((c) => {
@@ -1880,7 +1917,7 @@ useEffect(() => {
     const action = e.detail?.action ?? "SAY";
 
     const raw = String(e.detail?.text ?? "");
-    const text = cleanForSpeech(raw).trim();
+const text = cleanForChat(raw);
 
     const speak = !!e.detail?.speak;
 
@@ -1998,7 +2035,8 @@ useEffect(() => {
   function onPageRead(ev: Event) {
     const e = ev as CustomEvent<{ text?: string }>;
     const raw = String(e.detail?.text ?? "");
-    const txt = cleanForSpeech(raw).trim();
+    const txt = cleanForChat(raw);
+
     if (!txt) return;
 
     setPageReadText(txt);
@@ -2057,10 +2095,12 @@ useEffect(() => {
   }, [mounted, open, pos]);
 
   function pushAssistant(text: string) {
-    setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
-  }
+  const safe = cleanForChat(text);
+  setMsgs((prev) => [...prev, { role: "assistant", content: safe }]);
+}
+
   // ✅ DEBUG: muestra cómo se parte el texto antes de hablar (sin consola)
-  const DEBUG_TTS_PARTS = true;
+  const DEBUG_TTS_PARTS = false;
 
   function showTtsParts(label: string, input: string) {
     if (!DEBUG_TTS_PARTS) return;
@@ -2465,8 +2505,8 @@ if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
         if (!res.ok) {
           const msg =
             (payload as any)?._nonJson
-              ? "Error IA: el servidor devolvió una respuesta no-JSON. Revisa DevTools → Network → /api/ai/answer."
-              : `Error IA: ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
+              ? `Error IA (${askMode} • ${String(pathname || "")}): el servidor devolvió una respuesta no-JSON. Revisa DevTools → Network → /api/ai/answer.`
+             : `Error IA (${askMode} • ${String(pathname || "")}): ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
           pushAssistant(msg);
           await maybeSpeak(msg);
           return;
