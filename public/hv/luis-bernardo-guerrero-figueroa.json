@@ -1,0 +1,332 @@
+{
+  "kind": "HV",
+  "meta": {
+    "formato": "JNE - Formato Único de Declaración Jurada de Hoja de Vida",
+    "proceso_electoral": "Elecciones Generales 2026",
+    "anio": 2025,
+    "fecha_registro": "21/12/2025 05:59:07",
+    "fuente": {
+      "tipo": "pdf",
+      "archivo": "luis-bernardo-guerrero-figueroa.pdf",
+      "paginas": 5
+    }
+  },
+  "datos_personales": {
+    "dni": "26614247",
+    "sexo": "MASCULINO",
+    "apellidos": {
+      "paterno": "GUERRERO",
+      "materno": "FIGUEROA"
+    },
+    "nombres": "LUIS BERNARDO",
+    "fecha_nacimiento": "1953-08-20",
+    "lugar_nacimiento": {
+      "pais": "PERÚ",
+      "departamento": "CAJAMARCA",
+      "provincia": "CHOTA",
+      "distrito": "CHOTA"
+    },
+    "domicilio": {
+      "pais": "PERÚ",
+      "departamento": "CAJAMARCA",
+      "provincia": "CAJAMARCA",
+      "distrito": "CAJAMARCA",
+      "direccion": "******************************************"
+    },
+    "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+    "cargo_postula": "SENADOR",
+    "circunscripcion": "ÚNICO NACIONAL",
+    "nota_circunscripcion": null
+  },
+  "experiencia_laboral": {
+    "tiene_informacion": true,
+    "registros": [
+      {
+        "n": 1,
+        "centro_trabajo": "EDAC",
+        "ocupacion_profesion": "INGENIERO",
+        "ruc_empresa_opcional": "20453836364",
+        "direccion": "CASUARINAS F 3 URB. EL INGENIO",
+        "desde_anio": 1984,
+        "hasta_anio": 2025,
+        "ubicacion": {
+          "pais": "PERÚ",
+          "departamento": "CAJAMARCA",
+          "provincia": "CAJAMARCA",
+          "distrito": "CAJAMARCA"
+        },
+        "informacion_complementaria": null
+      }
+    ]
+  },
+  "formacion_academica": {
+    "educacion_basica_regular": {
+      "tiene_informacion": true,
+      "primaria": {
+        "cuenta": true,
+        "concluida": true
+      },
+      "secundaria": {
+        "cuenta": true,
+        "concluida": true
+      }
+    },
+    "estudios_no_universitarios": {
+      "tiene_informacion": false,
+      "ultimo_estudio_realizado": null,
+      "detalle": []
+    },
+    "estudios_universitarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "universidad": "UNIVERSIDAD NACIONAL DE CAJAMARCA",
+          "concluidos": true,
+          "grado_o_titulo": "INGENIERO AGRONOMO",
+          "egresado": true,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "universidad": "UNIVERSIDAD NACIONAL DE CAJAMARCA",
+          "concluidos": true,
+          "grado_o_titulo": "BACHILLER EN AGRONOMIA",
+          "egresado": true,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "posgrado": {
+      "cuenta_posgrado": true,
+      "registros": [
+        {
+          "n": 1,
+          "centro_estudios": "UNIVERSIDAD PARIS 1 PANTHÉON SORBONA",
+          "especializacion": "DIPLOMA DE ESTUDIOS SUPERIORES ESPECIALIZADOS, ESPECIALIDAD: DESARROLLO AGRÍCOLA (MAESTRÍA)",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": null,
+          "maestro": true,
+          "doctor": false,
+          "anio_obtencion": 2020,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "centro_estudios": "UNIVERSITÉ SORBONNE NOUVELLE",
+          "especializacion": "DIPLOMA DE ESTUDIOS ESPECIALIZADOS EN ESTUDIOS DE SOCIEDADES LATINOAMERICANAS, OPCIÓN ECONOMÍA (GRADO DE MAESTRO)",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": null,
+          "maestro": true,
+          "doctor": false,
+          "anio_obtencion": 2021,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 3,
+          "centro_estudios": "INSTITUTO DE BIOENERGÍA SHENG DU- CHINA",
+          "especializacion": "DIPLOMADO EN BIOENERGÍA",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": "MAGISTER",
+          "maestro": null,
+          "doctor": null,
+          "anio_obtencion": 1982,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 4,
+          "centro_estudios": "FUNDACIÓN KONRAD ADENAUER, ALEMANIA",
+          "especializacion": "DIPLOMADO EN ADMINISTRACIÓN PÚBLICA",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": "MAGISTER",
+          "maestro": null,
+          "doctor": null,
+          "anio_obtencion": 1987,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 5,
+          "centro_estudios": "ESAN - LIMA",
+          "especializacion": "DIPLOMADO EN GESTIÓN DEL AGUA.",
+          "concluidos": true,
+          "egresado": null,
+          "grado_obtenido": null,
+          "maestro": null,
+          "doctor": null,
+          "anio_obtencion": 2017,
+          "informacion_complementaria": null
+        }
+      ]
+    }
+  },
+  "trayectoria_partidaria": {
+    "cargos_partidarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+          "cargo": "COMISIÓN POLÍTICA - MIEMBRO",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+          "cargo": "FUNDADOR",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "cargos_eleccion_popular": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "MOVIMIENTO INDEPENDIENTE SOMOS PERU",
+          "cargo": "CONGRESISTA",
+          "desde_anio": 2000,
+          "hasta_anio": 2001,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "PERU POSIBLE",
+          "cargo": "CONGRESISTA",
+          "desde_anio": 2001,
+          "hasta_anio": 2006,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "renuncias": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "FRENTE INDEPENDIENTE REGIONAL",
+          "anio_renuncia": 2011,
+          "hasta_opcional": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "PERU AHORA",
+          "anio_renuncia": 2007,
+          "hasta_opcional": null,
+          "informacion_complementaria": null
+        }
+      ]
+    }
+  },
+  "sentencias": {
+    "ambito_penal": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "expediente": "0031972",
+          "fecha_sentencia_firme": "1972-03-01",
+          "organo_judicial": "CAJAMARCA",
+          "delito": "LESIONES",
+          "fallo_o_pena": "3 MESES",
+          "modalidad": "SUSPENDIDA",
+          "cumplimiento_fallo": "PENA CUMPLIDA",
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "obligaciones_familiares_contractuales_laborales_violencia": {
+      "tiene_informacion": false,
+      "registros": []
+    }
+  },
+  "ingresos_bienes_rentas": {
+    "ingresos": {
+      "tiene_informacion": true,
+      "anio_declarado": 2024,
+      "remuneracion_bruta_anual_quinta": {
+        "sector_publico": 0.0,
+        "sector_privado": 14842.0,
+        "total": 14842.0
+      },
+      "renta_bruta_anual_cuarta_ejercicio_individual": {
+        "sector_publico": 0.0,
+        "sector_privado": 0.0,
+        "total": 0.0
+      },
+      "otros_ingresos_anuales": {
+        "sector_publico": 0.0,
+        "sector_privado": 30000.0,
+        "total": 30000.0
+      },
+      "total_ingresos": 44842.0,
+      "nota": "Total de ingresos antes de impuestos u otras deducciones."
+    },
+    "bienes_inmuebles": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "tipo_bien": "REGISTRO DE PREDIOS",
+          "direccion": "CALLE VILLANUEVA PINILLOS JAEN- JAEN- CAJAMARCA",
+          "inscrito_sunarp": true,
+          "partida": "02069472",
+          "valor": 100000.0,
+          "valor_autovaluo": 30000.0,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "bienes_muebles": {
+      "tiene_informacion": true,
+      "vehiculos": [
+        {
+          "n": 1,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "T1D079",
+          "descripcion": "Auto Mazda 3 año 2010",
+          "valor": 15000.0,
+          "informacion_complementaria": null
+        }
+      ],
+      "total_bienes_muebles": 15000.0
+    },
+    "acciones_y_participaciones": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "persona_juridica": "Covertura del Norte SAC.",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 51,
+          "valor_nominal_total": 1.0,
+          "equivalencia": "51% de accionariado",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "persona_juridica": "Radio Layzon",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 51,
+          "valor_nominal_total": 1.0,
+          "equivalencia": "51% del accionariado",
+          "informacion_complementaria": null
+        }
+      ]
+    }
+  },
+  "informacion_adicional_opcional": {
+    "tiene_informacion": true,
+    "texto": "DECLARACIÓN JURADA DE INGRESOS DE BIENES Y RENTAS - Poseo los siguientes bienes no inscritos en SUNARP: 1.- Casa Habitación en Calle San Martin 610 Bambamarca valorizado en 150,000. 2.- Casa hospedaje Lote 3 mz. R Huanchaquito Trujillo valorizado en 250,000. 3.- Terreno rural en Caserio el Rollo Amazonas de 180000. 4.- Terreno Rural Bella union Cajamarca de 300000. 5.- Terreno rural en San José de la Coclla de 80000 soles. 6.- Terreno casa Barrio Delta Cajamarca de 60000 soles."
+  }
+}

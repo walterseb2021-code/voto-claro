@@ -1,0 +1,25 @@
+{
+  "meta": { "kind": "PLAN", "source": "PDF local" },
+  "axes": {
+    "SEG": {
+      "found": true,
+      "title": "Seguridad ciudadana / Crimen organizado",
+      "summary": "Plantea un programa para frenar el crimen organizado: cortar el financiamiento (seguir el dinero), fortalecer la UIF, recuperar extinción de dominio y levantar secreto bancario en casos vinculados. Incluye mejoras de prevención, investigación, inteligencia y control del territorio, además de cambios institucionales para combatir redes criminales y extorsión."
+    },
+    "ECO": {
+      "found": true,
+      "title": "Economía y empleo",
+      "summary": "Propone medidas para reactivación y formalización con énfasis en MYPE: formalización tributaria con incentivos (ingresar sin multas/recargos iniciales, deducciones y estabilidad tributaria), acceso a crédito y reducción de trabas. Incluye priorización de empleo formal, soporte productivo y políticas para elevar productividad y competitividad."
+    },
+    "SAL": {
+      "found": true,
+      "title": "Salud",
+      "summary": "Plantea “Salud digna para todos”: modernización de establecimientos, fortalecimiento del primer nivel, mejora de atención y acceso a servicios y medicamentos. Enfatiza reducción de brechas, eficiencia en gestión y capacidad resolutiva para atención oportuna."
+    },
+    "EDU": {
+      "found": true,
+      "title": "Educación",
+      "summary": "Plantea mejorar aprendizaje y calidad educativa con foco en primaria/secundaria: fortalecimiento de competencias (lectura, matemática), docentes, y cierre de brechas. Incluye componentes de educación digital, conectividad y modernización de servicios educativos, además de rutas para educación técnica y empleabilidad."
+    }
+  }
+}

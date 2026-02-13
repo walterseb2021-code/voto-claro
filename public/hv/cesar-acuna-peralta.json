@@ -1,9 +1,15 @@
 {
+  "kind": "HV",
   "meta": {
-    "formato": "JNE - Hoja de Vida",
+    "formato": "JNE - Formato Único de Declaración Jurada de Hoja de Vida",
     "proceso_electoral": "Elecciones Generales 2026",
     "anio": 2025,
-    "fecha_registro": "20/12/2025 16:03:42"
+    "fecha_registro": "20/12/2025 03:38:10",
+    "fuente": {
+      "tipo": "pdf",
+      "archivo": "cesar-acuña-peralta.pdf",
+      "paginas": 12
+    }
   },
   "datos_personales": {
     "dni": "17903382",
@@ -21,87 +27,343 @@
       "distrito": "TACABAMBA"
     },
     "domicilio": {
+      "pais": "PERU",
       "departamento": "LA LIBERTAD",
       "provincia": "TRUJILLO",
-      "distrito": "VICTOR LARCO HERRERA"
+      "distrito": "VICTOR LARCO HERRERA",
+      "direccion": "*******************************************************************"
     },
     "organizacion_politica": "ALIANZA PARA EL PROGRESO",
     "cargo_postula": "PRESIDENTE DE LA REPUBLICA",
-    "circunscripcion": "UNICO NACIONAL"
+    "circunscripcion": "UNICO NACIONAL",
+    "nota_circunscripcion": "Para Presidente/Vicepresidentes/Parlamento Andino no corresponde consignar región/provincia/distrito de circunscripción."
   },
-  "experiencia_laboral": [
-    {
-      "empresa": "UNIVERSIDAD CESAR VALLEJO",
-      "cargo": "ASESOR",
-      "ruc": null,
-      "direccion": "AV ALFREDO MENDIOLA N° 632",
-      "desde": 2019,
-      "hasta": 2025,
-      "ubicacion": {
-        "pais": "PERU",
-        "departamento": "LIMA",
-        "provincia": "LIMA",
-        "distrito": "LOS OLIVOS"
+  "experiencia_laboral": {
+    "tiene_informacion": true,
+    "registros": [
+      {
+        "n": 1,
+        "centro_trabajo": "UNIVERSIDAD CESAR VALLEJO",
+        "ocupacion_profesion": "ASESOR",
+        "ruc_empresa_opcional": null,
+        "direccion": "AV ALFREDO MENDIOLA N° 632",
+        "desde_anio": 2019,
+        "hasta_anio": 2025,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "LOS OLIVOS"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 2,
+        "centro_trabajo": "GOBIERNO REGIONAL DE LA LIBERTAD",
+        "ocupacion_profesion": "GOBERNADOR REGIONAL",
+        "ruc_empresa_opcional": null,
+        "direccion": "CAL. BAQUIJANO Y CARRILLO ALTURA CUADRA 18 NRO. 00 PARTE ALTA ESPERANZA",
+        "desde_anio": 2023,
+        "hasta_anio": 2025,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LA LIBERTAD",
+          "provincia": "TRUJILLO",
+          "distrito": "LA ESPERANZA"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 3,
+        "centro_trabajo": "UNIVERSIDAD CESAR VALLEJO",
+        "ocupacion_profesion": "PRESIDENTE DEL DIRECTORIO",
+        "ruc_empresa_opcional": null,
+        "direccion": "AV LARCO N° 170 URB SAN ANDRES 5TA ETAPA",
+        "desde_anio": 1999,
+        "hasta_anio": 2019,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LA LIBERTAD",
+          "provincia": "TRUJILLO",
+          "distrito": "VICTOR LARCO HERRERA"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 4,
+        "centro_trabajo": "GOBIERNO REGIONAL DE LA LIBERTAD",
+        "ocupacion_profesion": "GOBERNADOR REGIONAL",
+        "ruc_empresa_opcional": null,
+        "direccion": "CAL. BAQUIJANO Y CARRILLO ALTURA CUADRA 18 NRO. 00 PARTE ALTA ESPERANZA",
+        "desde_anio": 2015,
+        "hasta_anio": 2015,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LA LIBERTAD",
+          "provincia": "TRUJILLO",
+          "distrito": "LA ESPERANZA"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 5,
+        "centro_trabajo": "MUNICIPALIDAD PROVINCIAL DE TRUJILLO",
+        "ocupacion_profesion": "ALCALDE",
+        "ruc_empresa_opcional": null,
+        "direccion": "JR ALMAGRO Nº 525",
+        "desde_anio": 2007,
+        "hasta_anio": 2014,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LA LIBERTAD",
+          "provincia": "TRUJILLO",
+          "distrito": "TRUJILLO"
+        },
+        "informacion_complementaria": null
       }
-    },
-    {
-      "empresa": "GOBIERNO REGIONAL DE LA LIBERTAD",
-      "cargo": "GOBERNADOR REGIONAL",
-      "ruc": null,
-      "direccion": "CAL. BAQUIJANO Y CARRILLO ALTURA CUADRA 18 NRO. 00 PARTE ALTA ESPERANZA",
-      "desde": 2023,
-      "hasta": 2025,
-      "ubicacion": {
-        "pais": "PERU",
-        "departamento": "LA LIBERTAD",
-        "provincia": null,
-        "distrito": null
-      }
-    },
-    {
-      "empresa": "UNIVERSIDAD CESAR VALLEJO",
-      "cargo": "PRESIDENTE DEL DIRECTORIO",
-      "ruc": null,
-      "direccion": "AV LARCO N° 170 URB SAN ANDRES 5TA ETAPA",
-      "desde": 1999,
-      "hasta": 2019,
-      "ubicacion": {
-        "pais": "PERU",
-        "departamento": "LA LIBERTAD",
-        "provincia": "TRUJILLO",
-        "distrito": "VICTOR LARCO HERRERA"
-      }
-    }
-  ],
+    ]
+  },
   "formacion_academica": {
-    "educacion_basica": {
-      "primaria": { "concluida": true },
-      "secundaria": { "concluida": true }
+    "educacion_basica_regular": {
+      "tiene_informacion": true,
+      "primaria": {
+        "cuenta": true,
+        "concluida": true
+      },
+      "secundaria": {
+        "cuenta": true,
+        "concluida": true
+      }
     },
-    "universitaria": [],
-    "posgrado": []
+    "estudios_no_universitarios": {
+      "tiene_informacion": false,
+      "ultimo_estudio_realizado": null,
+      "detalle": []
+    },
+    "estudios_universitarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "universidad": "UNIVERSIDAD NACIONAL DE TRUJILLO",
+          "concluidos": true,
+          "grado_o_titulo": "BACHILLER EN INGENIERIA QUIMICA",
+          "egresado": true,
+          "anio_obtencion": 1995,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "universidad": "UNIVERSIDAD NACIONAL DE TRUJILLO",
+          "concluidos": true,
+          "grado_o_titulo": "INGENIERO QUIMICO",
+          "egresado": true,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "posgrado": {
+      "cuenta_posgrado": true,
+      "registros": [
+        {
+          "n": 1,
+          "centro_estudios": "UNIVERSIDAD DE LIMA",
+          "especializacion": "MAESTRO EN ADMINISTRACION DE LA EDUCACION",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": "MAESTRO",
+          "maestro": true,
+          "doctor": false,
+          "anio_obtencion": 1997,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "centro_estudios": "UNIVERSIDAD DE LOS ANDES",
+          "especializacion": "DIPLOMA DE MAGISTER EN DIRECCIÓN UNIVERSITARIA",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": null,
+          "maestro": true,
+          "doctor": false,
+          "anio_obtencion": 1998,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 3,
+          "centro_estudios": "UNIVERSIDAD COMPLUTENSE DE MADRID",
+          "especializacion": "TÍTULO DE DOCTOR POR LA UNIVERSIDAD COMPLUTENSE DE MADRID",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": "DOCTOR",
+          "maestro": false,
+          "doctor": true,
+          "anio_obtencion": 2013,
+          "informacion_complementaria": null
+        }
+      ]
+    }
   },
   "trayectoria_partidaria": {
-    "cargos_partidarios": [
-      {
-        "organizacion": "ALIANZA PARA EL PROGRESO",
-        "cargo": "PRESIDENTE Y FUNDADOR",
-        "desde": 2001,
-        "hasta": "ACTUALIDAD"
-      }
-    ],
-    "renuncias": []
+    "cargos_partidarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "ALIANZA PARA EL PROGRESO",
+          "cargo": "DIRECCIÓN EJECUTIVA NACIONAL",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "ALIANZA PARA EL PROGRESO",
+          "cargo": "PRESIDENTE",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "cargos_eleccion_popular": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "ALIANZA PARA EL PROGRESO",
+          "cargo": "GOBERNADOR REGIONAL",
+          "desde_anio": 2022,
+          "hasta_anio": 2026,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "renuncias": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "ALIANZA PARA EL PROGRESO DEL PERÚ",
+          "anio_renuncia": 2016,
+          "hasta_opcional": null,
+          "informacion_complementaria": "AFILIACIÓN CANCELADA - Comité Directivo - Presidente - Desde el 10/12/2015 al 16/08/2016 - FUENTE: ROP"
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "ALIANZA POR EL GRAN CAMBIO",
+          "anio_renuncia": 2010,
+          "hasta_opcional": null,
+          "informacion_complementaria": "AFILIACIÓN CANCELADA - Miembro del Plenario Electoral Nacional - Desde el 21/12/2010 al 04/08/2011 - Vocal del Comité Directivo - Desde el 21/12/2010 al 04/08/2011 - FUENTE: ROP"
+        },
+        {
+          "n": 3,
+          "organizacion_politica": "ALIANZA PARA EL PROGRESO",
+          "anio_renuncia": 2007,
+          "hasta_opcional": null,
+          "informacion_complementaria": "AFILIACIÓN CANCELADA - Fundador - Desde el 18/08/2004 al 12/04/2007 - Presidente Fundador - Desde el 18/08/2004 al 12/04/2007 - Representante Legal - Desde el 18/08/2004 al 12/04/2007 - FUENTE: ROP"
+        }
+      ]
+    }
   },
-  "sentencias_penales": [],
-  "ingresos_2024": {
-    "renta_cuarta_categoria": 572941.00,
-    "otros_ingresos": 109685.00,
-    "total_ingresos": 682626.00
+  "sentencias": {
+    "ambito_penal": {
+      "tiene_informacion": false,
+      "registros": []
+    },
+    "obligaciones_familiares_contractuales_laborales_violencia": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "expediente": "02974-2023-0-1801-JR-FC-17",
+          "fecha_sentencia_firme": null,
+          "organo_judicial": "17° JUZGADO FAMILIA",
+          "delito": "LABORAL FAMILIA / ALIMENTARIA CONTRACTUAL VIOLENCIA FAMILIAR",
+          "fallo_o_pena": "RES Nº 11 - CONFIRMA LA SENTENCIA EXPEDIDA MEDIANTE RESOLUCIÓN VEINTIDÓS DE FECHA 23 DE NOVIEMBRE DE 2022, QUE DECLARA FUNDADA EN PARTE LA DEMANDA DE ALIMENTOS Y ORDENA QUE LA PARTE DEMANDADA CESAR ACUÑA PERALTA PRESTE EN FORMA MENSUAL Y ADELANTADA.",
+          "modalidad": null,
+          "cumplimiento_fallo": null,
+          "informacion_complementaria": null
+        }
+      ]
+    }
   },
-  "bienes": {
-    "inmuebles_total_registros": 0,
-    "vehiculos_total": 0,
-    "valor_total_bienes_muebles": 0.00
+  "ingresos_bienes_rentas": {
+    "ingresos": {
+      "tiene_informacion": true,
+      "anio_declarado": 2024,
+      "remuneracion_bruta_anual_quinta": {
+        "sector_publico": 153401.0,
+        "sector_privado": 2885101.0,
+        "total": 3038502.0
+      },
+      "renta_bruta_anual_cuarta_ejercicio_individual": {
+        "sector_publico": 0.0,
+        "sector_privado": 0.0,
+        "total": 0.0
+      },
+      "otros_ingresos_anuales": {
+        "sector_publico": 0.0,
+        "sector_privado": 6798264.0,
+        "total": 6798264.0
+      },
+      "total_ingresos": 9836766.0,
+      "nota": "Total de ingresos antes de impuestos u otras deducciones."
+    },
+    "bienes_inmuebles": {
+      "tiene_informacion": true,
+      "registros": []
+    },
+    "bienes_muebles": {
+      "tiene_informacion": true,
+      "vehiculos": [],
+      "total_bienes_muebles": 15113167.06
+    },
+    "acciones_y_participaciones": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "persona_juridica": "UNIVERSIDAD CESAR VALLEJO SAC",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 5135358,
+          "valor_nominal_total": 100.0,
+          "equivalencia": null,
+          "informacion_complementaria": "INVERSION EN NEGOCIO PROPIO - ACCIONISTA AL 66.41% - UNIVERSIDAD CESAR VALLEJO: NUMERO DE ACCIONES: 5'135,358 ACCIONES VALOR DE CADA ACCIÓN: S/ 100.00 IMPORTE TOTAL EN SOLES: S/. 513,535,800.00"
+        },
+        {
+          "n": 2,
+          "persona_juridica": "CESAR VALLEJO FUTBOL CLUB SAC",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 1000,
+          "valor_nominal_total": 100.0,
+          "equivalencia": null,
+          "informacion_complementaria": "NUMERO DE ACCIONES: 1000 ACCIONES VALOR DE CADA ACCIÓN: S/ 100.00 IMPORTE TOTAL EN SOLES: S/. 100,000.00"
+        },
+        {
+          "n": 3,
+          "persona_juridica": "HOLDING INVESTIMEN CAPITAL SAC",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 8000,
+          "valor_nominal_total": 1.0,
+          "equivalencia": null,
+          "informacion_complementaria": "NUMERO DE ACCIONES: 8000 ACCIONES VALOR DE CADA ACCIÓN: S/ 1.00 IMPORTE TOTAL EN SOLES: S/. 8,000.00"
+        },
+        {
+          "n": 4,
+          "persona_juridica": "EL GRAN CESAR EIRL",
+          "tipo": "PARTICIPACIONES",
+          "numero_acciones_participaciones": 100,
+          "valor_nominal_total": 100000.0,
+          "equivalencia": null,
+          "informacion_complementaria": "CAPITAL I/ 100,000.00 (CIEN MIL INTIS) - CONSTITUIDO EN EL AÑO 02.06.1998. ACTUALMENTE EN SUNAT, PRESENTA BAJA DE OFICIO 06/01/2009."
+        }
+      ]
+    }
   },
-  "acciones_participaciones": []
+  "informacion_adicional_opcional": {
+    "tiene_informacion": true,
+    "texto": "RENUNCIAS EFECTUADAS A OTROS PARTIDOS - ALIANZA PARA EL PROGRESO DEL PERÚ - 2016 AFILIACIÓN CANCELADA Comité Directivo - Presidente - Desde el 10/12/2015 al 16/08/2016 FUENTE: ROP. RENUNCIAS EFECTUADAS A OTROS PARTIDOS - ALIANZA POR EL GRAN CAMBIO - 2010 AFILIACIÓN CANCELADA Miembro del Plenario Electoral Nacional - Desde el 21/12/2010 al 04/08/2011 Vocal del Comité Directivo - Desde el 21/12/2010 al 04/08/2011 FUENTE: ROP. RENUNCIAS EFECTUADAS A OTROS PARTIDOS - ALIANZA PARA EL PROGRESO - 2007 AFILIACIÓN CANCELADA Fundador - Desde el 18/08/2004 al 12/04/2007 Presidente Fundador - Desde el 18/08/2004 al 12/04/2007 Representante Legal - Desde el 18/08/2004 al 12/04/2007 FUENTE: ROP. DECLARACIÓN JURADA DE INGRESOS DE BIENES Y RENTAS - SE PERCIBE POR MARCAS, UN NETO MENSUAL DE S/150,000 (S/50,000.00 C/U) POR LAS MARCAS; CIS: CENTRO DE INFORMÁTICA Y SISTEMAS, ESCUELA DE LÍDERES Y CASEM: CASA DEL EMPRENDIMIENTO. DECLARACIÓN JURADA DE INGRESOS DE BIENES Y RENTAS - Percibo dividendos de la UCV por ser accionista, respecto del año 2024 y 2025: Dividendos 2024 Dividendos Pagados: 40,343,028 - Retención impuestos: 2,017,152 / Dividendos 2025-11 (A NOVIEMBRE) Dividendos Pagados - 73,888,214 / Retención impuestos - 3,694,411. INFORMACIÓN ADICIONAL - QUE MEDIANTE EXPEDIENTE N° 216883-2017, EN MATERIA DE VIOLENCIA FAMILIAR, SEGÚN RESOLUCIÓN N° 5, EN LA QUE SE DICTA MEDIDAS DE PROTECCIÓN A FAVOR DEL MENOR J.A.G."
+  }
 }

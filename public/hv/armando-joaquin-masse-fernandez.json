@@ -1,9 +1,15 @@
 {
+  "kind": "HV",
   "meta": {
-    "formato": "JNE - Hoja de Vida",
+    "formato": "JNE - Formato Único de Declaración Jurada de Hoja de Vida",
     "proceso_electoral": "Elecciones Generales 2026",
     "anio": 2025,
-    "fecha_registro": "21/12/2025 05:58:15"
+    "fecha_registro": "21/12/2025 05:58:15",
+    "fuente": {
+      "tipo": "pdf",
+      "archivo": "armando-joaquin-masse-fernandez.pdf",
+      "paginas": 5
+    }
   },
   "datos_personales": {
     "dni": "08255194",
@@ -21,152 +27,493 @@
       "distrito": "LIMA"
     },
     "domicilio": {
+      "pais": "PERU",
       "departamento": "LIMA",
       "provincia": "LIMA",
-      "distrito": "SANTIAGO DE SURCO"
+      "distrito": "SANTIAGO DE SURCO",
+      "direccion": "********************************************"
     },
     "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
     "cargo_postula": "PRESIDENTE DE LA REPUBLICA",
-    "circunscripcion": "UNICO NACIONAL"
+    "circunscripcion": "UNICO NACIONAL",
+    "nota_circunscripcion": "Para Presidente/Vicepresidentes/Parlamento Andino no corresponde consignar región/provincia/distrito de circunscripción."
   },
-  "experiencia_laboral": [
-    {
-      "empresa": "CENTRO MEDICO DE GUARDIA",
-      "cargo": "MEDICO",
-      "ruc": "20601489415",
-      "direccion": "AV. AVIACION 4882-4884",
-      "desde": 2016,
-      "hasta": 2025,
-      "ubicacion": {
-        "pais": "PERU",
-        "departamento": "LIMA",
-        "provincia": "LIMA",
-        "distrito": "SANTIAGO DE SURCO"
-      }
-    },
-    {
-      "empresa": "APDAYC",
-      "cargo": "PRESIDENTE / SECRETARIO GENERAL",
-      "ruc": "20100538203",
-      "direccion": "AV. PETIT THOUARS 5038",
-      "desde": 1999,
-      "hasta": 2025,
-      "ubicacion": {
-        "pais": "PERU",
-        "departamento": "LIMA",
-        "provincia": null,
-        "distrito": null
-      }
-    }
-  ],
-  "formacion_academica": {
-    "educacion_basica": {
-      "primaria": { "concluida": true },
-      "secundaria": { "concluida": true }
-    },
-    "universitaria": [
+  "experiencia_laboral": {
+    "tiene_informacion": true,
+    "registros": [
       {
-        "universidad": "UNIVERSIDAD INCA GARCILASO DE LA VEGA",
-        "grado": "ABOGADO",
-        "anio": 2007
+        "n": 1,
+        "centro_trabajo": "CENTRO MÉDICO DE GUARDIA",
+        "ocupacion_profesion": "MEDICO",
+        "ruc_empresa_opcional": "20601489415",
+        "direccion": "AV. AVIACION 4882-4884",
+        "desde_anio": 2016,
+        "hasta_anio": 2025,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "SANTIAGO DE SURCO"
+        },
+        "informacion_complementaria": null
       },
       {
-        "universidad": "UNIVERSIDAD INCA GARCILASO DE LA VEGA",
-        "grado": "BACHILLER EN DERECHO Y CIENCIAS POLITICAS",
-        "anio": 2006
-      },
-      {
-        "universidad": "UNIVERSIDAD NACIONAL MAYOR DE SAN MARCOS",
-        "grado": "MEDICO CIRUJANO",
-        "anio": 1988
-      }
-    ],
-    "posgrado": [
-      {
-        "universidad": "PONTIFICIA UNIVERSIDAD CATOLICA DEL PERU",
-        "especializacion": "MAGISTER EN ADMINISTRACION ESTRATEGICA DE EMPRESAS",
-        "grado_obtenido": "MAESTRO"
-      },
-      {
-        "universidad": "PONTIFICIA UNIVERSIDAD CATOLICA DEL PERU",
-        "especializacion": "MAESTRIA EN PROPIEDAD INTELECTUAL Y COMPETENCIA"
-      },
-      {
-        "universidad": "UNIVERSIDAD EUROPEA DE MADRID",
-        "especializacion": "MAGISTER DERECHO DIGITAL TECNOLOGICO"
+        "n": 2,
+        "centro_trabajo": "APDAYC",
+        "ocupacion_profesion": "PRESIDENTE/SECRETARIO GENERAL",
+        "ruc_empresa_opcional": "20100538203",
+        "direccion": "AV. PETIT THOUARS 5038",
+        "desde_anio": 1999,
+        "hasta_anio": 2025,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": null,
+          "distrito": null
+        },
+        "informacion_complementaria": null
       }
     ]
+  },
+  "formacion_academica": {
+    "educacion_basica_regular": {
+      "tiene_informacion": true,
+      "primaria": {
+        "cuenta": true,
+        "concluida": true
+      },
+      "secundaria": {
+        "cuenta": true,
+        "concluida": true
+      }
+    },
+    "estudios_no_universitarios": {
+      "tiene_informacion": false,
+      "ultimo_estudio_realizado": null,
+      "detalle": []
+    },
+    "estudios_universitarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "universidad": "UNIVERSIDAD INCA GARCILASO DE LA VEGA ASOCIACIÓN CIVIL",
+          "concluidos": true,
+          "grado_o_titulo": "ABOGADO",
+          "egresado": true,
+          "anio_obtencion": 2007,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "universidad": "UNIVERSIDAD INCA GARCILASO DE LA VEGA ASOCIACIÓN CIVIL",
+          "concluidos": true,
+          "grado_o_titulo": "BACHILLER EN DERECHO Y CIENCIAS POLITICAS",
+          "egresado": true,
+          "anio_obtencion": 2006,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 3,
+          "universidad": "UNIVERSIDAD NACIONAL MAYOR DE SAN MARCOS",
+          "concluidos": true,
+          "grado_o_titulo": "MÉDICO CIRUJANO",
+          "egresado": true,
+          "anio_obtencion": 1988,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "posgrado": {
+      "cuenta_posgrado": true,
+      "registros": [
+        {
+          "n": 1,
+          "centro_estudios": "PONTIFICIA UNIVERSIDAD CATÓLICA DEL PERÚ",
+          "especializacion": "MAGISTER EN ADMINISTRACION ESTRATEGICA DE EMPRESAS",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": "MAESTRO",
+          "maestro": true,
+          "doctor": false,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "centro_estudios": "PONTIFICIA UNIVERSIDAD CATÓLICA DEL PERÚ",
+          "especializacion": "MAESTRIA EN PROPIEDAD INTELECTUAL Y COMPETENCIA",
+          "concluidos": true,
+          "egresado": false,
+          "grado_obtenido": null,
+          "maestro": null,
+          "doctor": false,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 3,
+          "centro_estudios": "UNIVERSIDAD EUROPEA DE MADRID",
+          "especializacion": "MAGISTER DERECHO DIGITAL TECNOLÓGICO",
+          "concluidos": true,
+          "egresado": false,
+          "grado_obtenido": null,
+          "maestro": null,
+          "doctor": false,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        }
+      ]
+    }
   },
   "trayectoria_partidaria": {
-    "cargos_partidarios": [
-      {
-        "organizacion": "PARTIDO DEMOCRATICO FEDERAL",
-        "cargo": "COMISION POLITICA - MIEMBRO",
-        "desde": 2023,
-        "hasta": "ACTUALIDAD"
+    "cargos_partidarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+          "cargo": "COMISIÓN POLÍTICA - MIEMBRO",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+          "cargo": "FUNDADOR",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "cargos_eleccion_popular": {
+      "tiene_informacion": false,
+      "registros": []
+    },
+    "renuncias": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "ARMANDO EL PROGRESO",
+          "anio_renuncia": 2007,
+          "hasta_opcional": null,
+          "informacion_complementaria": null
+        }
+      ]
+    }
+  },
+  "sentencias": {
+    "ambito_penal": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "expediente": "610-2003",
+          "fecha_sentencia_firme": "2006-10-10",
+          "organo_judicial": "TREINTAISIETEAVO JUZGADO PENAL DE LIMA",
+          "delito": "CONTRA EL PATRIMONIO",
+          "fallo_o_pena": "SOBRESEIDA",
+          "modalidad": "OTRO - SOBRESEIDA",
+          "cumplimiento_fallo": "PENA CUMPLIDA",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "expediente": "12424-2015",
+          "fecha_sentencia_firme": "2019-10-02",
+          "organo_judicial": "DECIMO SEGUNDO JUZGADO PENAL DE LIMA",
+          "delito": "FRAUDE EN LA ADM. DE LAS PERSONAS JURIDICAS",
+          "fallo_o_pena": "ABSUELTO",
+          "modalidad": "OTRO - ABSUELTO ARCHIVADO",
+          "cumplimiento_fallo": "PENA CUMPLIDA",
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "obligaciones_familiares_contractuales_laborales_violencia": {
+      "tiene_informacion": false,
+      "registros": []
+    }
+  },
+  "ingresos_bienes_rentas": {
+    "ingresos": {
+      "tiene_informacion": true,
+      "anio_declarado": 2024,
+      "remuneracion_bruta_anual_quinta": {
+        "sector_publico": 0.0,
+        "sector_privado": 0.0,
+        "total": 0.0
       },
-      {
-        "organizacion": "PARTIDO DEMOCRATICO FEDERAL",
-        "cargo": "FUNDADOR",
-        "desde": 2023,
-        "hasta": "ACTUALIDAD"
-      }
-    ],
-    "renuncias": [
-      {
-        "organizacion": "ARMANDO EL PROGRESO",
-        "anio": 2007
-      }
-    ]
-  },
-  "sentencias_penales": [
-    {
-      "expediente": "610-2003",
-      "fecha_sentencia": "2006-10-10",
-      "organo_judicial": "TREINTAISIETEAVO JUZGADO PENAL DE LIMA",
-      "delito": "CONTRA EL PATRIMONIO",
-      "fallo": "SOBRESEIDA",
-      "cumplimiento": "PENA CUMPLIDA"
+      "renta_bruta_anual_cuarta_ejercicio_individual": {
+        "sector_publico": 0.0,
+        "sector_privado": 572941.0,
+        "total": 572941.0
+      },
+      "otros_ingresos_anuales": {
+        "sector_publico": 0.0,
+        "sector_privado": 109685.0,
+        "total": 109685.0
+      },
+      "total_ingresos": 682626.0,
+      "nota": "Total de ingresos antes de impuestos u otras deducciones."
     },
-    {
-      "expediente": "12424-2015",
-      "fecha_sentencia": "2019-10-02",
-      "organo_judicial": "DECIMO SEGUNDO JUZGADO PENAL DE LIMA",
-      "delito": "FRAUDE EN LA ADMINISTRACION DE LAS PERSONAS JURIDICAS",
-      "fallo": "ABSOLUTO / ARCHIVADO",
-      "cumplimiento": "PENA CUMPLIDA"
+    "bienes_inmuebles": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "tipo_bien": "REGISTRO DE PREDIOS",
+          "direccion": "AVENIDA PROLONGACION AVIACION NUM 4882-4884 URB RESIDENCIAL HIGUERETA - CUARTA ETAPA, SANTIAGO DE SURCO - LIMA - LIMA",
+          "inscrito_sunarp": true,
+          "partida": "44794268",
+          "valor": 2210000.0,
+          "valor_autovaluo": 381762.66,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "tipo_bien": "REGISTRO DE PREDIOS",
+          "direccion": "JIRON J. RELIAS AGUIRRE # 238 Y AV BOLOGNESI 611 - CUARTO PISO NUM 238 OFIC 408 URB CASCO URBANO, CHIMBOTE - SANTA - ANCASH",
+          "inscrito_sunarp": true,
+          "partida": "02002592",
+          "valor": 84250.0,
+          "valor_autovaluo": 25000.0,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 3,
+          "tipo_bien": "LIBRO DE ASENTAMIENTOS HUMANOS",
+          "direccion": "MZ B' LOTE 13 AA.HH CRUCE EL MILAGRO, SAN PEDRO DE LLOC - PACASMAYO - LA LIBERTAD",
+          "inscrito_sunarp": true,
+          "partida": "04009512",
+          "valor": 50000.0,
+          "valor_autovaluo": 15000.0,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 4,
+          "tipo_bien": "REGISTRO DE PREDIOS",
+          "direccion": "MZ 18 LOTE 13 - PUEBLO JOVEN NICOLAS DE PIEROLA - DPTO: LIMA PROV: LIMA DIST: LURIGANCHO",
+          "inscrito_sunarp": true,
+          "partida": "P02108466",
+          "valor": 606600.0,
+          "valor_autovaluo": 130000.0,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 5,
+          "tipo_bien": "REGISTRO DE PREDIOS",
+          "direccion": "MORROPON-CHULUCANAS - MZ E2 LOTE 17 - CENTRO POBLADO CIUDAD DE CHULUCANAS SECTOR III",
+          "inscrito_sunarp": true,
+          "partida": "P15069725",
+          "valor": 168500.0,
+          "valor_autovaluo": 40000.0,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 6,
+          "tipo_bien": "SECCION ESPECIAL DE PREDIOS RURALES",
+          "direccion": "UBICACION RURAL VALLE CHANCAY - LAMBAYEQUE / SECTOR LA CALERITA / PREDIO LA CALERITA COD.PRED. 7_6409245_108199 AREA Ha. 8.5178 U.C. 108199, TUMAN - CHICLAYO - LAMBAYEQUE",
+          "inscrito_sunarp": true,
+          "partida": "02300641",
+          "valor": 71000.0,
+          "valor_autovaluo": 35774.76,
+          "informacion_complementaria": "Autoavaluo al 2021"
+        },
+        {
+          "n": 7,
+          "tipo_bien": "SECCION ESPECIAL DE PREDIOS RURALES",
+          "direccion": "UBICACION RURAL VALLE CHANCAY - LAMBAYEQUE / SECTOR LA CALERITA / PREDIO TUMAN - SECTOR LA CALERITA COD.PRED. 7_6409245_58952 AREA Ha. 7.6687 U.C. 58952, TUMAN - CHICLAYO - LAMBAYEQUE",
+          "inscrito_sunarp": true,
+          "partida": "02294822",
+          "valor": 59800.0,
+          "valor_autovaluo": 32208.54,
+          "informacion_complementaria": "Autoavaluo al 2021"
+        },
+        {
+          "n": 8,
+          "tipo_bien": "SECCION ESPECIAL DE PREDIOS RURALES",
+          "direccion": "UBICACION RURAL VALLE CHANCAY - LAMBAYEQUE / SECTOR LA CALERITA / PREDIO TUMAN SECTOR LA CALERITA COD.PRED. 7_6409245_58950 AREA Ha. 7.3942 U.C. 58950, TUMAN - CHICLAYO - LAMBAYEQUE",
+          "inscrito_sunarp": true,
+          "partida": "02293945",
+          "valor": 72000.0,
+          "valor_autovaluo": 31055.64,
+          "informacion_complementaria": "Autoavaluo al 2021"
+        },
+        {
+          "n": 9,
+          "tipo_bien": "SECCION ESPECIAL DE PREDIOS RURALES",
+          "direccion": "UBICACION RURAL VALLE CHANCAY - LAMBAYEQUE / SECTOR LA CALERITA / PREDIO TUMAN - SECTOR LA CALERITA COD.PRED. 7_6409245_58913 AREA Ha. 7.1077 U.C. 58913, TUMAN - CHICLAYO - LAMBAYEQUE",
+          "inscrito_sunarp": true,
+          "partida": "02296136",
+          "valor": 64000.0,
+          "valor_autovaluo": 29852.34,
+          "informacion_complementaria": "Autoavaluo al 2021"
+        },
+        {
+          "n": 10,
+          "tipo_bien": "SECCION ESPECIAL DE PREDIOS RURALES",
+          "direccion": "UBICACION RURAL VALLE CHANCAY - LAMBAYEQUE / SECTOR LA CALERITA / PREDIO TUMAN - SECTOR LA CALERITA COD.PRED. 7_6409245_18995 AREA Ha. 5.8907 U.C. 18995, TUMAN - CHICLAYO - LAMBAYEQUE",
+          "inscrito_sunarp": true,
+          "partida": "02295259",
+          "valor": 60000.0,
+          "valor_autovaluo": 24740.94,
+          "informacion_complementaria": "Autoavaluo al 2021"
+        },
+        {
+          "n": 11,
+          "tipo_bien": "SECCION ESPECIAL DE PREDIOS RURALES",
+          "direccion": "UBICACION RURAL VALLE ZAÑA / SECTOR LA CALERITA / LA CALERITA COD.PRED. 7_6409245_108197 AREA Ha. 7.8936 U.C. 108197, ZAÑA - CHICLAYO - LAMBAYEQUE",
+          "inscrito_sunarp": true,
+          "partida": "11024898",
+          "valor": 67400.0,
+          "valor_autovaluo": 26578.8,
+          "informacion_complementaria": "Autoavaluo al 2024"
+        },
+        {
+          "n": 12,
+          "tipo_bien": "REGISTRO DE PREDIOS",
+          "direccion": "AVENIDA PETIT THOUARS NUM 5029 DPTO 604 - SEXTO PISO, MIRAFLORES - LIMA - LIMA",
+          "inscrito_sunarp": true,
+          "partida": "12987768",
+          "valor": 606600.0,
+          "valor_autovaluo": 133856.0,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 13,
+          "tipo_bien": "TERRENO",
+          "direccion": "CALLE LOS INCAS 655, MÁNCORA - TALARA",
+          "inscrito_sunarp": false,
+          "partida": null,
+          "valor": 51000.0,
+          "valor_autovaluo": 15777.11,
+          "informacion_complementaria": "Con contrato privado de compra venta ante notario público colegiado - Notaría Tarazona, Lima - Miraflores. Autoavaluo 2018."
+        },
+        {
+          "n": 14,
+          "tipo_bien": "INMUEBLE",
+          "direccion": "JR. GALEANO 840 URB. LOS ROSALES - SANTIAGO DE SURCO",
+          "inscrito_sunarp": true,
+          "partida": "44533383",
+          "valor": 1853500.0,
+          "valor_autovaluo": 254556.72,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 15,
+          "tipo_bien": "TERRENO AGRICOLA",
+          "direccion": "CORRAL DE ARENA, OLMOS - LAMBAYEQUE",
+          "inscrito_sunarp": false,
+          "partida": "11256046",
+          "valor": 54000.0,
+          "valor_autovaluo": 1000.0,
+          "informacion_complementaria": "Partida 11256046 asiento C002 - Título 2018-00445086."
+        }
+      ]
+    },
+    "bienes_muebles": {
+      "tiene_informacion": true,
+      "vehiculos": [
+        {
+          "n": 1,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "EG6326",
+          "descripcion": "Dorado Azul, 8 cilindros, marca Pontiac Lemans. Año 1969.",
+          "valor": 5000.0,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "EO7367",
+          "descripcion": "Buick Century automático, 6 cilindros, gasolinero gris.",
+          "valor": 1500.0,
+          "informacion_complementaria": "Malogrado, en condición de chatarra."
+        },
+        {
+          "n": 3,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "BSG892",
+          "descripcion": "Camión de 3 toneladas color blanco, marca FAW, categoría N2",
+          "valor": 75000.0,
+          "informacion_complementaria": "Carrocería baranda, Diesel año 2022."
+        },
+        {
+          "n": 4,
+          "tipo": "AUTOMÓVIL",
+          "placa": "JO9931",
+          "descripcion": "Chevrolet Cavalier, color negro, año 1992",
+          "valor": 4000.0,
+          "informacion_complementaria": "Siniestrado el año 1997."
+        },
+        {
+          "n": 5,
+          "tipo": "CAMIONETA RURAL",
+          "placa": "RO9027",
+          "descripcion": "Marca Kia, modelo Besta, año 1986",
+          "valor": 6000.0,
+          "informacion_complementaria": null
+        }
+      ],
+      "total_bienes_muebles": 91500.0
+    },
+    "acciones_y_participaciones": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "persona_juridica": "PRODUCCIONES IEMPSA SAC.",
+          "tipo": "PARTICIPACIONES",
+          "numero_acciones_participaciones": 959879,
+          "valor_nominal_total": 1.0,
+          "equivalencia": "79.99%",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "persona_juridica": "DISVENSA - DISCOS Y VENTAS S.A.",
+          "tipo": "PARTICIPACIONES",
+          "numero_acciones_participaciones": 34304,
+          "valor_nominal_total": 1.0,
+          "equivalencia": "61.74%",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 3,
+          "persona_juridica": "RANCHO PANCHO SAC.",
+          "tipo": "PARTICIPACIONES",
+          "numero_acciones_participaciones": 500,
+          "valor_nominal_total": 1.0,
+          "equivalencia": "50%",
+          "informacion_complementaria": "Equivale al 50% de las acciones."
+        },
+        {
+          "n": 4,
+          "persona_juridica": "AMSSE",
+          "tipo": "PARTICIPACIONES",
+          "numero_acciones_participaciones": 2250,
+          "valor_nominal_total": 1.0,
+          "equivalencia": "50%",
+          "informacion_complementaria": "Equivale al 50% de las acciones."
+        },
+        {
+          "n": 5,
+          "persona_juridica": "MEDICO DE GUARDIA SAC.",
+          "tipo": "PARTICIPACIONES",
+          "numero_acciones_participaciones": 4900,
+          "valor_nominal_total": 1.0,
+          "equivalencia": "99%",
+          "informacion_complementaria": "Equivale al 99% de las acciones."
+        }
+      ]
     }
-  ],
-  "ingresos_2024": {
-    "renta_cuarta_categoria": 572941.00,
-    "otros_ingresos": 109685.00,
-    "total_ingresos": 682626.00
   },
-  "bienes": {
-    "inmuebles_total_registros": 15,
-    "vehiculos_total": 5,
-    "valor_total_bienes_muebles": 91500.00
-  },
-  "acciones_participaciones": [
-    {
-      "empresa": "PRODUCCIONES IEMPSA SAC",
-      "porcentaje": 79.99
-    },
-    {
-      "empresa": "DISVENSA - DISCOS Y VENTAS S.A.",
-      "porcentaje": 61.74
-    },
-    {
-      "empresa": "RANCHO PANCHO SAC",
-      "porcentaje": 50
-    },
-    {
-      "empresa": "AMSSE",
-      "porcentaje": 50
-    },
-    {
-      "empresa": "MEDICO DE GUARDIA SAC",
-      "porcentaje": 99
-    }
-  ]
+  "informacion_adicional_opcional": {
+    "tiene_informacion": false,
+    "texto": null
+  }
 }

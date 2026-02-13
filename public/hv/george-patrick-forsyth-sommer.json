@@ -1,0 +1,300 @@
+{
+  "kind": "HV",
+  "meta": {
+    "formato": "JNE - Formato Único de Declaración Jurada de Hoja de Vida",
+    "proceso_electoral": "Elecciones Generales 2026",
+    "anio": 2025,
+    "fecha_registro": "23/12/2025 08:42:15",
+    "fuente": {
+      "tipo": "pdf",
+      "archivo": "george-patrick-forsyth-sommer.pdf",
+      "paginas": 4
+    }
+  },
+  "datos_personales": {
+    "dni": "41265978",
+    "sexo": "MASCULINO",
+    "apellidos": {
+      "paterno": "FORSYTH",
+      "materno": "SOMMER"
+    },
+    "nombres": "GEORGE PATRICK",
+    "fecha_nacimiento": "1982-06-20",
+    "lugar_nacimiento": {
+      "pais": "VENEZUELA",
+      "departamento": "CARACAS",
+      "provincia": null,
+      "distrito": null
+    },
+    "domicilio": {
+      "pais": "PERU",
+      "departamento": "LIMA",
+      "provincia": "LIMA",
+      "distrito": "LA VICTORIA",
+      "direccion": "********************"
+    },
+    "organizacion_politica": "PARTIDO DEMOCRATICO SOMOS PERU",
+    "cargo_postula": "DIPUTADO",
+    "circunscripcion": "LIMA METROPOLITANA",
+    "nota_circunscripcion": null
+  },
+  "experiencia_laboral": {
+    "tiene_informacion": true,
+    "registros": [
+      {
+        "n": 1,
+        "centro_trabajo": "ALHAMBRA INVERSIONES S.R.L",
+        "ocupacion_profesion": "GERENTE GENERAL",
+        "ruc_empresa_opcional": "20163339982",
+        "direccion": "CALLA TAMARIX 284",
+        "desde_anio": 2024,
+        "hasta_anio": 2025,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "SANTIAGO DE SURCO"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 2,
+        "centro_trabajo": "MUNICIPALIDAD DE LA VICTORIA",
+        "ocupacion_profesion": "ALCALDE DISTRITAL",
+        "ruc_empresa_opcional": "20131368071",
+        "direccion": "AV. IQUITOS 500",
+        "desde_anio": 2019,
+        "hasta_anio": 2020,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "LA VICTORIA"
+        },
+        "informacion_complementaria": "DESEMPEÑE LABORES COMO ALCALDE HASTA EL 12 DE OCTUBRE DEL 2020"
+      },
+      {
+        "n": 3,
+        "centro_trabajo": "CLUB ALIANZA LIMA",
+        "ocupacion_profesion": "REPRESENTANTE DE CREDITO FISCAL",
+        "ruc_empresa_opcional": "20160600382",
+        "direccion": "AV. ISABEL LA CATOLICA 821",
+        "desde_anio": 2012,
+        "hasta_anio": 2020,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "LA VICTORIA"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 4,
+        "centro_trabajo": "LOS M SAC",
+        "ocupacion_profesion": "GERENTE GENERAL",
+        "ruc_empresa_opcional": "20602370934",
+        "direccion": "JR CARTAVIO 105 CENTRO COMERCIAL MONTERRICO",
+        "desde_anio": 2017,
+        "hasta_anio": 2025,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "SANTIAGO DE SURCO"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 5,
+        "centro_trabajo": "CLUB ALIANZA LIMA",
+        "ocupacion_profesion": "FUTBOLISTA PROFESIONAL",
+        "ruc_empresa_opcional": "20160600382",
+        "direccion": "AV. ISABEL LA CATOLICA 821",
+        "desde_anio": 2008,
+        "hasta_anio": 2016,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "LA VICTORIA"
+        },
+        "informacion_complementaria": null
+      }
+    ]
+  },
+  "formacion_academica": {
+    "educacion_basica_regular": {
+      "tiene_informacion": true,
+      "primaria": {
+        "cuenta": true,
+        "concluida": true
+      },
+      "secundaria": {
+        "cuenta": true,
+        "concluida": true
+      }
+    },
+    "estudios_no_universitarios": {
+      "tiene_informacion": false,
+      "ultimo_estudio_realizado": null,
+      "detalle": []
+    },
+    "estudios_universitarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "universidad": "UNIVERSIDAD PERUANA DE CIENCIAS APLICADAS S.A.C.",
+          "concluidos": true,
+          "grado_o_titulo": "BACHILLER EN ADMINISTRACIÓN DE EMPRESAS",
+          "egresado": true,
+          "anio_obtencion": 2021,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "universidad": "UNIVERSIDAD DE SAN MARTIN DE PORRES",
+          "concluidos": false,
+          "grado_o_titulo": "NO CONCLUIDO",
+          "egresado": null,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "posgrado": {
+      "cuenta_posgrado": true,
+      "registros": [
+        {
+          "n": 1,
+          "centro_estudios": "UNIVERSIDAD DEL PACÍFICO",
+          "especializacion": "MAGÍSTER EN ADMINISTRACIÓN",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": "MAESTRO",
+          "maestro": true,
+          "doctor": false,
+          "anio_obtencion": 2023,
+          "informacion_complementaria": "INGENIERIA INDUSTRIAL"
+        }
+      ]
+    }
+  },
+  "trayectoria_partidaria": {
+    "cargos_partidarios": {
+      "tiene_informacion": false,
+      "registros": []
+    },
+    "cargos_eleccion_popular": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "PARTIDO POPULAR CRISTIANO - PPC - UNIDAD NACIONAL",
+          "cargo": "REGIDOR DISTRITAL",
+          "desde_anio": 2011,
+          "hasta_anio": 2014,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "PARTIDO DEMOCRATICO SOMOS PERU",
+          "cargo": "ALCALDE DISTRITAL",
+          "desde_anio": 2019,
+          "hasta_anio": 2022,
+          "informacion_complementaria": "OCUPE EL CARGO HASTA EL AÑO 2020"
+        }
+      ]
+    },
+    "renuncias": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "VICTORIA NACIONAL",
+          "anio_renuncia": 2021,
+          "hasta_opcional": null,
+          "informacion_complementaria": null
+        }
+      ]
+    }
+  },
+  "sentencias": {
+    "ambito_penal": {
+      "tiene_informacion": false,
+      "registros": []
+    },
+    "obligaciones_familiares_contractuales_laborales_violencia": {
+      "tiene_informacion": false,
+      "registros": []
+    }
+  },
+  "ingresos_bienes_rentas": {
+    "ingresos": {
+      "tiene_informacion": true,
+      "anio_declarado": 2024,
+      "remuneracion_bruta_anual_quinta": {
+        "sector_publico": 0.0,
+        "sector_privado": 0.0,
+        "total": 0.0
+      },
+      "renta_bruta_anual_cuarta_ejercicio_individual": {
+        "sector_publico": 0.0,
+        "sector_privado": 244000.0,
+        "total": 244000.0
+      },
+      "otros_ingresos_anuales": {
+        "sector_publico": 0.0,
+        "sector_privado": 0.0,
+        "total": 0.0
+      },
+      "total_ingresos": 244000.0,
+      "nota": "Total de ingresos antes de impuestos u otras deducciones."
+    },
+    "bienes_inmuebles": {
+      "tiene_informacion": false,
+      "registros": []
+    },
+    "bienes_muebles": {
+      "tiene_informacion": true,
+      "vehiculos": [
+        {
+          "n": 1,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "A2I249",
+          "descripcion": "BMW",
+          "valor": 2000.0,
+          "informacion_complementaria": "CARRO EN DESUSO"
+        },
+        {
+          "n": 2,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "25359C",
+          "descripcion": "MOTOKAWASAKY",
+          "valor": 40000.0,
+          "informacion_complementaria": null
+        }
+      ],
+      "total_bienes_muebles": 42000.0
+    },
+    "acciones_y_participaciones": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "persona_juridica": "ALHAMBRA INVERSIONES S.R.L",
+          "tipo": "PARTICIPACIONES",
+          "numero_acciones_participaciones": 500,
+          "valor_nominal_total": 1.0,
+          "equivalencia": null,
+          "informacion_complementaria": "El valor nominal señalado es por cada una de las participaciones."
+        }
+      ]
+    }
+  },
+  "informacion_adicional_opcional": {
+    "tiene_informacion": true,
+    "texto": "EXPERIENCIA LABORAL - La empresa: LOS M SAC se encuentra en la actualidad con Baja de Oficio. TRAYECTORIA PARTIDARIA Y/O POLÍTICA DE DIRIGENTE - Ocupe el cargo hasta octubre del 2020. INFORMACIÓN ADICIONAL - LAS SIGUIENTES EMPRESAS HE TENIDO ACCIONES PERO NO DESARROLLAN ACTIVIDAD ECONÓMICA Y/O SE ENCUENTRAN CON BAJA DE OFICIO EN SUNAT: NEGOCIOS PARALELOS SAC, ALIANZA DE INVERSIONES SAC, HNOS FORSYTH SAC, IMKAGASTRO SOCIEDAD ANONIMA CERRADA, GFSTEC. SOCIEDAD ANONIMA CERRADA - GFSTEC. SAC, INVERSIONES F.B.G SAC. LOS M SAC."
+  }
+}

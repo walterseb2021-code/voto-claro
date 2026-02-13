@@ -1,0 +1,333 @@
+{
+  "kind": "HV",
+  "meta": {
+    "formato": "JNE - Formato Único de Declaración Jurada de Hoja de Vida",
+    "proceso_electoral": "Elecciones Generales 2026",
+    "anio": 2025,
+    "fecha_registro": "22/12/2025 06:47:19",
+    "fuente": {
+      "tipo": "pdf",
+      "archivo": "virgilio-acuña-peralta.pdf",
+      "paginas": 5
+    }
+  },
+  "datos_personales": {
+    "dni": "16484970",
+    "sexo": "MASCULINO",
+    "apellidos": {
+      "paterno": "ACUÑA",
+      "materno": "PERALTA"
+    },
+    "nombres": "VIRGILIO",
+    "fecha_nacimiento": "1951-01-03",
+    "lugar_nacimiento": {
+      "pais": "PERÚ",
+      "departamento": "CAJAMARCA",
+      "provincia": "CHOTA",
+      "distrito": "TACABAMBA"
+    },
+    "domicilio": {
+      "pais": "PERÚ",
+      "departamento": "LIMA",
+      "provincia": "LIMA",
+      "distrito": "SANTIAGO DE SURCO",
+      "direccion": "******************************************************************"
+    },
+    "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+    "cargo_postula": "SENADOR",
+    "circunscripcion": "ÚNICO NACIONAL",
+    "nota_circunscripcion": null
+  },
+  "experiencia_laboral": {
+    "tiene_informacion": true,
+    "registros": [
+      {
+        "n": 1,
+        "centro_trabajo": "MINISTERIO DE TRANSPORTES Y COMUNICACIONES",
+        "ocupacion_profesion": "VICE MINISTRO",
+        "ruc_empresa_opcional": null,
+        "direccion": "AV ZORRITOS LIMA",
+        "desde_anio": 2022,
+        "hasta_anio": 2023,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LIMA",
+          "provincia": "LIMA",
+          "distrito": "LIMA"
+        },
+        "informacion_complementaria": null
+      },
+      {
+        "n": 2,
+        "centro_trabajo": "UNIVERSIDAD DE LAMBAYEQUE",
+        "ocupacion_profesion": "GERENTE GENERAL",
+        "ruc_empresa_opcional": "20487395987",
+        "direccion": "CALLE TACNA 065 LAMBAYEQUE",
+        "desde_anio": 2018,
+        "hasta_anio": 2022,
+        "ubicacion": {
+          "pais": "PERU",
+          "departamento": "LAMBAYEQUE",
+          "provincia": "CHICLAYO",
+          "distrito": "CHICLAYO"
+        },
+        "informacion_complementaria": null
+      }
+    ]
+  },
+  "formacion_academica": {
+    "educacion_basica_regular": {
+      "tiene_informacion": true,
+      "primaria": {
+        "cuenta": true,
+        "concluida": true
+      },
+      "secundaria": {
+        "cuenta": true,
+        "concluida": true
+      }
+    },
+    "estudios_no_universitarios": {
+      "tiene_informacion": false,
+      "ultimo_estudio_realizado": null,
+      "detalle": []
+    },
+    "estudios_universitarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "universidad": "UNIVERSIDAD NACIONAL DE CAJAMARCA",
+          "concluidos": true,
+          "grado_o_titulo": "INGENIERO CIVIL",
+          "egresado": true,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "universidad": "UNIVERSIDAD NACIONAL DE CAJAMARCA",
+          "concluidos": true,
+          "grado_o_titulo": "BACHILLER EN INGENIERIA CIVIL",
+          "egresado": true,
+          "anio_obtencion": null,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "posgrado": {
+      "cuenta_posgrado": true,
+      "registros": [
+        {
+          "n": 1,
+          "centro_estudios": "UNIVERSIDAD NACIONAL DE TRUJILLO",
+          "especializacion": "DOCTOR EN PLANIFICACIÓN Y GESTIÓN",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": null,
+          "maestro": null,
+          "doctor": true,
+          "anio_obtencion": 2014,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "centro_estudios": "UNIVERSIDAD DE SAN MARTÍN DE PORRES",
+          "especializacion": "MAESTRO EN GOBERNABILIDAD",
+          "concluidos": true,
+          "egresado": true,
+          "grado_obtenido": null,
+          "maestro": true,
+          "doctor": null,
+          "anio_obtencion": 2005,
+          "informacion_complementaria": null
+        }
+      ]
+    }
+  },
+  "trayectoria_partidaria": {
+    "cargos_partidarios": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+          "cargo": "COMISIÓN POLÍTICA - PRESIDENTE",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "PARTIDO DEMOCRATICO FEDERAL",
+          "cargo": "FUNDADOR",
+          "desde_anio": 2023,
+          "hasta": "ACTUALIDAD",
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "cargos_eleccion_popular": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "ALIANZA SOLIDARIDAD NACIONAL",
+          "cargo": "CONGRESISTA",
+          "desde_anio": 2011,
+          "hasta_anio": 2016,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "ALIANZA ELECTORAL UNIDAD NACIONAL",
+          "cargo": "CONGRESISTA",
+          "desde_anio": 2003,
+          "hasta_anio": 2006,
+          "informacion_complementaria": null
+        }
+      ]
+    },
+    "renuncias": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "organizacion_politica": "MOVIMIENTO REGIONAL CONSTRUYENDO",
+          "anio_renuncia": 2020,
+          "hasta_opcional": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "organizacion_politica": "RENOVACION POPULAR",
+          "anio_renuncia": 2015,
+          "hasta_opcional": null,
+          "informacion_complementaria": null
+        }
+      ]
+    }
+  },
+  "sentencias": {
+    "ambito_penal": {
+      "tiene_informacion": false,
+      "registros": []
+    },
+    "obligaciones_familiares_contractuales_laborales_violencia": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "expediente": "3334-2020",
+          "organo_judicial": "1ER JUZGADO CIVIL DE CHICLAYO",
+          "materia": "CONTRACTUAL",
+          "fallo": "FUNDADO , PAGAR SUMA DE DINERO POR AVAL",
+          "informacion_complementaria": "ESTADO ARCHIVADO."
+        }
+      ]
+    }
+  },
+  "ingresos_bienes_rentas": {
+    "ingresos": {
+      "tiene_informacion": true,
+      "anio_declarado": 2024,
+      "remuneracion_bruta_anual_quinta": {
+        "sector_publico": 0.0,
+        "sector_privado": 0.0,
+        "total": 0.0
+      },
+      "renta_bruta_anual_cuarta_ejercicio_individual": {
+        "sector_publico": 0.0,
+        "sector_privado": 36000.0,
+        "total": 36000.0
+      },
+      "otros_ingresos_anuales": {
+        "sector_publico": 0.0,
+        "sector_privado": 0.0,
+        "total": 0.0
+      },
+      "total_ingresos": 36000.0,
+      "nota": "Total de ingresos antes de impuestos u otras deducciones."
+    },
+    "bienes_inmuebles": {
+      "tiene_informacion": true,
+      "registros": []
+    },
+    "bienes_muebles": {
+      "tiene_informacion": true,
+      "vehiculos": [
+        {
+          "n": 1,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "M7Q862",
+          "descripcion": "CAMIONETA HILUX, TOYOTA COLOR ROJO, AÑO 1989",
+          "valor": 12000.0,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "tipo": "REGISTRO DE PROPIEDAD VEHICULAR",
+          "placa": "D8O359",
+          "descripcion": "AUTO MITSUBICHI, COLOR ROJO METALICO, AUTOMATICO DEL 2013",
+          "valor": 18000.0,
+          "informacion_complementaria": null
+        }
+      ],
+      "total_bienes_muebles": 30000.0
+    },
+    "acciones_y_participaciones": {
+      "tiene_informacion": true,
+      "registros": [
+        {
+          "n": 1,
+          "persona_juridica": "FEEDHUNTED SAC",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 760,
+          "valor_nominal_total": 1.0,
+          "equivalencia": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 2,
+          "persona_juridica": "UNIVERSIDAD DE LAMBAYEQUE SAC",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 506225,
+          "valor_nominal_total": 10.0,
+          "equivalencia": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 3,
+          "persona_juridica": "CORPORACION UNIVERSITARIA DE LA COSTA SAC",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 99927,
+          "valor_nominal_total": 10.0,
+          "equivalencia": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 4,
+          "persona_juridica": "EDIFICACIONES DE LA COSTA S.A.",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 4819675,
+          "valor_nominal_total": 1.0,
+          "equivalencia": null,
+          "informacion_complementaria": null
+        },
+        {
+          "n": 5,
+          "persona_juridica": "PLATAFORMA VIRTUAL",
+          "tipo": "ACCIONES",
+          "numero_acciones_participaciones": 377800,
+          "valor_nominal_total": 1.0,
+          "equivalencia": null,
+          "informacion_complementaria": "PLATAFORMA WEB SE CREA"
+        }
+      ]
+    }
+  },
+  "informacion_adicional_opcional": {
+    "tiene_informacion": false,
+    "texto": null
+  }
+}

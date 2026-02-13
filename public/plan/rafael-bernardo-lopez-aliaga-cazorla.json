@@ -1,27 +1,43 @@
 {
-  "kind": "PLAN",
-  "candidate_id": "rafael-bernardo-lopez-aliaga-cazorla-p",
-  "candidate_full_name": "Rafael Bernardo López Aliaga Cazorla",
+  "meta": {
+    "formato": "PLAN_AXES_V1",
+    "candidate_full_name": "Rafael Bernardo López Aliaga Cazorla"
+  },
   "axes": {
     "SEG": {
       "found": true,
-      "title": "Seguridad",
-      "summary": "El plan identifica la corrupción y la delincuencia como problemas centrales. Propone crear una Central de Lucha Contra la Corrupción (CCC) con plenos poderes para detectar, infiltrar y capturar delitos en flagrancia, verificar el patrimonio de funcionarios y restaurar la confianza institucional【304156416372015†L72-L100】. Para enfrentar la delincuencia común, el pandillaje y la microcomercialización de drogas se establecerán Unidades Itinerantes de Pacificación Ciudadana con inteligencia y agentes encubiertos que integren Policía, serenazgo, Poder Judicial, Fiscalía y organizaciones sociales【304156416372015†L136-L166】. El plan contempla un convenio con Estados Unidos para servicios de inteligencia, uso de tecnología de punta y extradición inmediata de cabecillas【304156416372015†L176-L185】. La videovigilancia se integrará entre los distintos niveles de gobierno, y se potenciará el servicio de inteligencia para reducir violencia, extorsión y terrorismo urbano mediante el uso de tecnología y la coordinación interinstitucional【304156416372015†L188-L224】."
+      "title": "Seguridad ciudadana",
+      "summary": "Plantea recuperar el control territorial y reducir la delincuencia mediante fortalecimiento operativo e institucional: mejor capacidad de respuesta del Estado, acciones de control y orden público, y medidas para enfrentar la inseguridad y el crimen, articulando autoridades y recursos para resultados medibles."
     },
     "ECO": {
       "found": true,
-      "title": "Economía",
-      "summary": "La dimensión económica plantea reactivar la economía por sectores y garantizar estabilidad macroeconómica. Se busca mantener la fortaleza de la moneda, reducir la inflación y lograr que el PBI crezca 7 % al quinto año【304156416372015†L2162-L2206】. Propone impulsar la industrialización y diversificación productiva mediante tecnología e innovación, creando ventajas competitivas y generando dos millones de empleos. Se favorecerá la instalación de industrias extranjeras en el país con incentivos tributarios【304156416372015†L2218-L2284】. El plan contempla trabajos remunerados en zonas rurales para reparación de andenes, reforestación y obras comunales con el fin de reducir la pobreza extrema. Además, crea el Instituto de Promoción y Desarrollo de PYMEs para promover formalización y asociatividad, e introducir el certificado CERTIPYME para facilitar exportaciones de bienes y servicios de pequeñas empresas【304156416372015†L2324-L2399】."
+      "title": "Economía y empleo",
+      "summary": "Enfatiza reactivación económica con reglas claras y reducción de trabas: simplificación de permisos, mejora del clima de inversión, impulso a infraestructura y servicios, y acciones para dinamizar actividad productiva, formalización y generación de empleo, con objetivos y metas por dimensión económica."
     },
     "SAL": {
       "found": true,
       "title": "Salud",
-      "summary": "Se reconoce el déficit de infraestructura, equipamiento y personal médico, proponiendo elevar la cobertura de salud y medicamentos de calidad con prioridad para la población más pobre【304156416372015†L58-L64】. Se impulsará la especialidad en Salud Familiar a nivel nacional, fortaleciendo los centros de atención y creando módulos nacionales de salud ocupacional. El plan combate el maltrato en el sector mediante centros de desarrollo personal y gestión del trato humanizado. También propone integrar servicios de salud de las Fuerzas Armadas y Policía para mejorar la atención y priorizar al combatiente【304156416372015†L94-L100】."
+      "summary": "Propone mejorar acceso y calidad de atención, priorizando población vulnerable: fortalecimiento de servicios, respuesta frente a brechas de atención y medicamentos, y enfoque de eficiencia del gasto y gestión para asegurar prestaciones oportunas."
     },
     "EDU": {
       "found": true,
       "title": "Educación",
-      "summary": "El plan aborda el déficit educativo mediante programas de alfabetización de adultos y saneamiento rural usando técnicas e insumos nativos【304156416372015†L71-L80】. Se enfoca en mejorar la infraestructura y equipamiento educativo, reducir la deserción y mejorar la calidad especialmente en zonas rurales y entre los más pobres. Promueve la educación técnica y profesional para elevar la productividad y diversificar la economía, y busca una formación en valores de libertad, igualdad y justicia."
+      "summary": "Plantea medidas de gestión educativa orientadas a resultados: liderazgo y responsabilidad de directivos, supervisión y mejora del desempeño, y enfoque de igualdad de oportunidades y meritocracia para elevar aprendizajes y calidad del sistema."
+    },
+    "SOC": {
+      "found": true,
+      "title": "Dimensión social",
+      "summary": "Organiza propuestas sociales (salud, educación y atención a población vulnerable) con objetivos, metas e indicadores, buscando cerrar brechas y mejorar servicios esenciales con ejecución y seguimiento."
+    },
+    "INST": {
+      "found": true,
+      "title": "Dimensión institucional",
+      "summary": "Incluye medidas de fortalecimiento del Estado y la gestión pública: ordenamiento institucional, mejora de capacidades y coordinación para ejecución de políticas con metas verificables."
+    },
+    "AMB": {
+      "found": true,
+      "title": "Dimensión territorial y ambiental",
+      "summary": "Contiene lineamientos para ordenamiento territorial y componentes ambientales ligados a desarrollo e infraestructura, buscando equilibrar crecimiento con sostenibilidad y gestión del territorio."
     }
   }
 }

@@ -1,27 +1,38 @@
 {
-  "kind": "PLAN",
-  "candidate_id": "keiko-sofia-fujimori-higuchi-p",
-  "candidate_full_name": "Keiko Sofía Fujimori Higuchi",
+  "meta": {
+    "formato": "PLAN_AXES_V1",
+    "candidate_full_name": "Keiko Sofía Fujimori Higuchi"
+  },
   "axes": {
     "SEG": {
       "found": true,
-      "title": "Seguridad",
-      "summary": "El eje Orden aborda la seguridad ciudadana con un enfoque integral. Se lanzará un Programa Nacional de Prevención Temprana para niños y adolescentes en zonas de alta vulnerabilidad con actividades deportivas y artísticas, tutoría, becas y formación técnica【631854170463538†L815-L833】. Se creará un Consejo Presidencial de Prevención del Delito que sesionará en regiones, se fomentarán escuelas deportivas y un programa \"Empleo Joven con Futuro\" para alejar a los jóvenes de las economías ilegales【631854170463538†L829-L843】. El plan refuerza el patrullaje con redistribución del servicio 24×24, incremento de patrullaje motorizado y uso de drones con reconocimiento facial【631854170463538†L858-L867】, y desarrolla la plataforma \"Perú con Orden\" para integrar denuncias, zonas de riesgo y alertas【631854170463538†L868-L873】. Se modernizarán las comisarías y el equipamiento policial, se profesionalizará la PNP, y se implementarán centros de comando y videovigilancia C5i con inteligencia artificial, acompañados de un Comando Unificado Permanente contra la inseguridad que integra al Presidente, PCM, ministros, INPE, FF.AA. y PNP. También se controlarían cadenas de valor criminales (minería ilegal, narcotráfico, trata de personas y extorsión), se fortalecerá SUCAMEC y se crearán unidades contra extorsión a MYPEs, con reformas procesales para flagrancia y una reforma integral del sistema de justicia【631854170463538†L913-L966】."
+      "title": "Seguridad ciudadana",
+      "summary": "Plantea recuperar el control territorial y enfrentar crimen organizado con mayor capacidad de la PNP, inteligencia y acciones focalizadas; incluye fortalecimiento del sistema penitenciario y medidas para mejorar persecución del delito y respuesta del Estado."
     },
     "ECO": {
       "found": true,
-      "title": "Economía",
-      "summary": "El eje Económico propone un Perú competitivo basado en la economía social de mercado. Plantea programas de formalización y simplificación administrativa para emprendedores y MYPE, mejorando acceso al financiamiento y promoviendo la digitalización y madurez tecnológica de las pequeñas empresas. Impulsa parques industriales y clusters logísticos, fomenta la innovación y el comercio electrónico, y crea incentivos tributarios para atraer inversión nacional y extranjera. Propone disciplina fiscal, un shock desregulatorio, fortalecimiento institucional y condiciones para crecimiento sostenible. También contempla la transición energética limpia, infraestructura y competitividad minera, mejora de carreteras y caminos rurales, industrialización regional y manufactura moderna, economía circular y gestión de residuos, promoción del turismo y apoyo al agro y pesca con enfoque de desarrollo regional."
+      "title": "Economía y empleo",
+      "summary": "Propone orden económico con consolidación fiscal y eficiencia del gasto; plantea reformas para mejorar competitividad, destrabar inversión y simplificar regulación, buscando crecimiento sostenido, formalización y generación de empleo."
     },
     "SAL": {
       "found": true,
       "title": "Salud",
-      "summary": "El plan social reconoce la debilidad del sistema de salud evidenciada por la pandemia y propone incrementar la inversión en camas hospitalarias, personal e infraestructura; digitalizar historias clínicas y telemedicina; mejorar la atención primaria y la salud familiar; y garantizar acceso universal a servicios de calidad, priorizando a las poblaciones más pobres. Incluye la creación de módulos nacionales de salud ocupacional, centros de desarrollo personal para un trato humanizado y especialización en Salud Familiar."
+      "summary": "En el pilar social plantea fortalecer intervenciones de salud pública y protección: énfasis en anemia materno-infantil (suplementos/medicamentos oportunos), acceso a agua segura, y servicios integrales para población vulnerable, incluyendo bienestar y salud mental en componentes específicos."
     },
     "EDU": {
       "found": true,
       "title": "Educación",
-      "summary": "Se prioriza una educación pública de calidad con acceso universal. El plan propone modernizar la infraestructura educativa, implementar meritocracia y formación docente, actualizar el currículo con enfoque en ciencias, tecnología y valores, promover alfabetización de adultos y asegurar conectividad digital. Impulsa becas y formación técnica y superior alineada con la demanda laboral, cierra la brecha digital y fomenta la educación en competencias tecnológicas e idiomas."
+      "summary": "Incluye medidas para reducir deserción y mejorar logros: acompañamiento educativo (p. ej. continuidad en secundaria), impulso de educación técnica y ocupacional (STEM) alineada a demanda laboral, y fortalecimiento docente/directivo en competencias digitales e integración responsable de herramientas de IA."
+    },
+    "SOC": {
+      "found": true,
+      "title": "Pilar social",
+      "summary": "Objetivo de reducción de pobreza con estrategia que combina programas sociales con oportunidades sostenibles: acceso a crédito productivo, capacitación, formalización y enfoque en hogares vulnerables, juventud y protección frente a violencia."
+    },
+    "AMB": {
+      "found": true,
+      "title": "Ambiente y sostenibilidad",
+      "summary": "Incluye economía circular y gestión moderna de residuos, eliminación de botaderos, y acciones para Amazonía/biodiversidad (financiamiento verde, control de tráfico ilegal y remediación de pasivos), con metas e indicadores."
     }
   }
 }

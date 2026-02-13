@@ -1,27 +1,70 @@
 {
-  "kind": "PLAN",
-  "candidate_id": "armando-joaquin-masse-fernandez",
-  "candidate_full_name": "Armando Joaquín Massé Fernández",
+  "meta": {
+    "kind": "PLAN",
+    "candidate_full_name": "Armando Joaquín Massé Fernández",
+    "candidate_slug": "armando-joaquin-masse-fernandez",
+    "party_name": "Partido Democrático Federal (Perú Federal)",
+    "source_pdf": "armando-joaquin-masse-fernandez.pdf",
+    "source_pages_total": 10,
+    "generated_from": "PDF (local)",
+    "notes": "Estructura compatible con src/app/candidate/[id]/page.tsx: requiere axes.{SEG,ECO,SAL,EDU}.{found,title,summary}. Puedes añadir ejes extra sin romper.",
+    "page_refs": {
+      "who_we_are_principles_vision_mission_objectives": [2, 3, 4],
+      "program_nationalism_competitive_economy_agro_mar": [4, 5, 6],
+      "security_work_education": [7],
+      "health_food_justice_equality_anti_corruption": [8, 9],
+      "defense_national": [9, 10]
+    }
+  },
   "axes": {
     "SEG": {
       "found": true,
-      "title": "Seguridad",
-      "summary": "Propone crear una Guardia Nacional Federal con entrenamiento especializado para combatir la delincuencia organizada y recuperar las calles, asegurando una justicia rápida y firme"
+      "title": "Seguridad ciudadana y sistema de inteligencia",
+      "summary": "Propone un Plan Nacional, regional y local de seguridad ciudadana con metas y presupuesto definidos, liderado por presidente, gobernadores y alcaldes; además, fortalecer un sistema de inteligencia nacional moderno (preventivo y oportuno). Plantea reingeniería de la Policía Nacional para enfrentar crimen y delincuencia, recortar burocracia y duplicidad de funciones, y articular trabajo con Poder Judicial, rondas campesinas/urbanas y sector privado. En el sistema penitenciario (INPE) sugiere que los delincuentes paguen servicios y alimentación. También vincula seguridad con defensa nacional y fortalecimiento del Sistema Nacional de Seguridad Ciudadana, inteligencia estable y lucha contra violencia y terrorismo.",
+      "pages": [7, 9, 10]
     },
     "ECO": {
       "found": true,
-      "title": "Economía",
-      "summary": "Su modelo de Estado federal busca transformar las regiones en estados federados; cada región retendrá el 70 % de sus impuestos para reinversión directa sin pasar por el MEF, impulsando la autonomía y el desarrollo regional"
+      "title": "Economía, empleo y competitividad",
+      "summary": "Plantea un enfoque de “nacionalismo competitivo” con políticas macroeconómicas para crecer, generar empleo, estabilizar precios y sostener la caja fiscal. Promueve inversión extranjera con reglas claras y seguridad jurídica, e impulsa inversión nacional para desarrollo industrial con meta de 7% de crecimiento del PBI. Incluye reforma tributaria para ampliar base (IGV y renta) y reducir evasión, además de formalización automática de propiedad, empresa y minería artesanal. En trabajo propone industrialización, premiar emprendimiento e innovación, calificación tecnológica progresiva de la fuerza laboral, remuneración justa concertada y seguridad social universal; también un fondo de jubilación para pensionistas.",
+      "pages": [4, 5, 6, 7]
     },
     "SAL": {
       "found": true,
-      "title": "Salud",
-      "summary": "Plantea un ‘Shock de salud’ liderado por médicos, con digitalización total de historias clínicas y construcción de hospitales regionales de alta complejidad con autonomía administrativa"
+      "title": "Salud y alimentación",
+      "summary": "Define la prevención como política de Estado y plantea seguridad social universal (pública y privada) con integración de sistemas. Propone reingeniería del sistema de salud para reducir burocracia y corrupción; descentralizar a las 25 regiones centros e institutos nacionales de salud según especialidad, y reforzar atención primaria y secundaria desde posta/centro de salud, con hospitales I, II y III desconcentrados. Señala que investigación y promoción de medicina deben articularse con medicina tradicional e incorporar inteligencia artificial como herramienta. Plantea incentivar industria farmacéutica nacional para producir medicinas básicas y asegurar agua potable y saneamiento básico para todos.",
+      "pages": [8]
     },
     "EDU": {
       "found": true,
       "title": "Educación",
-      "summary": "Aboga por una profunda reforma del Estado federal para eliminar la burocracia centralista y permitir que cada región administre sus propios recursos para salud, educación y seguridad"
+      "summary": "Declara la educación como prioridad de Estado: educación para libertad, valores, deporte y arte, respetando creencias. Propone alimentación para niños y jóvenes en escuelas y colegios, educación orientada al desarrollo nacional con ciencia, tecnología y valores éticos/democráticos/humanísticos, y presupuesto base de 6% del PBI. Promueve educación pública gratuita descentralizada, respeto a expresiones culturales y a maestros, erradicación del analfabetismo, reingeniería del sistema universitario para producir tecnología y fortalecimiento de carreras técnicas vinculadas al desarrollo industrial y empresarial.",
+      "pages": [7]
+    },
+
+    "FED": {
+      "found": true,
+      "title": "Federalismo y descentralización",
+      "summary": "Busca superar el modelo centralista, planteando descentralización política, económica, tributaria y administrativa con autonomía regional/local y desconcentración de instituciones nacionales hacia regiones. Propone derogar el D.S. 007-2007 (que “castró” la descentralización), perfeccionar la ley de bases con enfoque federal y formar regiones federales mediante proceso participativo, gradual y programático, capaces de generar recursos y reflejar voluntad popular.",
+      "pages": [6]
+    },
+    "AMB": {
+      "found": true,
+      "title": "Ambiente, Amazonía y recursos naturales",
+      "summary": "Plantea sostenibilidad ambiental como pilar; considera el Mar de Grau y recursos naturales como fuente estratégica (fauna, flora, petróleo, turismo, energía y comercio), prioriza pescado en alimentación nacional y rechaza sobreexplotación por empresas extranjeras. En agro propone planificación por cuencas, reforestación (“Poncho Verde para los Andes”), reservorios/presas para agua y prevención de huaycos, investigación agraria universitaria/centros científicos, marco tributario especial, formalización de propiedad/tenencia de tierra y fomento cooperativo. Afirma que la Amazonía debe administrarse sosteniblemente con gobiernos regionales, respetando valores culturales e impulsando competitividad e incentivos.",
+      "pages": [5, 6]
+    },
+    "JUS": {
+      "found": true,
+      "title": "Justicia y lucha anticorrupción",
+      "summary": "Propone Poder Judicial y Ministerio Público autónomos, descentralizados y desburocratizados con tecnología e IA. Plantea sanciones ejemplares: ley para juzgar con pena ejemplar a magistrado corrupto y que magistrados sean electos por voto popular previo refrendo. En anticorrupción, propone ley drástica especial, contralores electos por el pueblo, sanción rápida ejemplar, cadena perpetua a funcionarios corruptos y confiscación de bienes.",
+      "pages": [8, 9]
+    },
+    "DEF": {
+      "found": true,
+      "title": "Defensa nacional",
+      "summary": "Sostiene que la mejor defensa es una población que viva bien y quiera a su patria. Propone garantizar independencia, soberanía e integridad territorial/marítima e intereses nacionales; mantener equilibrio militar regional; fortalecer el Sistema Nacional de Seguridad Ciudadana con participación civil; sistema de inteligencia nacional estable y oportuno; y vida digna para militares y Policía Nacional.",
+      "pages": [9, 10]
     }
   }
 }
