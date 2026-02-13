@@ -123,13 +123,17 @@ function MiniProfileHeader({
         ) : null}
       </div>
       <div className="min-w-0">
-        <div className="text-sm font-semibold truncate text-slate-900">
-          {name}
-        </div>
-        {party ? (
-          <div className="text-xs text-slate-700 truncate">{party}</div>
-        ) : null}
-      </div>
+  <div className="text-sm font-semibold text-slate-900 whitespace-normal break-words leading-snug">
+    {name}
+  </div>
+
+  {party ? (
+    <div className="text-xs text-slate-700 whitespace-normal break-words leading-snug">
+      {party}
+    </div>
+  ) : null}
+</div>
+
     </div>
   );
 }
