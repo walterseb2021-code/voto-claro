@@ -51,7 +51,8 @@ export async function POST(req: Request) {
             .join("\n\n");
 
     // 3) API key
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
+
     if (!apiKey) {
       return NextResponse.json({ ok: false, error: "Falta GEMINI_API_KEY" }, { status: 500 });
     }
@@ -88,20 +89,37 @@ ${context}
 `.trim();
 
     // 5) Llamada a Gemini
-const resp = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+async function callGemini(model: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}` }] }],
-          generationConfig: { temperature: mode === "STRICT" ? 0.2 : 0.6 }
-        })
-      }
-    );
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}` }] }],
+      generationConfig: { temperature: mode === "STRICT" ? 0.2 : 0.6 },
+    }),
+  });
+}
+
+// 1) Intento principal
+let resp = await callGemini("gemini-2.5-flash");
+
+// 2) Si en producción 2.5 da 403, degradamos a 1.5-flash para no romper el bloque
+if (resp.status === 403) {
+  resp = await callGemini("gemini-1.5-flash");
+}
+
+const data = await resp.json().catch(() => ({}));
+
+if (!resp.ok) {
+  return NextResponse.json(
+    { ok: false, error: `Gemini error HTTP ${resp.status}`, raw: data },
+    { status: 502 }
+  );
+}
 
     const data = await resp.json().catch(() => ({}));
 
