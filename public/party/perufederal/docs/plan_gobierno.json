@@ -1,0 +1,498 @@
+{
+  "doc_id": "perufederal_plan_gobierno_2026_armando_masse",
+  "title": "Plan de Gobierno del Partido Democrático Federal (Perú Federal) - Dr. Armando Massé",
+  "principles": [
+    {
+      "principle": "La persona y la familia son el principio y fin de las políticas del Estado y gobiernos.",
+      "keywords": ["persona", "familia", "bienestar", "políticas públicas"]
+    },
+    {
+      "principle": "Libertad, equidad, justicia social y crecimiento económico como pilares del desarrollo.",
+      "keywords": ["libertad", "equidad", "justicia social", "crecimiento económico"]
+    },
+    {
+      "principle": "Ética, honestidad, honradez, verdad y solidaridad como base de la participación política.",
+      "keywords": ["ética", "honestidad", "anticorrupción", "solidaridad"]
+    },
+    {
+      "principle": "Democracia con bienestar social, igualdad de oportunidades y respeto a la identidad cultural.",
+      "keywords": ["democracia", "igualdad de oportunidades", "identidad cultural", "bienestar social"]
+    },
+    {
+      "principle": "Gobiernos locales y regionales como bases de la descentralización federal.",
+      "keywords": ["gobiernos regionales", "gobiernos locales", "federalismo", "descentralización"]
+    },
+    {
+      "principle": "Mercado libre con real y libre competencia.",
+      "keywords": ["mercado libre", "competencia", "regulación"]
+    },
+    {
+      "principle": "Bienestar social con acceso universal a salud, educación, seguridad y vivienda; protección del derecho al trabajo.",
+      "keywords": ["salud", "educación", "seguridad", "vivienda", "trabajo", "universalidad"]
+    },
+    {
+      "principle": "Estado promotor de inversiones, regulador y garante del interés social.",
+      "keywords": ["inversión", "Estado promotor", "regulación", "interés social"]
+    },
+    {
+      "principle": "Reglas claras para competitividad y propiedad privada.",
+      "keywords": ["reglas claras", "competitividad", "propiedad privada", "seguridad jurídica"]
+    }
+  ],
+  "positions": [
+    {
+      "topic": "Identidad política y propósito",
+      "stance": "Se presenta como un partido nacido del 'Perú profundo' para enfrentar el centralismo y construir un enfoque nacionalista, federalista-descentralista y democrático, con cambios que considera radicales.",
+      "why": "Afirma que el centralismo ha generado pobreza y brechas, y que los partidos tradicionales fracasaron por corrupción y modelo excluyente.",
+      "how": [
+        "Plantea un gobierno eficaz, eficiente y honrado, con mirada de largo plazo y solución de urgencias.",
+        "Promueve un 'nuevo contrato social' con participación de la sociedad civil."
+      ],
+      "keywords": ["Perú profundo", "centralismo", "cambios estructurales", "nuevo contrato social", "anticorrupción"],
+      "qa_seed": [
+        "¿Por qué el partido dice que el centralismo ha empobrecido al país?",
+        "¿Qué tipo de cambio político propone: gradual o radical?",
+        "¿Qué significa para el partido 'pensar globalmente y actuar localmente'?"
+      ]
+    },
+    {
+      "topic": "Democracia y Estado al servicio del ciudadano",
+      "stance": "Plantea una 'democracia real' con el Estado al servicio del ciudadano, sanciones ejemplares a la corrupción y participación activa de la sociedad civil.",
+      "why": "Sostiene que la fragilidad institucional y la desconfianza en partidos se debe a brechas históricas y a la indiferencia política ante necesidades urgentes.",
+      "how": [
+        "Impulsar instituciones eficientes, transparentes y estables.",
+        "Sanciones ejemplares a la corrupción y promoción de conducta honesta de autoridades.",
+        "Participación de sociedad civil en un nuevo contrato social."
+      ],
+      "keywords": ["democracia", "Estado al servicio", "instituciones", "transparencia", "sociedad civil"],
+      "qa_seed": [
+        "¿Qué entiende el partido por 'democracia real'?",
+        "¿Cómo plantea recuperar la confianza en la política?",
+        "¿Qué rol tendría la sociedad civil?"
+      ]
+    },
+    {
+      "topic": "Federalismo y descentralización",
+      "stance": "Busca superar el modelo centralista con una descentralización política, económica, tributaria y administrativa con enfoque federal, fortaleciendo autonomías regionales y locales.",
+      "why": "Afirma que el centralismo generó brechas entre Lima y provincias, y entre costa/sierra/selva, además de prejuicios sociales.",
+      "how": [
+        "Derogar el D.S. 007-2007 (según el documento, 'castró' la descentralización).",
+        "Perfeccionar la ley de bases de descentralización con enfoque federal.",
+        "Desconcentrar instituciones nacionales hacia las regiones según especialidad.",
+        "Formación gradual y participativa de regiones federales con capacidad de generar recursos."
+      ],
+      "keywords": ["federalismo", "descentralización", "autonomía", "desconcentración", "regiones federales"],
+      "qa_seed": [
+        "¿Qué propone exactamente sobre federalismo?",
+        "¿Cómo se formarían las regiones federales?",
+        "¿Qué cambios plantea en la descentralización tributaria?"
+      ]
+    },
+    {
+      "topic": "Economía, estabilidad y crecimiento",
+      "stance": "Defiende políticas macroeconómicas para crecer, generar empleo, estabilizar precios y sostener la caja fiscal, con un mercado que fije precios y un Estado regulador.",
+      "why": "Sostiene que la competitividad requiere reglas claras, inversión y rol estatal regulador porque no existe 'libre competencia pura'.",
+      "how": [
+        "Políticas macroeconómicas orientadas a crecimiento y empleo.",
+        "Rol regulador del Estado sobre el funcionamiento del mercado.",
+        "Meta explícita: crecimiento del PBI al 7% (como objetivo)."
+      ],
+      "keywords": ["macroeconomía", "crecimiento", "empleo", "precios", "caja fiscal", "7% PBI"],
+      "qa_seed": [
+        "¿Qué propone el partido para crecer económicamente?",
+        "¿Cuál es su rol del Estado frente al mercado?",
+        "¿Qué meta de crecimiento menciona el plan?"
+      ]
+    },
+    {
+      "topic": "Inversión privada y seguridad jurídica",
+      "stance": "Promueve inversión extranjera con tratos claros y seguridad jurídica, y considera la inversión nacional para industrialización como política de Estado.",
+      "why": "Plantea que industrializar y competir requiere tecnología, capital y mercados, con garantías para inversión.",
+      "how": [
+        "Políticas claras y seguridad jurídica para inversión extranjera.",
+        "Promoción e incentivo de inversión nacional: tecnología, acceso al capital, búsqueda de mercados.",
+        "Estado como promotor de inversiones y garante del interés social."
+      ],
+      "keywords": ["inversión privada", "inversión extranjera", "seguridad jurídica", "industrialización", "tecnología"],
+      "qa_seed": [
+        "¿El partido apoya la inversión privada?",
+        "¿Qué garantías menciona para inversión extranjera?",
+        "¿Cómo impulsaría la industria nacional?"
+      ]
+    },
+    {
+      "topic": "Reforma tributaria y ampliación de base",
+      "stance": "Plantea reforma tributaria para ampliar base con impuestos pagables sin evasión y propone 'premiar' a quienes paguen su deuda.",
+      "why": "Busca sostener finanzas públicas y reducir evasión con reglas más pagables y cumplimiento premiado.",
+      "how": [
+        "Ampliación de base tributaria (menciona IGV y renta como ejes).",
+        "Diseño para reducir evasión (sin detallar mecanismos específicos).",
+        "Premios o incentivos al cumplimiento de deudas tributarias."
+      ],
+      "keywords": ["reforma tributaria", "base tributaria", "IGV", "renta", "evasión", "incentivos"],
+      "qa_seed": [
+        "¿Qué dice el partido sobre impuestos y evasión?",
+        "¿Cómo ampliaría la base tributaria?",
+        "¿Qué significa 'premiar a quienes paguen su deuda'?"
+      ]
+    },
+    {
+      "topic": "Formalización (propiedad, empresa y minería artesanal)",
+      "stance": "Propone formalización automática de la propiedad, la empresa y la minería artesanal; y en agro menciona formalización automática de propiedad y tenencia de la tierra.",
+      "why": "La presenta como parte del impulso productivo y de competitividad, integrando actores al mercado.",
+      "how": [
+        "Formalización automática de propiedad y empresa.",
+        "Formalización automática de minería artesanal (sin detallar procedimiento).",
+        "En agro: formalización automática de propiedad y tenencia de tierra."
+      ],
+      "keywords": ["formalización", "propiedad", "empresa", "minería artesanal", "tierra", "competitividad"],
+      "qa_seed": [
+        "¿Qué formalizaciones automáticas propone el plan?",
+        "¿Qué dice sobre minería artesanal?",
+        "¿Cómo conecta formalización con competitividad?"
+      ]
+    },
+    {
+      "topic": "Mar de Grau, pesca y soberanía de recursos marinos",
+      "stance": "Considera el Mar de Grau y recursos naturales como fuente extraordinaria para la vida; prioriza el pescado como base de alimentación nacional y rechaza sobreexplotación extranjera.",
+      "why": "Enmarca el mar como riqueza estratégica (fauna, flora, petróleo, turismo, energía, comercio) que debe administrarse en beneficio nacional.",
+      "how": [
+        "Administración de recursos marinos con prioridad alimentaria nacional.",
+        "No permitir sobreexplotación por empresas extranjeras.",
+        "Fortalecer Marina de Guerra y SIMA como soporte de defensa y desarrollo industrial."
+      ],
+      "keywords": ["Mar de Grau", "pesca", "alimentación", "soberanía", "SIMA", "defensa"],
+      "qa_seed": [
+        "¿Qué propone el partido sobre pesca y el Mar de Grau?",
+        "¿Cómo evitaría la sobreexplotación de recursos marinos?",
+        "¿Qué rol asigna a la Marina y al SIMA?"
+      ]
+    },
+    {
+      "topic": "Energía y combustibles (petróleo y gas)",
+      "stance": "Plantea fortalecer una política nacional de combustibles fósiles (petróleo, gas) y energías no renovables para garantizar estabilidad energética.",
+      "why": "Lo vincula a seguridad energética y desarrollo nacional.",
+      "how": [
+        "Política nacional de combustibles fósiles y energías no renovables orientada a estabilidad (sin detallar instrumentos)."
+      ],
+      "keywords": ["energía", "petróleo", "gas", "estabilidad energética", "política nacional"],
+      "qa_seed": [
+        "¿Qué visión tiene el partido sobre energía y petróleo/gas?",
+        "¿Qué entiende por estabilidad energética?"
+      ]
+    },
+    {
+      "topic": "Agro, agua y reforestación",
+      "stance": "Impulsa desarrollo agropecuario con tecnología y capital, con planificación en cuencas, reforestación y obras de agua (reservorios/presas) para asegurar agua y prevenir desastres.",
+      "why": "Busca competitividad agropecuaria, seguridad hídrica y conservación de recursos agua-suelo-planta.",
+      "how": [
+        "Planificación en cuencas como política de Estado.",
+        "Reforestación con programa 'Poncho Verde para los Andes' (menciona PRONAMACHS) para agua, erosión e industria de madera.",
+        "Construcción de reservorios, presas y obras para aprovechar agua que se pierde al océano y prevenir huaycos/avenidas.",
+        "Investigación agraria obligatoria en universidades y centros científicos estatales/privados para transferir tecnología.",
+        "Marco tributario especial y política subsidiaria.",
+        "Fomento del cooperativismo."
+      ],
+      "keywords": ["agro", "agua", "cuencas", "reforestación", "reservorios", "presas", "PRONAMACHS", "cooperativas"],
+      "qa_seed": [
+        "¿Qué propone el partido para asegurar agua en el Perú?",
+        "¿Qué plantea sobre reforestación en los Andes?",
+        "¿Cómo impulsa la productividad agraria y la tecnología?"
+      ]
+    },
+    {
+      "topic": "Amazonía y biodiversidad",
+      "stance": "Declara a la Amazonía como tesoro, pulmón del mundo y reino de biodiversidad; propone administración sostenible con gobiernos regionales y respeto cultural indígena.",
+      "why": "Enfatiza valor ecológico, turístico e investigativo, y derechos culturales de pueblos indígenas.",
+      "how": [
+        "Gestión sostenible con gobiernos regionales para turismo/ecología/biodiversidad.",
+        "Incentivos para hacerla competitiva.",
+        "Respeto a valores culturales, usos, costumbres, idioma y dialectos de nacionalidades indígenas.",
+        "Promoción de investigación basada en biodiversidad."
+      ],
+      "keywords": ["Amazonía", "biodiversidad", "sostenibilidad", "pueblos indígenas", "turismo", "investigación"],
+      "qa_seed": [
+        "¿Qué propone el partido sobre la Amazonía?",
+        "¿Cómo combina competitividad y sostenibilidad en la selva?",
+        "¿Qué enfoque tiene sobre pueblos indígenas?"
+      ]
+    },
+    {
+      "topic": "Seguridad ciudadana e inteligencia",
+      "stance": "Prioriza seguridad con planes nacional/regional/local, metas y presupuesto, liderados por autoridades; refuerza inteligencia nacional y reingeniería de la PNP.",
+      "why": "Lo plantea como condición para orden social y para derrotar crimen y delincuencia.",
+      "how": [
+        "Plan de seguridad ciudadana con metas claras y presupuesto definido.",
+        "Sistema de inteligencia nacional moderno, estable, oportuno y preventivo, con funciones definidas por ley orgánica.",
+        "Reingeniería de la Policía Nacional para enfrentar crimen y delincuencia.",
+        "Eliminar burocracia, duplicidad e incompetencia.",
+        "Trabajo articulado entre Poder Judicial, rondas campesinas/urbanas y sector privado.",
+        "INPE 'competitivo': propone que delincuentes paguen servicios y alimentación."
+      ],
+      "keywords": ["seguridad", "inteligencia", "PNP", "rondas", "Poder Judicial", "INPE", "metas", "presupuesto"],
+      "qa_seed": [
+        "¿Cuál es la postura del partido sobre seguridad ciudadana?",
+        "¿Qué propone sobre inteligencia nacional?",
+        "¿Cómo plantea reformar la Policía y el sistema penitenciario?"
+      ]
+    },
+    {
+      "topic": "Trabajo, industria y seguridad social",
+      "stance": "Quiere un país industrializado, con promoción del emprendedor y jóvenes científicos; propone calificación tecnológica progresiva y seguridad social universal.",
+      "why": "Asocia industria y capital humano a competitividad y reducción de pobreza (expresa: 'queremos un país sin mendigos').",
+      "how": [
+        "Premiar éxito del emprendedor e innovación científica.",
+        "Capacitación tecnológica progresiva de la fuerza laboral.",
+        "Remuneración justa concertada entre trabajadores y empresarios según realidad competitiva de la empresa.",
+        "Seguridad social universal.",
+        "Crear fondo de jubilación para pensionistas que garantice vida digna."
+      ],
+      "keywords": ["trabajo", "industrialización", "emprendimiento", "innovación", "capacitación", "seguridad social", "pensionistas"],
+      "qa_seed": [
+        "¿Qué propone el partido para generar empleo?",
+        "¿Cómo ve la industrialización del Perú?",
+        "¿Qué plantea sobre pensiones y seguridad social?"
+      ]
+    },
+    {
+      "topic": "Educación",
+      "stance": "Declara la educación prioridad de Estado: pública, gratuita y descentralizada, con ciencia y tecnología, valores éticos y democráticos; propone presupuesto base del 6% del PBI.",
+      "why": "Vincula educación con libertad, valores, deporte, arte y desarrollo nacional con ciencia/tecnología.",
+      "how": [
+        "Presupuesto base del 6% del PBI.",
+        "Educación pública gratuita descentralizada, con respeto a culturas y a maestros.",
+        "Erradicar analfabetismo.",
+        "Reingeniería del sistema universitario para producción tecnológica.",
+        "Impulsar carreras técnicas y ocupacionales alineadas a competitividad regional.",
+        "Alimentación para niños y jóvenes en escuelas y colegios."
+      ],
+      "keywords": ["educación", "6% PBI", "descentralización", "ciencia", "tecnología", "universidad", "carreras técnicas", "alimentación escolar"],
+      "qa_seed": [
+        "¿Qué propone el partido en educación?",
+        "¿Qué meta presupuestal menciona?",
+        "¿Cómo plantea vincular educación con desarrollo productivo?"
+      ]
+    },
+    {
+      "topic": "Salud y alimentación",
+      "stance": "Plantea prevención como política de Estado, seguridad social universal (pública y privada integrada), reingeniería del sistema de salud y descentralización de institutos/centros por región.",
+      "why": "Busca reducir burocracia y corrupción, y fortalecer atención primaria desde postas y centros de salud.",
+      "how": [
+        "Integración de sistemas de salud con seguridad social universal pública y privada.",
+        "Reingeniería del sistema de salud eliminando burocracia y corrupción.",
+        "Descentralizar institutos/centros nacionales de salud hacia las 25 regiones según especialidad.",
+        "Atención primaria y secundaria desde posta y centro de salud; hospitales especializados desconcentrados.",
+        "Impulsar investigación médica junto con medicina tradicional; IA como herramienta fundamental.",
+        "Incentivar industria farmacéutica nacional para producir medicinas básicas.",
+        "Agua potable y saneamiento básico para todos.",
+        "Alimentación en comedores escolares y comedores público-privados."
+      ],
+      "keywords": ["salud", "prevención", "seguridad social", "atención primaria", "descentralización", "IA", "medicina tradicional", "farmacéutica nacional", "saneamiento", "alimentación"],
+      "qa_seed": [
+        "¿Qué propone el partido sobre salud pública?",
+        "¿Cómo plantea combatir burocracia y corrupción en salud?",
+        "¿Qué rol le da a la inteligencia artificial en salud?"
+      ]
+    },
+    {
+      "topic": "Justicia, Ministerio Público y rondas",
+      "stance": "Propone un Poder Judicial y Ministerio Público autónomos, descentralizados, desburocratizados y con tecnología e IA, con magistrados ejemplares; plantea medidas drásticas contra magistrados corruptos.",
+      "why": "Asocia justicia a igualdad y a la lucha anticorrupción, con necesidad de sanción rápida y ejemplar.",
+      "how": [
+        "Descentralización y desburocratización del sistema de justicia con tecnología e IA.",
+        "Ley para sancionar con pena ejemplar al magistrado corrupto.",
+        "Propuesta: magistrados electos por voto popular previo refrendo (así lo formula el documento).",
+        "Rondas campesinas y urbanas trabajando coordinadamente con Ministerio Público y Poder Judicial."
+      ],
+      "keywords": ["justicia", "Ministerio Público", "Poder Judicial", "IA", "magistrados", "anticorrupción", "rondas"],
+      "qa_seed": [
+        "¿Qué propone el partido para reformar la justicia?",
+        "¿Qué plantea sobre magistrados corruptos?",
+        "¿Cómo integra rondas campesinas y urbanas?"
+      ]
+    },
+    {
+      "topic": "Igualdad de oportunidades para la mujer",
+      "stance": "Busca desterrar ideas patriarcales, revalorizar el rol formativo y económico de la mujer, abolir división sexual del trabajo, reconocer derecho a elegir maternidad y fortalecer mecanismos contra violencia.",
+      "why": "Lo enmarca como igualdad real de oportunidades y justicia social.",
+      "how": [
+        "Políticas para revalorar el papel productivo y formativo de la mujer.",
+        "Fortalecer mecanismos sociales y jurídicos contra la violencia.",
+        "Reconocer la elección de maternidad como opción de vida."
+      ],
+      "keywords": ["mujer", "igualdad", "patriarcado", "violencia", "maternidad", "derechos"],
+      "qa_seed": [
+        "¿Qué plantea el partido sobre derechos de la mujer?",
+        "¿Cómo aborda la violencia contra la mujer?",
+        "¿Qué significa abolir la división sexual del trabajo?"
+      ]
+    },
+    {
+      "topic": "Anticorrupción y ética política",
+      "stance": "Plantea una ley drástica anticorrupción, sanción rápida y ejemplar, contralores electos por el pueblo, cadena perpetua y confiscación de bienes para funcionarios corruptos.",
+      "why": "Define la corrupción como un mal grave y sostiene que debe combatirse con ejemplo, educación en valores y castigo severo.",
+      "how": [
+        "Ley especial anticorrupción con sanciones drásticas.",
+        "Educación con valores y ejemplo de funcionarios honestos y transparentes.",
+        "Contralores electos por el pueblo.",
+        "Sanción rápida y ejemplar; emular experiencias de otros países (sin especificar cuáles).",
+        "Cadena perpetua y confiscación de bienes para funcionarios corruptos."
+      ],
+      "keywords": ["corrupción", "ética", "sanciones", "contralores", "cadena perpetua", "confiscación", "valores"],
+      "qa_seed": [
+        "¿Qué propone el partido contra la corrupción?",
+        "¿Qué sanciones menciona?",
+        "¿Qué rol tendría la Contraloría según el plan?"
+      ]
+    },
+    {
+      "topic": "Discapacidad e inclusión",
+      "stance": "Propone educación inclusiva de calidad, acceso al empleo e ingresos, participación política y social, seguridad social, salud e igualdad de oportunidades.",
+      "why": "Lo enmarca dentro de justicia social e igualdad.",
+      "how": [
+        "Plan de educación inclusiva.",
+        "Medidas para acceso a empleo e ingresos.",
+        "Garantías de participación política y social y de seguridad social.",
+        "Derecho a salud e igualdad de oportunidades."
+      ],
+      "keywords": ["discapacidad", "inclusión", "empleo", "seguridad social", "salud", "igualdad"],
+      "qa_seed": [
+        "¿Qué propone el partido para personas con discapacidad?",
+        "¿Cómo aborda inclusión educativa y laboral?"
+      ]
+    },
+    {
+      "topic": "Globalización, comercio y diplomacia",
+      "stance": "Propone un consenso latinoamericano para 'humanizar' la globalización; su diplomacia trabajaría por cumplimiento de acuerdos ONU; promueve libre competencia y comercio sin trabas en el marco de la OMC; embajadas/consulados como centros de negocios y defensa de peruanos en el exterior.",
+      "why": "Busca inserción internacional con enfoque regional y apoyo a compatriotas de ultramar.",
+      "how": [
+        "Impulsar consenso latinoamericano para humanizar globalización.",
+        "Cumplimiento de acuerdos de la ONU.",
+        "Comercio sin trabas y libre competencia dentro de la OMC.",
+        "Reorientar embajadas/consulados a relaciones, negocios y defensa consular.",
+        "Eliminar 'burocracia dorada' (así lo expresa el documento)."
+      ],
+      "keywords": ["globalización", "comercio", "OMC", "ONU", "diplomacia", "consulados", "compatriotas"],
+      "qa_seed": [
+        "¿Qué postura tiene el partido sobre globalización y comercio?",
+        "¿Qué propone para peruanos en el extranjero?",
+        "¿Cómo ve la integración latinoamericana?"
+      ]
+    },
+    {
+      "topic": "Integración latinoamericana y fronteras",
+      "stance": "Propone acuerdos y alianzas para establecer mercados libres en América, con idea de moneda y mercado común, e integrar zonas de frontera con espacios similares de países vecinos.",
+      "why": "Busca integración regional económica y política.",
+      "how": [
+        "Acuerdos y alianzas económicas y políticas para mercados libres regionales.",
+        "Impulsar moneda y mercado común americano (planteamiento general).",
+        "Proyectos de integración de zonas de frontera con países vecinos."
+      ],
+      "keywords": ["integración", "Latinoamérica", "mercado común", "moneda común", "fronteras"],
+      "qa_seed": [
+        "¿Qué propone el partido sobre integración latinoamericana?",
+        "¿Qué significa su idea de mercado y moneda común?"
+      ]
+    },
+    {
+      "topic": "Defensa nacional y soberanía",
+      "stance": "Plantea que la mejor defensa es una población que viva bien y quiera su patria; garantiza soberanía e integridad territorial/marítima, equilibrio militar regional, fortalecimiento de seguridad ciudadana y lucha frontal contra violencia y terrorismo.",
+      "why": "Enmarca defensa como seguridad integral de la nación con FF.AA. y Policía valoradas y con inteligencia estable.",
+      "how": [
+        "Garantizar independencia, soberanía e integridad territorial y marítima.",
+        "Buscar equilibrio militar en la región.",
+        "Fortalecer Sistema Nacional de Seguridad Ciudadana con sociedad civil.",
+        "Lucha frontal contra violencia y terrorismo; apoyo a rondas y comités de autodefensa.",
+        "Sistema de inteligencia nacional estable y oportuno con visión de largo plazo.",
+        "Vida digna para soldados, oficiales, suboficiales y Policía Nacional."
+      ],
+      "keywords": ["defensa", "soberanía", "integridad territorial", "terrorismo", "inteligencia", "FFAA", "PNP", "rondas", "autodefensa"],
+      "qa_seed": [
+        "¿Qué plantea el partido sobre defensa nacional?",
+        "¿Cómo aborda terrorismo y violencia?",
+        "¿Qué rol cumple la inteligencia nacional?"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "name": "Quiénes somos",
+      "summary": "Se define como un partido del 'Perú profundo' contra el centralismo, con enfoque nacionalista, federalista-descentralista y democrático; plantea un gobierno honrado, eficaz y de largo plazo.",
+      "keywords": ["identidad", "Perú profundo", "centralismo", "pilares", "cambios estructurales"]
+    },
+    {
+      "name": "Nuestros principios",
+      "summary": "Declara bases centradas en persona y familia, libertad/equidad/justicia social, ética política, democracia con identidad cultural, mercado libre con competencia y Estado promotor-regulador.",
+      "keywords": ["principios", "ética", "bienestar", "competencia", "Estado promotor"]
+    },
+    {
+      "name": "Visión y misión",
+      "summary": "Visión de ciudadanos libres y responsables, país seguro, innovador y competitivo; misión de promover cambios estructurales mediante revolución democrática e instituciones transparentes.",
+      "keywords": ["visión", "misión", "innovación", "instituciones", "seguridad", "competitividad"]
+    },
+    {
+      "name": "Objetivos estratégicos",
+      "summary": "Prioriza seguridad ciudadana, Estado al servicio del ciudadano, anticorrupción, riqueza compartida, clase media fuerte, competitividad, federalismo, sostenibilidad ambiental y participación civil, incluyendo atención al adulto mayor.",
+      "keywords": ["objetivos", "seguridad", "anticorrupción", "clase media", "federalismo", "ambiente", "adulto mayor"]
+    },
+    {
+      "name": "Programa",
+      "summary": "Ejes: nacionalismo competitivo (macro, inversión, tributación, formalización), mar y energía, agro (agua, reforestación, investigación), federalismo, Amazonía, justicia social (seguridad, trabajo, educación, salud, justicia, mujer, anticorrupción, discapacidad, comercio e integración), y defensa nacional.",
+      "keywords": ["programa", "nacionalismo competitivo", "agro", "Amazonía", "seguridad", "educación", "salud", "defensa"]
+    }
+  ],
+  "qa_seed": [
+    {
+      "q": "¿Qué propone el partido en economía?",
+      "a": "Propone políticas macroeconómicas para crecer y generar empleo, estabilizar precios y sostener la caja fiscal. Defiende un mercado que fije precios, con un Estado regulador porque no existe competencia perfecta. Plantea atraer inversión con seguridad jurídica, impulsar inversión nacional para industrializar con tecnología y acceso al capital, y menciona una meta de crecimiento del PBI de 7%."
+    },
+    {
+      "q": "¿Cuál es su postura sobre seguridad?",
+      "a": "La seguridad es prioridad estratégica: plantea planes nacional/regional/local con metas y presupuesto, fortalecimiento de inteligencia nacional preventiva, reingeniería de la Policía, eliminación de burocracia y coordinación con Poder Judicial, rondas y sector privado. También plantea medidas en el sistema penitenciario para que delincuentes cubran servicios y alimentación."
+    },
+    {
+      "q": "¿Qué visión tiene del Estado?",
+      "a": "Lo concibe como un Estado al servicio del ciudadano, promotor de inversiones, regulador y garante del interés social, con instituciones eficientes, transparentes y estables. Además, busca desconcentrar instituciones hacia regiones y fortalecer gobiernos regionales y locales en un enfoque federal."
+    },
+    {
+      "q": "¿Cómo aborda la descentralización?",
+      "a": "Plantea un federalismo descentralista: descentralización política, económica, tributaria y administrativa, respeto de autonomías regionales y locales, desconcentración de instituciones nacionales y formación gradual y participativa de regiones federales con capacidad de generar recursos."
+    },
+    {
+      "q": "¿Qué piensa sobre inversión privada?",
+      "a": "La promueve: plantea inversión extranjera con tratos claros y seguridad jurídica, y considera la inversión nacional para industrialización como política de Estado, con incentivos, tecnología, acceso al capital y búsqueda de mercados."
+    },
+    {
+      "q": "¿Cómo resolvería la informalidad?",
+      "a": "El documento propone formalización automática de la propiedad, la empresa y la minería artesanal, y en el sector agrario menciona formalización automática de propiedad y tenencia de tierra. No detalla procedimientos, pero lo plantea como eje para integrar a la población y mejorar competitividad."
+    }
+  ],
+  "keywords": [
+    "federalismo",
+    "descentralización",
+    "nacionalismo competitivo",
+    "justicia social",
+    "seguridad ciudadana",
+    "anticorrupción",
+    "inversión privada",
+    "seguridad jurídica",
+    "reforma tributaria",
+    "formalización",
+    "Amazonía",
+    "Mar de Grau",
+    "agro",
+    "agua",
+    "educación 6% PBI",
+    "salud preventiva",
+    "inteligencia artificial",
+    "defensa nacional",
+    "integración latinoamericana"
+  ],
+  "gaps_detected": [
+    "No presenta cronogramas, responsables, ni indicadores de seguimiento para la mayoría de propuestas.",
+    "La 'formalización automática' se menciona como objetivo, pero no se detallan mecanismos o pasos.",
+    "En reforma tributaria se mencionan líneas generales (base tributaria, IGV, renta, reducir evasión), pero sin diseño técnico específico.",
+    "No desarrolla propuestas detalladas de vivienda (aunque se menciona como parte del bienestar social), ni un plan operativo con metas cuantificadas.",
+    "Algunas propuestas son programáticas (por ejemplo, mercado/moneda común en América) sin instrumentos concretos."
+  ]
+}

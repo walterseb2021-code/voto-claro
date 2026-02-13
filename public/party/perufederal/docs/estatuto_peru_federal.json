@@ -1,0 +1,216 @@
+{
+  "doc_id": "perufederal_estatuto_oficial",
+  "title": "Estatuto del Partido Democrático Federal",
+  "principles": [
+    {
+      "principle": "Federalismo integrador como superación del centralismo histórico.",
+      "keywords": ["federalismo", "descentralización", "fin del centralismo"]
+    },
+    {
+      "principle": "Solidaridad y subsidiaridad como base del Perú Federal.",
+      "keywords": ["solidaridad", "subsidiaridad", "confianza recíproca"]
+    },
+    {
+      "principle": "Respeto irrestricto a los derechos humanos.",
+      "keywords": ["derechos humanos", "libertad", "justicia", "dignidad"]
+    },
+    {
+      "principle": "Rechazo frontal a la corrupción, narcotráfico y armamentismo.",
+      "keywords": ["anticorrupción", "ética", "moral pública"]
+    },
+    {
+      "principle": "Identidad nacional basada en raíces históricas y ancestrales.",
+      "keywords": ["identidad", "Tawantinsuyo", "historia", "soberanía"]
+    },
+    {
+      "principle": "Soberanía tecnológica, jurídica, alimentaria, territorial y militar.",
+      "keywords": ["soberanía", "tecnología", "autarquía", "defensa nacional"]
+    }
+  ],
+  "positions": [
+    {
+      "topic": "Modelo de país",
+      "stance": "Propone transformar el Perú en una república federal industrializada, moderna y descentralizada.",
+      "why": "Considera que el modelo centralista ha fracasado en generar desarrollo armónico regional.",
+      "how": [
+        "Impulsar regiones federales con autonomía.",
+        "Instalar industria 4.0 en cada región.",
+        "Desarrollar tecnología avanzada como robótica, IA y nanotecnología."
+      ],
+      "keywords": ["república federal", "industria 4.0", "descentralización"],
+      "qa_seed": [
+        "¿Qué tipo de Estado propone el partido?",
+        "¿Por qué quiere un modelo federal?",
+        "¿Qué significa industria 4.0 para el partido?"
+      ]
+    },
+    {
+      "topic": "Democracia interna",
+      "stance": "Establece elecciones internas con voto universal o modalidad de delegados según nivel organizativo.",
+      "why": "Busca garantizar pluralidad y debido proceso electoral interno.",
+      "how": [
+        "Congreso Nacional elige presidente y CEN.",
+        "Delegados elegidos por voto secreto y universal.",
+        "Tribunal Electoral Nacional organiza procesos internos."
+      ],
+      "keywords": ["democracia interna", "delegados", "tribunal electoral"],
+      "qa_seed": [
+        "¿Cómo elige el partido a sus dirigentes?",
+        "¿Existe democracia interna?",
+        "¿Quién organiza las elecciones internas?"
+      ]
+    },
+    {
+      "topic": "Afiliación",
+      "stance": "Permite afiliarse a ciudadanos peruanos habilitados políticamente y sin condenas por delitos graves.",
+      "why": "Busca garantizar integridad moral dentro del partido.",
+      "how": [
+        "Registro formal ante el partido.",
+        "No pertenecer a otra organización política.",
+        "No tener condenas por corrupción, terrorismo, narcotráfico, secuestro o violación."
+      ],
+      "keywords": ["afiliación", "requisitos", "integridad"],
+      "qa_seed": [
+        "¿Quién puede afiliarse?",
+        "¿Qué requisitos exige el partido?",
+        "¿Puede alguien con antecedentes afiliarse?"
+      ]
+    },
+    {
+      "topic": "Régimen disciplinario",
+      "stance": "Establece un sistema disciplinario con faltas leves, graves y muy graves.",
+      "why": "Busca preservar la unidad, ética y coherencia partidaria.",
+      "how": [
+        "Tribunal de Ética Regional y Nacional.",
+        "Sanciones que van desde amonestación hasta expulsión.",
+        "Respeto al debido proceso y doble instancia."
+      ],
+      "keywords": ["disciplina", "tribunal de ética", "expulsión"],
+      "qa_seed": [
+        "¿Cómo sanciona el partido a sus miembros?",
+        "¿Existe expulsión por indisciplina?",
+        "¿Hay tribunal interno?"
+      ]
+    },
+    {
+      "topic": "Igualdad y paridad",
+      "stance": "Establece paridad obligatoria de 50% mujeres y 50% hombres en listas.",
+      "why": "Busca igualdad real de oportunidades.",
+      "how": [
+        "Paridad y alternancia en listas electorales.",
+        "Medidas contra el acoso político hacia mujeres."
+      ],
+      "keywords": ["paridad", "igualdad", "acoso político"],
+      "qa_seed": [
+        "¿El partido respeta la paridad?",
+        "¿Qué medidas toma contra el acoso político?"
+      ]
+    },
+    {
+      "topic": "Financiamiento",
+      "stance": "Se rige por financiamiento público y privado regulado por ley.",
+      "why": "Busca transparencia y legalidad en ingresos.",
+      "how": [
+        "Registro contable obligatorio.",
+        "Prohibición de financiamiento ilegal.",
+        "Control mediante tesorería nacional."
+      ],
+      "keywords": ["financiamiento", "tesorería", "transparencia"],
+      "qa_seed": [
+        "¿Cómo se financia el partido?",
+        "¿Recibe dinero público?",
+        "¿Cómo controla sus ingresos?"
+      ]
+    },
+    {
+      "topic": "Estructura organizativa",
+      "stance": "Estructura descentralizada en niveles: nacional, regional, provincial y distrital.",
+      "why": "Coherente con su ideología federal.",
+      "how": [
+        "Congresos en cada nivel.",
+        "Comités ejecutivos en cada jurisdicción.",
+        "Órganos autónomos: Tribunal Electoral y Tribunal de Ética."
+      ],
+      "keywords": ["estructura", "congreso nacional", "comités", "federalismo interno"],
+      "qa_seed": [
+        "¿Cómo se organiza el partido internamente?",
+        "¿Tiene órganos autónomos?"
+      ]
+    },
+    {
+      "topic": "Alianzas y fusiones",
+      "stance": "Permite alianzas, fusiones o integración con otras organizaciones políticas.",
+      "why": "Para ampliar representación política.",
+      "how": [
+        "Aprobación por el Comité Ejecutivo Nacional.",
+        "Respeto a la ley electoral vigente."
+      ],
+      "keywords": ["alianza", "fusión", "integración"],
+      "qa_seed": [
+        "¿Puede aliarse con otros partidos?",
+        "¿Puede fusionarse?"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "name": "Identidad y principios",
+      "summary": "Define al partido como federalista, descentralista, soberano y anticorrupción, inspirado en modelos internacionales de desarrollo y en la historia nacional.",
+      "keywords": ["federalismo", "identidad", "soberanía"]
+    },
+    {
+      "name": "Organización interna",
+      "summary": "Estructura jerárquica descentralizada con congresos y comités en todos los niveles territoriales.",
+      "keywords": ["estructura", "niveles", "organización"]
+    },
+    {
+      "name": "Democracia interna",
+      "summary": "Regula elección de dirigentes y candidatos mediante procesos internos organizados por tribunal electoral autónomo.",
+      "keywords": ["elecciones internas", "tribunal electoral"]
+    },
+    {
+      "name": "Disciplina y ética",
+      "summary": "Establece régimen disciplinario con sanciones proporcionales y tribunal autónomo.",
+      "keywords": ["ética", "disciplina", "sanciones"]
+    },
+    {
+      "name": "Financiamiento",
+      "summary": "Define régimen patrimonial, fuentes de financiamiento y control contable conforme a ley.",
+      "keywords": ["finanzas", "transparencia"]
+    }
+  ],
+  "qa_seed": [
+    {
+      "q": "¿Qué es el Partido Democrático Federal según su estatuto?",
+      "a": "Es una organización política que propone un modelo federal descentralizado para superar el centralismo histórico, con principios de soberanía, justicia social y modernización tecnológica."
+    },
+    {
+      "q": "¿Cómo elige a sus autoridades?",
+      "a": "Mediante procesos de democracia interna organizados por un tribunal electoral propio, con voto universal o modalidad de delegados según el nivel organizativo."
+    },
+    {
+      "q": "¿Puede expulsar a un miembro?",
+      "a": "Sí. El estatuto contempla faltas leves, graves y muy graves, y establece sanciones que pueden llegar hasta la expulsión, respetando el debido proceso."
+    },
+    {
+      "q": "¿Tiene paridad de género?",
+      "a": "Sí. Establece que las listas deben respetar paridad y alternancia entre mujeres y hombres."
+    }
+  ],
+  "keywords": [
+    "estatuto",
+    "federalismo",
+    "democracia interna",
+    "disciplina",
+    "paridad",
+    "financiamiento",
+    "estructura partidaria",
+    "soberanía",
+    "tribunal electoral"
+  ],
+  "gaps_detected": [
+    "No desarrolla políticas públicas concretas, sino estructura interna y principios organizativos.",
+    "No detalla cronogramas ni indicadores de gestión política.",
+    "La visión internacional mencionada no se traduce en mecanismos específicos dentro del estatuto."
+  ]
+}

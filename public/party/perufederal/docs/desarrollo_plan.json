@@ -1,0 +1,173 @@
+{
+  "doc_id": "perufederal_desarrollo_plan_extendido",
+  "title": "Desarrollo del Plan – Partido Democrático Federal",
+  "document_type": "Desarrollo programático estratégico",
+  "core_vision": "Transformar al Perú en una República Federal industrializada, soberana, tecnológicamente avanzada y económicamente autosuficiente mediante una ruptura estructural con el centralismo histórico.",
+
+  "ideological_foundation": {
+    "axis": "Federalismo integrador productivo",
+    "historical_reference": [
+      "Raigambre ancestral andina",
+      "Organización del Tawantinsuyo",
+      "Resistencia histórica frente al centralismo",
+      "Superación del modelo neoliberal concentrador"
+    ],
+    "long_term_goal": "Convertir al Perú en una nación de primer mundo en el tricentenario, con clase media fuerte, industria desarrollada y soberanía integral."
+  },
+
+  "principles": [
+    {
+      "principle": "Cada región federal debe ser un polo productivo autosostenible.",
+      "keywords": ["región federal", "autonomía productiva", "desarrollo regional"]
+    },
+    {
+      "principle": "Industrialización como base del desarrollo y superación de pobreza.",
+      "keywords": ["industrialización", "valor agregado", "transformación de recursos"]
+    },
+    {
+      "principle": "Cuarta revolución industrial como salto histórico.",
+      "keywords": ["industria 4.0", "IA", "nanotecnología", "robótica"]
+    },
+    {
+      "principle": "Soberanía integral: tecnológica, alimentaria, territorial y militar.",
+      "keywords": ["soberanía", "independencia económica", "defensa"]
+    },
+    {
+      "principle": "Autarquía alimentaria y gestión estratégica del agua.",
+      "keywords": ["represas", "riego tecnificado", "agricultura familiar"]
+    }
+  ],
+
+  "strategic_axes": [
+
+    {
+      "topic": "Transformación tecnológica nacional",
+      "stance": "Cada región debe incorporar industria 4.0 como política estructural.",
+      "why": "El atraso tecnológico es una de las causas del subdesarrollo regional.",
+      "how": [
+        "Instalación de centros de nanotecnología y robótica.",
+        "Impulso a impresión 3D industrial.",
+        "Desarrollo de biotecnología regional.",
+        "Incorporación de computación cuántica.",
+        "Aplicación masiva de inteligencia artificial.",
+        "Desarrollo de Internet de las cosas.",
+        "Promoción de energía solar.",
+        "Incorporación de vehículos autónomos."
+      ],
+      "impact_expected": [
+        "Competitividad internacional.",
+        "Reducción de dependencia tecnológica.",
+        "Generación de empleo altamente calificado."
+      ],
+      "qa_seed": [
+        "¿Cómo aplicaría la cuarta revolución industrial?",
+        "¿Qué significa industria 4.0 en regiones?",
+        "¿Cómo reduciría la brecha tecnológica?"
+      ]
+    },
+
+    {
+      "topic": "Agua y revolución agrícola",
+      "stance": "El agua es el eje de la independencia económica rural.",
+      "why": "La agricultura familiar sostiene millones de personas pero sufre sequía estructural.",
+      "how": [
+        "Construcción masiva de represas.",
+        "Canalización de agua desde lagunas.",
+        "Riego por goteo y riego tecnificado.",
+        "Apoyo directo a 6 millones de agricultores familiares.",
+        "Reactivación integral del sector agrícola y ganadero."
+      ],
+      "strategic_goal": "Autarquía alimentaria y generación de empleo digno rural.",
+      "qa_seed": [
+        "¿Cómo resolvería la crisis hídrica?",
+        "¿Qué propone para agricultores familiares?",
+        "¿Cómo lograr soberanía alimentaria?"
+      ]
+    },
+
+    {
+      "topic": "Modelo económico regional",
+      "stance": "Economía regional basada en transformación de recursos naturales.",
+      "why": "Exportar materia prima perpetúa dependencia.",
+      "how": [
+        "Procesos industriales locales.",
+        "Rechazo a monopolios.",
+        "Modelo integrador de mercado.",
+        "Regulación del sistema financiero como intermediario real.",
+        "Evitar uso de ahorros para empresas paralelas."
+      ],
+      "vision": "Empresas regionales fuertes con presencia global.",
+      "qa_seed": [
+        "¿El partido es estatista o pro mercado?",
+        "¿Cómo ve el sistema financiero?",
+        "¿Qué propone frente a monopolios?"
+      ]
+    },
+
+    {
+      "topic": "Soberanía marítima y aérea",
+      "stance": "Administración propia del mar y control del espacio aéreo.",
+      "why": "Se considera que el Estado ha abandonado 900,000 km de océano y su espacio aéreo.",
+      "how": [
+        "Gestión estratégica del Mar de Grau.",
+        "Fortalecimiento de Marina Mercante nacional.",
+        "Fortalecimiento de Fuerzas Armadas con IA.",
+        "Modernización tecnológica militar."
+      ],
+      "qa_seed": [
+        "¿Qué propone sobre el mar?",
+        "¿Cómo fortalecería defensa nacional?"
+      ]
+    },
+
+    {
+      "topic": "Reforma cultural y mental",
+      "stance": "Romper colonización mental y formar ciudadanos, no consumidores.",
+      "why": "El modelo centralista habría debilitado identidad nacional.",
+      "how": [
+        "Educación integral.",
+        "Rescate identidad histórica.",
+        "Servicio militar retributivo.",
+        "Formación tecnológica avanzada."
+      ],
+      "qa_seed": [
+        "¿Qué significa romper colonización mental?",
+        "¿Por qué plantea servicio militar retributivo?"
+      ]
+    }
+
+  ],
+
+  "macro_structure": {
+    "modelo_estado": "República Federal descentralizada",
+    "estructura_productiva": "Regiones con industria avanzada",
+    "estructura_social": "Clase media fortalecida",
+    "estructura_tecnologica": "Transición directa a economía tecnológica",
+    "estructura_defensa": "Soberanía territorial y tecnológica"
+  },
+
+  "conversation_depth_support": {
+    "economic_model_explanation": "No es estatismo absoluto ni libre mercado puro; plantea mercado regulado con fuerte desarrollo empresarial nacional.",
+    "federalism_application": "No solo descentralización administrativa, sino autonomía productiva y tecnológica regional.",
+    "difference_with_plan_gobierno": "El Plan de Gobierno expone ejes; este documento desarrolla la arquitectura técnica de implementación."
+  },
+
+  "keywords": [
+    "industria 4.0",
+    "soberanía tecnológica",
+    "república federal",
+    "autarquía alimentaria",
+    "regulación financiera",
+    "empresariado nacional",
+    "defensa tecnológica",
+    "agua y represas",
+    "modernización regional"
+  ],
+
+  "gaps_detected": [
+    "No establece cronograma detallado de implementación tecnológica.",
+    "No detalla presupuesto específico para industria 4.0.",
+    "No define indicadores medibles por región.",
+    "La transición institucional al modelo federal no tiene calendario normativo detallado."
+  ]
+}
