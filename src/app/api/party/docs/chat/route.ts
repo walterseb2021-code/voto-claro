@@ -118,7 +118,7 @@ ${safeContext}
       "x-goog-api-key": apiKey,
     },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}` }] }],
+      contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
       generationConfig: {
         temperature: mode === "STRICT" ? 0.2 : 0.6,
       },
