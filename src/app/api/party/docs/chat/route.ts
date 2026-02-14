@@ -38,6 +38,7 @@ export async function POST(req: Request) {
               return `${head}\n${c.text}`;
             })
             .join("\n\n")
+            
         : docs
             .slice(0, 3)
             .map((d, i) => {
@@ -64,6 +65,13 @@ ${sections || "- (sin secciones)"}`;
     if (!apiKey) {
       return NextResponse.json({ ok: false, error: "Falta GEMINI_API_KEY" }, { status: 500 });
     }
+    // 🔒 Límite de seguridad para evitar payload excesivo
+    const MAX_CONTEXT_CHARS = 12000;
+    const safeContext =
+      context.length > MAX_CONTEXT_CHARS
+        ? context.slice(0, MAX_CONTEXT_CHARS) +
+          "\n\n[Contenido recortado por límite técnico]"
+        : context;
 
     // 4) Reglas anti-invento + estilo humano
     const system = `
@@ -93,7 +101,8 @@ MODO=${mode}
 PREGUNTA=${question}
 
 CONTEXTO OFICIAL (docs del partido):
-${context}
+${safeContext}
+
 `.trim();
 
     // 5) Llamada Gemini con fallback por 403
