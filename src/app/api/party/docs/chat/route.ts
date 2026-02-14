@@ -1,4 +1,6 @@
 // src/app/api/party/docs/chat/route.ts
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import { loadPartyDocsFromPublic } from "@/lib/partyDocs/loadPartyDocs";
 import { retrieveRelevantChunks } from "@/lib/partyDocs/retrieve";
@@ -95,20 +97,25 @@ ${context}
 `.trim();
 
     // 5) Llamada Gemini con fallback por 403
-    async function callGemini(model: string) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        model
-      )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  async function callGemini(model: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent`;
 
-      return fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}` }] }],
-          generationConfig: { temperature: mode === "STRICT" ? 0.2 : 0.6 }
-        })
-      });
-    }
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}` }] }],
+      generationConfig: {
+        temperature: mode === "STRICT" ? 0.2 : 0.6,
+      },
+    }),
+  });
+}
 
     let resp = await callGemini("gemini-2.5-flash");
     if (resp.status === 403) {
