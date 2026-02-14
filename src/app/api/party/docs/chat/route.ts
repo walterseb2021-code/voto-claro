@@ -120,15 +120,22 @@ ${context}
     const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
 let resp = await callGemini(model);
   
-    const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({}));
 
-    if (!resp.ok) {
-      return NextResponse.json(
-        { ok: false, error: `Gemini error HTTP ${resp.status}`, raw: data },
-        { status: 502 }
-      );
-    }
+if (!resp.ok) {
+  console.log("🧪 PARTY DOCS → GEMINI HTTP STATUS:", resp.status);
+  console.log("🧪 PARTY DOCS → GEMINI ERROR BODY:", JSON.stringify(data).slice(0, 2000));
 
+  return NextResponse.json(
+    {
+      ok: false,
+      error: `Gemini error HTTP ${resp.status}`,
+      gemini_message: (data as any)?.error?.message ?? null,
+      raw: data,
+    },
+    { status: 502 }
+  );
+}
     const text =
       data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("")?.trim() || "";
 
