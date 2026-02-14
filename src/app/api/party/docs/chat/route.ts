@@ -117,11 +117,9 @@ ${context}
   });
 }
 
-    let resp = await callGemini("gemini-2.5-flash");
-    if (resp.status === 403) {
-      resp = await callGemini("gemini-1.5-flash");
-    }
-
+    const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
+let resp = await callGemini(model);
+  
     const data = await resp.json().catch(() => ({}));
 
     if (!resp.ok) {
