@@ -222,7 +222,9 @@ export default function IntencionDeVotoPage() {
   }, [confirmedPartyId, active?.options]);
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
+   <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100">
+  <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
+
       {/* HEADER */}
       <section className="rounded-3xl border-[6px] border-red-600 shadow-sm overflow-hidden bg-white">
         <div className="p-6 md:p-8 bg-gradient-to-br from-sky-50 via-white to-white">
@@ -409,8 +411,9 @@ export default function IntencionDeVotoPage() {
       </section>
 
       <footer className="mt-6 text-xs text-slate-700">
-        VOTO CLARO • Intención de voto (confirmación) • No afecta HV/Plan/Compare/Federalito.
+        VOTO CLARO • Intención de voto (confirmación) • “Infórmate, Reflexiona y Decide.”
       </footer>
+
 
       {/* Botón Subir (abajo al centro) */}
       <div className="mt-6 flex justify-center">
@@ -424,6 +427,8 @@ export default function IntencionDeVotoPage() {
           ⬆ Subir
         </button>
       </div>
+        </div>
+
     </main>
   );
 }
