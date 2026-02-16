@@ -1,0 +1,15 @@
+﻿{
+  "version": 1,
+  "mode_defaults": {
+    "allow_premios": false,
+    "reason": "Premios desactivados por normativa/periodo electoral (configurable por admin)."
+  },
+  "level_rules": {
+    "level1": { "total_questions": 25, "pass_score": 23, "per_question_max_sec": 10, "pool_total_sec": 280 },
+    "level2": { "total_questions": 25, "pass_score": 23, "per_question_max_sec": 10, "pool_total_sec": 280 }
+  },
+  "level2_party": {
+    "partyId": "partido-democratico-federal",
+    "source": "manual_config"
+  }
+}

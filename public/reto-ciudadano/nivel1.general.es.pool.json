@@ -1,0 +1,10 @@
+﻿{
+  "version": 1,
+  "level": 1,
+  "lang": "es",
+  "pool_size_expected": 250,
+  "time_limit_sec_per_question": 10,
+  "pool_time_total_sec": 280,
+  "pass_score": 23,
+  "questions": []
+}
