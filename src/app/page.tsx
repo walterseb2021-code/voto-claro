@@ -494,6 +494,36 @@ export default function HomePage() {
             </div>
           </div>
         </Link>
+                {/* ✅ SMART LINK: Intención de voto (UI) */}
+        <Link
+          href="/intencion-de-voto"
+          onClick={(e) =>
+            handleSmartNavigate({
+              key: "intencion",
+              href: "/intencion-de-voto",
+              speech:
+                "Vas a entrar a Intención de voto. Es una pantalla piloto con once partidos y nulo o blanco, para visualizar tendencias de forma simple. Recuerda: decide con información verificable.",
+              preventDefault: true,
+              e,
+            })
+          }
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+        >
+          <div className="flex items-start gap-3">
+            <div className="text-2xl leading-none">📊</div>
+            <div className="min-w-0">
+              <div className="text-base font-extrabold text-slate-900">INTENCIÓN DE VOTO</div>
+              <p className="mt-1 text-sm text-slate-900">
+                Vista piloto (11 partidos + Nulo/Blanco) para explorar tendencias. Próximamente se incluirán
+                todos los partidos.
+              </p>
+              <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+                Abrir página →
+              </div>
+            </div>
+          </div>
+        </Link>
+
       </section>
 
       <footer className="mt-6 text-xs text-slate-700">
