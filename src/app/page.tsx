@@ -523,6 +523,35 @@ export default function HomePage() {
             </div>
           </div>
         </Link>
+               {/* ✅ SMART LINK: Reto Ciudadano (UI) */}
+        <Link
+          href="/reto-ciudadano"
+          onClick={(e) =>
+            handleSmartNavigate({
+              key: "reto-ciudadano",
+              href: "/reto-ciudadano",
+              speech:
+                "Vas a entrar a Reto Ciudadano. Es un juego por niveles: conocimiento general, partido y ruleta. Puedes jugar en modo sin premio o con premio.",
+              preventDefault: true,
+              e,
+            })
+          }
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+        >
+          <div className="flex items-start gap-3">
+            <div className="text-2xl leading-none">🎯</div>
+            <div className="min-w-0">
+              <div className="text-base font-extrabold text-slate-900">RETO CIUDADANO</div>
+              <p className="mt-1 text-sm text-slate-900">
+                Juego por niveles: Conocimiento general → Partido → Ruleta. Practica y vuelve a intentar con
+                información verificable.
+              </p>
+              <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+                Abrir página →
+              </div>
+            </div>
+          </div>
+        </Link>
 
       </section>
 
