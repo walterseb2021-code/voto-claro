@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CANDIDATE_GROUPS } from "@/lib/perufederalCandidates";
 import { supabase } from "@/lib/supabaseClient";
+import { ADMIN_KEY, LS_ADMIN_UNLOCK, PITCH_DONE_KEY } from "@/lib/adminConfig";
 
 // ===============================
 // ✅ Storage keys (demo PRO)
@@ -31,7 +32,6 @@ type LiveEntry = {
 
 const LS_LIVE_KEY = "votoclaro_live_entries_v1";
 const LS_PINS_KEY = "votoclaro_live_pins_v1";
-const LS_ADMIN_UNLOCK = "votoclaro_admin_unlocked_v1";
 
 function safeJsonParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -99,27 +99,41 @@ export default function AdminLivePage() {
   // ===============================
   // ✅ Gate simple (solo tú)
   // ===============================
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [adminKeyInput, setAdminKeyInput] = useState("");
+ const [adminUnlocked, setAdminUnlocked] = useState(false);
+const [adminKeyInput, setAdminKeyInput] = useState("");
 
-  // Cambia esta clave por una tuya (y NO la compartas)
-  const ADMIN_KEY = "VC-ADMIN-2026";
+useEffect(() => {
+  if (typeof window === "undefined") return;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const ok = window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1";
-    setAdminUnlocked(ok);
-  }, []);
-
-  function unlockAdmin() {
-    if (adminKeyInput.trim() === ADMIN_KEY) {
-      window.localStorage.setItem(LS_ADMIN_UNLOCK, "1");
-      setAdminUnlocked(true);
-    } else {
-      alert("Clave incorrecta.");
-    }
+  // ✅ primero: debe haber pasado por /pitch en esta sesión
+  const pitchOk = sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+  if (!pitchOk) {
+    setAdminUnlocked(false);
+    return;
   }
 
+  // ✅ segundo: si ya desbloqueaste admin antes, queda guardado
+  const ok = window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1";
+  setAdminUnlocked(ok);
+}, []);
+
+function unlockAdmin() {
+  // ✅ exige sesión pitch
+  const pitchOk = typeof window !== "undefined" && sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+  if (!pitchOk) {
+    alert("Acceso no autorizado. Debes ingresar desde /pitch.");
+    return;
+  }
+
+  if (adminKeyInput.trim() === ADMIN_KEY) {
+    window.localStorage.setItem(LS_ADMIN_UNLOCK, "1");
+    setAdminUnlocked(true);
+  } else {
+    alert("Clave incorrecta.");
+  }
+}
+
+ 
   // ===============================
   // ✅ Data candidates (DEDUP por id)
   // ===============================

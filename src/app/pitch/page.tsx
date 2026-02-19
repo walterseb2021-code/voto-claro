@@ -4,6 +4,7 @@
 import Script from "next/script";
 import React from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { PITCH_DONE_KEY } from "@/lib/adminConfig";
 
 type AccessState = "CHECKING" | "GRANTED" | "DENIED";
 
@@ -66,7 +67,25 @@ console.log("[Pitch][DEBUG] error:", error);
         }
 
         const ok = Array.isArray(data) && data.length > 0;
-        if (alive) setAccess(ok ? "GRANTED" : "DENIED");
+
+if (ok) {
+  try {
+    // ✅ Marca sesión como “pasó pitch”
+    sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
+
+    // ✅ Guarda token (para futuro: grupo/seguridad por token)
+    sessionStorage.setItem("votoclaro_pitch_token_v1", token);
+  } catch {}
+}
+
+if (ok) {
+  try {
+    sessionStorage.setItem(PITCH_DONE_KEY, "1");
+  } catch {}
+}
+if (alive) setAccess(ok ? "GRANTED" : "DENIED");
+
+
       } catch (e) {
         console.error("[Pitch] token check exception:", e);
         if (alive) setAccess("DENIED");
