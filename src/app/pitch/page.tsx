@@ -85,7 +85,6 @@ if (ok) {
 }
 if (alive) setAccess(ok ? "GRANTED" : "DENIED");
 
-
       } catch (e) {
         console.error("[Pitch] token check exception:", e);
         if (alive) setAccess("DENIED");

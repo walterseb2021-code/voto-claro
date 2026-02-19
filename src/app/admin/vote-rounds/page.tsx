@@ -2,8 +2,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { ADMIN_KEY, LS_ADMIN_UNLOCK, PITCH_DONE_KEY } from "@/lib/adminConfig";
 
 type Round = {
   id: string;
@@ -12,11 +13,7 @@ type Round = {
   created_at: string;
 };
 
-const LS_ADMIN_UNLOCK = "votoclaro_admin_unlocked_v1";
-// Misma clave local que usas en /admin/live (demo PRO)
-const ADMIN_KEY = "VC-ADMIN-2026";
-
-function Pill({ children }: { children: React.ReactNode }) {
+function Pill({ children }: { children: ReactNode }) {
   return (
     <span className="text-xs px-3 py-1 rounded-full border border-green-200 bg-green-100 text-green-800 font-medium">
       {children}
@@ -32,16 +29,42 @@ export default function AdminVoteRoundsPage() {
     else router.push("/");
   }
 
+  // ✅ Evita Hydration mismatch:
+  //   - SSR no puede leer sessionStorage
+  //   - por eso esperamos a "mounted" y recién decidimos pitchOk/adminUnlocked
+  const [mounted, setMounted] = useState(false);
+  const [pitchOk, setPitchOk] = useState(false);
+
   // Gate local (igual que admin/live)
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [adminKeyInput, setAdminKeyInput] = useState("");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    setAdminUnlocked(window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1");
+    setMounted(true);
+
+    const ok =
+      typeof window !== "undefined" &&
+      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+
+    setPitchOk(ok);
+
+    // ✅ si ya desbloqueaste admin antes, queda guardado (pero solo si pitchOk)
+    setAdminUnlocked(
+      ok && window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1"
+    );
   }, []);
 
   function unlockAdmin() {
+    // ✅ exige sesión pitch
+    const ok =
+      typeof window !== "undefined" &&
+      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+
+    if (!ok) {
+      alert("Acceso no autorizado. Debes ingresar desde /pitch.");
+      return;
+    }
+
     if (adminKeyInput.trim() === ADMIN_KEY) {
       window.localStorage.setItem(LS_ADMIN_UNLOCK, "1");
       setAdminUnlocked(true);
@@ -88,7 +111,10 @@ export default function AdminVoteRoundsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminUnlocked]);
 
-  const activeRound = useMemo(() => rounds.find((r) => r.is_active) ?? null, [rounds]);
+  const activeRound = useMemo(
+    () => rounds.find((r) => r.is_active) ?? null,
+    [rounds]
+  );
 
   async function createRound() {
     const name = newName.trim();
@@ -179,7 +205,8 @@ export default function AdminVoteRoundsPage() {
   // Styles coherentes con tu verde/rojo
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap = "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
+  const sectionWrap =
+    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
   const inner = "rounded-2xl border-2 border-red-600 bg-white/85 p-4";
   const btn =
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
@@ -197,10 +224,62 @@ export default function AdminVoteRoundsPage() {
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
 
+  // ✅ Gate DURO sin hydration mismatch
+  if (!mounted) {
+    return (
+      <main className={wrap}>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
+          Admin – Rondas de Voto
+        </h1>
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!pitchOk) {
+    return (
+      <main className={wrap}>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
+          Admin – Rondas de Voto
+        </h1>
+
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="text-sm font-extrabold text-slate-900">
+              Acceso bloqueado
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+              Debes ingresar primero desde <span className="font-extrabold">/pitch</span> en esta pestaña.
+            </div>
+
+            <Link href="/pitch?t=GRUPOA-2026-01" className={btn + " mt-3"}>
+              Ir a /pitch
+            </Link>
+
+            <div className="mt-3 text-xs text-slate-600">
+              Nota: esto usa <span className="font-extrabold">sessionStorage</span>. Si abres otra pestaña nueva,
+              tendrás que pasar por /pitch ahí también.
+            </div>
+          </div>
+        </section>
+
+        <button type="button" onClick={goBack} className={btn + " mt-4"}>
+          ← Volver
+        </button>
+      </main>
+    );
+  }
+
   if (!adminUnlocked) {
     return (
       <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Admin – Rondas de Voto</h1>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
+          Admin – Rondas de Voto
+        </h1>
 
         <section className={sectionWrap}>
           <div className={inner}>
@@ -236,7 +315,9 @@ export default function AdminVoteRoundsPage() {
   return (
     <main className={wrap}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Admin – Rondas de Voto</h1>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
+          Admin – Rondas de Voto
+        </h1>
 
         <div className="flex gap-2 flex-wrap">
           <Link href="/admin/live" className={btnSm}>
@@ -275,12 +356,16 @@ export default function AdminVoteRoundsPage() {
 
           {notice ? (
             <div className="mt-4 text-sm text-slate-900">
-              <div className="inline-block rounded-xl bg-green-50 border-2 border-red-500 px-4 py-2">{notice}</div>
+              <div className="inline-block rounded-xl bg-green-50 border-2 border-red-500 px-4 py-2">
+                {notice}
+              </div>
             </div>
           ) : null}
 
           <div className="mt-6 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
-            <div className="text-sm font-extrabold text-slate-900">Crear nueva ronda (recomendado para “reset”)</div>
+            <div className="text-sm font-extrabold text-slate-900">
+              Crear nueva ronda (recomendado para “reset”)
+            </div>
             <div className="mt-1 text-xs text-slate-600">
               Crea una ronda nueva y la activa. No borra historial.
             </div>

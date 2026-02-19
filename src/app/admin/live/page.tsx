@@ -86,53 +86,52 @@ export default function AdminLivePage() {
   const router = useRouter();
     const PROD_ORIGIN = "https://voto-claro.vercel.app";
 
-  const origin =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "https://voto-claro.vercel.app";
-
+  
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/");
   }
 
+   // ===============================
+  // ✅ Gate (igual que /admin/vote-rounds)
   // ===============================
-  // ✅ Gate simple (solo tú)
-  // ===============================
- const [adminUnlocked, setAdminUnlocked] = useState(false);
-const [adminKeyInput, setAdminKeyInput] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [pitchOk, setPitchOk] = useState(false);
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [adminKeyInput, setAdminKeyInput] = useState("");
 
-  // ✅ primero: debe haber pasado por /pitch en esta sesión
-  const pitchOk = sessionStorage.getItem(PITCH_DONE_KEY) === "1";
-  if (!pitchOk) {
-    setAdminUnlocked(false);
-    return;
+  useEffect(() => {
+    setMounted(true);
+
+    const ok =
+      typeof window !== "undefined" &&
+      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+
+    setPitchOk(ok);
+
+    // ✅ si ya desbloqueaste admin antes, queda guardado (pero solo si pitchOk)
+    setAdminUnlocked(ok && window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1");
+  }, []);
+
+  function unlockAdmin() {
+    // ✅ exige sesión pitch
+    const ok =
+      typeof window !== "undefined" &&
+      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+
+    if (!ok) {
+      alert("Acceso no autorizado. Debes ingresar desde /pitch.");
+      return;
+    }
+
+    if (adminKeyInput.trim() === ADMIN_KEY) {
+      window.localStorage.setItem(LS_ADMIN_UNLOCK, "1");
+      setAdminUnlocked(true);
+    } else {
+      alert("Clave incorrecta.");
+    }
   }
-
-  // ✅ segundo: si ya desbloqueaste admin antes, queda guardado
-  const ok = window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1";
-  setAdminUnlocked(ok);
-}, []);
-
-function unlockAdmin() {
-  // ✅ exige sesión pitch
-  const pitchOk = typeof window !== "undefined" && sessionStorage.getItem(PITCH_DONE_KEY) === "1";
-  if (!pitchOk) {
-    alert("Acceso no autorizado. Debes ingresar desde /pitch.");
-    return;
-  }
-
-  if (adminKeyInput.trim() === ADMIN_KEY) {
-    window.localStorage.setItem(LS_ADMIN_UNLOCK, "1");
-    setAdminUnlocked(true);
-  } else {
-    alert("Clave incorrecta.");
-  }
-}
-
  
   // ===============================
   // ✅ Data candidates (DEDUP por id)
@@ -478,6 +477,56 @@ function unlockAdmin() {
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
 
+     // ✅ Gate DURO sin hydration mismatch (idéntico a /admin/vote-rounds)
+  if (!mounted) {
+    return (
+      <main className={wrap}>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
+          Admin – EN VIVO (VOTO CLARO)
+        </h1>
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!pitchOk) {
+    return (
+      <main className={wrap}>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
+          Admin – EN VIVO (VOTO CLARO)
+        </h1>
+
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="text-sm font-extrabold text-slate-900">
+              Acceso bloqueado
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+              Debes ingresar primero desde <span className="font-extrabold">/pitch</span> en esta pestaña.
+            </div>
+
+            <Link href="/pitch?t=GRUPOA-2026-01" className={btn + " mt-3"}>
+              Ir a /pitch
+            </Link>
+
+            <div className="mt-3 text-xs text-slate-600">
+              Nota: esto usa <span className="font-extrabold">sessionStorage</span>. Si abres otra pestaña nueva,
+              tendrás que pasar por /pitch ahí también.
+            </div>
+          </div>
+        </section>
+
+        <button type="button" onClick={goBack} className={btn + " mt-4"}>
+          ← Volver
+        </button>
+      </main>
+    );
+  }
+
   if (!adminUnlocked) {
     return (
       <main className={wrap}>
@@ -506,8 +555,7 @@ function unlockAdmin() {
             </button>
 
             <div className="mt-3 text-xs text-slate-600">
-              Nota: esta clave es local (demo PRO). Luego la hacemos 100% segura con
-              servidor.
+              Nota: esta clave es local (demo PRO). Luego la hacemos 100% segura con servidor.
             </div>
           </div>
         </section>
