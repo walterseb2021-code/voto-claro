@@ -210,10 +210,10 @@ export default function ComentariosPage() {
 };
       if (em) payload.email = em;
       if (ce) payload.celular = ce;
-           const { error } = await supabase.from("reto_premio_participants").upsert(payload, {
-        onConflict: "device_id",
-      });
-
+          const { error } = await supabase
+  .from("reto_premio_participants")
+  .update(payload)
+  .eq("device_id", deviceId);
       if (error) throw new Error(error.message);
 
       setHasData(true);
