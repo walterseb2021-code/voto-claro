@@ -1,6 +1,7 @@
 // src/app/api/vote/cast/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getCookieValue } from "@/lib/http/cookies";
 
 export const runtime = "nodejs";
 
@@ -29,7 +30,14 @@ export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdmin();
 
-    const payload = await req.json().catch(() => null);
+ const cookieHeader = req.headers.get("cookie");
+const group = getCookieValue(cookieHeader, "vc_group") ?? "";
+
+if (!group) {
+  return json(401, { error: "vc_group cookie not found" });
+}
+
+ const payload = await req.json();
     const device_id = (payload?.device_id ?? "").toString().trim();
     const party_slug = (payload?.party_slug ?? "").toString().trim();
 
@@ -42,39 +50,41 @@ export async function POST(req: Request) {
 
     // 1) Ronda activa
     const { data: round, error: roundErr } = await supabase
-      .from("vote_rounds")
-      .select("id,name,is_active,created_at")
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  .from("vote_rounds")
+  .select("id,name,is_active,created_at,group_code")
+  .eq("is_active", true)
+  .eq("group_code", group)
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
 
     if (roundErr) return json(500, { error: "Error leyendo vote_rounds", detail: roundErr.message });
     if (!round) return json(404, { error: "No hay ronda activa" });
 
     // 2) Partido (por slug) dentro de esa ronda y enabled
     const { data: party, error: partyErr } = await supabase
-      .from("vote_parties")
-      .select("id,round_id,slug,name,enabled,position")
-      .eq("round_id", round.id)
-      .eq("slug", party_slug)
-      .limit(1)
-      .maybeSingle();
-
+  .from("vote_parties")
+  .select("id,round_id,slug,name,enabled,position,group_code")
+  .eq("round_id", round.id)
+  .eq("slug", party_slug)
+  .eq("group_code", group)
+  .limit(1)
+  .maybeSingle();
     if (partyErr) return json(500, { error: "Error leyendo vote_parties", detail: partyErr.message });
     if (!party) return json(404, { error: "Partido no encontrado en la ronda activa" });
     if (!party.enabled) return json(403, { error: "Partido deshabilitado" });
 
     // 3) Insertar voto (si ya votó en la ronda, UNIQUE lo bloquea)
     const { data: cast, error: castErr } = await supabase
-      .from("vote_casts")
-      .insert({
-        round_id: round.id,
-        party_id: party.id,
-        device_id,
-      })
-      .select("id,round_id,party_id,device_id,created_at")
-      .maybeSingle();
+  .from("vote_casts")
+  .insert({
+    round_id: round.id,
+    party_id: party.id,
+    device_id,
+    group_code: group,
+  })
+  .select("id,round_id,party_id,device_id,group_code,created_at")
+  .maybeSingle();
 
     if (castErr) {
       // Postgres UNIQUE violation: 23505
@@ -89,13 +99,14 @@ export async function POST(req: Request) {
     }
 
     // 4) (Opcional) devolver tally actualizado para ese partido
-    const { data: tally, error: tallyErr } = await supabase
-      .from("vote_tally")
-      .select("total_votes")
-      .eq("round_id", round.id)
-      .eq("party_id", party.id)
-      .limit(1)
-      .maybeSingle();
+   const { data: tally, error: tallyErr } = await supabase
+  .from("vote_tally")
+  .select("total_votes,group_code")
+  .eq("round_id", round.id)
+  .eq("party_id", party.id)
+  .eq("group_code", group)
+  .limit(1)
+  .maybeSingle();
 
     if (tallyErr) {
       // no bloqueamos, solo devolvemos sin tally

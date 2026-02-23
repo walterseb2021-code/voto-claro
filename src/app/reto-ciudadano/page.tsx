@@ -492,8 +492,13 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   );
 }
 
-function Nivel3Ruleta(props: { enabled: boolean; mode: PlayMode; onRestartToLevel1?: () => void }) {
-  const { enabled, mode, onRestartToLevel1 } = props;
+function Nivel3Ruleta(props: {
+  enabled: boolean;
+  mode: PlayMode;
+  onRestartToLevel1?: () => void;
+ onFinishPick?: (pick: number) => void; // ✅ NUEVO: mandamos el número exacto (1..8)
+}) {
+  const { enabled, mode, onRestartToLevel1, onFinishPick } = props;
 
   const [started, setStarted] = useState(false);
 
@@ -622,6 +627,7 @@ function Nivel3Ruleta(props: { enabled: boolean; mode: PlayMode; onRestartToLeve
 
       setSpinsUsed((x) => x + 1);
       setSpinning(false);
+      onFinishPick?.(pick);
     }, 2800);
   }
 
@@ -1337,7 +1343,54 @@ function Nivel2Partido(props: {
 
 export default function RetoCiudadanoPage() {
   const [mode, setMode] = useState<PlayMode>("sin_premio");
+  const [dni, setDni] = useState("");
+const [celular, setCelular] = useState("");
+const [email, setEmail] = useState("");
+const [premioAutorizado, setPremioAutorizado] = useState(false);
+const [premioError, setPremioError] = useState<string | null>(null);
 
+async function registrarPremio() {
+  setPremioError(null);
+
+  if (!dni || !celular || !email) {
+    setPremioError("Todos los campos son obligatorios.");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/reto-ciudadano/premio/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dni,
+        celular,
+        email,
+        device_id: "WEB",
+        group_code: "GRUPOA",
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (data.error === "BLOQUEO_24H") {
+        setPremioError("Estás bloqueado por 24 horas.");
+        return;
+      }
+      if (data.error === "BLOQUEO_PREMIO") {
+        setPremioError("Ya ganaste premio. Debes esperar 1 mes.");
+        return;
+      }
+
+      setPremioError("No se pudo registrar.");
+      return;
+    }
+
+    setPremioAutorizado(true);
+  } catch {
+    setPremioError("Error de conexión.");
+  }
+}
   const [partyId, setPartyId] = useState<string>("perufederal");
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [partyLoading, setPartyLoading] = useState(false);
@@ -1455,16 +1508,74 @@ export default function RetoCiudadanoPage() {
           Nota: el sistema de premios puede estar desactivado durante campaña por normativa.
         </p>
       </section>
+      {mode === "con_premio" && (
+  <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
+    <div className="text-sm font-extrabold text-slate-900">
+      Registro obligatorio para participar con premio
+    </div>
 
+    {!premioAutorizado ? (
+      <>
+        <div className="mt-3 grid gap-3">
+          <input
+            type="text"
+            placeholder="DNI"
+            value={dni}
+            onChange={(e) => setDni(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            placeholder="Celular"
+            value={celular}
+            onChange={(e) => setCelular(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm"
+          />
+          <input
+            type="email"
+            placeholder="Correo electrónico"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm"
+          />
+        </div>
+
+        {premioError && (
+          <div className="mt-3 text-xs font-semibold text-red-700">
+            {premioError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={registrarPremio}
+          className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
+        >
+          Registrarme y continuar
+        </button>
+      </>
+    ) : (
+      <div className="mt-3 text-xs font-semibold text-green-700">
+        ✅ Registro validado. Puedes iniciar el reto.
+      </div>
+    )}
+  </section>
+)}
       <section className="mt-5 grid grid-cols-1 gap-3">
-        <Nivel1General
-          key={`l1-${sessionKey}-${mode}`}
-          mode={mode}
-          onStatus={(s) => {
-            setNivel1Good(s.good);
-            setNivel1Passed(s.passed);
-          }}
-        />
+        {mode === "con_premio" && !premioAutorizado ? (
+  <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+    🔒 Debes completar el registro para iniciar el Nivel 1.
+  </div>
+) : (
+  <Nivel1General
+    key={`l1-${sessionKey}-${mode}`}
+    mode={mode}
+    onStatus={(s) => {
+      setNivel1Good(s.good);
+      setNivel1Passed(s.passed);
+    }}
+  />
+)}
 
         <Nivel2Partido
           key={`l2-${sessionKey}-${mode}`}
@@ -1483,7 +1594,49 @@ export default function RetoCiudadanoPage() {
           onHardResetToLevel1={hardResetToLevel1}
         />
 
-        <Nivel3Ruleta enabled={nivel2Passed} mode={mode} onRestartToLevel1={hardResetToLevel1} />
+       <Nivel3Ruleta
+  enabled={nivel2Passed}
+  mode={mode}
+  onRestartToLevel1={hardResetToLevel1}
+  onFinishPick={async (pick) => {
+    if (mode !== "con_premio") return;
+
+    // Si no tenemos celular, no podemos bloquear server-side
+    if (!celular) {
+      setPremioAutorizado(false);
+      hardResetToLevel1();
+      return;
+    }
+
+    const isPrize = pick === 2 || pick === 6;
+
+    try {
+      if (isPrize) {
+        await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            celular,
+            prize_segment: pick,      // ✅ AQUÍ VA 2 o 6
+            prize_note: "Premio ruleta",
+          }),
+        });
+      } else {
+        await fetch("/api/reto-ciudadano/premio/lock24h", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ celular }),
+        });
+      }
+    } catch {}
+
+    // Fuerza que vuelva a pedir registro
+    setPremioAutorizado(false);
+
+    // Reinicia todo a Nivel 1
+    hardResetToLevel1();
+  }}
+/>
       </section>
     </main>
   );

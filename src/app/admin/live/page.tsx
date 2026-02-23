@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CANDIDATE_GROUPS } from "@/lib/perufederalCandidates";
 import { supabase } from "@/lib/supabaseClient";
-import { ADMIN_KEY, LS_ADMIN_UNLOCK, PITCH_DONE_KEY } from "@/lib/adminConfig";
+import { createClient } from "@supabase/supabase-js";
 
 // ===============================
 // ✅ Storage keys (demo PRO)
@@ -84,55 +84,46 @@ function genPin4(): string {
 
 export default function AdminLivePage() {
   const router = useRouter();
-    const PROD_ORIGIN = "https://voto-claro.vercel.app";
+  const PROD_ORIGIN = "https://voto-claro.vercel.app";
 
-  
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/");
   }
 
-   // ===============================
-  // ✅ Gate (igual que /admin/vote-rounds)
-  // ===============================
-  const [mounted, setMounted] = useState(false);
-  const [pitchOk, setPitchOk] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [adminKeyInput, setAdminKeyInput] = useState("");
-
-  useEffect(() => {
-    setMounted(true);
-
-    const ok =
-      typeof window !== "undefined" &&
-      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
-
-    setPitchOk(ok);
-
-    // ✅ si ya desbloqueaste admin antes, queda guardado (pero solo si pitchOk)
-    setAdminUnlocked(ok && window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1");
+  const supabaseClient = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    return createClient(url, key);
   }, []);
 
-  function unlockAdmin() {
-    // ✅ exige sesión pitch
-    const ok =
-      typeof window !== "undefined" &&
-      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+  useEffect(() => {
+    // Esta ruta debe estar protegida server-side por proxy.ts (cookies + ADMIN_EMAIL).
+    // Aquí verificamos sesión cliente para evitar flashes raros.
+    let alive = true;
 
-    if (!ok) {
-      alert("Acceso no autorizado. Debes ingresar desde /pitch.");
-      return;
-    }
+    (async () => {
+      try {
+        const { data } = await supabaseClient.auth.getSession();
+        if (!alive) return;
 
-    if (adminKeyInput.trim() === ADMIN_KEY) {
-      window.localStorage.setItem(LS_ADMIN_UNLOCK, "1");
-      setAdminUnlocked(true);
-    } else {
-      alert("Clave incorrecta.");
-    }
-  }
- 
+        if (!data?.session) {
+          router.replace("/admin/login");
+          return;
+        }
+      } finally {
+        if (alive) setChecking(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ===============================
   // ✅ Data candidates (DEDUP por id)
   // ===============================
@@ -228,7 +219,8 @@ export default function AdminLivePage() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
-    // ===============================
+
+  // ===============================
   // ✅ NUEVO: Realtime en Admin (solo candidato seleccionado)
   // ===============================
   useEffect(() => {
@@ -444,7 +436,7 @@ export default function AdminLivePage() {
       setLives((prev) => prev.filter((x) => x.candidateId !== candidateId));
     } catch (err) {
       alert("Error de red eliminando todo. Revisa consola.");
-      console.warn("[VOTO CLARO] Error de red eliminando live (all):", err);
+      console.warn("[VOTO CLARO] Error de red eliminando todo:", err);
     } finally {
       setDeletingAll(false);
     }
@@ -477,85 +469,18 @@ export default function AdminLivePage() {
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
 
-     // ✅ Gate DURO sin hydration mismatch (idéntico a /admin/vote-rounds)
-  if (!mounted) {
+  if (checking) {
     return (
       <main className={wrap}>
         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
           Admin – EN VIVO (VOTO CLARO)
         </h1>
+
         <section className={sectionWrap}>
           <div className={inner}>
             <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (!pitchOk) {
-    return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – EN VIVO (VOTO CLARO)
-        </h1>
-
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">
-              Acceso bloqueado
-            </div>
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-              Debes ingresar primero desde <span className="font-extrabold">/pitch</span> en esta pestaña.
-            </div>
-
-            <Link href="/pitch?t=GRUPOA-2026-01" className={btn + " mt-3"}>
-              Ir a /pitch
-            </Link>
-
-            <div className="mt-3 text-xs text-slate-600">
-              Nota: esto usa <span className="font-extrabold">sessionStorage</span>. Si abres otra pestaña nueva,
-              tendrás que pasar por /pitch ahí también.
-            </div>
-          </div>
-        </section>
-
-        <button type="button" onClick={goBack} className={btn + " mt-4"}>
-          ← Volver
-        </button>
-      </main>
-    );
-  }
-
-  if (!adminUnlocked) {
-    return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – EN VIVO (VOTO CLARO)
-        </h1>
-
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">
-              Acceso privado
-            </div>
-            <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-              Ingresa tu clave de administrador para ver PINs y gestionar enlaces.
-            </div>
-
-            <input
-              value={adminKeyInput}
-              onChange={(e) => setAdminKeyInput(e.target.value)}
-              placeholder="Clave admin"
-              className={input}
-            />
-
-            <button type="button" onClick={unlockAdmin} className={btn + " mt-3"}>
-              Entrar
-            </button>
-
-            <div className="mt-3 text-xs text-slate-600">
-              Nota: esta clave es local (demo PRO). Luego la hacemos 100% segura con servidor.
+              Verificando sesión.
             </div>
           </div>
         </section>
@@ -634,30 +559,29 @@ export default function AdminLivePage() {
                   </div>
 
                   <div className="mt-2 flex gap-2 flex-wrap">
-                  <Link
-  href={`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`}
-  className={btnSm}
-  target="_blank"
-  rel="noreferrer"
->
-  Abrir panel
-</Link>
+                    <Link
+                      href={`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`}
+                      className={btnSm}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Abrir panel
+                    </Link>
 
                     <button
-  type="button"
-  onClick={() => copy(`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`)}
-  className={btnSm}
->
-  Copiar link
-</button>
-
+                      type="button"
+                      onClick={() =>
+                        copy(`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`)
+                      }
+                      className={btnSm}
+                    >
+                      Copiar link
+                    </button>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border-2 border-red-600 bg-white/85 p-3">
-                  <div className="text-xs font-extrabold text-slate-700">
-                    PIN (4 dígitos)
-                  </div>
+                  <div className="text-xs font-extrabold text-slate-700">PIN (4 dígitos)</div>
 
                   <div className="mt-1 text-2xl font-extrabold text-slate-900 tracking-widest">
                     {selectedPin?.pin ?? "----"}

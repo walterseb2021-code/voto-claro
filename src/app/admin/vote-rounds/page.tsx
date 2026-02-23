@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ADMIN_KEY, LS_ADMIN_UNLOCK, PITCH_DONE_KEY } from "@/lib/adminConfig";
+import { createClient } from "@supabase/supabase-js";
 
 type Round = {
   id: string;
@@ -29,49 +29,38 @@ export default function AdminVoteRoundsPage() {
     else router.push("/");
   }
 
-  // ✅ Evita Hydration mismatch:
-  //   - SSR no puede leer sessionStorage
-  //   - por eso esperamos a "mounted" y recién decidimos pitchOk/adminUnlocked
-  const [mounted, setMounted] = useState(false);
-  const [pitchOk, setPitchOk] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  // Gate local (igual que admin/live)
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [adminKeyInput, setAdminKeyInput] = useState("");
-
-  useEffect(() => {
-    setMounted(true);
-
-    const ok =
-      typeof window !== "undefined" &&
-      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
-
-    setPitchOk(ok);
-
-    // ✅ si ya desbloqueaste admin antes, queda guardado (pero solo si pitchOk)
-    setAdminUnlocked(
-      ok && window.localStorage.getItem(LS_ADMIN_UNLOCK) === "1"
-    );
+  const supabase = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    return createClient(url, key);
   }, []);
 
-  function unlockAdmin() {
-    // ✅ exige sesión pitch
-    const ok =
-      typeof window !== "undefined" &&
-      sessionStorage.getItem(PITCH_DONE_KEY) === "1";
+  useEffect(() => {
+    // Esta ruta debe estar protegida server-side por proxy.ts (cookies + ADMIN_EMAIL).
+    // Aquí verificamos sesión cliente para evitar flashes raros.
+    let alive = true;
 
-    if (!ok) {
-      alert("Acceso no autorizado. Debes ingresar desde /pitch.");
-      return;
-    }
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!alive) return;
 
-    if (adminKeyInput.trim() === ADMIN_KEY) {
-      window.localStorage.setItem(LS_ADMIN_UNLOCK, "1");
-      setAdminUnlocked(true);
-    } else {
-      alert("Clave incorrecta.");
-    }
-  }
+        if (!data?.session) {
+          router.replace("/admin/login");
+          return;
+        }
+      } finally {
+        if (alive) setChecking(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Data
   const [rounds, setRounds] = useState<Round[]>([]);
@@ -87,7 +76,6 @@ export default function AdminVoteRoundsPage() {
       const res = await fetch("/api/vote/admin/rounds", {
         method: "GET",
         cache: "no-store",
-        headers: { "x-vc-admin-key": ADMIN_KEY },
       });
 
       const data = await res.json();
@@ -106,10 +94,10 @@ export default function AdminVoteRoundsPage() {
   }
 
   useEffect(() => {
-    if (!adminUnlocked) return;
+    if (checking) return;
     void loadRounds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminUnlocked]);
+  }, [checking]);
 
   const activeRound = useMemo(
     () => rounds.find((r) => r.is_active) ?? null,
@@ -129,7 +117,7 @@ export default function AdminVoteRoundsPage() {
       const res = await fetch("/api/vote/admin/rounds", {
         method: "POST",
         cache: "no-store",
-        headers: { "Content-Type": "application/json", "x-vc-admin-key": ADMIN_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
       const data = await res.json();
@@ -156,7 +144,7 @@ export default function AdminVoteRoundsPage() {
       const res = await fetch("/api/vote/admin/rounds", {
         method: "PUT",
         cache: "no-store",
-        headers: { "Content-Type": "application/json", "x-vc-admin-key": ADMIN_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ round_id }),
       });
       const data = await res.json();
@@ -185,7 +173,7 @@ export default function AdminVoteRoundsPage() {
       const res = await fetch("/api/vote/admin/rounds", {
         method: "PATCH",
         cache: "no-store",
-        headers: { "Content-Type": "application/json", "x-vc-admin-key": ADMIN_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ round_id }),
       });
       const data = await res.json();
@@ -224,83 +212,18 @@ export default function AdminVoteRoundsPage() {
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
 
-  // ✅ Gate DURO sin hydration mismatch
-  if (!mounted) {
+  if (checking) {
     return (
       <main className={wrap}>
         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
           Admin – Rondas de Voto
         </h1>
+
         <section className={sectionWrap}>
           <div className={inner}>
             <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (!pitchOk) {
-    return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – Rondas de Voto
-        </h1>
-
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">
-              Acceso bloqueado
-            </div>
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-              Debes ingresar primero desde <span className="font-extrabold">/pitch</span> en esta pestaña.
-            </div>
-
-            <Link href="/pitch?t=GRUPOA-2026-01" className={btn + " mt-3"}>
-              Ir a /pitch
-            </Link>
-
-            <div className="mt-3 text-xs text-slate-600">
-              Nota: esto usa <span className="font-extrabold">sessionStorage</span>. Si abres otra pestaña nueva,
-              tendrás que pasar por /pitch ahí también.
-            </div>
-          </div>
-        </section>
-
-        <button type="button" onClick={goBack} className={btn + " mt-4"}>
-          ← Volver
-        </button>
-      </main>
-    );
-  }
-
-  if (!adminUnlocked) {
-    return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – Rondas de Voto
-        </h1>
-
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">Acceso privado</div>
-            <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-              Solo el administrador puede crear/activar/cerrar rondas.
-            </div>
-
-            <input
-              value={adminKeyInput}
-              onChange={(e) => setAdminKeyInput(e.target.value)}
-              placeholder="Clave admin"
-              className={input}
-            />
-
-            <button type="button" onClick={unlockAdmin} className={btn + " mt-3"}>
-              Entrar
-            </button>
-
-            <div className="mt-3 text-xs text-slate-600">
-              Nota: gate local (demo PRO). La API también exige una clave (VC_ADMIN_KEY).
+              Verificando sesión.
             </div>
           </div>
         </section>
@@ -338,7 +261,9 @@ export default function AdminVoteRoundsPage() {
                 {activeRound ? (
                   <>
                     <Pill>Activa</Pill>{" "}
-                    <span className="ml-2 font-extrabold text-slate-900">{activeRound.name}</span>
+                    <span className="ml-2 font-extrabold text-slate-900">
+                      {activeRound.name}
+                    </span>
                   </>
                 ) : (
                   <span className="text-red-700 font-extrabold">No hay ronda activa</span>
@@ -377,7 +302,12 @@ export default function AdminVoteRoundsPage() {
               className={input}
             />
 
-            <button type="button" onClick={createRound} className={btn + " mt-3"} disabled={loading}>
+            <button
+              type="button"
+              onClick={createRound}
+              className={btn + " mt-3"}
+              disabled={loading}
+            >
               ➕ Crear y activar
             </button>
           </div>
@@ -397,11 +327,15 @@ export default function AdminVoteRoundsPage() {
                     className="rounded-2xl border-2 border-red-600 bg-green-50/50 p-3 flex items-start justify-between gap-3 flex-wrap"
                   >
                     <div className="min-w-0">
-                      <div className="text-sm font-extrabold text-slate-900 break-words">{r.name}</div>
+                      <div className="text-sm font-extrabold text-slate-900 break-words">
+                        {r.name}
+                      </div>
                       <div className="mt-1 text-[11px] text-slate-600">
                         {new Date(r.created_at).toLocaleString("es-PE")} · ID: {r.id}
                       </div>
-                      <div className="mt-2">{r.is_active ? <Pill>Activa</Pill> : <Pill>Inactiva</Pill>}</div>
+                      <div className="mt-2">
+                        {r.is_active ? <Pill>Activa</Pill> : <Pill>Inactiva</Pill>}
+                      </div>
                     </div>
 
                     <div className="flex gap-2 flex-wrap">

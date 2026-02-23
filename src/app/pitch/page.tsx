@@ -6,7 +6,7 @@ import React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { PITCH_DONE_KEY } from "@/lib/adminConfig";
 
-type AccessState = "CHECKING" | "GRANTED" | "DENIED";
+type AccessState = "CHECKING" | "GRANTED" | "DENIED" | "MISSING_TOKEN";
 
 // 🎨 COLORES (según tu imagen)
 // ✅ Color base EXACTO (según Paint): R=83 G=129 B=39
@@ -41,11 +41,11 @@ export default function PitchPage() {
         const url = new URL(window.location.href);
         const token = (url.searchParams.get("t") ?? "").trim();
 
-        // ✅ Requiere token en la URL
-        if (!token) {
-          if (alive) setAccess("DENIED");
-          return;
-        }
+       // ✅ Requiere token en la URL
+if (!token) {
+  if (alive) setAccess("MISSING_TOKEN");
+  return;
+}
 
         // ✅ Validar token en Supabase (solo si está activo)
         const { data, error } = await supabase
@@ -70,19 +70,31 @@ console.log("[Pitch][DEBUG] error:", error);
 
 if (ok) {
   try {
-    // ✅ Marca sesión como “pasó pitch”
+    // 🔐 PASO NUEVO: activar gate server-side (cookie HttpOnly)
+    const res = await fetch("/api/gate/pitch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ token }),
+    });
+
+    if (!res.ok) {
+      console.error("[Pitch] gate API failed");
+      if (alive) setAccess("DENIED");
+      return;
+    }
+
+    // ✅ Mantener sessionStorage (UX)
     sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
-
-    // ✅ Guarda token (para futuro: grupo/seguridad por token)
     sessionStorage.setItem("votoclaro_pitch_token_v1", token);
-  } catch {}
+    sessionStorage.setItem(PITCH_DONE_KEY, "1");
+  } catch (e) {
+    console.error("[Pitch] gate activation error:", e);
+    if (alive) setAccess("DENIED");
+    return;
+  }
 }
 
-if (ok) {
-  try {
-    sessionStorage.setItem(PITCH_DONE_KEY, "1");
-  } catch {}
-}
 if (alive) setAccess(ok ? "GRANTED" : "DENIED");
 
       } catch (e) {
@@ -130,6 +142,41 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
       </main>
     );
   }
+  if (access === "MISSING_TOKEN") {
+  return (
+    <main
+      className="min-h-screen flex items-center justify-center px-6"
+      style={{ background: BG_GREEN, color: TEXT_DARK }}
+    >
+      <div
+        className="max-w-md w-full text-center rounded-2xl"
+        style={{
+          background: PANEL_BG,
+          border: `3px solid ${RED_BORDER}`,
+          padding: 18,
+          boxShadow: "0 18px 50px rgba(0,0,0,.25)",
+        }}
+      >
+        <div
+          className="text-xl font-extrabold"
+          style={{
+            color: TITLE_BLACK,
+            WebkitTextStroke: `1px ${RED_BORDER}`,
+            textShadow: "0 4px 12px rgba(0,0,0,.15)",
+          }}
+        >
+          Acceso bloqueado
+        </div>
+
+        <p className="mt-3 text-sm leading-relaxed" style={{ color: TEXT_DARK, fontWeight: 700 }}>
+          Debes ingresar con un enlace válido que incluya un token.
+          <br />
+          Ejemplo: <b>/pitch?t=GRUPOA-2026-01</b>
+        </p>
+      </div>
+    </main>
+  );
+}
 
   if (access === "DENIED") {
     return (

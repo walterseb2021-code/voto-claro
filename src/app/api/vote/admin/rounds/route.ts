@@ -1,6 +1,7 @@
 // src/app/api/vote/admin/rounds/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 export const runtime = "nodejs";
 
@@ -8,12 +9,45 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
 }
 
-function requireAdminKey(req: Request) {
-  const expected = process.env.VC_ADMIN_KEY || "";
-  const got = req.headers.get("x-vc-admin-key") || "";
-  if (!expected) return { ok: false, error: "Falta VC_ADMIN_KEY en variables de entorno." as const };
-  if (!got || got !== expected) return { ok: false, error: "No autorizado." as const };
-  return { ok: true as const };
+async function requireAdmin(req: NextRequest) {
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+
+    if (!url || !anon || !adminEmail) {
+      return { ok: false as const, error: "UNAUTHORIZED" as const, cookiesToSet: [] as any[] };
+    }
+
+    const cookiesToSet: any[] = [];
+
+    const supabase = createServerClient(url, anon, {
+      cookies: {
+        // ✅ Route Handlers: usar req.cookies.getAll()
+        getAll() {
+          return req.cookies.getAll();
+        },
+        // ✅ Capturar cookies que Supabase quiera refrescar
+        setAll(list) {
+          cookiesToSet.push(...list);
+        },
+      },
+    });
+
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data?.user) {
+      return { ok: false as const, error: "UNAUTHORIZED" as const, cookiesToSet };
+    }
+
+    const userEmail = (data.user.email ?? "").trim().toLowerCase();
+    if (userEmail !== adminEmail) {
+      return { ok: false as const, error: "FORBIDDEN" as const, cookiesToSet };
+    }
+
+    return { ok: true as const, cookiesToSet };
+  } catch {
+    return { ok: false as const, error: "UNAUTHORIZED" as const, cookiesToSet: [] as any[] };
+  }
 }
 
 function getAdminSupabase() {
@@ -23,7 +57,7 @@ function getAdminSupabase() {
   if (!url || !serviceKey) {
     throw new Error("Faltan variables de entorno de Supabase (URL o SERVICE_ROLE).");
   }
-  return createClient(url, serviceKey);
+  return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
 /**
@@ -32,9 +66,9 @@ function getAdminSupabase() {
  * PUT: activa una ronda existente (desactiva las demás)
  * PATCH: cierra la ronda (is_active=false) sin borrar historial
  */
-export async function GET(req: Request) {
-  const gate = requireAdminKey(req);
-  if (!gate.ok) return jsonError(gate.error, 401);
+export async function GET(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
 
   try {
     const supabaseAdmin = getAdminSupabase();
@@ -46,15 +80,22 @@ export async function GET(req: Request) {
 
     if (error) return jsonError(`Supabase error: ${error.message}`, 500);
 
-    return NextResponse.json({ ok: true, rounds: data ?? [] });
+    const res = NextResponse.json({ ok: true, rounds: data ?? [] });
+
+    // ✅ Aplicar cookies refrescadas (si hubo)
+    for (const { name, value, options } of gate.cookiesToSet) {
+      res.cookies.set(name, value, options);
+    }
+
+    return res;
   } catch (e: any) {
     return jsonError(e?.message ?? "Error interno.", 500);
   }
 }
 
-export async function POST(req: Request) {
-  const gate = requireAdminKey(req);
-  if (!gate.ok) return jsonError(gate.error, 401);
+export async function POST(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
 
   let body: any = {};
   try {
@@ -87,15 +128,22 @@ export async function POST(req: Request) {
 
     if (updErr) return jsonError(`Supabase error: ${updErr.message}`, 500);
 
-    return NextResponse.json({ ok: true, round: created });
+    const res = NextResponse.json({ ok: true, round: created });
+
+    // ✅ Aplicar cookies refrescadas (si hubo)
+    for (const { name, value, options } of gate.cookiesToSet) {
+      res.cookies.set(name, value, options);
+    }
+
+    return res;
   } catch (e: any) {
     return jsonError(e?.message ?? "Error interno.", 500);
   }
 }
 
-export async function PUT(req: Request) {
-  const gate = requireAdminKey(req);
-  if (!gate.ok) return jsonError(gate.error, 401);
+export async function PUT(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
 
   let body: any = {};
   try {
@@ -126,15 +174,22 @@ export async function PUT(req: Request) {
 
     if (updErr) return jsonError(`Supabase error: ${updErr.message}`, 500);
 
-    return NextResponse.json({ ok: true, round_id });
+    const res = NextResponse.json({ ok: true, round_id });
+
+    // ✅ Aplicar cookies refrescadas (si hubo)
+    for (const { name, value, options } of gate.cookiesToSet) {
+      res.cookies.set(name, value, options);
+    }
+
+    return res;
   } catch (e: any) {
     return jsonError(e?.message ?? "Error interno.", 500);
   }
 }
 
-export async function PATCH(req: Request) {
-  const gate = requireAdminKey(req);
-  if (!gate.ok) return jsonError(gate.error, 401);
+export async function PATCH(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
 
   let body: any = {};
   try {
@@ -157,7 +212,14 @@ export async function PATCH(req: Request) {
 
     if (error) return jsonError(`Supabase error: ${error.message}`, 500);
 
-    return NextResponse.json({ ok: true, round_id, closed: true });
+    const res = NextResponse.json({ ok: true, round_id, closed: true });
+
+    // ✅ Aplicar cookies refrescadas (si hubo)
+    for (const { name, value, options } of gate.cookiesToSet) {
+      res.cookies.set(name, value, options);
+    }
+
+    return res;
   } catch (e: any) {
     return jsonError(e?.message ?? "Error interno.", 500);
   }
