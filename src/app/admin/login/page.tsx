@@ -14,7 +14,7 @@ function AdminLoginInner() {
   const nextPath = useMemo(() => {
     const n = searchParams.get("next");
     // Evitar open-redirect: solo permitir rutas internas
-    if (!n || !n.startsWith("/")) return "/admin/reto";
+    if (!n || !n.startsWith("/")) return "/admin";
     return n;
   }, [searchParams]);
 
