@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
-export default function AdminLoginPage() {
+// ✅ Evita prerender/SSG en build (Vercel) para esta página
+export const dynamic = "force-dynamic";
+
+function AdminLoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -137,5 +140,19 @@ export default function AdminLoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
+          <div style={{ color: "#6b7280", fontSize: 14 }}>Cargando…</div>
+        </div>
+      }
+    >
+      <AdminLoginInner />
+    </Suspense>
   );
 }
