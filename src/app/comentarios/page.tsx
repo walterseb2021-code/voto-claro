@@ -209,7 +209,7 @@ export default function ComentariosPage() {
       };
       if (em) payload.email = em;
       if (ce) payload.celular = ce;
-
+      console.log("[VOTO CLARO] deviceId before upsert:", JSON.stringify(deviceId));
       const { error } = await supabase.from("reto_premio_participants").upsert(payload, {
         onConflict: "device_id",
       });
