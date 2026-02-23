@@ -13,27 +13,15 @@ type CommentRow = {
   device_id: string | null;
   page: string | null;
   message: string;
-  status: "new" | "reviewed" | "archived";
+  status: "new" | "reviewed" | "archived" | "blocked";
 };
-
-function getSupabaseAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_KEY ||
-    "";
-
-  // ⚠️ En admin client-side NO podemos usar service role.
-  // Este panel funciona si tu tabla es readable por admin vía RLS o si lo migramos a API server-side.
-  // Por ahora lo dejamos listo y si falla, en el siguiente paso lo pasamos a /api/admin/comments.
-  return createClient(url, key);
-}
 
 export default function AdminCommentsPage() {
   const router = useRouter();
 
   const [checking, setChecking] = useState(true);
 
+  // Se usa SOLO para verificar sesión (login) y evitar flashes raros.
   const supabaseSessionClient = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -53,8 +41,6 @@ export default function AdminCommentsPage() {
   }
 
   useEffect(() => {
-    // Esta ruta debe estar protegida server-side por proxy.ts (cookies + ADMIN_EMAIL).
-    // Aquí verificamos sesión cliente para evitar flashes raros.
     let alive = true;
 
     (async () => {
@@ -77,30 +63,80 @@ export default function AdminCommentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const supabase = useMemo(() => getSupabaseAdminClient(), []);
-
   async function loadComments() {
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      let q = supabase
-        .from("user_comments")
-        .select("id,created_at,group_code,device_id,page,message,status")
-        .order("created_at", { ascending: false })
-        .limit(200);
+      const params = new URLSearchParams();
+      params.set("limit", "200");
 
-      if (groupFilter !== "ALL") q = q.eq("group_code", groupFilter);
-      if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
+      // Si eliges "Todos", no mandamos status
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
 
-      const { data, error } = await q;
-      if (error) throw new Error(error.message);
+      const res = await fetch(`/api/admin/comments?${params.toString()}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      });
 
-      setItems((data ?? []) as CommentRow[]);
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg =
+          json?.reason
+            ? `No autorizado (${json.reason}).`
+            : json?.detail
+            ? json.detail
+            : json?.error
+            ? json.error
+            : "Error desconocido.";
+        throw new Error(msg);
+      }
+
+      let list = (json?.items ?? []) as CommentRow[];
+
+      // Filtro por grupo (lo hacemos aquí para no tocar el API)
+      if (groupFilter !== "ALL") {
+        list = list.filter((x) => x.group_code === groupFilter);
+      }
+
+      setItems(list);
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function setStatus(id: string, status: "reviewed" | "archived") {
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/admin/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ id, status }),
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg =
+          json?.reason
+            ? `No autorizado (${json.reason}).`
+            : json?.detail
+            ? json.detail
+            : json?.error
+            ? json.error
+            : "Error desconocido.";
+        throw new Error(msg);
+      }
+
+      await loadComments();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? String(e));
     }
   }
 
@@ -190,16 +226,13 @@ export default function AdminCommentsPage() {
                 <option value="new">new</option>
                 <option value="reviewed">reviewed</option>
                 <option value="archived">archived</option>
+                <option value="blocked">blocked</option>
                 <option value="ALL">Todos</option>
               </select>
             </div>
 
             <div className="flex items-end">
-              <button
-                type="button"
-                onClick={loadComments}
-                className={btnSm + " w-full"}
-              >
+              <button type="button" onClick={loadComments} className={btnSm + " w-full"}>
                 {loading ? "Cargando..." : "Recargar"}
               </button>
             </div>
@@ -208,9 +241,6 @@ export default function AdminCommentsPage() {
           {errorMsg ? (
             <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
               Error: {errorMsg}
-              <div className="mt-1 text-xs text-slate-600">
-                Si esto falla por permisos (RLS), en el siguiente paso lo movemos a un API admin server-side.
-              </div>
             </div>
           ) : null}
 
@@ -236,28 +266,26 @@ export default function AdminCommentsPage() {
                       ? "Nuevo"
                       : c.status === "reviewed"
                       ? "Revisado"
-                      : "Archivado"}
+                      : c.status === "archived"
+                      ? "Archivado"
+                      : "Bloqueado"}
                   </div>
                 </div>
+
                 <div className="mt-2 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
                   {c.message}
                 </div>
+
                 <div className="mt-2 text-xs text-slate-600">
                   page: {c.page ?? "-"} • device: {c.device_id ?? "-"} • id: {c.id}
                 </div>
 
                 <div className="mt-3 flex gap-2 flex-wrap">
-                  {c.status !== "reviewed" && (
+                  {c.status !== "reviewed" && c.status !== "blocked" && (
                     <button
                       type="button"
                       className="px-3 py-1 rounded-lg border-2 border-red-600 bg-green-700 text-white text-xs font-bold"
-                      onClick={async () => {
-                        await supabase
-                          .from("user_comments")
-                          .update({ status: "reviewed" })
-                          .eq("id", c.id);
-                        loadComments();
-                      }}
+                      onClick={() => setStatus(c.id, "reviewed")}
                     >
                       Marcar como Revisado
                     </button>
@@ -267,13 +295,7 @@ export default function AdminCommentsPage() {
                     <button
                       type="button"
                       className="px-3 py-1 rounded-lg border-2 border-red-600 bg-slate-700 text-white text-xs font-bold"
-                      onClick={async () => {
-                        await supabase
-                          .from("user_comments")
-                          .update({ status: "archived" })
-                          .eq("id", c.id);
-                        loadComments();
-                      }}
+                      onClick={() => setStatus(c.id, "archived")}
                     >
                       Marcar como Archivado
                     </button>
