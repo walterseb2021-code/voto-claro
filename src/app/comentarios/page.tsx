@@ -10,8 +10,10 @@ type CommentRow = {
   created_at: string;
   group_code: string;
   message: string;
-  status: "new" | "reviewed" | "archived";
+  status: "new" | "reviewed" | "archived" | "blocked";
 };
+
+type TimeFilter = "TODAY" | "D7" | "D30" | "ALL";
 
 function readCookie(name: string) {
   if (typeof document === "undefined") return null;
@@ -73,6 +75,28 @@ function hasSoeces(text: string) {
   return words.some((w) => banned.has(w));
 }
 
+function getSinceDate(filter: TimeFilter): Date | null {
+  const now = new Date();
+  if (filter === "ALL") return null;
+
+  if (filter === "TODAY") {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  if (filter === "D7") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 7);
+    return d;
+  }
+
+  // D30
+  const d = new Date(now);
+  d.setDate(d.getDate() - 30);
+  return d;
+}
+
 export default function ComentariosPage() {
   const router = useRouter();
 
@@ -103,6 +127,19 @@ export default function ComentariosPage() {
   // ✅ Botón “Subir”
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  // ✅ Verificación de datos (para permitir comentar)
+  const [checkingData, setCheckingData] = useState(true);
+  const [hasData, setHasData] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+
+  // ✅ Formulario de datos (correo o celular)
+  const [email, setEmail] = useState("");
+  const [celular, setCelular] = useState("");
+  const [savingData, setSavingData] = useState(false);
+
+  // ✅ NUEVO: filtro por fecha para comentarios publicados
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("D7");
+
   useEffect(() => {
     const g = readCookie("vc_group");
     if (g) setGroupCode(g);
@@ -118,17 +155,94 @@ export default function ComentariosPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  async function checkIfHasData(currentDeviceId: string) {
+    setCheckingData(true);
+    setDataError(null);
+
+    try {
+      const { data, error } = await supabase
+        .from("reto_premio_participants")
+        .select("device_id")
+        .eq("device_id", currentDeviceId)
+        .limit(1);
+
+      if (error) throw new Error(error.message);
+
+      setHasData(!!(data && data.length > 0));
+    } catch (e: any) {
+      setHasData(false);
+      setDataError(e?.message ?? String(e));
+    } finally {
+      setCheckingData(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!deviceId) return;
+    void checkIfHasData(deviceId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId]);
+
+  async function saveMyData() {
+    setOkMsg(null);
+    setErrMsg(null);
+    setDataError(null);
+
+    if (!deviceId) {
+      setErrMsg("No se pudo identificar tu dispositivo. Recarga la página.");
+      return;
+    }
+
+    const em = email.trim();
+    const ce = celular.trim();
+
+    if (!em && !ce) {
+      setErrMsg("Escribe al menos un correo o un celular.");
+      return;
+    }
+
+    setSavingData(true);
+    try {
+      // Guardamos (o actualizamos) tus datos usando tu device_id
+      const payload: any = {
+        device_id: deviceId,
+      };
+      if (em) payload.email = em;
+      if (ce) payload.celular = ce;
+
+      const { error } = await supabase.from("reto_premio_participants").upsert(payload, {
+        onConflict: "device_id",
+      });
+
+      if (error) throw new Error(error.message);
+
+      setHasData(true);
+      setOkMsg("Listo. Tus datos fueron guardados. Ya puedes comentar.");
+    } catch (e: any) {
+      setErrMsg(e?.message ?? String(e));
+    } finally {
+      setSavingData(false);
+    }
+  }
+
   async function loadPublicReviewed() {
     setPublicLoading(true);
     setPublicError(null);
 
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from("user_comments")
         .select("id,created_at,group_code,message,status")
         .eq("status", "reviewed")
         .order("created_at", { ascending: false })
         .limit(50);
+
+      const since = getSinceDate(timeFilter);
+      if (since) {
+        q = q.gte("created_at", since.toISOString());
+      }
+
+      const { data, error } = await q;
 
       if (error) throw new Error(error.message);
 
@@ -140,10 +254,35 @@ export default function ComentariosPage() {
     }
   }
 
+  // ✅ Si la lista pública está abierta, se actualiza sola.
+  // También se refresca cuando cambias el filtro de fecha.
+  useEffect(() => {
+    if (!showPublic) return;
+
+    void loadPublicReviewed();
+
+    const id = window.setInterval(() => {
+      void loadPublicReviewed();
+    }, 8000);
+
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPublic, timeFilter]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setOkMsg(null);
     setErrMsg(null);
+
+    // ✅ Primero: si no tiene datos, no puede comentar
+    if (checkingData) {
+      setErrMsg("Espera un momento… estamos verificando tus datos.");
+      return;
+    }
+    if (!hasData) {
+      setErrMsg("Para comentar, primero debes registrar tu correo o celular.");
+      return;
+    }
 
     const text = message.trim();
     if (!text) {
@@ -151,6 +290,7 @@ export default function ComentariosPage() {
       return;
     }
 
+    // Filtro “amable” en pantalla (el filtro real ya está en la base de datos)
     if (hasSoeces(text)) {
       setErrMsg(
         "Aceptamos críticas negativas, pero sin insultos ni groserías. Por favor reescribe tu comentario con respeto."
@@ -174,6 +314,11 @@ export default function ComentariosPage() {
 
       setMessage("");
       setOkMsg("¡Gracias! Tu comentario fue enviado.");
+
+      // ✅ Si el usuario tiene abierta la lista pública, refrescamos ya
+      if (showPublic) {
+        await loadPublicReviewed();
+      }
     } catch (e: any) {
       setErrMsg(e?.message ?? String(e));
     } finally {
@@ -194,6 +339,9 @@ export default function ComentariosPage() {
     "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
     "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
 
+  const select =
+    "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
+
   return (
     <main className={wrap}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -202,7 +350,11 @@ export default function ComentariosPage() {
             Comentarios ciudadanos
           </h1>
           <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-            Déjanos tu opinión o sugerencia. (Es anónimo.)
+            Para comentar, primero debes registrar tu correo o celular.
+            <br />
+            <span className="text-xs text-slate-600">
+              Nadie verá tus datos. Solo se guardan para control y contacto si aplica.
+            </span>
           </p>
         </div>
 
@@ -217,107 +369,193 @@ export default function ComentariosPage() {
       </div>
 
       <section className={card}>
-        <form onSubmit={onSubmit} className="grid gap-4">
-          <div>
-            <div className={label}>Grupo (opcional)</div>
-            <input
-              className={input}
-              value={groupCode}
-              onChange={(e) => setGroupCode(e.target.value)}
-              placeholder="Ej: GRUPOA"
-            />
-            <div className="mt-1 text-xs text-slate-600">
-              Si vienes desde un pitch, esto se llena automáticamente.
+        {/* Mensajes */}
+        {okMsg ? (
+          <div className="rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
+            {okMsg}
+          </div>
+        ) : null}
+
+        {errMsg ? (
+          <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+            Error: {errMsg}
+          </div>
+        ) : null}
+
+        {dataError ? (
+          <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+            Error al verificar datos: {dataError}
+          </div>
+        ) : null}
+
+        {/* Si está verificando */}
+        {checkingData ? (
+          <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
+            Verificando si ya registraste tus datos…
+          </div>
+        ) : null}
+
+        {/* Si NO tiene datos: mostrar formulario para registrar */}
+        {!checkingData && !hasData ? (
+          <div className="mt-4 grid gap-4">
+            <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
+              Para poder comentar, registra por lo menos un correo o un celular.
+              <div className="mt-1 text-xs text-slate-600">
+                Si ya dejaste tus datos en Reto Ciudadano, toca “Ya dejé mis datos” para verificar.
+              </div>
+            </div>
+
+            <div>
+              <div className={label}>Correo (opcional si pones celular)</div>
+              <input
+                className={input}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="correo@dominio.com"
+              />
+            </div>
+
+            <div>
+              <div className={label}>Celular (opcional si pones correo)</div>
+              <input
+                className={input}
+                value={celular}
+                onChange={(e) => setCelular(e.target.value)}
+                placeholder="999888777"
+              />
+            </div>
+
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" className={btn} onClick={saveMyData} disabled={savingData}>
+                {savingData ? "Guardando..." : "Guardar mis datos"}
+              </button>
+
+              <button
+                type="button"
+                className={btn}
+                onClick={() => deviceId && checkIfHasData(deviceId)}
+                disabled={savingData}
+              >
+                🔄 Ya dejé mis datos (verificar)
+              </button>
             </div>
           </div>
+        ) : null}
 
-          <div>
-            <div className={label}>Tu comentario</div>
-            <textarea
-              className={textarea}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Escribe aquí…"
-              maxLength={500}
-            />
-            <div className="mt-1 text-xs text-slate-600">Máximo 500 caracteres.</div>
-          </div>
-
-          {okMsg ? (
-            <div className="rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
-              {okMsg}
+        {/* Si SÍ tiene datos: mostrar formulario normal de comentarios */}
+        {!checkingData && hasData ? (
+          <form onSubmit={onSubmit} className="grid gap-4 mt-4">
+            <div>
+              <div className={label}>Grupo (opcional)</div>
+              <input
+                className={input}
+                value={groupCode}
+                onChange={(e) => setGroupCode(e.target.value)}
+                placeholder="Ej: GRUPOA"
+              />
+              <div className="mt-1 text-xs text-slate-600">
+                Si vienes desde un pitch, esto se llena automáticamente.
+              </div>
             </div>
-          ) : null}
 
-          {errMsg ? (
-            <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
-              Error: {errMsg}
+            <div>
+              <div className={label}>Tu comentario</div>
+              <textarea
+                className={textarea}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Escribe aquí…"
+                maxLength={500}
+              />
+              <div className="mt-1 text-xs text-slate-600">Máximo 500 caracteres.</div>
             </div>
-          ) : null}
 
-          <button type="submit" className={btn} disabled={sending}>
-            {sending ? "Enviando..." : "Enviar comentario"}
-          </button>
-
-          <div className="mt-2">
-            <button
-              type="button"
-              className={btn + " w-full"}
-              onClick={async () => {
-                const next = !showPublic;
-                setShowPublic(next);
-                if (next && publicItems.length === 0 && !publicLoading) {
-                  await loadPublicReviewed();
-                }
-              }}
-            >
-              {showPublic ? "▲ Ocultar comentarios publicados" : "▼ Ver comentarios publicados"}
+            <button type="submit" className={btn} disabled={sending}>
+              {sending ? "Enviando..." : "Enviar comentario"}
             </button>
 
-            {showPublic ? (
-              <div className="mt-3 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
-                <div className="text-sm font-extrabold text-slate-900">
-                  Comentarios publicados (aprobados)
-                </div>
-                <div className="mt-1 text-xs text-slate-600">
-                  Aquí se muestran solo los comentarios revisados y aprobados.
-                </div>
-
-                {publicError ? (
-                  <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
-                    Error al cargar comentarios: {publicError}
-                  </div>
-                ) : null}
-
-                {publicLoading ? (
-                  <div className="mt-3 text-sm font-semibold text-slate-700">Cargando...</div>
-                ) : null}
-
-                {!publicLoading && !publicError && publicItems.length === 0 ? (
-                  <div className="mt-3 text-sm font-semibold text-slate-700">
-                    Aún no hay comentarios publicados.
-                  </div>
-                ) : null}
-
-                <div className="mt-3 space-y-3">
-                  {publicItems.map((c) => (
-                    <div
-                      key={c.id}
-                      className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
-                    >
-                      <div className="text-xs font-extrabold text-slate-900">
-                        {c.group_code} • {new Date(c.created_at).toLocaleString()}
-                      </div>
-                      <div className="mt-2 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
-                        {c.message}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {/* ✅ NUEVO: selector por fecha (arriba del botón de ver comentarios) */}
+            <div className="mt-2 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
+              <div className="text-sm font-extrabold text-slate-900">
+                Ver comentarios publicados
               </div>
-            ) : null}
-          </div>
-        </form>
+              <div className="mt-1 text-xs text-slate-600">
+                Filtra por fecha para que cargue rápido.
+              </div>
+
+              <div className="mt-3">
+                <div className={label}>Mostrar</div>
+                <select
+                  className={select}
+                  value={timeFilter}
+                  onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
+                >
+                  <option value="TODAY">Hoy</option>
+                  <option value="D7">Últimos 7 días</option>
+                  <option value="D30">Últimos 30 días</option>
+                  <option value="ALL">Todos</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                className={btn + " w-full mt-3"}
+                onClick={async () => {
+                  const next = !showPublic;
+                  setShowPublic(next);
+                  if (next && publicItems.length === 0 && !publicLoading) {
+                    await loadPublicReviewed();
+                  }
+                }}
+              >
+                {showPublic ? "▲ Ocultar comentarios publicados" : "▼ Ver comentarios publicados"}
+              </button>
+
+              {showPublic ? (
+                <div className="mt-3 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
+                  <div className="text-sm font-extrabold text-slate-900">
+                    Comentarios publicados (aprobados)
+                  </div>
+                  <div className="mt-1 text-xs text-slate-600">
+                    Se actualiza automáticamente cada pocos segundos.
+                  </div>
+
+                  {publicError ? (
+                    <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+                      Error al cargar comentarios: {publicError}
+                    </div>
+                  ) : null}
+
+                  {publicLoading ? (
+                    <div className="mt-3 text-sm font-semibold text-slate-700">Cargando...</div>
+                  ) : null}
+
+                  {!publicLoading && !publicError && publicItems.length === 0 ? (
+                    <div className="mt-3 text-sm font-semibold text-slate-700">
+                      Aún no hay comentarios publicados.
+                    </div>
+                  ) : null}
+
+                  <div className="mt-3 space-y-3">
+                    {publicItems.map((c) => (
+                      <div
+                        key={c.id}
+                        className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                      >
+                        <div className="text-xs font-extrabold text-slate-900">
+                          {c.group_code} • {new Date(c.created_at).toLocaleString()}
+                        </div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+                          {c.message}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </form>
+        ) : null}
       </section>
 
       {/* ✅ Botón flotante “Subir” */}
