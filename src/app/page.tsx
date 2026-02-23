@@ -552,7 +552,34 @@ export default function HomePage() {
             </div>
           </div>
         </Link>
-
+        {/* ✅ SMART LINK: Comentario Ciudadano (UI) */}
+<Link
+  href="/comentarios"
+  onClick={(e) =>
+    handleSmartNavigate({
+      key: "comentarios",
+      href: "/comentarios",
+      speech:
+        "Vas a entrar a Comentarios ciudadanos. Ahí puedes dejar tu opinión o sugerencia. Es anónimo y ayuda a mejorar la app.",
+      preventDefault: true,
+      e,
+    })
+  }
+  className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+>
+  <div className="flex items-start gap-3">
+    <div className="text-2xl leading-none">💬</div>
+    <div className="min-w-0">
+      <div className="text-base font-extrabold text-slate-900">COMENTARIO CIUDADANO</div>
+      <p className="mt-1 text-sm text-slate-900">
+        Deja tu opinión o sugerencia para mejorar Voto Claro. (Se publica solo si es aprobado).
+      </p>
+      <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+        Abrir página →
+      </div>
+    </div>
+  </div>
+</Link>
       </section>
 
       <footer className="mt-6 text-xs text-slate-700">
