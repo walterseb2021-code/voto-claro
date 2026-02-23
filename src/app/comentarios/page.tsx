@@ -205,12 +205,12 @@ export default function ComentariosPage() {
     try {
       // Guardamos (o actualizamos) tus datos usando tu device_id
       const payload: any = {
-        device_id: deviceId,
-      };
+  device_id: deviceId,
+  group_code: groupCode, // ← agrega esto
+};
       if (em) payload.email = em;
       if (ce) payload.celular = ce;
-      console.log("[VOTO CLARO] deviceId before upsert:", JSON.stringify(deviceId));
-      const { error } = await supabase.from("reto_premio_participants").upsert(payload, {
+           const { error } = await supabase.from("reto_premio_participants").upsert(payload, {
         onConflict: "device_id",
       });
 
