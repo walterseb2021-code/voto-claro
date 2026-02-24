@@ -800,7 +800,7 @@ async function handleCambioConValentia(
   // ✅ Si es “Conversación del partido” => responder desde docs del partido
   const i = detectIntent(rawQ);
 
-  if (i.asksPartyDetails) {
+  if (i.asksPartyDetails || i.wantsPLAN || i.wantsHV || i.wantsNEWS || i.t.length >= 12) {
     try {
       const res = await fetch("/api/party/docs/chat", {
         method: "POST",
@@ -866,7 +866,12 @@ function getPageCtx(pathname: string): PageCtx {
   if (p.startsWith("/candidate/")) return "CANDIDATE";
   if (p.startsWith("/intencion-de-voto")) return "INTENCION";
   if (p.startsWith("/reto-ciudadano")) return "RETO";
-  if (p.startsWith("/comentario-ciudadano") || p.startsWith("/comentarios-ciudadanos")) return "COMENTARIO";
+ if (
+  p.startsWith("/comentario-ciudadano") ||
+  p.startsWith("/comentarios-ciudadanos") ||
+  p.startsWith("/comentarios")
+)
+  return "COMENTARIO";
   return "OTHER";
 }
 

@@ -52,7 +52,7 @@ export default function PartyDocsBlock(props: { partyId?: string }) {
             Documentos base
           </div>
           <h3 className="mt-1 text-base md:text-lg font-extrabold text-slate-900 break-words">
-            Conversación del partido (JSON)
+            Conversación del partido
           </h3>
           <p className="mt-2 text-sm md:text-base text-slate-800 font-semibold leading-relaxed break-words">
             Responde de forma fluida y humana, pero siempre alineada a nuestros documentos base.
@@ -102,19 +102,52 @@ export default function PartyDocsBlock(props: { partyId?: string }) {
         </div>
       ) : null}
 
-      {ans ? (
-        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/60 p-4">
-          <div className="text-xs text-slate-700 font-extrabold tracking-wide uppercase">
-            Respuesta
-          </div>
-          <div className="mt-2 text-sm md:text-base text-slate-900 font-semibold leading-relaxed whitespace-pre-wrap break-words">
-            {ans}
-          </div>
-        </div>
-      ) : null}
+    {ans ? (
+  <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/60 p-4">
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="text-xs text-slate-700 font-extrabold tracking-wide uppercase">
+        Respuesta
+      </div>
 
+      <button
+        type="button"
+        onClick={() => {
+          const text = String(ans || "").trim();
+          if (!text) return;
+
+          // 1) Dejar el texto listo para leer (y mostrar aviso en el chat)
+          window.dispatchEvent(
+            new CustomEvent("votoclaro:page-read", { detail: { text } })
+          );
+
+          // 2) Intentar abrir el panel del asistente para que se vea
+          (window as any).__federalitoAssistantOpen?.();
+
+          // 3) Leer inmediatamente (si voz está ON y ya hubo interacción)
+          window.dispatchEvent(
+            new CustomEvent("votoclaro:guide", {
+              detail: { action: "SAY", text, speak: true },
+            })
+          );
+        }}
+        className={
+          "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
+          "border border-slate-300 bg-black text-white text-xs md:text-sm font-extrabold " +
+          "hover:opacity-90 transition shadow-sm"
+        }
+        title="Leer esta respuesta en voz alta"
+      >
+        🔊 Leer respuesta
+      </button>
+    </div>
+
+    <div className="mt-2 text-sm md:text-base text-slate-900 font-semibold leading-relaxed whitespace-pre-wrap break-words">
+      {ans}
+    </div>
+  </div>
+) : null}
       <p className="mt-3 text-xs text-slate-600 text-center font-semibold">
-        Nota: Este bloque responde usando únicamente los documentos base cargados en JSON.
+        
       </p>
     </div>
   );
