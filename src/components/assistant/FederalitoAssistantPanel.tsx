@@ -726,7 +726,7 @@ function buildContextualQuestion(rawQ: string, mem: MemoryState, candidateName: 
 
 function safeLoadMem(): MemoryState {
   try {
-    const raw = localStorage.getItem(LS_ASSIST_MEM);
+    const raw = sessionStorage.getItem(LS_ASSIST_MEM);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return {};
@@ -738,7 +738,7 @@ function safeLoadMem(): MemoryState {
 
 function safeSaveMem(mem: MemoryState) {
   try {
-    localStorage.setItem(LS_ASSIST_MEM, JSON.stringify(mem || {}));
+    sessionStorage.setItem(LS_ASSIST_MEM, JSON.stringify(mem || {}));
   } catch {}
 }
 
@@ -1384,13 +1384,13 @@ export default function FederalitoAssistantPanel() {
 
     // Preferencias (voz/idioma/modo)
     try {
-      const vm = localStorage.getItem(LS_VOICE_MODE) as VoiceMode | null;
+      const vm = sessionStorage.getItem(LS_VOICE_MODE) as VoiceMode | null;
       if (vm === "ON" || vm === "OFF") setVoiceMode(vm);
 
-      const vl = localStorage.getItem(LS_VOICE_LANG) as VoiceLang | null;
+      const vl = sessionStorage.getItem(LS_VOICE_LANG) as VoiceLang | null;
       if (vl === "es-PE" || vl === "qu") setVoiceLang(vl);
 
-      const am = localStorage.getItem(LS_ASK_MODE) as AskMode | null;
+      const am = sessionStorage.getItem(LS_ASK_MODE) as AskMode | null;
       if (am === "HV" || am === "PLAN" || am === "NEWS") setAskMode(am);
     } catch {}
     hydratedPrefsRef.current = true;
@@ -1788,9 +1788,9 @@ function safeResetFabPos() {
     setDraft("");
 
     setMem({});
-    try {
-      localStorage.removeItem(LS_ASSIST_MEM);
-    } catch {}
+   try {
+  sessionStorage.removeItem(LS_ASSIST_MEM);
+   } catch {}
     setRefAxisId(null);
     setRefWaitingNumber(false);
   }
@@ -1830,9 +1830,9 @@ function safeResetFabPos() {
     if (!hydratedPrefsRef.current) return;
 
     try {
-      localStorage.setItem(LS_VOICE_MODE, voiceMode);
-      localStorage.setItem(LS_VOICE_LANG, voiceLang);
-      localStorage.setItem(LS_ASK_MODE, askMode);
+      sessionStorage.setItem(LS_VOICE_MODE, voiceMode);
+      sessionStorage.setItem(LS_VOICE_LANG, voiceLang);
+      sessionStorage.setItem(LS_ASK_MODE, askMode);
     } catch {}
   }, [mounted, voiceMode, voiceLang, askMode]);
 
