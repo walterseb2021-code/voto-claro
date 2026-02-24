@@ -765,7 +765,22 @@ function answerFromCambioConValentia(rawQ: string) {
   if (wantsGuide) {
     return `${CAMBIO_PAGE_GUIDE}\n\n${CAMBIO_PAGE_TITLE}\n\nEnlace:\n${CAMBIO_PAGE_LINK_URL}\n\n${CAMBIO_PAGE_PHRASE}`;
   }
-
+    // ✅ Preguntas por temas/propuestas: esta ventana solo es acceso + mensaje + link
+  if (
+    q.includes("tema") ||
+    q.includes("temas") ||
+    q.includes("propuesta") ||
+    q.includes("propuestas") ||
+    q.includes("eje") ||
+    q.includes("ejes") ||
+    q.includes("plan")
+  ) {
+    return (
+      "En esta ventana solo muestro el acceso y el mensaje principal.\n\n" +
+      "Para ver temas y propuestas detalladas, revisa el sitio oficial:\n" +
+      CAMBIO_PAGE_LINK_URL
+    );
+  }
   if (q.includes("link") || q.includes("enlace") || q.includes("web") || q.includes("pagina") || q.includes("página")) {
     return `Enlace oficial:\n${CAMBIO_PAGE_LINK_URL}`;
   }
@@ -782,20 +797,76 @@ async function handleCambioConValentia(
   maybeSpeakFn: (t: string) => Promise<void>,
   pushFn: (t: string) => void
 ) {
+  // ✅ Si es “Conversación del partido” => responder desde docs del partido
+  const i = detectIntent(rawQ);
+
+  if (i.asksPartyDetails) {
+    try {
+      const res = await fetch("/api/party/docs/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          partyId: "perufederal",
+          mode: "SUMMARY",
+          question: String(rawQ || "").trim(),
+        }),
+      });
+
+      const payload = await safeReadJson(res);
+
+      if (!res.ok) {
+        const msg =
+          (payload as any)?._nonJson
+            ? "Error PARTY DOCS: respuesta no-JSON. Revisa DevTools → Network → /api/party/docs/chat."
+            : `Error PARTY DOCS: ${String((payload as any)?.error ?? (payload as any)?.message ?? "desconocido")}`;
+        pushFn(msg);
+        await maybeSpeakFn(msg);
+        return;
+      }
+
+      const ans = String((payload as any)?.answer ?? (payload as any)?.text ?? "").trim();
+      const out = ans || "No encontré una respuesta en los documentos del partido para esa pregunta.";
+
+      pushFn(out);
+      await maybeSpeakFn(out);
+      return;
+    } catch {
+      const msg = "No pude consultar los documentos del partido en este momento.";
+      pushFn(msg);
+      await maybeSpeakFn(msg);
+      return;
+    }
+  }
+
+  // ✅ Caso normal de esta ventana (guía/link/frase)
   const out = answerFromCambioConValentia(rawQ);
   pushFn(out);
   await maybeSpeakFn(out);
 }
 
-type PageCtx = "HOME" | "REFLEXION" | "CIUDADANO" | "CAMBIO" | "CANDIDATE" | "OTHER";
+type PageCtx =
+  | "HOME"
+  | "REFLEXION"
+  | "CIUDADANO"
+  | "CAMBIO"
+  | "CANDIDATE"
+  | "INTENCION"
+  | "RETO"
+  | "COMENTARIO"
+  | "OTHER";
 
 function getPageCtx(pathname: string): PageCtx {
   const p = String(pathname || "");
   if (p === "/" || p.startsWith("/#")) return "HOME";
   if (p.startsWith("/reflexion")) return "REFLEXION";
-  if (p.startsWith("/ciudadano/servicio")) return "CIUDADANO";
+  if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios"))
+  return "CIUDADANO";
   if (p.startsWith("/cambio-con-valentia")) return "CAMBIO";
   if (p.startsWith("/candidate/")) return "CANDIDATE";
+  if (p.startsWith("/intencion-de-voto")) return "INTENCION";
+  if (p.startsWith("/reto-ciudadano")) return "RETO";
+  if (p.startsWith("/comentario-ciudadano") || p.startsWith("/comentarios-ciudadanos")) return "COMENTARIO";
   return "OTHER";
 }
 
@@ -1072,6 +1143,10 @@ async function handleGlobalPolicyAndRedirect(params: {
   }
 
   const ctx = getPageCtx(pathname);
+  // ✅ Estas pantallas nuevas nunca deben ser interceptadas por el gate global
+if (ctx === "INTENCION" || ctx === "RETO" || ctx === "COMENTARIO") {
+  return { handled: false };
+}
   const redirect = buildRedirectMessage(ctx, rawQ);
 
   // ✅ null => estás en pantalla correcta / o HOME help => NO interceptar
@@ -1416,7 +1491,9 @@ export default function FederalitoAssistantPanel() {
 
   const compareCandidateId = useMemo(() => getCompareIdFromSearchParams(searchParams), [searchParams]);
 
-  const isCiudadanoServicioPage = String(pathname || "").startsWith("/ciudadano/servicio");
+  const isCiudadanoServicioPage =
+  String(pathname || "").startsWith("/ciudadano/servicio") ||
+  String(pathname || "").startsWith("/ciudadano/servicios");
   const isCambioConValentiaPage = String(pathname || "").startsWith(CAMBIO_PAGE_ROUTE);
 
   const [refAxisId, setRefAxisId] = useState<string | null>(null);
@@ -2422,7 +2499,39 @@ if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
       await maybeSpeak(out);
       return;
     }
+   
 
+// ✅ Páginas que NO requieren candidato: guía local por ruta
+const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
+if (ctxNow === "INTENCION") {
+  const msg =
+    "Estás en Intención de voto.\n\n" +
+    "Aquí puedes registrar o revisar intención de voto según las opciones de la pantalla.\n" +
+    "Dime qué ves (botones/opciones) y te digo exactamente qué hace cada una.";
+  pushAssistant(msg);
+  await maybeSpeak(msg);
+  return;
+}
+
+if (ctxNow === "RETO") {
+  const msg =
+    "Estás en Reto ciudadano.\n\n" +
+    "Aquí puedes participar y registrar acciones según la dinámica de la pantalla.\n" +
+    "Dime qué acción quieres hacer (por ejemplo: participar, enviar, votar) y te guío.";
+  pushAssistant(msg);
+  await maybeSpeak(msg);
+  return;
+}
+
+if (ctxNow === "COMENTARIO") {
+  const msg =
+    "Estás en Comentario ciudadano.\n\n" +
+    "Aquí puedes leer y publicar comentarios.\n" +
+    "Dime si quieres: 1) escribir un comentario, 2) ver comentarios, o 3) filtrar/ordenar, y te guío.";
+  pushAssistant(msg);
+  await maybeSpeak(msg);
+  return;
+}
     if (!candidateId) {
       const msg =
         "Primero abre la ficha de un candidato.\n\n" +
