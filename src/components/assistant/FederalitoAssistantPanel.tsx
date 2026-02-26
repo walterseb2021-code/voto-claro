@@ -17,6 +17,11 @@ import {
   CAMBIO_PAGE_PHRASE,
   CAMBIO_PAGE_GUIDE,
 } from "@/lib/cambioConValentiaContent";
+import {
+  COMO_FUNCIONA_ROUTE,
+  COMO_FUNCIONA_GUIDE,
+  COMO_FUNCIONA_FAQ,
+} from "@/lib/comoFuncionaContent";
 
 type GuideEventDetail = {
   action?: "SAY" | "OPEN" | "CLOSE" | "SAY_AND_OPEN";
@@ -215,12 +220,87 @@ async function handleCiudadanoServicio(
   rawQ: string,
   maybeSpeakFn: (t: string) => Promise<void>,
   pushFn: (t: string) => void
-) {
+ ) 
+ 
+ {
   const out = answerFromCiudadanoServicio(rawQ);
   pushFn(out);
   await maybeSpeakFn(out);
+ }
+function answerFromComoFunciona(rawQ: string) {
+  const q = normalizeLite(rawQ);
+
+  // 0) si pregunta muy corta o tipo "ayuda"
+  if (!q || q.length < 3 || q.includes("ayuda") || q.includes("guia") || q.includes("guía")) {
+    return COMO_FUNCIONA_GUIDE;
+  }
+
+  // 1) “lista / qué hay / leer todo”
+  if (
+    q.includes("lista") ||
+    q.includes("que hay") ||
+    q.includes("qué hay") ||
+    q.includes("leer todo") ||
+    q.includes("todo")
+  ) {
+    const list = COMO_FUNCIONA_FAQ.map((it, i) => `${i + 1}) ${it.title}`).join("\n");
+    return (
+      `${COMO_FUNCIONA_GUIDE}\n\n` +
+      `Temas disponibles:\n${list}\n\n` +
+      `Dime el número (por ejemplo “2”) o una palabra clave (por ejemplo “políticas”, “privacidad”, “voz”, “micrófono”).`
+    );
+  }
+
+  // 2) si el usuario dice solo un número 1..N
+  const mNum = q.match(/^\s*(\d{1,2})\s*$/);
+  if (mNum) {
+    const n = Number(mNum[1]);
+    const item = COMO_FUNCIONA_FAQ[n - 1];
+    if (!item) return "Ese número no existe en la lista. Dime un número válido.";
+    return `✅ ${item.title}\n\n${item.answer}`;
+  }
+
+  // 3) match por keyword / título
+  const hit =
+    COMO_FUNCIONA_FAQ.find((it) => (it.keywords || []).some((k) => q.includes(normalizeLite(k)))) ||
+    COMO_FUNCIONA_FAQ.find((it) => normalizeLite(it.title).includes(q) || q.includes(normalizeLite(it.title)));
+
+  if (hit) return `✅ ${hit.title}\n\n${hit.answer}`;
+
+  // 4) fallback: búsqueda suave por palabras (>=4 letras)
+  const words = q.split(" ").filter((w) => w.length >= 4);
+  let best: { item: any; score: number } | null = null;
+
+  for (const it of COMO_FUNCIONA_FAQ) {
+    const t = normalizeLite(`${it.title} ${it.answer} ${(it.keywords || []).join(" ")}`);
+    let score = 0;
+    for (const w of words) if (t.includes(w)) score++;
+    if (!best || score > best.score) best = { item: it, score };
+  }
+
+  if (best && best.score >= 1) {
+    return `✅ ${best.item.title}\n\n${best.item.answer}`;
+  }
+
+  // 5) si no entiende, vuelve a guía + lista
+  const list = COMO_FUNCIONA_FAQ.map((it, i) => `${i + 1}) ${it.title}`).join("\n");
+  return (
+    "No encontré ese tema en esta página.\n\n" +
+    "Prueba con: “lista”, “políticas”, “privacidad”, “voz”, “micrófono”, “fuentes”, “qué hace el asistente”.\n\n" +
+    `Temas disponibles:\n${list}\n\n` +
+    COMO_FUNCIONA_GUIDE
+  );
 }
 
+async function handleComoFunciona(
+  rawQ: string,
+  maybeSpeakFn: (t: string) => Promise<void>,
+  pushFn: (t: string) => void
+) {
+  const out = answerFromComoFunciona(rawQ);
+  pushFn(out);
+  await maybeSpeakFn(out);
+}
 function getVoicesSafe(): SpeechSynthesisVoice[] {
   try {
     return window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
@@ -2499,6 +2579,11 @@ if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
 
     if (isCiudadanoServicioPage) {
       await handleCiudadanoServicio(rawQ, maybeSpeak, pushAssistant);
+      return;
+    }
+        const isComoFuncionaPage = String(pathname || "").startsWith("/como-funciona");
+    if (isComoFuncionaPage) {
+      await handleComoFunciona(rawQ, maybeSpeak, pushAssistant);
       return;
     }
     // ✅ /como-funciona: FAQ local + redirección inteligente (sin backend)
