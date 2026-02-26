@@ -854,11 +854,12 @@ type PageCtx =
   | "INTENCION"
   | "RETO"
   | "COMENTARIO"
+  | "COMO_FUNCIONA"
   | "OTHER";
-
 function getPageCtx(pathname: string): PageCtx {
   const p = String(pathname || "");
   if (p === "/" || p.startsWith("/#")) return "HOME";
+  if (p.startsWith("/como-funciona")) return "COMO_FUNCIONA";
   if (p.startsWith("/reflexion")) return "REFLEXION";
   if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios"))
   return "CIUDADANO";
@@ -1864,7 +1865,7 @@ function safeResetFabPos() {
       {
         role: "system",
         content:
-          "Hola, soy Federalito AI. Puedo ayudarte a usar la app y responder preguntas según la pestaña actual: Hoja de vida, Plan de gobierno o Actuar político.",
+          "Hola, soy el asistente de VOTO CLARO. Puedo ayudarte a usar la app y responder preguntas según la pestaña actual: Hoja de vida, Plan de gobierno o Actuar político.",
       },
     ]);
     setDraft("");
@@ -1888,7 +1889,7 @@ function safeResetFabPos() {
     {
       role: "system",
       content:
-        "Hola, soy Federalito AI. Puedes elegir: Hoja de vida (HV), Plan (PLAN) o Actuar político (NEWS). También puedo escucharte con 🎙️ y responder con voz.",
+        "Hola, soy el asistente de VOTO CLARO. Puedes elegir: Hoja de vida (HV), Plan (PLAN) o Actuar político (NEWS). También puedo escucharte con 🎙️ y responder con voz.",
     },
   ]);
 
@@ -2110,6 +2111,10 @@ useEffect(() => {
     text =
       "Estás en Un cambio con valentía. " +
       "Esta ventana muestra una propuesta política y te dirige a su sitio oficial para más información.";
+  } else if (p.startsWith("/como-funciona")) {
+    text =
+      "Estás en Cómo funciona VOTO CLARO. " +
+      "Aquí tienes la guía de uso: flujo recomendado, qué hace el Asistente, límites técnicos y política de uso.";
   } else {
     return; // no hay texto para esta ruta
   }
@@ -2496,7 +2501,98 @@ if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
       await handleCiudadanoServicio(rawQ, maybeSpeak, pushAssistant);
       return;
     }
+    // ✅ /como-funciona: FAQ local + redirección inteligente (sin backend)
+if (String(pathname || "").startsWith("/como-funciona")) {
+  const q = normalizeLite(rawQ);
 
+  // FAQ: voz / micrófono
+  if (q.includes("voz") || q.includes("audio") || q.includes("no habla") || q.includes("no se escucha")) {
+    const msg =
+      "Si el Asistente no habla automáticamente, haz un clic o toque en la pantalla y vuelve a intentar. " +
+      "Es un bloqueo normal del navegador para permitir audio.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (q.includes("micro") || q.includes("micrófono") || q.includes("no me escucha") || q.includes("dictar")) {
+    const msg =
+      "Para usar el micrófono, toca 🎙️ Hablar. Si no funciona, revisa permisos del navegador. " +
+      "En algunos equipos puede pedir autorización o fallar por configuración.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  // flujo recomendado / buscar candidato
+  if (q.includes("buscar") || q.includes("candidato") || q.includes("inicio")) {
+    const msg =
+      "Para buscar candidatos, ve a Inicio (/). Escribe al menos 2 letras en el buscador, " +
+      "elige un candidato y abre su ficha.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  // secciones clave
+  if (q.includes("hoja de vida") || q === "hv") {
+    const msg =
+      "Hoja de Vida: respuestas basadas en el documento oficial. Pregunta por estudios, experiencia, ingresos, " +
+      "sentencias y datos del documento. Si no hay evidencia, se indicará.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (q.includes("plan")) {
+    const msg =
+      "Plan de Gobierno: respuestas basadas en el plan del candidato. Puedes preguntar por economía, salud, seguridad, " +
+      "educación y propuestas. Si eliges un segundo candidato, aparece la comparación.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (q.includes("actuar") || q.includes("politico") || q.includes("político") || q.includes("cronologia") || q.includes("cronología")) {
+    const msg =
+      "Actuar Político: información basada en registros disponibles. Puedes pedir resumen, hechos recientes, cronología " +
+      "o preguntar por un tema específico.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  // redirecciones recomendadas
+  if (q.includes("servicio") || q.includes("local de vot") || q.includes("miembro de mesa") || q.includes("multa")) {
+    const msg = "Eso está en Servicios al ciudadano. Ve a /ciudadano/servicio.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (q.includes("reflex") || q.includes("eje") || q.includes("pregunta")) {
+    const msg = "Eso está en Reflexionar antes de votar. Ve a /reflexion.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (q.includes("cambio con valent") || q.includes("peru federal") || q.includes("perú federal") || q.includes("partido")) {
+    const msg = "Eso está en Un cambio con valentía. Ve a /cambio-con-valentia.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  // fallback útil
+  const msg =
+    "Puedo ayudarte a usar VOTO CLARO.\n\n" +
+    "Dime qué quieres hacer: buscar candidatos, abrir ficha, hoja de vida, plan, actuar político, " +
+    "servicios al ciudadano, reflexión o cambio con valentía.";
+  pushAssistant(msg);
+  await maybeSpeak(msg);
+  return;
+}
     // ✅ HOME: responder preguntas genéricas sin exigir candidato
     if ((pathname === "/" || String(pathname || "").startsWith("/#")) && !candidateId) {
       const out = answerFromHomeGeneric(rawQ);
@@ -2843,7 +2939,7 @@ async function speakLastAssistant() {
  }
 
 
-  const fabLabel = useMemo(() => (open ? "Cerrar Federalito AI" : "Abrir Federalito AI"), [open]);
+  const fabLabel = useMemo(() => (open ? "Cerrar Asistente" : "Abrir Asistente"), [open]);
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
 
   return (
@@ -2890,7 +2986,7 @@ async function speakLastAssistant() {
             </div>
 
             <div className="text-left leading-[14px]">
-              <div className="text-[12px] font-extrabold text-slate-900">Federalito AI</div>
+              <div className="text-[12px] font-extrabold text-slate-900">Asistente</div>
               <div className="text-[11px] text-slate-600">{open ? `Modo: ${modeLabel}` : "Asistente / Guía"}</div>
             </div>
 
@@ -2930,7 +3026,7 @@ async function speakLastAssistant() {
                 </div>
 
                 <div className="min-w-0">
-                  <div className="text-[13px] font-extrabold truncate">Federalito AI</div>
+                   <div className="text-[13px] font-extrabold truncate">Asistente</div>
                   <div className="text-[11px] opacity-90 truncate">
                     {candidateId ? `ID: ${candidateId} • ${modeLabel}` : `Modo: ${modeLabel}`}
                   </div>

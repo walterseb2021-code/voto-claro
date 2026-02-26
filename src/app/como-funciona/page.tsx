@@ -15,8 +15,7 @@ function sendGuide(text: string, action: "SAY" | "SAY_AND_OPEN" = "SAY") {
 
 export default function ComoFuncionaPage() {
   useEffect(() => {
-    // ✅ Mensaje de bienvenida (intenta narrar; si el navegador bloquea audio, bastará 1 clic/toque)
-        // ✅ Al entrar a esta ventana: NO abrir el panel (evita que tape la pantalla)
+    // ✅ Al entrar a esta ventana: NO abrir el panel (evita que tape la pantalla)
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
         detail: { action: "CLOSE" },
@@ -24,43 +23,49 @@ export default function ComoFuncionaPage() {
     );
 
     const t = setTimeout(() => {
-      sendGuide(
-        "Bienvenido a Cómo funciona VOTO CLARO. Aquí aprenderás cómo usar la app, cómo te ayuda Federalito, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa."
-      );
-    }, 0);
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: {
+        action: "SAY",
+        text: "Bienvenido a Cómo funciona VOTO CLARO. Aquí aprenderás cómo usar la app, cómo te ayuda el Asistente, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa.",
+        speak: true,
+      },
+    })
+  );
+}, 0);
 
     return () => clearTimeout(t);
   }, []);
+
   function scrollTop() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
-     <header className="mb-6 relative">
-  {/* ⬅ Volver a Inicio (arriba derecha) */}
-  <div className="absolute right-0 top-0">
-    <Link
-      href="/"
-     className="rounded-xl px-4 py-2 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition shadow-md border-2 border-red-500"
-    >
-      ⬅ Volver a Inicio
-    </Link>
-  </div>
+      <header className="mb-6 relative">
+        {/* ⬅ Volver a Inicio (arriba derecha) */}
+        <div className="absolute right-0 top-0">
+          <Link
+            href="/"
+            className="rounded-xl px-4 py-2 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition shadow-md border-2 border-red-500"
+          >
+            ⬅ Volver a Inicio
+          </Link>
+        </div>
 
-  <h1 className="text-3xl font-semibold text-slate-900">¿Cómo funciona VOTO CLARO?</h1>
-  <p className="mt-2 text-slate-800 max-w-3xl">
-    Esta ventana es la guía de uso. Si Federalito no habla automáticamente, haz un clic/toque en la pantalla y
-    vuelve a intentar (es un bloqueo normal del navegador).
-  </p>
-</header>
+        <h1 className="text-3xl font-semibold text-slate-900">¿Cómo funciona VOTO CLARO?</h1>
+        <p className="mt-2 text-slate-800 max-w-3xl">
+          Esta ventana es la guía de uso. Si el Asistente no habla automáticamente, haz un clic/toque en la pantalla y
+          vuelve a intentar (es un bloqueo normal del navegador).
+        </p>
+      </header>
 
       {/* 1) Qué es */}
       <section className="rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
-       <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VOTO CLARO?</h2>
+        <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VOTO CLARO?</h2>
         <p className="mt-2 text-slate-800 text-sm">
-          Voto Claro es una app informativa para ayudarte a entender información pública antes de votar. No es un juego,
-          no es una red social y no reemplaza tu criterio.
+          VOTO CLARO es una app informativa para ayudarte a entender información pública antes de votar. No es un juego, no es una red social y no reemplaza tu criterio.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -70,8 +75,8 @@ export default function ComoFuncionaPage() {
               sendGuide(
                 "Voto Claro es una app informativa para entender información pública antes de votar. No reemplaza tu criterio."
               )
-            } 
-           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+            }
+            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
             🔊 Leer esta parte
           </button>
@@ -84,13 +89,13 @@ export default function ComoFuncionaPage() {
 
         <ol className="mt-3 space-y-3 text-sm text-slate-800 list-decimal pl-5">
           <li>
-            <b>Entra a Inicio (/)</b> y busca un candidato escribiendo al menos 2 letras.
+            <b>Entra a Inicio</b> y busca un candidato escribiendo al menos 2 letras.
           </li>
           <li>
-            <b>Abre la ficha del candidato</b> y revisa sus secciones (HV, Plan, Actuar político).
+            <b>Abre la ficha del candidato</b> y revisa sus secciones (Hoja de Vida, Plan, Actuar político).
           </li>
           <li>
-            <b>Haz preguntas dentro de la sección correcta</b>. Federalito responde mejor cuando estás en la pestaña
+            <b>Haz preguntas dentro de la sección correcta</b>. El Asistente responde mejor cuando estás en la pestaña
             correcta.
           </li>
           <li>
@@ -106,19 +111,19 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre HV, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa evidencia y luego decide tú."
+                "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre Hoja de Vida, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa evidencia y luego decide tú."
               )
             }
-           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
             🔊 Leer el flujo
           </button>
         </div>
       </section>
 
-      {/* 3) Qué hace Federalito */}
-     <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
-        <h2 className="text-lg font-bold text-slate-900">3) ¿Cómo te ayuda Federalito?</h2>
+      {/* 3) Qué hace el Asistente */}
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+        <h2 className="text-lg font-bold text-slate-900">3) ¿Cómo te ayuda el Asistente?</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
           <li>
@@ -141,12 +146,12 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Federalito te ayuda según la ventana en la que estás. Puede hablar si activas Voz: ON, puede escucharte con el micrófono si tu navegador lo permite, y si preguntas algo fuera de contexto te guía para ir a la ventana correcta."
+                "El Asistente te ayuda según la ventana en la que estás. Puede hablar si activas Voz: ON, puede escucharte con el micrófono si tu navegador lo permite, y si preguntas algo fuera de contexto te guía para ir a la ventana correcta."
               )
             }
-           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
-            🔊 Leer Federalito
+            🔊 Leer esta parte
           </button>
         </div>
       </section>
@@ -181,7 +186,7 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Límites técnicos: algunos navegadores bloquean el audio hasta un clic o toque. Federalito no mantiene conversación infinita; tiene memoria corta. No habla de cualquier tema: responde solo sobre lo que existe en la app y la sección actual. No inventa. El micrófono depende de permisos del navegador."
+                "Límites técnicos: algunos navegadores bloquean el audio hasta un clic o toque. El Asistente no mantiene conversación infinita; tiene memoria corta. No habla de cualquier tema: responde solo sobre lo que existe en la app y la sección actual. No inventa. El micrófono depende de permisos del navegador."
               )
             }
             className="rounded-xl px-4 py-2 border border-amber-700 bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition"
@@ -192,7 +197,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 5) Política de uso */}
-     <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">5) Política de uso (buen uso de la app)</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -211,7 +216,7 @@ export default function ComoFuncionaPage() {
             <b>Sin ingeniería inversa:</b> no intentes desarmar, copiar o atacar el funcionamiento de la app.
           </li>
           <li>
-            <b>Sin manipulación:</b> no intentes forzar a Federalito a “inventar” o a hablar de temas fuera de contexto.
+            <b>Sin manipulación:</b> no intentes forzar al Asistente a “inventar” o a hablar de temas fuera de contexto.
           </li>
           <li>
             <b>Propósito:</b> esta app es para informarte y ayudarte a decidir con criterio.
@@ -223,7 +228,7 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-               "Política de uso: utiliza VOTO CLARO con respeto. No insultos ni lisuras. Pregunta dentro de lo que existe en la app. No ingeniería inversa ni intentos de atacar la app. No intentes forzar a Federalito a inventar o hablar fuera de contexto."
+                "Política de uso: utiliza VOTO CLARO con respeto. No insultos ni lisuras. Pregunta dentro de lo que existe en la app. No intentes desarmar o atacar el funcionamiento. No intentes forzar al Asistente a inventar o hablar fuera de contexto."
               )
             }
             className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
@@ -233,29 +238,136 @@ export default function ComoFuncionaPage() {
         </div>
       </section>
 
-      {/* 6) Qué hay en las secciones (resumen corto) */}
+      {/* 6) Qué hay en las secciones (resumen claro y completo) */}
       <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">6) ¿Qué encontrarás en cada sección?</h2>
 
+        <p className="mt-2 text-slate-800 text-sm">
+          Aquí tienes un mapa rápido de la app. En cada sección, el Asistente puede guiarte con voz (Voz: ON) y también
+          puedes dictar con 🎙️ si tu navegador lo permite.
+        </p>
+
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
-            <div className="font-bold text-slate-900">Inicio (/)</div>
-            <div className="text-slate-800 mt-1">Buscar candidatos y entrar a su ficha.</div>
+            <div className="font-bold text-slate-900">Inicio</div>
+            <div className="text-slate-800 mt-1">
+              Es el centro de navegación. Desde aquí buscas candidatos y entras a todas las demás secciones.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Escribe al menos 2 letras en “Buscar candidato” y elige uno de la lista.
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Ficha del candidato</div>
+            <div className="text-slate-800 mt-1">
+              Aquí exploras la información del candidato en tres partes: Hoja de Vida, Plan de Gobierno y Actuar Político.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se busca información? Entra a la pestaña correcta y escribe tu pregunta (o usa una de las preguntas
+              clave).
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Hoja de Vida</div>
+            <div className="text-slate-800 mt-1">
+              Respuestas basadas en el documento oficial. Si no existe evidencia, la app lo indicará.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo preguntar bien? Pregunta por estudios, experiencia, sentencias, ingresos, declaraciones y datos del
+              documento.
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Plan de Gobierno</div>
+            <div className="text-slate-800 mt-1">
+              Respuestas basadas en el plan. Puedes preguntar por economía, salud, seguridad, educación y propuestas.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              Extra: incluye comparación entre planes cuando eliges un segundo candidato.
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Actuar Político</div>
+            <div className="text-slate-800 mt-1">
+              Información basada en registros disponibles para revisar hechos relevantes del candidato.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo usarlo? Pide “Resumen”, “Hechos recientes”, “Cronología”, o pregunta por un tema específico.
+            </div>
           </div>
 
           <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
             <div className="font-bold text-slate-900">Servicios al ciudadano</div>
-            <div className="text-slate-800 mt-1">Enlaces oficiales: local de votación, multas, miembro de mesa.</div>
+            <div className="text-slate-800 mt-1">
+              Enlaces oficiales para trámites electorales (local de votación, miembro de mesa, multas y más).
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Escribe el servicio que buscas y te guía hacia el enlace oficial correspondiente.
+            </div>
           </div>
 
-         <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
             <div className="font-bold text-slate-900">Reflexionar antes de votar</div>
-            <div className="text-slate-800 mt-1">Preguntas por ejes: economía, salud, educación, seguridad.</div>
+            <div className="text-slate-800 mt-1">
+              Preguntas y reflexiones por ejes (economía, salud, educación, seguridad y más).
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Escribe un tema (por ejemplo “salud”) y luego el número de pregunta (1 a 5).
+            </div>
           </div>
 
-         <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
             <div className="font-bold text-slate-900">Un cambio con valentía</div>
-            <div className="text-slate-800 mt-1">Acceso a propuesta y enlace oficial.</div>
+            <div className="text-slate-800 mt-1">
+              Espacio institucional del partido: acceso a su web, bloques informativos y contenidos propios.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Puedes leer el contenido o preguntar en “Conversación del partido” para resolver dudas.
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Videos y transmisiones</div>
+            <div className="text-slate-800 mt-1">
+              Reúne videos grabados o en vivo de candidatos (cuando estén disponibles en la plataforma).
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Busca el nombre del candidato para ver sus transmisiones y presentaciones.
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Intención de voto</div>
+            <div className="text-slate-800 mt-1">
+              Registra tu preferencia de forma guiada. Incluye opción blanco / nulo con reflexión previa.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Elige una opción y confirma para registrar tu decisión.
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Reto ciudadano</div>
+            <div className="text-slate-800 mt-1">
+              Juego por niveles para aprender y participar. Tiene intentos limitados y tiempos de espera.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Entra al nivel, responde y avanza. Si fallas, el sistema te indica cuándo reintentar.
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+            <div className="font-bold text-slate-900">Comentarios ciudadanos</div>
+            <div className="text-slate-800 mt-1">
+              Espacio para publicar comentarios y leer aportes de otras personas, con reglas para evitar abusos.
+            </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Registra tus datos una vez, escribe tu comentario y envía. Luego puedes ver comentarios.
+            </div>
           </div>
         </div>
 
@@ -264,10 +376,10 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Resumen de secciones: en Inicio buscas candidatos. En Servicios al ciudadano hay enlaces oficiales como local de votación y multas. En Reflexión hay preguntas por ejes. En Cambio con valentía hay una propuesta y enlace oficial."
+                "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexionar antes de votar te guía por ejes y preguntas. Un cambio con valentía reúne información institucional y conversación del partido. También hay videos y transmisiones, intención de voto, reto ciudadano y comentarios ciudadanos."
               )
             }
-           className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
+            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
             🔊 Leer resumen de secciones
           </button>
@@ -278,9 +390,8 @@ export default function ComoFuncionaPage() {
       <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
         <p className="mt-2 text-slate-800 text-sm">
-          Esta aplicación fue desarrollada por encargo de un <b>Partido Político </b> como una
-          herramienta informativa. VOTO CLARO busca ayudar a entender información pública y{" "}
-          <b>no reemplaza el criterio personal</b> del usuario.
+          Esta aplicación fue desarrollada por encargo de un <b>Partido Político</b> como una herramienta informativa.
+          VOTO CLARO busca ayudar a entender información pública y <b>no reemplaza el criterio personal</b> del usuario.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -288,7 +399,7 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-               "Transparencia: esta aplicación fue desarrollada por encargo del Partido Político Democrático Perú Federal como una herramienta informativa. VOTO CLARO no reemplaza tu criterio personal."
+                "Transparencia: esta aplicación fue desarrollada por encargo de un partido político como una herramienta informativa. VOTO CLARO no reemplaza tu criterio personal."
               )
             }
             className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
@@ -297,17 +408,17 @@ export default function ComoFuncionaPage() {
           </button>
         </div>
       </section>
-      {/* ✅ ACCIONES RÁPIDAS */}
-    {/* ✅ ACCIONES RÁPIDAS */}
-<div className="mt-10 flex justify-center">
-  <button
-    type="button"
-    onClick={scrollTop}
-   className="rounded-full px-6 py-3 bg-green-700 text-white text-sm font-bold hover:bg-green-800 transition shadow-lg border-2 border-red-500"
-  >
-    ⬆ Subir
-  </button>
-</div>
+
+      {/* ⬆ Subir */}
+      <div className="mt-10 flex justify-center">
+        <button
+          type="button"
+          onClick={scrollTop}
+          className="rounded-full px-6 py-3 bg-green-700 text-white text-sm font-bold hover:bg-green-800 transition shadow-lg border-2 border-red-500"
+        >
+          ⬆ Subir
+        </button>
+      </div>
 
       <footer className="mt-8 text-xs text-slate-600">
         Siguiente mejora opcional (en otro paso): agregar botones aquí para ir directo a Inicio, Servicios, Reflexión y
