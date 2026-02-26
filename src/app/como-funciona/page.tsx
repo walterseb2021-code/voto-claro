@@ -99,8 +99,8 @@ export default function ComoFuncionaPage() {
             correcta.
           </li>
           <li>
-            <b>Usa evidencia</b>: páginas, fragmentos y fuentes. Si no hay evidencia, la app lo indica.
-          </li>
+        <b>Revisa la información</b> con calma. Si algo no aparece en la app, se indicará claramente.
+        </li>
           <li>
             <b>Luego decides tú</b>, con criterio.
           </li>
@@ -110,9 +110,9 @@ export default function ComoFuncionaPage() {
           <button
             type="button"
             onClick={() =>
-              sendGuide(
-                "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre Hoja de Vida, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa evidencia y luego decide tú."
-              )
+            sendGuide(
+            "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre Hoja de Vida, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa la información y luego decide tú."
+            )
             }
             className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
@@ -173,8 +173,8 @@ export default function ComoFuncionaPage() {
             <b>No habla de cualquier tema</b>. Responde sobre lo que existe en la app y sobre la sección actual. Si le
             preguntas algo fuera, te dirá que no corresponde.
           </li>
-          <li>
-            <b>No adivina</b> ni inventa: si no hay evidencia, lo marca como “sin evidencia” o te orienta a fuentes.
+             <li>
+            <b>No adivina</b> ni inventa: si esa información no está disponible en la app, te lo dirá y te orientará.
           </li>
           <li>
             <b>El micrófono depende del navegador</b>. En algunos equipos puede fallar o pedir permisos.
@@ -325,9 +325,10 @@ export default function ComoFuncionaPage() {
             <div className="text-slate-800 mt-1">
               Espacio institucional del partido: acceso a su web, bloques informativos y contenidos propios.
             </div>
-            <div className="text-slate-700 mt-2 font-semibold">
-              ¿Cómo se usa aquí? Puedes leer el contenido o preguntar en “Conversación del partido” para resolver dudas.
-            </div>
+             <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Puedes leer el contenido o preguntar en
+             “Conversación” para resolver dudas.
+          </div>
           </div>
 
           <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
@@ -375,9 +376,9 @@ export default function ComoFuncionaPage() {
           <button
             type="button"
             onClick={() =>
-              sendGuide(
-                "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexionar antes de votar te guía por ejes y preguntas. Un cambio con valentía reúne información institucional y conversación del partido. También hay videos y transmisiones, intención de voto, reto ciudadano y comentarios ciudadanos."
-              )
+             sendGuide(
+            "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexionar antes de votar te guía por ejes y preguntas. Un cambio con valentía reúne información institucional y conversación. También hay videos y transmisiones, intención de voto, reto ciudadano y comentarios ciudadanos."
+             )
             }
             className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
@@ -389,19 +390,18 @@ export default function ComoFuncionaPage() {
       {/* 7) Transparencia y autoría */}
       <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
         <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
-        <p className="mt-2 text-slate-800 text-sm">
-          Esta aplicación fue desarrollada por encargo de un <b>Partido Político</b> como una herramienta informativa.
-          VOTO CLARO busca ayudar a entender información pública y <b>no reemplaza el criterio personal</b> del usuario.
+       <p className="mt-2 text-slate-800 text-sm">
+       Esta aplicación es una herramienta informativa para facilitar el acceso a información pública.
+       VOTO CLARO busca ayudar a entender información pública y <b>no reemplaza el criterio personal</b> del usuario.
         </p>
-
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() =>
-              sendGuide(
-                "Transparencia: esta aplicación fue desarrollada por encargo de un partido político como una herramienta informativa. VOTO CLARO no reemplaza tu criterio personal."
-              )
-            }
+           sendGuide(
+           "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal."
+            )
+        }
             className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
           >
             🔊 Leer transparencia
@@ -421,8 +421,7 @@ export default function ComoFuncionaPage() {
       </div>
 
       <footer className="mt-8 text-xs text-slate-600">
-        Siguiente mejora opcional (en otro paso): agregar botones aquí para ir directo a Inicio, Servicios, Reflexión y
-        Cambio con valentía.
+      Gracias por usar VOTO CLARO.
       </footer>
     </main>
   );

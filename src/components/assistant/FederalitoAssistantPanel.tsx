@@ -257,7 +257,7 @@ function answerFromComoFunciona(rawQ: string) {
     const n = Number(mNum[1]);
     const item = COMO_FUNCIONA_FAQ[n - 1];
     if (!item) return "Ese número no existe en la lista. Dime un número válido.";
-    return `✅ ${item.title}\n\n${item.answer}`;
+    return `✅ ${item.title}\n\n${dedupeLeadingTitle(item.title, item.answer)}`;
   }
 
   // 3) match por keyword / título
@@ -265,7 +265,7 @@ function answerFromComoFunciona(rawQ: string) {
     COMO_FUNCIONA_FAQ.find((it) => (it.keywords || []).some((k) => q.includes(normalizeLite(k)))) ||
     COMO_FUNCIONA_FAQ.find((it) => normalizeLite(it.title).includes(q) || q.includes(normalizeLite(it.title)));
 
-  if (hit) return `✅ ${hit.title}\n\n${hit.answer}`;
+  if (hit) return `✅ ${hit.title}\n\n${dedupeLeadingTitle(hit.title, hit.answer)}`;
 
   // 4) fallback: búsqueda suave por palabras (>=4 letras)
   const words = q.split(" ").filter((w) => w.length >= 4);
@@ -279,7 +279,7 @@ function answerFromComoFunciona(rawQ: string) {
   }
 
   if (best && best.score >= 1) {
-    return `✅ ${best.item.title}\n\n${best.item.answer}`;
+    return `✅ ${best.item.title}\n\n${dedupeLeadingTitle(best.item.title, best.item.answer)}`;
   }
 
   // 5) si no entiende, vuelve a guía + lista
@@ -575,16 +575,69 @@ function splitForSpeech(text: string, maxLen = 220) {
 
   return parts.filter(Boolean);
 }
+function dedupeLeadingTitle(title: string, answer: string) {
+  const t = String(title ?? "").trim();
+  let a = String(answer ?? "");
 
+  if (!t) return a;
+
+  // Escape para regex
+  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // Quita al inicio: "Titulo:" (con espacios/saltos)
+  const re = new RegExp("^\\s*" + escaped + "\\s*:\\s*", "i");
+  if (re.test(a)) a = a.replace(re, "");
+
+  return a;
+}
 function cleanForSpeech(text: string) {
-  return String(text ?? "")
-    .replace(/\u00AD/g, "")  // soft hyphen
-    .replace(/\u200B/g, "")  // zero-width space
-    .replace(/\u200C/g, "")  // zero-width non-joiner
-    .replace(/\u200D/g, "")  // zero-width joiner
-    .replace(/\u2060/g, "")  // word joiner
-    .replace(/\uFEFF/g, "")  // BOM invisible
-    .replace(/\u00A0/g, " "); // NBSP -> espacio normal
+  let t = String(text ?? "");
+
+  // invisibles comunes (mantiene lo que ya tenías)
+  t = t
+    .replace(/\u00AD/g, "") // soft hyphen
+    .replace(/\u200B/g, "") // zero-width space
+    .replace(/\u200C/g, "") // zero-width non-joiner
+    .replace(/\u200D/g, "") // zero-width joiner
+    .replace(/\u2060/g, ""); // word joiner
+
+  // quitar markdown básico para que no lea símbolos
+  t = t
+    .replace(/```[\s\S]*?```/g, " ") // bloques de código
+    .replace(/`([^`]+)`/g, "$1") // inline code
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1"); // links markdown
+
+  // términos técnicos: evita "storage, storage"
+  t = t
+    .replace(/\bLocalStorage\/SessionStorage\b/gi, "almacenamiento local o de sesión")
+    .replace(/\bLocalStorage\b/gi, "almacenamiento local")
+    .replace(/\bSessionStorage\b/gi, "almacenamiento de sesión");
+
+  // URLs: que suenen humano
+  t = t
+    .replace(/\bhttps?:\/\/www\./gi, "www punto ")
+    .replace(/\bhttps?:\/\//gi, "")
+    .replace(/\bwww\./gi, "www punto ")
+    .replace(/\.gob\.pe\b/gi, " punto gob punto pe")
+    .replace(/\.com\b/gi, " punto com")
+    .replace(/\.pe\b/gi, " punto pe")
+    .replace(/\.org\b/gi, " punto org")
+    .replace(/\//g, " / ");
+
+  // siglas comunes (ajusta pronunciación)
+  t = t
+    .replace(/\bPDF\b/g, "P D F")
+    .replace(/\bAPI\b/g, "A P I")
+    .replace(/\bTTS\b/g, "T T S")
+    .replace(/\bHV\b/g, "H V");
+
+  // limpieza final
+  t = t
+    .replace(/\s+/g, " ")
+    .replace(/\s([,.;:!?])/g, "$1")
+    .trim();
+
+  return t;
 }
 
 function fixMojibakeBasic(input: string) {
