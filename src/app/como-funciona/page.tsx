@@ -388,26 +388,33 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 7) Transparencia y autoría */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
-        <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
-       <p className="mt-2 text-slate-800 text-sm">
-       Esta aplicación es una herramienta informativa para facilitar el acceso a información pública.
-       VOTO CLARO busca ayudar a entender información pública y <b>no reemplaza el criterio personal</b> del usuario.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() =>
-           sendGuide(
-           "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal."
-            )
-        }
-            className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
-          >
-            🔊 Leer transparencia
-          </button>
-        </div>
-      </section>
+<section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+  <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
+
+  <p className="mt-2 text-slate-800 text-sm">
+    Esta aplicación es una herramienta informativa para facilitar el acceso a información pública.{" "}
+    VOTO CLARO busca ayudar a entender información pública y{" "}
+    <b>no reemplaza el criterio personal</b> del usuario.
+    <br />
+    <span className="text-slate-600">
+      Desarrollado por: <b>Tu Nombre Aquí</b>
+    </span>
+  </p>
+
+  <div className="mt-4 flex flex-wrap gap-2">
+    <button
+      type="button"
+      onClick={() =>
+        sendGuide(
+          "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal. Desarrollado por: Tu Nombre Aquí."
+        )
+      }
+      className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
+    >
+      🔊 Leer transparencia
+    </button>
+  </div>
+</section>
 
       {/* ⬆ Subir */}
       <div className="mt-10 flex justify-center">
