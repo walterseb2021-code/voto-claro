@@ -384,8 +384,10 @@ function FederalitoSplash() {
               fontWeight: 800,
             }}
           >
-            <span style={{ fontWeight: 900 }}>Federalito AI</span>
-            <span style={{ opacity: 0.85, fontWeight: 800 }}>• guía de voto informado</span>
+           <span style={{ fontWeight: 900 }}>Asistente AI</span>
+          <span style={{ opacity: 0.85, fontWeight: 800 }}>
+          {" - Guía de Voto Informado"}
+          </span>
           </div>
 
           <h1
