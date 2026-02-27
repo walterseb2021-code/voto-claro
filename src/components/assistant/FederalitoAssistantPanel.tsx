@@ -1291,16 +1291,23 @@ if (ctx === "INTENCION" || ctx === "RETO" || ctx === "COMENTARIO") {
   // ✅ null => estás en pantalla correcta / o HOME help => NO interceptar
   if (redirect === null) return { handled: false };
 
-  if (ctx === "CANDIDATE") {
-    const i = detectIntent(rawQ);
-    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS) {
+if (ctx === "CANDIDATE") {
+  const i = detectIntent(rawQ);
+
+  // Solo redirigir si pide una sección distinta a la pestaña actual
+  if (i.wantsHV || i.wantsPLAN || i.wantsNEWS) {
+    const target: AskMode = i.wantsHV ? "HV" : i.wantsPLAN ? "PLAN" : "NEWS";
+
+    if (params.askMode !== target) {
       pushAssistant(redirect);
       await maybeSpeak(redirect);
       return { handled: true };
     }
-    return { handled: false };
   }
 
+  // Si ya está en la pestaña correcta, NO bloquear: que responda normal
+  return { handled: false };
+}
   const i = detectIntent(rawQ);
 
   if (ctx === "REFLEXION") {
@@ -1496,10 +1503,9 @@ function buildActuarAnswer(file: ActuarFile, rawQ: string) {
       counts[k] = (counts[k] || 0) + 1;
     }
     const top3 = newest.filter((x) => !!x.date).slice(0, 3);
-    return (
-      `Resumen de Actuar Político — ${file.candidate_full_name}\n` +
-      `Generado: ${file.generated_at}\n` +
-      `Registros: ${items.length}\n\n` +
+      return (
+      `Actuar político de ${file.candidate_full_name}\n` +
+      `Total de registros encontrados: ${items.length}\n\n` +
       `Por temas:\n` +
       Object.entries(counts)
         .sort((a, b) => b[1] - a[1])
@@ -1514,13 +1520,13 @@ function buildActuarAnswer(file: ActuarFile, rawQ: string) {
   if (i.wantsRecent) {
     const top = newest.filter((x) => !!x.date).slice(0, 6);
     if (!top.length) return buildActuarFallback(rawQ);
-    return `Hechos más recientes — ${file.candidate_full_name}\n\n` + top.map(fmtItem).join("\n\n");
+   return `Hechos más recientes de ${file.candidate_full_name}\n\n` + top.map(fmtItem).join("\n\n");
   }
 
   // 4) Cronología
   if (i.wantsTimeline) {
     const top = newest.slice(0, 10);
-    return `Cronología (más nuevo → más antiguo) — ${file.candidate_full_name}\n\n` + top.map(fmtItem).join("\n\n");
+   return `Cronología de ${file.candidate_full_name} (de lo más reciente a lo más antiguo)\n\n` + top.map(fmtItem).join("\n\n");
   }
 
   // 5) Filtros por “tema” (topics)
@@ -2117,13 +2123,13 @@ useEffect(() => {
     };
   }, [pathname]);
 
-  useEffect(() => {
-    const tab = String(searchParams?.get("tab") || "").toUpperCase();
-    if (tab === "PLAN") setAskMode("PLAN");
-    else if (tab === "NEWS") setAskMode("NEWS");
-    else if (tab === "HV") setAskMode("HV");
-  }, [searchParams]);
+useEffect(() => {
+  const tab = String(searchParams?.get("tab") || "").toUpperCase();
 
+  if (tab === "PLAN") setAskMode("PLAN");
+  else if (tab === "NEWS") setAskMode("NEWS");
+  else setAskMode("HV"); // default: HV
+}, [searchParams]);
   useEffect(() => {
     (window as any).__federalitoAssistantOpen = () => setOpen(true);
     (window as any).__federalitoAssistantClose = () => setOpen(false);

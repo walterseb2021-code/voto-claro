@@ -397,7 +397,7 @@ export default function ComoFuncionaPage() {
     <b>no reemplaza el criterio personal</b> del usuario.
     <br />
     <span className="text-slate-600">
-      Desarrollado por: <b>WALTER SEBASTIAN CABANILLAS ARVREZ</b>
+      Desarrollado por: <b>WALTER SEBASTIAN CABANILLAS ALVAREZ</b>
     </span>
   </p>
 
@@ -406,7 +406,7 @@ export default function ComoFuncionaPage() {
       type="button"
       onClick={() =>
         sendGuide(
-          "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal. Desarrollado por: WALTER SEBASTIAN CABANILLAS ARVREZ."
+          "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal. Desarrollado por: WALTER SEBASTIAN CABANILLAS ALVAREZ."
         )
       }
       className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
