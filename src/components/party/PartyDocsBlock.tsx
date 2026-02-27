@@ -6,6 +6,8 @@ type Mode = "STRICT" | "SUMMARY";
 
 export default function PartyDocsBlock(props: { partyId?: string }) {
   const partyId = props.partyId ?? "perufederal";
+  const isApp = partyId === "app";
+
   const [mode, setMode] = useState<Mode>("SUMMARY");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,15 +36,31 @@ export default function PartyDocsBlock(props: { partyId?: string }) {
     }
   }
 
-  // ✅ Misma línea visual PRO de /cambio-con-valentia
+  // ✅ Misma línea visual PRO (sin romper layout)
   const innerCard = "rounded-2xl border-2 border-red-600 bg-white/80 p-4";
-  const btnGreen =
+
+  // ✅ Colores por partido (solo botones/focus/fondos suaves)
+  const btnPrimary =
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border border-red-500 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
+    "border border-red-500 text-white text-sm font-extrabold " +
+    "transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed " +
+    (isApp
+      ? "bg-[#2F61A6] hover:bg-[#244d86]"
+      : "bg-green-800 hover:bg-green-900");
+
   const selectWarm =
     "rounded-xl border border-red-500 bg-white px-3 py-2 text-sm font-extrabold text-slate-900 " +
-    "shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-600";
+    "shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 " +
+    (isApp ? "focus:ring-[#2F61A6]" : "focus:ring-green-600");
+
+  const inputFocus =
+    "w-full rounded-xl border border-red-500 bg-white px-4 py-3 text-sm md:text-base font-semibold text-slate-900 " +
+    "shadow-sm focus:outline-none focus:ring-2 " +
+    (isApp ? "focus:ring-[#2F61A6]" : "focus:ring-green-600");
+
+  const answerWrap =
+    "mt-4 rounded-2xl border-2 border-red-600 p-4 " +
+    (isApp ? "bg-sky-50/70" : "bg-green-50/60");
 
   return (
     <div className={innerCard}>
@@ -80,14 +98,14 @@ export default function PartyDocsBlock(props: { partyId?: string }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Pregunta cualquier tema (economía, educación, seguridad, salud...)"
-          className="w-full rounded-xl border border-red-500 bg-white px-4 py-3 text-sm md:text-base font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          className={inputFocus}
         />
 
         <button
           type="button"
           onClick={ask}
           disabled={!canAsk || loading}
-          className={btnGreen + " h-[46px] sm:h-auto"}
+          className={btnPrimary + " h-[46px] sm:h-auto"}
         >
           {loading ? "Consultando..." : "Preguntar"}
         </button>
@@ -102,52 +120,50 @@ export default function PartyDocsBlock(props: { partyId?: string }) {
         </div>
       ) : null}
 
-    {ans ? (
-  <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/60 p-4">
-    <div className="flex items-center justify-between gap-2 flex-wrap">
-      <div className="text-xs text-slate-700 font-extrabold tracking-wide uppercase">
-        Respuesta
-      </div>
+      {ans ? (
+        <div className={answerWrap}>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-xs text-slate-700 font-extrabold tracking-wide uppercase">
+              Respuesta
+            </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          const text = String(ans || "").trim();
-          if (!text) return;
+            <button
+              type="button"
+              onClick={() => {
+                const text = String(ans || "").trim();
+                if (!text) return;
 
-          // 1) Dejar el texto listo para leer (y mostrar aviso en el chat)
-          window.dispatchEvent(
-            new CustomEvent("votoclaro:page-read", { detail: { text } })
-          );
+                window.dispatchEvent(
+                  new CustomEvent("votoclaro:page-read", { detail: { text } })
+                );
 
-          // 2) Intentar abrir el panel del asistente para que se vea
-          (window as any).__federalitoAssistantOpen?.();
+                (window as any).__federalitoAssistantOpen?.();
 
-          // 3) Leer inmediatamente (si voz está ON y ya hubo interacción)
-          window.dispatchEvent(
-            new CustomEvent("votoclaro:guide", {
-              detail: { action: "SAY", text, speak: true },
-            })
-          );
-        }}
-        className={
-          "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-          "border border-slate-300 bg-black text-white text-xs md:text-sm font-extrabold " +
-          "hover:opacity-90 transition shadow-sm"
-        }
-        title="Leer esta respuesta en voz alta"
-      >
-        🔊 Leer respuesta
-      </button>
-    </div>
+                window.dispatchEvent(
+                  new CustomEvent("votoclaro:guide", {
+                    detail: { action: "SAY", text, speak: true },
+                  })
+                );
+              }}
+              className={
+                "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
+                "border border-slate-300 bg-black text-white text-xs md:text-sm font-extrabold " +
+                "hover:opacity-90 transition shadow-sm"
+              }
+              title="Leer esta respuesta en voz alta"
+            >
+              🔊 Leer respuesta
+            </button>
+          </div>
 
-    <div className="mt-2 text-sm md:text-base text-slate-900 font-semibold leading-relaxed whitespace-pre-wrap break-words">
-      {ans}
-    </div>
-  </div>
-) : null}
+          <div className="mt-2 text-sm md:text-base text-slate-900 font-semibold leading-relaxed whitespace-pre-wrap break-words">
+            {ans}
+          </div>
+        </div>
+      ) : null}
+
       <p className="mt-3 text-xs text-slate-600 text-center font-semibold">
-        
+        {/* Mantener vacío si no quieres nota */}
       </p>
     </div>
   );

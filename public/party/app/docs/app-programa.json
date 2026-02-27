@@ -1,0 +1,195 @@
+{
+  "doc_id": "app_programa_general_2026",
+  "title": "Plan de Gobierno - Alianza para el Progreso (APP)",
+
+  "keywords": [
+    "APP",
+    "Alianza para el Progreso",
+    "plan de gobierno",
+    "programa político",
+    "desarrollo",
+    "Perú",
+    "gestión pública"
+  ],
+
+  "principles": [
+    {
+      "principle": "Democracia participativa con liderazgo firme y responsable",
+      "keywords": ["democracia", "liderazgo", "institucionalidad"]
+    },
+    {
+      "principle": "Desarrollo humano integral con prioridad en educación y empleo",
+      "keywords": ["educación", "empleo", "oportunidades"]
+    },
+    {
+      "principle": "Descentralización efectiva y fortalecimiento de gobiernos regionales",
+      "keywords": ["descentralización", "regiones", "municipalidades"]
+    },
+    {
+      "principle": "Economía social de mercado con inclusión productiva",
+      "keywords": ["economía", "empresa", "inversión", "mypes"]
+    },
+    {
+      "principle": "Seguridad ciudadana como condición básica del desarrollo",
+      "keywords": ["seguridad", "delincuencia", "orden interno"]
+    },
+    {
+      "principle": "Lucha frontal contra la corrupción con mecanismos preventivos y sancionadores",
+      "keywords": ["corrupción", "transparencia", "ética pública"]
+    }
+  ],
+
+  "sections": [
+    {
+      "name": "Educación",
+      "summary": "Reforma educativa enfocada en calidad, infraestructura moderna, formación docente continua y educación técnica vinculada al mercado laboral.",
+      "keywords": ["educación pública", "infraestructura escolar", "docentes", "universidades"]
+    },
+    {
+      "name": "Salud",
+      "summary": "Fortalecimiento del sistema de salud pública con acceso universal, infraestructura hospitalaria moderna y atención primaria preventiva.",
+      "keywords": ["hospitales", "medicinas", "SIS", "atención primaria"]
+    },
+    {
+      "name": "Economía y empleo",
+      "summary": "Impulso a la inversión privada, apoyo a MYPES, formalización laboral y generación de empleo sostenible.",
+      "keywords": ["empleo", "mypes", "formalización", "inversión privada"]
+    },
+    {
+      "name": "Seguridad ciudadana",
+      "summary": "Reestructuración policial, fortalecimiento de inteligencia y coordinación con municipios para combatir la criminalidad.",
+      "keywords": ["policía", "criminalidad", "extorsión", "pandillas"]
+    },
+    {
+      "name": "Descentralización",
+      "summary": "Transferencia efectiva de competencias y recursos a regiones con supervisión técnica.",
+      "keywords": ["regiones", "canon", "gobiernos regionales"]
+    },
+    {
+      "name": "Infraestructura",
+      "summary": "Modernización de carreteras, puertos, aeropuertos y servicios básicos para cerrar brechas sociales.",
+      "keywords": ["carreteras", "agua", "saneamiento", "puertos"]
+    }
+  ],
+
+  "positions": [
+
+    {
+      "topic": "Reactivación económica",
+      "stance": "APP propone una economía estable con reglas claras que promueva inversión privada y crecimiento sostenible.",
+      "why": "El crecimiento económico es base para reducir pobreza y generar empleo formal.",
+      "how": [
+        "Simplificación administrativa",
+        "Reducción de trabas burocráticas",
+        "Promoción de asociaciones público-privadas",
+        "Apoyo financiero a MYPES"
+      ],
+      "keywords": ["reactivación", "crecimiento", "inversión"]
+    },
+
+    {
+      "topic": "Educación básica",
+      "stance": "Mejorar calidad educativa con infraestructura moderna y capacitación docente permanente.",
+      "why": "La educación es el motor del desarrollo social y económico.",
+      "how": [
+        "Modernización de colegios",
+        "Formación docente continua",
+        "Evaluación de desempeño",
+        "Conectividad digital escolar"
+      ],
+      "keywords": ["colegios", "docentes", "infraestructura escolar"]
+    },
+
+    {
+      "topic": "Educación técnica y superior",
+      "stance": "Vincular educación técnica con demanda laboral real.",
+      "why": "Reducir desempleo juvenil y mejorar productividad.",
+      "how": [
+        "Alianzas con sector privado",
+        "Fortalecer institutos técnicos",
+        "Programas de prácticas preprofesionales"
+      ],
+      "keywords": ["institutos", "universidades", "empleo juvenil"]
+    },
+
+    {
+      "topic": "Salud pública",
+      "stance": "Fortalecer infraestructura hospitalaria y atención primaria.",
+      "why": "Reducir brechas en acceso y calidad del servicio.",
+      "how": [
+        "Construcción y equipamiento hospitalario",
+        "Mejor abastecimiento de medicamentos",
+        "Digitalización de historias clínicas"
+      ],
+      "keywords": ["hospitales", "SIS", "medicinas"]
+    },
+
+    {
+      "topic": "Seguridad ciudadana",
+      "stance": "Combate firme contra delincuencia organizada y extorsión.",
+      "why": "La inseguridad frena inversión y bienestar social.",
+      "how": [
+        "Fortalecer inteligencia policial",
+        "Tecnología de vigilancia",
+        "Reforma del sistema penitenciario"
+      ],
+      "keywords": ["extorsión", "criminalidad", "PNP"]
+    },
+
+    {
+      "topic": "Lucha contra la corrupción",
+      "stance": "Tolerancia cero a actos corruptos en todos los niveles del Estado.",
+      "why": "La corrupción debilita confianza ciudadana y frena desarrollo.",
+      "how": [
+        "Transparencia en contrataciones",
+        "Fortalecer control interno",
+        "Sanciones ejemplares"
+      ],
+      "keywords": ["transparencia", "contrataciones públicas"]
+    },
+
+    {
+      "topic": "Descentralización",
+      "stance": "Fortalecer regiones con recursos y supervisión técnica.",
+      "why": "Cerrar brechas territoriales y promover desarrollo equilibrado.",
+      "how": [
+        "Transferencia presupuestal responsable",
+        "Capacitación técnica regional",
+        "Supervisión eficiente"
+      ],
+      "keywords": ["regiones", "canon", "municipalidades"]
+    },
+
+    {
+      "topic": "Infraestructura nacional",
+      "stance": "Cerrar brechas en transporte y servicios básicos.",
+      "why": "Infraestructura adecuada mejora productividad y calidad de vida.",
+      "how": [
+        "Construcción de carreteras",
+        "Modernización de puertos",
+        "Acceso universal a agua potable"
+      ],
+      "keywords": ["carreteras", "agua", "saneamiento"]
+    }
+
+  ],
+
+  "qa_seed": [
+    {
+      "q": "¿APP promueve inversión privada?",
+      "a": "Sí, promovemos inversión privada responsable con reglas claras y estabilidad jurídica."
+    },
+    {
+      "q": "¿Cómo enfrentarán la inseguridad?",
+      "a": "Fortaleciendo inteligencia policial, tecnología y coordinación con gobiernos locales."
+    },
+    {
+      "q": "¿Qué proponen en educación?",
+      "a": "Infraestructura moderna, capacitación docente y educación técnica vinculada al mercado laboral."
+    },
+    {
+      "q": "¿Cómo combatirán la corrupción?",
+      "a": "Transparencia en contrataciones, control interno fuerte y sanciones firmes."
+    }
+  ]
+}

@@ -26,7 +26,7 @@ export type PartyDoc = {
   [key: string]: any;
 };
 
-let _cache: { loadedAt: number; docs: PartyDoc[] } | null = null;
+let _cache: { loadedAt: number; partyId: string; docs: PartyDoc[] } | null = null;
 
 // Cache (ms). Si luego quieres, lo subimos a 5 min.
 const CACHE_TTL_MS = 60_000;
@@ -43,7 +43,13 @@ export async function loadPartyDocsFromPublic(
   partyId = "perufederal"
 ): Promise<PartyDoc[]> {
   // Cache simple en memoria (server) para no leer disco en cada request
-  if (_cache && Date.now() - _cache.loadedAt < CACHE_TTL_MS) return _cache.docs;
+ if (
+  _cache &&
+  _cache.partyId === partyId &&
+  Date.now() - _cache.loadedAt < CACHE_TTL_MS
+) {
+  return _cache.docs;
+}
 
   const baseDir = path.join(process.cwd(), "public", "party", partyId, "docs");
 
@@ -52,7 +58,7 @@ export async function loadPartyDocsFromPublic(
     files = await fs.readdir(baseDir);
   } catch (e) {
     // Si la carpeta no existe o Vercel no la ve, devolvemos vacío (sin romper)
-    _cache = { loadedAt: Date.now(), docs: [] };
+    _cache = { loadedAt: Date.now(), partyId, docs: [] };
     return [];
   }
 
@@ -111,7 +117,7 @@ export async function loadPartyDocsFromPublic(
     );
   }
 
-  _cache = { loadedAt: Date.now(), docs };
+  _cache = { loadedAt: Date.now(), partyId, docs };
   return docs;
 }
 

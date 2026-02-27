@@ -1,0 +1,31 @@
+{
+  "doc_id": "app-base",
+  "title": "APP - Documentos base",
+  "updated_at": "2026-02-27",
+  "principles": [
+    { "principle": "Este documento base es un placeholder inicial para APP." },
+    { "principle": "Reemplaza estos principios por los oficiales del partido." }
+  ],
+  "sections": [
+    {
+      "name": "Identidad",
+      "summary": "Resumen corto de la identidad del partido (placeholder).",
+      "content": "Contenido oficial de identidad del partido (placeholder)."
+    },
+    {
+      "name": "Economía",
+      "summary": "Resumen corto de la propuesta económica (placeholder).",
+      "content": "Contenido oficial de economía del partido (placeholder)."
+    },
+    {
+      "name": "Seguridad",
+      "summary": "Resumen corto de seguridad ciudadana (placeholder).",
+      "content": "Contenido oficial de seguridad del partido (placeholder)."
+    },
+    {
+      "name": "Educación",
+      "summary": "Resumen corto de educación (placeholder).",
+      "content": "Contenido oficial de educación (placeholder)."
+    }
+  ]
+}

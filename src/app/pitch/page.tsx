@@ -5,27 +5,35 @@ import Script from "next/script";
 import React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { PITCH_DONE_KEY } from "@/lib/adminConfig";
+import { getActiveParty, partyWelcomeAssets, setActiveParty } from "@/lib/partyThemeClient";
 
 type AccessState = "CHECKING" | "GRANTED" | "DENIED" | "MISSING_TOKEN";
 
 // 🎨 COLORES (según tu imagen)
-// ✅ Color base EXACTO (según Paint): R=83 G=129 B=39
+// ✅ Perú Federal (verde)
 const BG_GREEN = "rgb(83,129,39)";
-
-// ✨ Jaspeado amarillo MUY tenue (mismo para interior y exterior)
-// ⚠️ IMPORTANTE: en CSS, el ÚLTIMO fondo es el "de abajo".
-// Por eso luego lo aplicamos como: `${BG_JASPE_SOFT}, ${BG_GREEN}`
-const BG_JASPE_SOFT =
+const BG_JASPE_SOFT_GREEN =
   "radial-gradient(1200px 800px at 20% 10%, rgba(255,255,140,.07), transparent 45%)," +
   "radial-gradient(900px 700px at 80% 20%, rgba(255,245,120,.06), transparent 50%)," +
   "radial-gradient(1000px 900px at 50% 90%, rgba(255,235,110,.05), transparent 55%)";
+
+// ✅ APP (azul principal #2F61A6)
+const BG_APP = "#2F61A6";
+const BG_JASPE_SOFT_APP =
+  "radial-gradient(1200px 800px at 20% 10%, rgba(190,220,255,.10), transparent 45%)," +
+  "radial-gradient(900px 700px at 80% 20%, rgba(160,205,255,.08), transparent 50%)," +
+  "radial-gradient(1000px 900px at 50% 90%, rgba(210,235,255,.08), transparent 55%)";
 
 const PANEL_BG = "rgba(255,255,255,.78)";
 const TEXT_DARK = "#0f172a";
 const TITLE_BLACK = "#0b0b0b";
 const RED_BORDER = "#b91c1c";
-const BTN_BG = "#14532d"; // verde oscuro
-const BTN_BG_2 = "#166534"; // verde oscuro (variante)
+const BTN_BG = "#14532d"; // Perú Federal (verde)
+const BTN_BG_2 = "#166534"; // Perú Federal (verde variante)
+
+// ✅ APP (azul)
+const BTN_BG_APP = "#2F61A6";
+const BTN_BG_APP_2 = "#244d86";
 const BTN_TEXT = "#ffffff";
 
 export default function PitchPage() {
@@ -40,7 +48,17 @@ export default function PitchPage() {
 
         const url = new URL(window.location.href);
         const token = (url.searchParams.get("t") ?? "").trim();
-
+        // ✅ Definir partido activo según token
+// GRUPOA → perufederal
+// GRUPOB → app
+if (token.startsWith("GRUPOB-")) {
+  setActiveParty("app");
+} else if (token.startsWith("GRUPOA-")) {
+  setActiveParty("perufederal");
+} else {
+  // fallback seguro: si el token no tiene prefijo conocido
+  setActiveParty("perufederal");
+}
        // ✅ Requiere token en la URL
 if (!token) {
   if (alive) setAccess("MISSING_TOKEN");
@@ -114,7 +132,7 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
     return (
       <main
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: BG_GREEN, color: TEXT_DARK }}
+        style={{ background: getActiveParty() === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
       >
         <div
           className="max-w-md w-full text-center rounded-2xl"
@@ -146,7 +164,7 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
   return (
     <main
       className="min-h-screen flex items-center justify-center px-6"
-      style={{ background: BG_GREEN, color: TEXT_DARK }}
+      style={{ background: getActiveParty() === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
     >
       <div
         className="max-w-md w-full text-center rounded-2xl"
@@ -182,7 +200,7 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
     return (
       <main
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: BG_GREEN, color: TEXT_DARK }}
+        style={{ background: getActiveParty() === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
       >
         <div
           className="max-w-md w-full text-center rounded-2xl"
@@ -228,7 +246,7 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
     );
   }
 
-  return <FederalitoSplash />;
+  return <FederalitoSplash partyId={getActiveParty()} />;
 }
 
 /**
@@ -237,7 +255,8 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
  * - En /pitch SIEMPRE se muestra (si el token es válido)
  * - Solo navega a / cuando el usuario hace clic (Saltar/Entrar) o termina el video
  */
-function FederalitoSplash() {
+function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
+  const isApp = props.partyId === "app";
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -257,7 +276,9 @@ function FederalitoSplash() {
 
         // ✅ ORDEN CORRECTO: primero jaspe (arriba), luego color base (abajo)
         // Esto evita el blanco y deja todo uniforme
-        background: `${BG_JASPE_SOFT}, ${BG_GREEN}`,
+        background: isApp
+        ? `${BG_JASPE_SOFT_APP}, ${BG_APP}`
+        : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
 
         color: TEXT_DARK,
       }}
@@ -286,8 +307,9 @@ function FederalitoSplash() {
             boxShadow: "0 20px 60px rgba(0,0,0,.35)",
 
             // ✅ MISMO fondo EXACTO que el exterior (jaspe + base)
-            background: `${BG_JASPE_SOFT}, ${BG_GREEN}`,
-
+             background: isApp
+             ? `${BG_JASPE_SOFT_APP}, ${BG_APP}`
+             : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
             position: "relative",
             aspectRatio: "9 / 16",
             zIndex: 0,
@@ -298,7 +320,7 @@ function FederalitoSplash() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             id="federalito-splash-poster"
-            src="/federalito.png"
+            src={partyWelcomeAssets(getActiveParty()).avatarSrc}
             alt="Federalito AI"
             draggable={false}
             className="pointer-events-none select-none"
@@ -321,7 +343,7 @@ function FederalitoSplash() {
 
           <video
             id="federalito-splash-video"
-            src="/media/federalito.mp4"
+            src={partyWelcomeAssets(getActiveParty()).welcomeVideoSrc}
             muted
             playsInline
             loop={false}
@@ -442,7 +464,7 @@ function FederalitoSplash() {
               type="button"
               style={{
                 border: `2px solid ${RED_BORDER}`,
-                background: BTN_BG,
+                background: isApp ? BTN_BG_APP : BTN_BG,
                 color: BTN_TEXT,
                 fontWeight: 900,
                 borderRadius: 12,
@@ -460,7 +482,7 @@ function FederalitoSplash() {
               type="button"
               style={{
                 border: `2px solid ${RED_BORDER}`,
-                background: BTN_BG_2,
+                background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
                 color: BTN_TEXT,
                 fontWeight: 900,
                 borderRadius: 12,
