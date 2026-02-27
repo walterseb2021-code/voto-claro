@@ -86,40 +86,46 @@ if (!(globalThis as any).DOMMatrix) {
   (globalThis as any).DOMMatrix = DOMMatrixShim as any;
 }
 
+if (!(globalThis as any).DOMMatrixReadOnly) {
+  (globalThis as any).DOMMatrixReadOnly = (globalThis as any).DOMMatrix as any;
+}
 
-// ✅ Fix: pdfjs (fake worker) usa structuredClone y falla con DOMMatrix del polyfill
-const __nativeStructuredClone = globalThis.structuredClone;
+// ✅ FIX DEFINITIVO: pdfjs (fake worker) usa structuredClone con transfer,
+// y eso DETACHA ArrayBuffer => luego revienta con:
+// "An ArrayBuffer is detached and could not be cloned."
+const __nativeStructuredClone =
+  typeof globalThis.structuredClone === "function"
+    ? globalThis.structuredClone.bind(globalThis)
+    : null;
 
 function __sanitizeForClone(v: any): any {
   if (!v) return v;
 
- // DOMMatrix / DOMMatrixReadOnly / "matrix-like" (no clonable en serverless). Lo convertimos a objeto simple.
-if (typeof v === "object") {
-  const name = (v as any)?.constructor?.name ?? "";
+  // DOMMatrix / DOMMatrixReadOnly / "matrix-like" (no clonable en serverless). Lo convertimos a objeto simple.
+  if (typeof v === "object") {
+    const name = (v as any)?.constructor?.name ?? "";
+    const isDomMatrixFamily = typeof name === "string" && name.startsWith("DOMMatrix");
 
-  const isDomMatrixFamily = typeof name === "string" && name.startsWith("DOMMatrix");
+    const isMatrixLike =
+      typeof (v as any).a === "number" &&
+      typeof (v as any).b === "number" &&
+      typeof (v as any).c === "number" &&
+      typeof (v as any).d === "number" &&
+      typeof (v as any).e === "number" &&
+      typeof (v as any).f === "number";
 
-  const isMatrixLike =
-    (v as any) &&
-    typeof (v as any).a === "number" &&
-    typeof (v as any).b === "number" &&
-    typeof (v as any).c === "number" &&
-    typeof (v as any).d === "number" &&
-    typeof (v as any).e === "number" &&
-    typeof (v as any).f === "number";
-
-  if (isDomMatrixFamily || isMatrixLike) {
-    return {
-      a: (v as any).a,
-      b: (v as any).b,
-      c: (v as any).c,
-      d: (v as any).d,
-      e: (v as any).e,
-      f: (v as any).f,
-      is2D: (v as any).is2D ?? true,
-    };
+    if (isDomMatrixFamily || isMatrixLike) {
+      return {
+        a: (v as any).a,
+        b: (v as any).b,
+        c: (v as any).c,
+        d: (v as any).d,
+        e: (v as any).e,
+        f: (v as any).f,
+        is2D: (v as any).is2D ?? true,
+      };
+    }
   }
-}
 
   if (Array.isArray(v)) return v.map(__sanitizeForClone);
 
@@ -128,79 +134,40 @@ if (typeof v === "object") {
 
   if (typeof v === "object") {
     const out: any = {};
-    for (const k of Object.keys(v)) out[k] = __sanitizeForClone(v[k]);
+    for (const k of Object.keys(v)) out[k] = __sanitizeForClone((v as any)[k]);
     return out;
   }
 
   return v;
 }
 
-function __isTransferable(x: any) {
+function __hasTransfer(options: any) {
   try {
-    // ArrayBuffer / SharedArrayBuffer
-    if (x instanceof ArrayBuffer) return true;
-    if (typeof SharedArrayBuffer !== "undefined" && x instanceof SharedArrayBuffer) return true;
-
-    // TypedArray/DataView -> su buffer es transferible, pero en transfer list puede venir el view o el buffer
-    if (ArrayBuffer.isView(x)) return true;
-
-    // MessagePort (Node)
-    const name = x?.constructor?.name ?? "";
-    if (name === "MessagePort") return true;
-
-    return false;
+    return Boolean(options && typeof options === "object" && Array.isArray((options as any).transfer) && (options as any).transfer.length);
   } catch {
     return false;
   }
 }
 
-function __sanitizeCloneOptions(options: any) {
-  if (!options || typeof options !== "object") return options;
-
-  const transfer = (options as any).transfer;
-  if (!Array.isArray(transfer)) return options;
-
-  // ✅ Regla clave en Node: NO transfieras el "view" (Uint8Array),
-  // transfieres su ArrayBuffer subyacente (view.buffer).
-  const expanded = transfer
-    .map((x: any) => {
-      try {
-        if (ArrayBuffer.isView(x)) return x.buffer; // <- el fix real
-        return x;
-      } catch {
-        return x;
-      }
-    })
-    .filter(Boolean);
-
-  // ✅ Filtra solo los realmente transferibles
-  const safeTransfer = expanded.filter(__isTransferable);
-
-  // ✅ Dedup (mismo buffer repetido rompe a veces)
-  const uniq: any[] = [];
-  const seen = new Set<any>();
-  for (const x of safeTransfer) {
-    if (seen.has(x)) continue;
-    seen.add(x);
-    uniq.push(x);
-  }
-
-  return { ...(options as any), transfer: uniq };
-}
-
-
+// ✅ Overwrite: si viene transfer list, la IGNORAMOS (para que NO detache buffers)
+// y solo sanitizamos el value (DOMMatrix/etc).
 if (typeof __nativeStructuredClone === "function") {
   (globalThis as any).structuredClone = (value: any, options?: any) => {
+    const safeValue = __sanitizeForClone(value);
+
+    // CLAVE: si pdfjs manda { transfer: [...] } => NO la usamos (evita detach)
+    if (__hasTransfer(options)) {
+      return __nativeStructuredClone(safeValue);
+    }
+
     try {
       return __nativeStructuredClone(value, options);
     } catch {
-      const safeValue = __sanitizeForClone(value);
-      const safeOptions = __sanitizeCloneOptions(options);
-      return __nativeStructuredClone(safeValue, safeOptions);
+      // fallback: sanitizado sin options
+      return __nativeStructuredClone(safeValue);
     }
   };
 }
-
 // 🔒 Singleton de pdfjs (se carga UNA sola vez por instancia)
 let PDFJS_SINGLETON: any = null;
 /**
@@ -1286,7 +1253,16 @@ function resolvePartyIdFromAnyId(id: string): { partyId: string | null; reason: 
   // 1) Si ya nos pasan un partyId (slug), lo usamos
   // (ej: "partido-democratico-federal")
   const asSlug = slugifyPartyName(clean);
+  // ✅ ALIAS: permite llamar con un id "corto" pero usar el slug real del PDF
+  // Ej: /api/docs/plan?id=perufederal -> data/docs/partido/partido-democratico-federal_plan.pdf
+  const PARTY_ALIAS: Record<string, string> = {
+    perufederal: "partido-democratico-federal",
+  };
 
+  const aliased = PARTY_ALIAS[asSlug];
+  if (aliased) {
+    return { partyId: aliased, reason: "ALIAS_MAP" };
+  }
   // 2) Intentamos ver si es candidateId consultando data/candidates.json
   const candidates = loadCandidatesFromJson();
 

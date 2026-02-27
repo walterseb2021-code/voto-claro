@@ -251,7 +251,21 @@ function getBaseUrl(req: Request) {
 
 async function fetchLocalJson(url: string) {
   const res = await fetch(url, { cache: "no-store" });
-  const data = await res.json();
+const ct = res.headers.get("content-type") || "";
+const raw = await res.text();
+
+let data: any = null;
+try {
+  data = ct.includes("application/json") ? JSON.parse(raw) : JSON.parse(raw);
+} catch {
+  data = { _nonJson: true, text: raw.slice(0, 1200) };
+}
+
+if (!res.ok) {
+  const msg = data?.error ?? (data?._nonJson ? "Non-JSON response from /api/docs/plan" : `HTTP ${res.status}`);
+  throw new Error(msg);
+}
+return data;
   if (!res.ok) {
     const msg = (data as any)?.error ?? `HTTP ${res.status}`;
     throw new Error(msg);
