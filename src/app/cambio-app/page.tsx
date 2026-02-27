@@ -15,6 +15,7 @@ import {
 } from "@/lib/cambioAppContent";
 import { CANDIDATE_GROUPS } from "@/lib/perufederalCandidates";
 import { supabase } from "@/lib/supabaseClient";
+export const dynamic = "force-dynamic";
 
 function guideHoverOnce(text: string) {
   if (typeof window === "undefined") return;

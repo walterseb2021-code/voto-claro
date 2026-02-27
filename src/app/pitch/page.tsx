@@ -5,7 +5,8 @@ import Script from "next/script";
 import React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { PITCH_DONE_KEY } from "@/lib/adminConfig";
-import { getActiveParty, partyWelcomeAssets, setActiveParty } from "@/lib/partyThemeClient";
+import { partyWelcomeAssets, setActiveParty } from "@/lib/partyThemeClient";
+export const dynamic = "force-dynamic";
 
 type AccessState = "CHECKING" | "GRANTED" | "DENIED" | "MISSING_TOKEN";
 
@@ -38,6 +39,7 @@ const BTN_TEXT = "#ffffff";
 
 export default function PitchPage() {
   const [access, setAccess] = React.useState<AccessState>("CHECKING");
+  const [party, setParty] = React.useState<"perufederal" | "app">("perufederal");
 
   React.useEffect(() => {
     let alive = true;
@@ -48,35 +50,30 @@ export default function PitchPage() {
 
         const url = new URL(window.location.href);
         const token = (url.searchParams.get("t") ?? "").trim();
-        // ✅ Definir partido activo según token
-// GRUPOA → perufederal
-// GRUPOB → app
-if (token.startsWith("GRUPOB-")) {
-  setActiveParty("app");
-} else if (token.startsWith("GRUPOA-")) {
-  setActiveParty("perufederal");
-} else {
-  // fallback seguro: si el token no tiene prefijo conocido
-  setActiveParty("perufederal");
-}
-       // ✅ Requiere token en la URL
-if (!token) {
-  if (alive) setAccess("MISSING_TOKEN");
-  return;
-}
+
+        // ✅ Definir partido activo según token (reactivo + persistido)
+        const nextParty = token.startsWith("GRUPOB-") ? "app" : "perufederal";
+        setParty(nextParty);
+        setActiveParty(nextParty);
+
+        // ✅ Requiere token en la URL
+        if (!token) {
+          if (alive) setAccess("MISSING_TOKEN");
+          return;
+        }
 
         // ✅ Validar token en Supabase (solo si está activo)
         const { data, error } = await supabase
           .from("votoclaro_public_links")
-
           .select("id")
           .eq("route", "/pitch")
           .eq("token", token)
           .eq("is_active", true)
           .limit(1);
-console.log("[Pitch][DEBUG] token:", token);
-console.log("[Pitch][DEBUG] data:", data);
-console.log("[Pitch][DEBUG] error:", error);
+
+        console.log("[Pitch][DEBUG] token:", token);
+        console.log("[Pitch][DEBUG] data:", data);
+        console.log("[Pitch][DEBUG] error:", error);
 
         if (error) {
           console.error("[Pitch] token check error:", error);
@@ -86,35 +83,34 @@ console.log("[Pitch][DEBUG] error:", error);
 
         const ok = Array.isArray(data) && data.length > 0;
 
-if (ok) {
-  try {
-    // 🔐 PASO NUEVO: activar gate server-side (cookie HttpOnly)
-    const res = await fetch("/api/gate/pitch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ token }),
-    });
+        if (ok) {
+          try {
+            // 🔐 PASO NUEVO: activar gate server-side (cookie HttpOnly)
+            const res = await fetch("/api/gate/pitch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              cache: "no-store",
+              body: JSON.stringify({ token }),
+            });
 
-    if (!res.ok) {
-      console.error("[Pitch] gate API failed");
-      if (alive) setAccess("DENIED");
-      return;
-    }
+            if (!res.ok) {
+              console.error("[Pitch] gate API failed");
+              if (alive) setAccess("DENIED");
+              return;
+            }
 
-    // ✅ Mantener sessionStorage (UX)
-    sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
-    sessionStorage.setItem("votoclaro_pitch_token_v1", token);
-    sessionStorage.setItem(PITCH_DONE_KEY, "1");
-  } catch (e) {
-    console.error("[Pitch] gate activation error:", e);
-    if (alive) setAccess("DENIED");
-    return;
-  }
-}
+            // ✅ Mantener sessionStorage (UX)
+            sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
+            sessionStorage.setItem("votoclaro_pitch_token_v1", token);
+            sessionStorage.setItem(PITCH_DONE_KEY, "1");
+          } catch (e) {
+            console.error("[Pitch] gate activation error:", e);
+            if (alive) setAccess("DENIED");
+            return;
+          }
+        }
 
-if (alive) setAccess(ok ? "GRANTED" : "DENIED");
-
+        if (alive) setAccess(ok ? "GRANTED" : "DENIED");
       } catch (e) {
         console.error("[Pitch] token check exception:", e);
         if (alive) setAccess("DENIED");
@@ -132,7 +128,7 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
     return (
       <main
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: getActiveParty() === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
+        style={{ background: party === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
       >
         <div
           className="max-w-md w-full text-center rounded-2xl"
@@ -160,47 +156,48 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
       </main>
     );
   }
+
   if (access === "MISSING_TOKEN") {
-  return (
-    <main
-      className="min-h-screen flex items-center justify-center px-6"
-      style={{ background: getActiveParty() === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
-    >
-      <div
-        className="max-w-md w-full text-center rounded-2xl"
-        style={{
-          background: PANEL_BG,
-          border: `3px solid ${RED_BORDER}`,
-          padding: 18,
-          boxShadow: "0 18px 50px rgba(0,0,0,.25)",
-        }}
+    return (
+      <main
+        className="min-h-screen flex items-center justify-center px-6"
+        style={{ background: party === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
       >
         <div
-          className="text-xl font-extrabold"
+          className="max-w-md w-full text-center rounded-2xl"
           style={{
-            color: TITLE_BLACK,
-            WebkitTextStroke: `1px ${RED_BORDER}`,
-            textShadow: "0 4px 12px rgba(0,0,0,.15)",
+            background: PANEL_BG,
+            border: `3px solid ${RED_BORDER}`,
+            padding: 18,
+            boxShadow: "0 18px 50px rgba(0,0,0,.25)",
           }}
         >
-          Acceso bloqueado
-        </div>
+          <div
+            className="text-xl font-extrabold"
+            style={{
+              color: TITLE_BLACK,
+              WebkitTextStroke: `1px ${RED_BORDER}`,
+              textShadow: "0 4px 12px rgba(0,0,0,.15)",
+            }}
+          >
+            Acceso bloqueado
+          </div>
 
-        <p className="mt-3 text-sm leading-relaxed" style={{ color: TEXT_DARK, fontWeight: 700 }}>
-          Debes ingresar con un enlace válido que incluya un token.
-          <br />
-          Ejemplo: <b>/pitch?t=GRUPOA-2026-01</b>
-        </p>
-      </div>
-    </main>
-  );
-}
+          <p className="mt-3 text-sm leading-relaxed" style={{ color: TEXT_DARK, fontWeight: 700 }}>
+            Debes ingresar con un enlace válido que incluya un token.
+            <br />
+            Ejemplo: <b>/pitch?t=GRUPOA-2026-01</b>
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   if (access === "DENIED") {
     return (
       <main
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: getActiveParty() === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
+        style={{ background: party === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
       >
         <div
           className="max-w-md w-full text-center rounded-2xl"
@@ -246,7 +243,7 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
     );
   }
 
-  return <FederalitoSplash partyId={getActiveParty()} />;
+  return <FederalitoSplash partyId={party} />;
 }
 
 /**
@@ -257,6 +254,8 @@ if (alive) setAccess(ok ? "GRANTED" : "DENIED");
  */
 function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
   const isApp = props.partyId === "app";
+  const assets = partyWelcomeAssets(props.partyId);
+
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -273,13 +272,8 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
         inset: 0,
         zIndex: 9999,
         display: "block",
-
-        // ✅ ORDEN CORRECTO: primero jaspe (arriba), luego color base (abajo)
-        // Esto evita el blanco y deja todo uniforme
-        background: isApp
-        ? BG_APP
-        : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
-
+        // ✅ APP sólido (si quieres jaspe azul, cambia a `${BG_JASPE_SOFT_APP}, ${BG_APP}`)
+        background: isApp ? BG_APP : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
         color: TEXT_DARK,
       }}
     >
@@ -305,22 +299,18 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             overflow: "hidden",
             border: "none",
             boxShadow: "0 20px 60px rgba(0,0,0,.35)",
-
-            // ✅ MISMO fondo EXACTO que el exterior (jaspe + base)
-              background: isApp
-            ? BG_APP
-            : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
+            // ✅ MISMO fondo EXACTO que el exterior
+            background: isApp ? BG_APP : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
             position: "relative",
             aspectRatio: "9 / 16",
             zIndex: 0,
             pointerEvents: "none",
           }}
         >
-          {/* ⚠️ NO TOCAR IMAGEN */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             id="federalito-splash-poster"
-            src={partyWelcomeAssets(getActiveParty()).avatarSrc}
+            src={assets.avatarSrc}
             alt="Federalito AI"
             draggable={false}
             className="pointer-events-none select-none"
@@ -330,11 +320,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               width: "100%",
               height: "100%",
               objectFit: "contain",
-              
-
-              // ✅ IMPORTANTE: transparente para que el verde interior = exterior
               background: isApp ? BG_APP : "transparent",
-
               display: "block",
               opacity: 1,
               transition: "opacity 420ms ease",
@@ -344,7 +330,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
 
           <video
             id="federalito-splash-video"
-            src={partyWelcomeAssets(getActiveParty()).welcomeVideoSrc}
+            src={assets.welcomeVideoSrc}
             muted
             playsInline
             loop={false}
@@ -408,10 +394,10 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               fontWeight: 800,
             }}
           >
-           <span style={{ fontWeight: 900 }}>Asistente AI</span>
-          <span style={{ opacity: 0.85, fontWeight: 800 }}>
-          {" - Guía de Voto Informado"}
-          </span>
+            <span style={{ fontWeight: 900 }}>Asistente AI</span>
+            <span style={{ opacity: 0.85, fontWeight: 800 }}>
+              {" - Guía de Voto Informado"}
+            </span>
           </div>
 
           <h1
@@ -439,12 +425,13 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               fontWeight: 700,
             }}
           >
-            Bienvenido a <b>Voto Claro</b>. Aquí encontrarás documentos (Planes de Gobierno, Hojas de Vida e información de
-            fuentes confiables).
+            Bienvenido a <b>Voto Claro</b>. Aquí encontrarás documentos (Planes de
+            Gobierno, Hojas de Vida e información de fuentes confiables).
             <br />
-            Te mostraremos <b>evidencias verificables</b> para ayudarte a identificar propuestas coherentes con la realidad
-            actual (nacional e internacional) y un candidato/a con trayectoria y conducta pública consistente con lo que
-            promete.
+            Te mostraremos <b>evidencias verificables</b> para ayudarte a
+            identificar propuestas coherentes con la realidad actual (nacional e
+            internacional) y un candidato/a con trayectoria y conducta pública
+            consistente con lo que promete.
           </p>
 
           <p
@@ -460,7 +447,15 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             <i>“Un voto responsable empieza con información verificable.”</i>
           </p>
 
-          <div style={{ marginTop: 16, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              gap: 10,
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <button
               id="federalito-splash-skip"
               type="button"
@@ -498,10 +493,17 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             </button>
           </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 1, color: "#0b1220", fontWeight: 700 }}>
-            La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar “Saltar” si no deseas ver la presentación.
-
-            
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              opacity: 1,
+              color: "#0b1220",
+              fontWeight: 700,
+            }}
+          >
+            La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar
+            “Saltar” si no deseas ver la presentación.
           </div>
         </div>
       </div>
