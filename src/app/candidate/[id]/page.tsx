@@ -791,8 +791,8 @@ console.log("[PLAN] axes type:", typeof (file as any)?.axes, "value:", (file as 
       return `• ${title}: ${sum.trim()}`;
     });
 
-    setAnswer("Plan de Gobierno (JSON local) — resumen por ejes:\n\n" + parts.join("\n\n"));
-    setCitations([{ title: "Plan de Gobierno (JSON local)" }]);
+    setAnswer("Plan de Gobierno (JNE) — PDF oficial — resumen por ejes:\n\n" + parts.join("\n\n"));
+    setCitations([{ title: "Plan de Gobierno (JNE) — PDF oficial" }]);
     return;
   }
 
@@ -809,8 +809,8 @@ console.log("[PLAN] axes type:", typeof (file as any)?.axes, "value:", (file as 
       return;
     }
 
-    setAnswer(`Plan de Gobierno (JSON local) — ${title}\n\n${sum.trim()}`);
-    setCitations([{ title: "Plan de Gobierno (JSON local)" }]);
+    setAnswer(`Plan de Gobierno (JNE) — PDF oficial — ${title}\n\n${sum.trim()}`);
+    setCitations([{ title: "Plan de Gobierno (JNE) — PDF oficial" }]);
     return;
   }
 
@@ -848,8 +848,8 @@ console.log("[PLAN] axes type:", typeof (file as any)?.axes, "value:", (file as 
     return;
   }
 
-  setAnswer(`Plan de Gobierno (JSON local) — ${title}\n\n${sum}`);
-  setCitations([{ title: "Plan de Gobierno (JSON local)" }]);
+  setAnswer(`Plan de Gobierno (JNE) — PDF oficial — ${title}\n\n${sum}`);
+  setCitations([{ title: "Plan de Gobierno (JNE) — PDF oficial)" }]);
   return;
 }
 
@@ -950,7 +950,7 @@ if (qnDP2 === "dni" || qnDP2 === "edad") {
   if (dp?.circunscripcion) lines.push(`• Circunscripción: ${fix(dp?.circunscripcion)}`);
 
   setAnswer(lines.join("\n"));
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 
@@ -1083,14 +1083,14 @@ if (qnDP2 === "dni" || qnDP2 === "edad") {
       }
 
       setAnswer("Hoja de Vida (archivo local) — resumen estructurado:\n\n" + lines.join("\n"));
-      setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+      setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
       return;
     }
 
     // ✅ Legacy (si no viene esquema nuevo)
     const top = entries.slice(0, 10).map((e) => `• ${e.path}: ${snippet(e.value, 160)}`);
     setAnswer("Hoja de Vida (archivo local) — resumen de campos:\n\n" + top.join("\n"));
-    setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+    setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
     return;
   }
 
@@ -1174,7 +1174,7 @@ if (!Array.isArray(univ) || univ.length === 0) {
   }
 
   setAnswer(out.join("\n"));
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoj de Vida (JNE) — PDF oficial" }]);
   return;
 }
 
@@ -1263,13 +1263,13 @@ if (
   }
 
   setAnswer(out.join("\n"));
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 // ✅ DEBUG: confirmar que entramos a "ingresos/bienes"
 if (String(q ?? "").toLowerCase().includes("ingres")) {
   setAnswer("DEBUG: Entró al bloque de ingresos.");
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 // ✅ Si el usuario pregunta por "datos personales", devolvemos esa sección completa
@@ -1339,7 +1339,7 @@ if (
   if (dp?.circunscripcion) lines.push(`• Circunscripción: ${fix(dp?.circunscripcion)}`);
 
   setAnswer(lines.join("\n"));
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }*/
 
@@ -1391,7 +1391,7 @@ if (
   }
 
   setAnswer(out.join("\n"));
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 // ✅ Información adicional opcional
@@ -1412,7 +1412,7 @@ if (
 
   if (!info?.tiene_informacion || !info?.texto) {
     setAnswer("Hoja de Vida (archivo local) — información adicional:\n\n• No registra información adicional.");
-    setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+    setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
     return;
   }
 
@@ -1420,7 +1420,7 @@ if (
     "Hoja de Vida (archivo local) — información adicional:\n\n" +
       `• ${fix(info.texto)}`
   );
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 
@@ -1483,7 +1483,7 @@ const qnSent = String(q ?? "")
   parts.push(...fmtRegs("Sentencias / procesos — ámbito familiar", famRegs));
 
   setAnswer("Hoja de Vida (archivo local) — sentencias / procesos (todos los registros):\n\n" + parts.join("\n"));
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 
@@ -1505,7 +1505,7 @@ if (
 
   if (!Array.isArray(regs) || regs.length === 0) {
     setAnswer("Hoja de Vida (archivo local) — experiencia laboral:\n\n• No registra experiencia laboral.");
-    setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+    setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
     return;
   }
 
@@ -1523,7 +1523,7 @@ if (
   });
 
   setAnswer(out.join("\n"));
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 
@@ -1593,7 +1593,7 @@ for (const [k, arr] of groups.entries()) {
   );
 }
 
-  setCitations([{ title: "Hoja de Vida (archivo local)" }]);
+  setCitations([{ title: "Hoja de Vida (JNE) — PDF oficial" }]);
   return;
 }
 }
@@ -1696,8 +1696,8 @@ return;
     if (!found || !summary) return null;
 
     return {
-      answer: `Plan de Gobierno (JSON local) — ${title}\n\n${summary}`,
-      citations: [{ title: "Plan de Gobierno (JSON local)" }] as Source[],
+      answer: `Plan de Gobierno (JNE) — PDF oficial — ${title}\n\n${summary}`,
+      citations: [{ title: "Plan de Gobierno (JNE) — PDF oficial" }] as Source[],
     };
   }
 
