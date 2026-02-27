@@ -497,7 +497,7 @@ function Nivel3Ruleta(props: {
   mode: PlayMode;
   onRestartToLevel1?: () => void;
  onFinishPick?: (pick: number) => void; // ✅ NUEVO: mandamos el número exacto (1..8)
-}) {
+ }) {
   const { enabled, mode, onRestartToLevel1, onFinishPick } = props;
 
   const [started, setStarted] = useState(false);
@@ -546,6 +546,20 @@ function Nivel3Ruleta(props: {
   } | null>(null);
 
   const [rotation, setRotation] = useState(0);
+    // ✅ WIN FX: glow + pulso + confetti corto
+  const [winPulse, setWinPulse] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  const confetti = useMemo(() => {
+    return Array.from({ length: 28 }, (_, i) => ({
+      id: i,
+      left: Math.round(Math.random() * 100),     // 0..100 vw
+      delay: Math.random() * 0.25,               // 0..0.25s
+      duration: 1.8 + Math.random() * 0.6,       // 1.8..2.4s
+      size: 6 + Math.round(Math.random() * 8),   // 6..14px
+      rot: Math.round(Math.random() * 360),
+    }));
+  }, []);
 
   const timerRef = useRef<number | null>(null);
 
@@ -573,7 +587,33 @@ function Nivel3Ruleta(props: {
   useEffect(() => {
     return () => cleanupTimer();
   }, []);
+  // ✅ Disparar FX cuando hay resultado
+  useEffect(() => {
+    if (!result) return;
 
+    const isWinnerNumber = result.n === 2 || result.n === 6;
+
+    if (!isWinnerNumber) return;
+
+    // glow/pulso siempre en 2/6
+    setWinPulse(true);
+    const t1 = window.setTimeout(() => setWinPulse(false), 2200);
+
+    // confetti SOLO si es premio REAL (mode con premio + isPrize)
+    if (result.isPrize && mode === "con_premio") {
+      setShowConfetti(true);
+      const t2 = window.setTimeout(() => setShowConfetti(false), 2200);
+
+      return () => {
+        window.clearTimeout(t1);
+        window.clearTimeout(t2);
+      };
+    }
+
+    return () => {
+      window.clearTimeout(t1);
+    };
+  }, [result, mode]);
   function resetLevel3() {
     cleanupTimer();
     setStarted(false);
@@ -709,6 +749,25 @@ function Nivel3Ruleta(props: {
 
       {/* Ruleta */}
       <div className="mt-4 flex flex-col items-center">
+                {/* ✅ Confetti corto (solo al ganar en modo con premio) */}
+        {showConfetti && (
+          <div className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
+            {confetti.map((p) => (
+              <span
+                key={p.id}
+                className="vc-confetti"
+                style={{
+                  left: `${p.left}vw`,
+                  width: p.size,
+                  height: p.size,
+                  animationDelay: `${p.delay}s`,
+                  animationDuration: `${p.duration}s`,
+                  transform: `rotate(${p.rot}deg)`,
+                }}
+              />
+            ))}
+          </div>
+        )}
         <div className="relative" style={{ width: 280, height: 280 }}>
           {/* Puntero */}
           <div
@@ -724,8 +783,8 @@ function Nivel3Ruleta(props: {
           />
 
           {/* Círculo */}
-          <div
-            className="absolute inset-0 rounded-full border"
+                         <div
+            className={`absolute inset-0 rounded-full border ${winPulse ? "vc-win-pulse" : ""}`}
             style={{
               background: wheelBg,
               transform: `rotate(${rotation}deg)`,
@@ -821,6 +880,41 @@ function Nivel3Ruleta(props: {
             </button>
           </div>
         )}
+              <style>{`
+        .vc-win-pulse{
+          animation: vcWinPulse 2.2s ease-in-out;
+          box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 0 0 rgba(245,158,11,.0);
+        }
+        @keyframes vcWinPulse{
+          0%   { filter: brightness(1);   transform: scale(1); }
+          10%  { filter: brightness(1.2); transform: scale(1.01); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 18px 6px rgba(245,158,11,.35); }
+          25%  { filter: brightness(0.95);transform: scale(0.995); }
+          40%  { filter: brightness(1.18);transform: scale(1.01); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 18px 6px rgba(245,158,11,.32); }
+          60%  { filter: brightness(0.97);transform: scale(0.997); }
+          85%  { filter: brightness(1.10);transform: scale(1.005); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 12px 4px rgba(245,158,11,.22); }
+          100% { filter: brightness(1);   transform: scale(1); }
+        }
+
+        .vc-confetti{
+          position: absolute;
+          top: -16px;
+          border-radius: 4px;
+          background: rgba(245,158,11,.95);
+          box-shadow: 0 6px 18px rgba(0,0,0,.15);
+          animation-name: vcConfettiFall;
+          animation-timing-function: ease-in;
+          animation-fill-mode: both;
+        }
+        .vc-confetti:nth-child(3n){ background: rgba(34,197,94,.95); }
+        .vc-confetti:nth-child(4n){ background: rgba(59,130,246,.95); }
+        .vc-confetti:nth-child(5n){ background: rgba(168,85,247,.95); }
+
+        @keyframes vcConfettiFall{
+          0%   { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+          10%  { opacity: 1; }
+          100% { transform: translateY(105vh) rotate(420deg); opacity: 0; }
+        }
+      `}</style>
       </div>
     </div>
   );
@@ -1633,8 +1727,10 @@ async function registrarPremio() {
     // Fuerza que vuelva a pedir registro
     setPremioAutorizado(false);
 
-    // Reinicia todo a Nivel 1
-    hardResetToLevel1();
+    // ✅ Deja 2.4s para ver el glow/confetti antes de resetear
+    window.setTimeout(() => {
+      hardResetToLevel1();
+    }, 2400);
   }}
 />
       </section>
