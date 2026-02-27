@@ -597,7 +597,7 @@ function Nivel3Ruleta(props: {
 
     // glow/pulso siempre en 2/6
     setWinPulse(true);
-    const t1 = window.setTimeout(() => setWinPulse(false), 2200);
+    const t1 = window.setTimeout(() => setWinPulse(false), 4200);
 
     // confetti SOLO si es premio REAL (mode con premio + isPrize)
     if (result.isPrize && mode === "con_premio") {
@@ -650,13 +650,11 @@ function Nivel3Ruleta(props: {
       const seg = segments.find((x) => x.n === pick)!;
       const isPrize = pick === 2 || pick === 6;
 
-      let message = isPrize ? "🎉 ¡Ganaste premio!" : "😅 Inténtalo nuevamente";
-      if (isPrize && mode === "sin_premio") {
-        message = "🎯 Cayó en premio, pero estás en modo SIN premio.";
-      }
-      if (!isPrize && mode === "con_premio") {
-        message = "😅 Inténtalo nuevamente";
-      }
+    let message = isPrize ? "🎉 ¡Ganaste!" : "😅 Inténtalo nuevamente";
+
+if (isPrize && mode === "sin_premio") {
+  message = "✨ Cayó en un número premiado, pero estás en modo SIN premio (no se entrega premio).";
+}
 
       setResult({
         n: pick,
@@ -859,11 +857,13 @@ function Nivel3Ruleta(props: {
             ))}
           </div>
 
-          <div className="mt-3 text-[11px] text-slate-600">
-            {mode === "con_premio"
-              ? "Modo con premio: si cae en #2 o #6, muestra premio."
-              : "Modo sin premio: no entrega premio aunque caiga en #2 o #6."}
-          </div>
+          {!result && (
+  <div className="mt-3 text-[11px] text-slate-600">
+    {mode === "con_premio"
+      ? "Modo con premio: #2 y #6 entregan premio."
+      : "Modo sin premio: #2 y #6 no entregan premio."}
+  </div>
+)}
         </div>
 
         {l3Locked && (
@@ -882,7 +882,7 @@ function Nivel3Ruleta(props: {
         )}
               <style>{`
         .vc-win-pulse{
-          animation: vcWinPulse 2.2s ease-in-out;
+          animation: vcWinPulse 4.2s ease-in-out;
           box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 0 0 rgba(245,158,11,.0);
         }
         @keyframes vcWinPulse{
