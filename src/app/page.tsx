@@ -219,7 +219,7 @@ export default function HomePage() {
 
               {/* Pills (verde claro de fondo, texto verde oscuro) */}
               <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <Pill>Federalito AI • modo guía</Pill>
+                <Pill>Asistente AI • modo guía</Pill>
                 <Pill>Sin inventar</Pill>
                 <Pill>Con evidencia</Pill>
               </div>
@@ -583,7 +583,7 @@ export default function HomePage() {
       </section>
 
       <footer className="mt-6 text-xs text-slate-700">
-        VOTO CLARO muestra información muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
+        VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
         reemplaza el criterio personal.
       </footer>
     </main>
