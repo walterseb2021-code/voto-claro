@@ -277,7 +277,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
         // ✅ ORDEN CORRECTO: primero jaspe (arriba), luego color base (abajo)
         // Esto evita el blanco y deja todo uniforme
         background: isApp
-        ? `${BG_JASPE_SOFT_APP}, ${BG_APP}`
+        ? BG_APP
         : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
 
         color: TEXT_DARK,
@@ -307,9 +307,9 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             boxShadow: "0 20px 60px rgba(0,0,0,.35)",
 
             // ✅ MISMO fondo EXACTO que el exterior (jaspe + base)
-             background: isApp
-             ? `${BG_JASPE_SOFT_APP}, ${BG_APP}`
-             : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
+              background: isApp
+            ? BG_APP
+            : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
             position: "relative",
             aspectRatio: "9 / 16",
             zIndex: 0,
@@ -330,9 +330,10 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               width: "100%",
               height: "100%",
               objectFit: "contain",
+              
 
               // ✅ IMPORTANTE: transparente para que el verde interior = exterior
-              background: "transparent",
+              background: isApp ? BG_APP : "transparent",
 
               display: "block",
               opacity: 1,
@@ -359,6 +360,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               transition: "opacity 420ms ease",
               willChange: "opacity",
               pointerEvents: "none",
+              background: isApp ? BG_APP : "transparent",
             }}
           />
 
