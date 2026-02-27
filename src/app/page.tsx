@@ -13,7 +13,11 @@ type Candidate = {
 };
 
 const PITCH_DONE_KEY = "votoclaro_pitch_done_v1";
-const NAV_DELAY_MS = 10400; // ✅ tiempo para que Federalito termine antes de navegar
+const BASE_NAV_DELAY_MS = 6500;     // tiempo base antes de navegar
+const MS_PER_WORD = 420;            // velocidad aproximada de narración
+const MIN_NAV_DELAY_MS = 9000;      // mínimo para textos cortos
+const MAX_NAV_DELAY_MS = 22000;     // máximo para textos largos
+// ✅ tiempo para que Federalito termine antes de navegar
 const DOUBLE_CLICK_WINDOW_MS = 280; // ✅ ventana para detectar 2 clics y entrar directo
 
 function FederalitoAvatar({ size = 140 }: { size?: number }) {
@@ -87,7 +91,11 @@ export default function HomePage() {
     clickTimersRef.current[key] = null;
     navTimersRef.current[key] = null;
   }
-
+function estimateNavDelayMs(speech: string) {
+  const words = speech.trim().split(/\s+/).filter(Boolean).length;
+  const estimated = BASE_NAV_DELAY_MS + words * MS_PER_WORD;
+  return Math.max(MIN_NAV_DELAY_MS, Math.min(MAX_NAV_DELAY_MS, estimated));
+}
   /**
    * ✅ 1 clic: (espera ventana de doble click) -> narra -> navega con delay largo
    * ✅ 2 clics rápidos: entra directo SIN narración
@@ -123,7 +131,7 @@ export default function HomePage() {
       navTimersRef.current[key] = window.setTimeout(() => {
         navTimersRef.current[key] = null;
         router.push(href);
-      }, NAV_DELAY_MS);
+      }, estimateNavDelayMs(speech));
     }, DOUBLE_CLICK_WINDOW_MS);
   }
 
