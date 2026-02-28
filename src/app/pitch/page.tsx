@@ -344,7 +344,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               // ✅ SIEMPRE contain (no cover)
               objectFit: "contain",
               objectPosition: "50% 50%",
-              transform: isApp ? "scale(1.36)" : "none",
+              transform: isApp ? "scale(1.42)" : "none",
               transformOrigin: "center",
               // ✅ APP: el video “rellena” con EXACTO #0537A8
               background: isApp ? BG_APP : "transparent",
