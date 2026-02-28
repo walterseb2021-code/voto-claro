@@ -65,7 +65,7 @@ export default function HomePage() {
 
   // ✅ Hooks SIEMPRE arriba (sin returns antes)
   const [allowHome, setAllowHome] = useState(false);
-
+  const [activeParty, setActiveParty] = useState<"perufederal" | "app">("perufederal");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -144,6 +144,15 @@ function estimateNavDelayMs(speech: string) {
       if (sp.get("fromPitch") === "1") {
         sessionStorage.setItem(PITCH_DONE_KEY, "1");
         setAllowHome(true);
+        // ✅ Detectar party desde URL o storage
+        const partyFromUrl = sp.get("party");
+        const partyFromStorage = localStorage.getItem("votoclaro_active_party_v1");
+
+        if (partyFromUrl === "app" || partyFromStorage === "app") {
+         setActiveParty("app");
+       } else {
+         setActiveParty("perufederal");
+      }
         router.replace("/"); // limpia ?fromPitch=1
         return;
       }
@@ -474,34 +483,63 @@ function estimateNavDelayMs(speech: string) {
         </Link>
 
         {/* ✅ SMART LINK */}
-        <Link
-          href="/cambio-con-valentia"
-          onClick={(e) =>
-            handleSmartNavigate({
-              key: "cambio",
-              href: "/cambio-con-valentia",
-              speech:
-                "Vas a entrar a Un cambio con valentía. Esta ventana muestra una propuesta y un acceso al sitio oficial del partido político democrático perú federal para ampliar la información.",
-              preventDefault: true,
-              e,
-            })
-          }
-          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
-        >
-          <div className="flex items-start gap-3">
-            <div className="text-2xl leading-none">🔥</div>
-            <div className="min-w-0">
-              <div className="text-base font-extrabold text-slate-900">UN CAMBIO CON VALENTÍA</div>
-              <p className="mt-1 text-sm text-slate-900">
-                El futuro no se espera, se construye. Investiga, participa y descubre la nueva propuesta del
-                Partido Democrático Perú Federal.
-              </p>
-              <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
-                Abrir página →
-              </div>
-            </div>
-          </div>
-        </Link>
+        {activeParty === "app" ? (
+  <Link
+    href="/cambio-app"
+    onClick={(e) =>
+      handleSmartNavigate({
+        key: "cambio-app",
+        href: "/cambio-app",
+        speech:
+          "Vas a entrar a Alianza para el Progreso. Aquí encontrarás la propuesta correspondiente al grupo activo.",
+        preventDefault: true,
+        e,
+      })
+    }
+    className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-blue-100 p-5 shadow-sm hover:shadow-md hover:bg-blue-200 transition"
+  >
+    <div className="flex items-start gap-3">
+      <div className="text-2xl leading-none">🔵</div>
+      <div className="min-w-0">
+        <div className="text-base font-extrabold text-slate-900">ALIANZA PARA EL PROGRESO</div>
+        <p className="mt-1 text-sm text-slate-900">
+          Explora la propuesta correspondiente al grupo APP.
+        </p>
+        <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+          Abrir página →
+        </div>
+      </div>
+    </div>
+  </Link>
+) : (
+  <Link
+    href="/cambio-con-valentia"
+    onClick={(e) =>
+      handleSmartNavigate({
+        key: "cambio",
+        href: "/cambio-con-valentia",
+        speech:
+          "Vas a entrar a Un cambio con valentía. Esta ventana muestra la propuesta del Partido Democrático Perú Federal.",
+        preventDefault: true,
+        e,
+      })
+    }
+    className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+  >
+    <div className="flex items-start gap-3">
+      <div className="text-2xl leading-none">🔥</div>
+      <div className="min-w-0">
+        <div className="text-base font-extrabold text-slate-900">UN CAMBIO CON VALENTÍA</div>
+        <p className="mt-1 text-sm text-slate-900">
+          Propuesta del Partido Democrático Perú Federal.
+        </p>
+        <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+          Abrir página →
+        </div>
+      </div>
+    </div>
+  </Link>
+)}
                 {/* ✅ SMART LINK: Intención de voto (UI) */}
         <Link
           href="/intencion-de-voto"
