@@ -318,7 +318,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               height: "100%",
               objectFit: "contain",
               objectPosition: "50% 50%",
-              transform: isApp ? "scale(1.18)" : "none",
+              transform: isApp ? "scale(1.05)" : "none",
               transformOrigin: "center",
               // ✅ APP: fondo EXACTO #0537A8
               background: isApp ? BG_APP : "transparent",
@@ -344,7 +344,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               // ✅ SIEMPRE contain (no cover)
               objectFit: "contain",
               objectPosition: "50% 50%",
-              transform: isApp ? "scale(1.18)" : "none",
+              transform: isApp ? "scale(1.22)" : "none",
               transformOrigin: "center",
               // ✅ APP: el video “rellena” con EXACTO #0537A8
               background: isApp ? BG_APP : "transparent",
