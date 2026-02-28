@@ -1,16 +1,17 @@
 // src/app/pitch/page.tsx
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import Script from "next/script";
 import React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { PITCH_DONE_KEY } from "@/lib/adminConfig";
 import { partyWelcomeAssets, setActiveParty } from "@/lib/partyThemeClient";
-export const dynamic = "force-dynamic";
 
 type AccessState = "CHECKING" | "GRANTED" | "DENIED" | "MISSING_TOKEN";
 
-// 🎨 COLORES (según tu imagen)
+// 🎨 COLORES
 // ✅ Perú Federal (verde)
 const BG_GREEN = "rgb(83,129,39)";
 const BG_JASPE_SOFT_GREEN =
@@ -18,8 +19,10 @@ const BG_JASPE_SOFT_GREEN =
   "radial-gradient(900px 700px at 80% 20%, rgba(255,245,120,.06), transparent 50%)," +
   "radial-gradient(1000px 900px at 50% 90%, rgba(255,235,110,.05), transparent 55%)";
 
-// ✅ APP (azul principal #2F61A6)
-const BG_APP = "#2F61A6";
+// ✅ APP (AZUL REAL del video): RGB(5,55,168) → #0537A8
+const BG_APP = "#0537A8";
+
+// (No se usa en APP ahora, se deja por si luego quieres “jaspe”)
 const BG_JASPE_SOFT_APP =
   "radial-gradient(1200px 800px at 20% 10%, rgba(190,220,255,.10), transparent 45%)," +
   "radial-gradient(900px 700px at 80% 20%, rgba(160,205,255,.08), transparent 50%)," +
@@ -32,9 +35,9 @@ const RED_BORDER = "#b91c1c";
 const BTN_BG = "#14532d"; // Perú Federal (verde)
 const BTN_BG_2 = "#166534"; // Perú Federal (verde variante)
 
-// ✅ APP (azul)
-const BTN_BG_APP = "#2F61A6";
-const BTN_BG_APP_2 = "#244d86";
+// ✅ APP (azul) — base y hover
+const BTN_BG_APP = BG_APP; // #0537A8
+const BTN_BG_APP_2 = "#0D3B9A"; // más oscuro
 const BTN_TEXT = "#ffffff";
 
 export default function PitchPage() {
@@ -85,7 +88,7 @@ export default function PitchPage() {
 
         if (ok) {
           try {
-            // 🔐 PASO NUEVO: activar gate server-side (cookie HttpOnly)
+            // 🔐 activar gate server-side (cookie HttpOnly)
             const res = await fetch("/api/gate/pitch", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -118,7 +121,6 @@ export default function PitchPage() {
     }
 
     checkAccess();
-
     return () => {
       alive = false;
     };
@@ -246,12 +248,6 @@ export default function PitchPage() {
   return <FederalitoSplash partyId={party} />;
 }
 
-/**
- * ✅ Splash profesional:
- * - Vive SOLO en /pitch
- * - En /pitch SIEMPRE se muestra (si el token es válido)
- * - Solo navega a / cuando el usuario hace clic (Saltar/Entrar) o termina el video
- */
 function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
   const isApp = props.partyId === "app";
   const assets = partyWelcomeAssets(props.partyId);
@@ -267,12 +263,13 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
   return (
     <div
       id="federalito-splash"
+      data-party={props.partyId}
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 9999,
         display: "block",
-        // ✅ APP sólido (si quieres jaspe azul, cambia a `${BG_JASPE_SOFT_APP}, ${BG_APP}`)
+        // ✅ APP: sólido EXACTO #0537A8 (sin gradientes/overlays)
         background: isApp ? BG_APP : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
         color: TEXT_DARK,
       }}
@@ -299,8 +296,8 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             overflow: "hidden",
             border: "none",
             boxShadow: "0 20px 60px rgba(0,0,0,.35)",
-            // ✅ MISMO fondo EXACTO que el exterior
-            background: isApp ? BG_APP : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
+            // ✅ APP: contenedor EXACTO #0537A8 (bloque uniforme)
+            background: isApp ? BG_APP : "transparent",
             position: "relative",
             aspectRatio: "9 / 16",
             zIndex: 0,
@@ -320,6 +317,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               width: "100%",
               height: "100%",
               objectFit: "contain",
+              // ✅ APP: fondo EXACTO #0537A8
               background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 1,
@@ -340,13 +338,15 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               inset: 0,
               width: "100%",
               height: "100%",
-              objectFit: "cover",
+              // ✅ SIEMPRE contain (no cover)
+              objectFit: "contain",
+              // ✅ APP: el video “rellena” con EXACTO #0537A8
+              background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 0,
               transition: "opacity 420ms ease",
               willChange: "opacity",
               pointerEvents: "none",
-              background: isApp ? BG_APP : "transparent",
             }}
           />
 
@@ -355,11 +355,16 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             style={{
               position: "absolute",
               inset: 0,
-              background: "rgba(255,255,255,0.0)",
+              width: "100%",
+              height: "100%",
+              // (No aplica objectFit a div, se deja limpio)
+              // ✅ APP: si llegara a mostrarse, mantiene EXACTO #0537A8
+              background: isApp ? BG_APP : "transparent",
+              display: "block",
               opacity: 0,
-              pointerEvents: "none",
-              transition: "opacity 120ms ease",
+              transition: "opacity 420ms ease",
               willChange: "opacity",
+              pointerEvents: "none",
             }}
           />
         </div>
@@ -395,9 +400,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             }}
           >
             <span style={{ fontWeight: 900 }}>Asistente AI</span>
-            <span style={{ opacity: 0.85, fontWeight: 800 }}>
-              {" - Guía de Voto Informado"}
-            </span>
+            <span style={{ opacity: 0.85, fontWeight: 800 }}>{" - Guía de Voto Informado"}</span>
           </div>
 
           <h1
@@ -425,13 +428,12 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
               fontWeight: 700,
             }}
           >
-            Bienvenido a <b>Voto Claro</b>. Aquí encontrarás documentos (Planes de
-            Gobierno, Hojas de Vida e información de fuentes confiables).
+            Bienvenido a <b>Voto Claro</b>. Aquí encontrarás documentos (Planes de Gobierno, Hojas de Vida e información de
+            fuentes confiables).
             <br />
-            Te mostraremos <b>evidencias verificables</b> para ayudarte a
-            identificar propuestas coherentes con la realidad actual (nacional e
-            internacional) y un candidato/a con trayectoria y conducta pública
-            consistente con lo que promete.
+            Te mostraremos <b>evidencias verificables</b> para ayudarte a identificar propuestas coherentes con la realidad
+            actual (nacional e internacional) y un candidato/a con trayectoria y conducta pública consistente con lo que
+            promete.
           </p>
 
           <p
@@ -447,15 +449,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             <i>“Un voto responsable empieza con información verificable.”</i>
           </p>
 
-          <div
-            style={{
-              marginTop: 16,
-              display: "flex",
-              gap: 10,
-              justifyContent: "center",
-              flexWrap: "wrap",
-            }}
-          >
+          <div style={{ marginTop: 16, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
             <button
               id="federalito-splash-skip"
               type="button"
@@ -493,17 +487,8 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             </button>
           </div>
 
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 12,
-              opacity: 1,
-              color: "#0b1220",
-              fontWeight: 700,
-            }}
-          >
-            La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar
-            “Saltar” si no deseas ver la presentación.
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 1, color: "#0b1220", fontWeight: 700 }}>
+            La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar “Saltar” si no deseas ver la presentación.
           </div>
         </div>
       </div>
@@ -523,7 +508,9 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
             user-select: none !important;
           }
 
-          #federalito-splash-video{
+          /* ✅ SOLO PerúFederal puede aplicar “cover” en móvil.
+             ✅ APP mantiene contain (sin forzar cover, sin bordes lavados) */
+          #federalito-splash[data-party="perufederal"] #federalito-splash-video{
             object-fit: cover !important;
             object-position: 50% 12% !important;
             transform: scale(1.08) !important;
@@ -616,10 +603,18 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
           if(poster) void poster.offsetHeight;
         }catch(e){}
 
+        /* ✅ En APP NO hacemos “flash overlay” (evita cambio de tono).
+           ✅ Mantiene el resto de animaciones (fade poster/video). */
         try{
-          if(flash){
-            flash.style.opacity = "0.22";
-            setTimeout(function(){ try{ flash.style.opacity = "0"; }catch(e){} }, 120);
+          var isApp = false;
+          try{
+            if(splash && splash.dataset && splash.dataset.party === "app") isApp = true;
+          }catch(e){}
+          if(!isApp){
+            if(flash){
+              flash.style.opacity = "0.22";
+              setTimeout(function(){ try{ flash.style.opacity = "0"; }catch(e){} }, 120);
+            }
           }
         }catch(e){}
 
