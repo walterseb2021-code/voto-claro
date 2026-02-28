@@ -544,10 +544,15 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
     function goHome(){
       try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
       try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
-      var party = "";
+     var party = "";
 try{ party = (splash && splash.dataset && splash.dataset.party) ? splash.dataset.party : ""; }catch(e){}
-var qp = party ? ("&party=" + encodeURIComponent(party)) : "";
-try{ window.location.assign("/?fromPitch=1" + qp); }catch(e){ window.location.href = "/?fromPitch=1" + qp; }
+
+var target = (party === "app")
+  ? "/cambio-app?fromPitch=1"
+  : "/?fromPitch=1";
+
+try{ window.location.assign(target); }
+catch(e){ window.location.href = target; }
     }
 
     function resetVisual(){
