@@ -214,7 +214,15 @@ export default function CambioAppPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-     setActiveParty("app");
+
+    // ✅ Fijar APP como partido activo (y PERSISTIR para que no se pierda al volver a inicio)
+    try {
+      localStorage.setItem("votoclaro_active_party_v1", "app");
+      sessionStorage.setItem("votoclaro_active_party_v1", "app");
+    } catch {}
+
+    setActiveParty("app");
+
     const welcome =
       "Bienvenido a APP. " +
       "Aquí puedes conocer la propuesta y visitar la página oficial.";
@@ -386,7 +394,17 @@ export default function CambioAppPage() {
         </div>
 
         <Link
-          href="/"
+          href="/?party=app"
+          onClick={() => {
+            // ✅ Blindaje extra: asegurar party app antes de volver a Home
+            try {
+              localStorage.setItem("votoclaro_active_party_v1", "app");
+              sessionStorage.setItem("votoclaro_active_party_v1", "app");
+            } catch {}
+            try {
+              setActiveParty("app");
+            } catch {}
+          }}
           className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-[#2F61A6] text-white text-sm font-extrabold hover:bg-[#244d86] shadow-sm transition"
         >
           ← Volver al inicio
@@ -421,7 +439,7 @@ export default function CambioAppPage() {
             CANDIDATO
           </div>
           <div className="mt-1 text-base md:text-lg font-extrabold text-slate-900 whitespace-normal break-words">
-            Armando Joaquín Massé Fernández
+            César Acuña Peralta
           </div>
         </div>
 
@@ -482,7 +500,7 @@ export default function CambioAppPage() {
               </div>
 
               <h2 className="mt-1 text-base md:text-lg font-extrabold text-slate-900 break-words">
-                Virgilio Acuña Peralta
+                César Acuña Peralta
               </h2>
 
               <p className="mt-2 text-sm md:text-base text-slate-800 font-semibold leading-relaxed break-words">
@@ -517,7 +535,7 @@ export default function CambioAppPage() {
             </div>
 
             <h2 className="mt-1 text-xl md:text-2xl font-extrabold text-slate-900 break-words">
-              Armando Joaquín Massé Fernández
+              César Acuña Peralta
             </h2>
           </div>
 
@@ -561,28 +579,21 @@ export default function CambioAppPage() {
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
                     {
-                      label: "Médico cirujano",
-                      url: "https://www.youtube.com/watch?v=5mE11zwfqno",
+                      label: "Formación Académica y Docencia",
+                      url: "https://www.youtube.com/watch?v=Fuh-737_UAg",
                     },
                     {
-                      label: "Cantautor y compositor",
-                      url: "https://www.youtube.com/watch?v=ikOo6jHi3tA",
+                      label: "Emprendimiento y Gestión educativa",
+                      url: "https://www.cesaracuna.pe/links/una-historia-ganadora?gad_source=1&gad_campaignid=23153707879&gbraid=0AAAABBuPsejM40DJYK-DtP9AOyM1AVKer&gclid=Cj0KCQiAwYrNBhDcARIsAGo3u32jRnfg_YfOVEeNe4YdS9SkElDz7K28s-YM-ZnjRZjr1DfGeMllnR0aAvgeEALw_wcB",
                     },
                     {
-                      label: "Locutor y comunicador",
-                      url: "https://www.youtube.com/watch?v=hJYQl315YK0&t=31s",
+                      label: "Trayectoria Política",
+                      url: "https://www.youtube.com/watch?v=usJhHvVB96I",
                     },
+
                     {
-                      label: "Gestor cultural y líder en derechos de autor",
-                      url: "https://www.youtube.com/watch?v=GcZCwjK8K-Q",
-                    },
-                    {
-                      label: "Escritor",
-                      url: "https://web.facebook.com/share/v/1DaBDzvBa2/",
-                    },
-                    {
-                      label: "Político",
-                      url: "https://www.youtube.com/shorts/v1LYIpYGmno",
+                      label: "Gestión Deportiva",
+                      url: "https://www.youtube.com/watch?v=DmRyvNO7Imc",
                     },
                   ].map((item) => (
                     <div
