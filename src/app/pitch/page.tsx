@@ -541,18 +541,38 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
 
     var KEY = "votoclaro_pitch_done_v1";
 
-  function goHome(){
+function goHome(){
   try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
   try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
+
+  // ✅ Detectar party actual (app o perufederal)
   var party = "";
   try{ party = (splash && splash.dataset && splash.dataset.party) ? splash.dataset.party : ""; }catch(e){}
 
-  var target = (party === "app")
-  ? "/cambio-app?fromPitch=1"
-  : "/?fromPitch=1";
+  // ✅ Persistir party de forma "a prueba de balas" (varias keys + cookie)
+  try{
+    if(party){
+      // sessionStorage
+      sessionStorage.setItem("votoclaro_active_party_v1", party);
+      sessionStorage.setItem("active_party", party);
+      sessionStorage.setItem("party", party);
+      sessionStorage.setItem("votoclaro_party", party);
 
-  try{ window.location.assign(target); }
-  catch(e){ window.location.href = target; }
+      // localStorage
+      localStorage.setItem("votoclaro_active_party_v1", party);
+      localStorage.setItem("active_party", party);
+      localStorage.setItem("party", party);
+      localStorage.setItem("votoclaro_party", party);
+
+      // cookie (por si el middleware/SSR lo usa)
+      document.cookie = "votoclaro_party=" + encodeURIComponent(party) + "; path=/; max-age=31536000; samesite=lax";
+    }
+  }catch(e){}
+
+  // ✅ Ir a inicio SIEMPRE, pero pasando party en la URL también
+  var qp = party ? ("&party=" + encodeURIComponent(party)) : "";
+  try{ window.location.assign("/?fromPitch=1" + qp); }
+  catch(e){ window.location.href = "/?fromPitch=1" + qp; }
 }
 
     function resetVisual(){
