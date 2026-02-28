@@ -420,14 +420,14 @@ export default function CambioAppPage() {
             rel="noreferrer"
             onMouseEnter={onHoverSpeak}
             onTouchStart={onHoverSpeak}
-            className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-green-900 border-2 border-red-600 hover:shadow-lg transition"
+           className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-[#2F61A6] border-2 border-red-600 hover:shadow-lg transition"
             title="Abrir sitio oficial del Partido Alianza para el Progreso (APP)"
           >
             <Image
               src="/app-bienvenida.png"
               alt="APP"
               fill
-              className="object-contain"
+              className="object-cover"
               priority
             />
           </a>
@@ -466,7 +466,7 @@ export default function CambioAppPage() {
           rel="noreferrer"
           onMouseEnter={onHoverSpeak}
           onTouchStart={onHoverSpeak}
-          className="mt-4 block rounded-2xl border-2 border-red-600 bg-green-50/80 px-5 py-4 shadow-sm hover:bg-green-100 hover:shadow-md transition"
+         className="mt-4 block rounded-2xl border-2 border-red-600 bg-sky-50 px-5 py-4 shadow-sm hover:bg-sky-100 hover:shadow-md transition"
           title="Abrir sitio oficial del Partido Alianza para el Progreso (APP)"
         >
           <p className="text-sm md:text-base font-extrabold text-slate-900 text-center uppercase leading-relaxed whitespace-normal break-words">
@@ -571,7 +571,7 @@ export default function CambioAppPage() {
               </button>
 
               {/* Perfil Multidisciplinario */}
-              <div className="mt-6 rounded-2xl border-2 border-red-600 bg-green-50/60 p-4">
+               <div className="mt-6 rounded-2xl border-2 border-red-600 bg-sky-50 p-4">
                 <h3 className="text-sm md:text-base font-extrabold text-slate-900 text-center">
                   Perfil Multidisciplinario
                 </h3>
@@ -651,7 +651,7 @@ export default function CambioAppPage() {
           </div>
 
           {liveNow.length === 0 ? (
-            <div className="mt-3 rounded-2xl border-2 border-red-600 bg-green-50/70 p-4 text-sm font-semibold text-slate-700">
+            <div className="mt-3 rounded-2xl border-2 border-red-600 bg-sky-50 p-4 text-sm font-semibold text-slate-700">
               No hay transmisiones en vivo en este momento.
             </div>
           ) : (
@@ -725,7 +725,7 @@ export default function CambioAppPage() {
               />
 
               {filteredCandidateSuggestions.length > 0 ? (
-                <div className="mt-2 rounded-2xl border-2 border-red-600 bg-green-50/70 p-2">
+                <div className="mt-2 rounded-2xl border-2 border-red-600 bg-sky-50 p-2">
                   {filteredCandidateSuggestions.map((c, idx) => (
                     <button
                       key={`${c.id}-${idx}`}
@@ -734,7 +734,7 @@ export default function CambioAppPage() {
                         setSelectedCandidateForHistory(c.id);
                         setLiveSearch(c.name);
                       }}
-                      className="w-full text-left rounded-xl px-3 py-2 hover:bg-green-100 transition text-sm font-extrabold text-slate-900"
+                      className="w-full text-left rounded-xl px-3 py-2 hover:bg-sky-100 transition text-sm font-extrabold text-slate-900"
                       title="Ver historial"
                     >
                       {c.name}
@@ -764,7 +764,7 @@ export default function CambioAppPage() {
           </div>
 
           {selectedCandidateForHistory ? (
-            <div className="mt-5 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4">
+            <div className="mt-5 rounded-2xl border-4 border-red-700 bg-sky-50 p-4">
               <div className="text-sm font-extrabold text-slate-900">
                 Historial de transmisiones
               </div>
