@@ -13,10 +13,10 @@ type Candidate = {
 };
 
 const PITCH_DONE_KEY = "votoclaro_pitch_done_v1";
-const BASE_NAV_DELAY_MS = 6500;     // tiempo base antes de navegar
-const MS_PER_WORD = 420;            // velocidad aproximada de narración
-const MIN_NAV_DELAY_MS = 9000;      // mínimo para textos cortos
-const MAX_NAV_DELAY_MS = 22000;     // máximo para textos largos
+const BASE_NAV_DELAY_MS = 6500; // tiempo base antes de navegar
+const MS_PER_WORD = 420; // velocidad aproximada de narración
+const MIN_NAV_DELAY_MS = 9000; // mínimo para textos cortos
+const MAX_NAV_DELAY_MS = 22000; // máximo para textos largos
 // ✅ tiempo para que Federalito termine antes de navegar
 const DOUBLE_CLICK_WINDOW_MS = 280; // ✅ ventana para detectar 2 clics y entrar directo
 
@@ -91,11 +91,13 @@ export default function HomePage() {
     clickTimersRef.current[key] = null;
     navTimersRef.current[key] = null;
   }
-function estimateNavDelayMs(speech: string) {
-  const words = speech.trim().split(/\s+/).filter(Boolean).length;
-  const estimated = BASE_NAV_DELAY_MS + words * MS_PER_WORD;
-  return Math.max(MIN_NAV_DELAY_MS, Math.min(MAX_NAV_DELAY_MS, estimated));
-}
+
+  function estimateNavDelayMs(speech: string) {
+    const words = speech.trim().split(/\s+/).filter(Boolean).length;
+    const estimated = BASE_NAV_DELAY_MS + words * MS_PER_WORD;
+    return Math.max(MIN_NAV_DELAY_MS, Math.min(MAX_NAV_DELAY_MS, estimated));
+  }
+
   /**
    * ✅ 1 clic: (espera ventana de doble click) -> narra -> navega con delay largo
    * ✅ 2 clics rápidos: entra directo SIN narración
@@ -140,20 +142,32 @@ function estimateNavDelayMs(speech: string) {
     try {
       const sp = new URLSearchParams(window.location.search);
 
-      // Si vienes desde pitch con parámetro, marcamos la sesión y limpiamos la URL.
-      if (sp.get("fromPitch") === "1") {
-        sessionStorage.setItem(PITCH_DONE_KEY, "1");
-        setAllowHome(true);
-        // ✅ Detectar party desde URL o storage
+      // ✅ Resolver partido desde URL o storage (fuente de verdad para Home)
+      const resolveParty = () => {
         const partyFromUrl = sp.get("party");
         const partyFromStorage = localStorage.getItem("votoclaro_active_party_v1");
+        return (partyFromUrl === "app" || partyFromStorage === "app") ? "app" : "perufederal";
+      };
 
-        if (partyFromUrl === "app" || partyFromStorage === "app") {
-         setActiveParty("app");
-       } else {
-         setActiveParty("perufederal");
-      }
-        router.replace("/"); // limpia ?fromPitch=1
+      // Si vienes desde pitch con parámetro, marcamos la sesión, fijamos party y limpiamos URL.
+      if (sp.get("fromPitch") === "1") {
+        const nextParty = resolveParty();
+
+        // ✅ Persistir party (CLAVE para que no se pierda al volver a inicio)
+        try {
+          localStorage.setItem("votoclaro_active_party_v1", nextParty);
+          sessionStorage.setItem("votoclaro_active_party_v1", nextParty);
+        } catch {}
+
+        // ✅ Estado React
+        setActiveParty(nextParty);
+
+        // ✅ Gate
+        sessionStorage.setItem(PITCH_DONE_KEY, "1");
+        setAllowHome(true);
+
+        // ✅ Limpia URL (borra ?fromPitch=1&party=...)
+        router.replace("/");
         return;
       }
 
@@ -161,6 +175,14 @@ function estimateNavDelayMs(speech: string) {
       if (!done) {
         router.replace("/pitch");
         return;
+      }
+
+      // ✅ Si ya está permitido Home, igual fijamos party desde storage para que sea estable
+      try {
+        const stored = localStorage.getItem("votoclaro_active_party_v1");
+        setActiveParty(stored === "app" ? "app" : "perufederal");
+      } catch {
+        setActiveParty("perufederal");
       }
 
       setAllowHome(true);
@@ -482,65 +504,66 @@ function estimateNavDelayMs(speech: string) {
           </div>
         </Link>
 
-        {/* ✅ SMART LINK */}
+        {/* ✅ SMART LINK (DINÁMICO POR PARTIDO) */}
         {activeParty === "app" ? (
-  <Link
-    href="/cambio-app"
-    onClick={(e) =>
-      handleSmartNavigate({
-        key: "cambio-app",
-        href: "/cambio-app",
-        speech:
-          "Vas a entrar a Alianza para el Progreso. Aquí encontrarás la propuesta correspondiente al grupo activo.",
-        preventDefault: true,
-        e,
-      })
-    }
-    className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-blue-100 p-5 shadow-sm hover:shadow-md hover:bg-blue-200 transition"
-  >
-    <div className="flex items-start gap-3">
-      <div className="text-2xl leading-none">🔵</div>
-      <div className="min-w-0">
-        <div className="text-base font-extrabold text-slate-900">ALIANZA PARA EL PROGRESO</div>
-        <p className="mt-1 text-sm text-slate-900">
-          Explora la propuesta correspondiente al grupo APP.
-        </p>
-        <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
-          Abrir página →
-        </div>
-      </div>
-    </div>
-  </Link>
-) : (
-  <Link
-    href="/cambio-con-valentia"
-    onClick={(e) =>
-      handleSmartNavigate({
-        key: "cambio",
-        href: "/cambio-con-valentia",
-        speech:
-          "Vas a entrar a Un cambio con valentía. Esta ventana muestra la propuesta del Partido Democrático Perú Federal.",
-        preventDefault: true,
-        e,
-      })
-    }
-    className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
-  >
-    <div className="flex items-start gap-3">
-      <div className="text-2xl leading-none">🔥</div>
-      <div className="min-w-0">
-        <div className="text-base font-extrabold text-slate-900">UN CAMBIO CON VALENTÍA</div>
-        <p className="mt-1 text-sm text-slate-900">
-          Propuesta del Partido Democrático Perú Federal.
-        </p>
-        <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
-          Abrir página →
-        </div>
-      </div>
-    </div>
-  </Link>
-)}
-                {/* ✅ SMART LINK: Intención de voto (UI) */}
+          <Link
+            href="/cambio-app"
+            onClick={(e) =>
+              handleSmartNavigate({
+                key: "cambio-app",
+                href: "/cambio-app",
+                speech:
+                  "Vas a entrar a Alianza para el Progreso. Aquí encontrarás la propuesta correspondiente al grupo activo.",
+                preventDefault: true,
+                e,
+              })
+            }
+            className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-blue-100 p-5 shadow-sm hover:shadow-md hover:bg-blue-200 transition"
+          >
+            <div className="flex items-start gap-3">
+              <div className="text-2xl leading-none">🔵</div>
+              <div className="min-w-0">
+                <div className="text-base font-extrabold text-slate-900">ALIANZA PARA EL PROGRESO</div>
+                <p className="mt-1 text-sm text-slate-900">
+                  Explora la propuesta correspondiente al grupo APP.
+                </p>
+                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+                  Abrir página →
+                </div>
+              </div>
+            </div>
+          </Link>
+        ) : (
+          <Link
+            href="/cambio-con-valentia"
+            onClick={(e) =>
+              handleSmartNavigate({
+                key: "cambio",
+                href: "/cambio-con-valentia",
+                speech:
+                  "Vas a entrar a Un cambio con valentía. Esta ventana muestra la propuesta del Partido Democrático Perú Federal.",
+                preventDefault: true,
+                e,
+              })
+            }
+            className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+          >
+            <div className="flex items-start gap-3">
+              <div className="text-2xl leading-none">🔥</div>
+              <div className="min-w-0">
+                <div className="text-base font-extrabold text-slate-900">UN CAMBIO CON VALENTÍA</div>
+                <p className="mt-1 text-sm text-slate-900">
+                  Propuesta del Partido Democrático Perú Federal.
+                </p>
+                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+                  Abrir página →
+                </div>
+              </div>
+            </div>
+          </Link>
+        )}
+
+        {/* ✅ SMART LINK: Intención de voto (UI) */}
         <Link
           href="/intencion-de-voto"
           onClick={(e) =>
@@ -569,7 +592,8 @@ function estimateNavDelayMs(speech: string) {
             </div>
           </div>
         </Link>
-               {/* ✅ SMART LINK: Reto Ciudadano (UI) */}
+
+        {/* ✅ SMART LINK: Reto Ciudadano (UI) */}
         <Link
           href="/reto-ciudadano"
           onClick={(e) =>
@@ -598,34 +622,35 @@ function estimateNavDelayMs(speech: string) {
             </div>
           </div>
         </Link>
+
         {/* ✅ SMART LINK: Comentario Ciudadano (UI) */}
-<Link
-  href="/comentarios"
-  onClick={(e) =>
-    handleSmartNavigate({
-      key: "comentarios",
-      href: "/comentarios",
-      speech:
-        "Vas a entrar a Comentarios ciudadanos. Ahí puedes dejar tu opinión o sugerencia. Es anónimo y ayuda a mejorar la app.",
-      preventDefault: true,
-      e,
-    })
-  }
-  className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
->
-  <div className="flex items-start gap-3">
-    <div className="text-2xl leading-none">💬</div>
-    <div className="min-w-0">
-      <div className="text-base font-extrabold text-slate-900">COMENTARIO CIUDADANO</div>
-      <p className="mt-1 text-sm text-slate-900">
-        Deja tu opinión o sugerencia para mejorar Voto Claro. (Se publica solo si es aprobado).
-      </p>
-      <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
-        Abrir página →
-      </div>
-    </div>
-  </div>
-</Link>
+        <Link
+          href="/comentarios"
+          onClick={(e) =>
+            handleSmartNavigate({
+              key: "comentarios",
+              href: "/comentarios",
+              speech:
+                "Vas a entrar a Comentarios ciudadanos. Ahí puedes dejar tu opinión o sugerencia. Es anónimo y ayuda a mejorar la app.",
+              preventDefault: true,
+              e,
+            })
+          }
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+        >
+          <div className="flex items-start gap-3">
+            <div className="text-2xl leading-none">💬</div>
+            <div className="min-w-0">
+              <div className="text-base font-extrabold text-slate-900">COMENTARIO CIUDADANO</div>
+              <p className="mt-1 text-sm text-slate-900">
+                Deja tu opinión o sugerencia para mejorar Voto Claro. (Se publica solo si es aprobado).
+              </p>
+              <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
+                Abrir página →
+              </div>
+            </div>
+          </div>
+        </Link>
       </section>
 
       <footer className="mt-6 text-xs text-slate-700">
