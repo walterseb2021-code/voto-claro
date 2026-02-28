@@ -289,9 +289,9 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
         }}
       >
         <div
-          className="federalito-anim"
-          style={{
-            width: "min(520px, 92vw)",
+            className="federalito-anim"
+            style={{
+            width: isApp ? "min(600px, 95vw)" : "min(520px, 92vw)",
             borderRadius: 22,
             overflow: "hidden",
             border: "none",
@@ -496,7 +496,7 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
       <style>{`
         @media (max-width: 640px) {
           .federalito-anim{
-            width: min(360px, 88vw) !important;
+            width: min(420px, 96vw) !important;
             aspect-ratio: 4 / 5 !important;
             max-height: 46vh !important;
             margin-top: 100px !important;
