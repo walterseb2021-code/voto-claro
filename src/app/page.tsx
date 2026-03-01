@@ -392,19 +392,19 @@ export default function HomePage() {
 
         <div className="mt-4">
           <input
-            className="
-              w-full
-              border-2 border-red-600
-              rounded-xl
-              px-4 py-3
-              bg-primary
-              text-white
-              font-semibold
-              placeholder:text-white/80
-              focus:outline-none
-              focus:ring-2
-              focus:ring-accent
-            "
+  className="
+    w-full
+    border-2 border-red-600
+    rounded-xl
+    px-4 py-3
+    bg-white
+    text-black
+    font-semibold
+    placeholder:text-black
+    focus:outline-none
+    focus:ring-2
+    focus:ring-accent
+  "
             placeholder="Escribe: 'Armando Massé', 'César Acuña', 'López Aliaga', 'Keiko Fujimori'..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
