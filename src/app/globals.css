@@ -11,6 +11,16 @@
 
   /* ✅ “Muted” NO se permite en modo claro: igual al foreground */
   --foreground-muted: var(--foreground);
+
+  /* =========================
+     DEFAULT PARTY TOKENS (Perú Federal)
+     (no usar --color-background aquí para no chocar con @theme inline)
+     ========================= */
+  --color-primary: #15803d; /* verde principal */
+  --color-primary-soft: #dcfce7; /* verde claro */
+  --color-accent: #16a34a;
+  --color-border: #166534;
+  --color-party-bg: #f0fdf4;
 }
 
 @theme inline {
@@ -151,4 +161,24 @@ body {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* =========================
+   PARTY THEMES
+========================= */
+
+html[data-party="app"] {
+  --color-primary: #2F61A6; /* azul institucional */
+ --color-primary-soft: #f0f9ff; /* sky-50 */
+  --color-accent: #dc2626; /* rojo borde */
+  --color-border: #dc2626;
+  --color-party-bg: #f0f9ff;     /* sky-50 */
+}
+
+html[data-party="perufederal"] {
+  --color-primary: #15803d;
+  --color-primary-soft: #dcfce7;
+  --color-accent: #16a34a;
+  --color-border: #166534;
+  --color-party-bg: #f0fdf4;
 }

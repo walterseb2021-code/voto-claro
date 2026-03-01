@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import FederalitoClientGate from "@/components/assistant/FederalitoClientGate";
 import HideOnPitch from "@/components/HideOnPitch";
+import PartyThemeInitializer from "@/components/PartyThemeInitializer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,13 +38,17 @@ export default function RootLayout({
           geistMono.variable,
           "antialiased",
           "min-h-screen",
+          // ✅ Ahora el fondo también es por partido (APP vs Perú Federal)
           "bg-gradient-to-b",
-          "from-green-50",
+          "from-primary-soft",
           "via-white",
-          "to-green-100",
+          "to-backgroundparty",
           "text-slate-900",
         ].join(" ")}
       >
+        {/* ✅ Activa el theme global leyendo localStorage y seteando data-party en <html> */}
+        <PartyThemeInitializer />
+
         {/* ✅ Federalito (pero NO en /pitch) */}
         <HideOnPitch>
           <FederalitoClientGate />

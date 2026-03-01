@@ -41,7 +41,7 @@ function FederalitoAvatar({ size = 140 }: { size?: number }) {
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-xs px-3 py-1 rounded-full border border-green-200 bg-green-100 text-green-800 font-medium">
+    <span className="text-xs px-3 py-1 rounded-full border border-borderparty bg-primary-soft text-primary font-medium">
       {children}
     </span>
   );
@@ -146,7 +146,7 @@ export default function HomePage() {
       const resolveParty = () => {
         const partyFromUrl = sp.get("party");
         const partyFromStorage = localStorage.getItem("votoclaro_active_party_v1");
-        return (partyFromUrl === "app" || partyFromStorage === "app") ? "app" : "perufederal";
+        return partyFromUrl === "app" || partyFromStorage === "app" ? "app" : "perufederal";
       };
 
       // Si vienes desde pitch con parámetro, marcamos la sesión, fijamos party y limpiamos URL.
@@ -244,11 +244,11 @@ export default function HomePage() {
   if (!allowHome) return null;
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
+    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-primary-soft via-white to-backgroundparty">
       {/* HERO */}
       <section className="rounded-3xl border-[6px] border-red-600 shadow-sm overflow-hidden bg-white">
         {/* Banner superior (SIN imagen, como pediste) */}
-        <div className="p-6 md:p-8 bg-gradient-to-br from-sky-50 via-white to-white">
+        <div className="p-6 md:p-8 bg-gradient-to-br from-primary-soft via-white to-white">
           <div className="flex flex-col gap-6">
             <div className="min-w-0">
               {/* Título */}
@@ -256,14 +256,14 @@ export default function HomePage() {
                 VOTO CLARO
               </h1>
 
-              {/* Pills (verde claro de fondo, texto verde oscuro) */}
+              {/* Pills */}
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <Pill>Asistente AI • modo guía</Pill>
                 <Pill>Sin inventar</Pill>
                 <Pill>Con evidencia</Pill>
               </div>
 
-              {/* Frase principal (negro) + explicación (gris oscuro) */}
+              {/* Frase principal */}
               <p className="mt-3 text-base md:text-lg font-semibold text-slate-900">
                 Información clara para decidir mejor.
               </p>
@@ -271,7 +271,7 @@ export default function HomePage() {
                 Federalito te guía paso a paso por documentos, fuentes y comparaciones.
               </p>
 
-              {/* 3 pasos (verde claro porque NO navegan) */}
+              {/* 3 pasos */}
               <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <button
                   type="button"
@@ -280,7 +280,7 @@ export default function HomePage() {
                       "Paso 1: Busca. Escribe al menos 2 letras del nombre del candidato que buscas y abre su ficha para ver Hoja de Vida, Plan de gobierno y actuar político."
                     )
                   }
-                  className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                  className="text-left rounded-2xl border-[6px] border-red-600 bg-primary-soft p-4 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">1) Busca</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -295,7 +295,7 @@ export default function HomePage() {
                       "Paso 2: Verifica. En la ficha revisa Hoja de Vida y Plan de Gobierno. Si no hay páginas o fuentes, lo marcaremos como sin evidencia."
                     )
                   }
-                  className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                  className="text-left rounded-2xl border-[6px] border-red-600 bg-primary-soft p-4 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">2) Verifica</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -310,7 +310,7 @@ export default function HomePage() {
                       "Paso 3: Decide. Antes de votar, revisa la evidencia: Hoja de vida, Plan y Actuar político. Luego decide con criterio: coherencia, viabilidad y conducta pública."
                     )
                   }
-                  className="text-left rounded-2xl border-[6px] border-red-600 bg-green-50 p-4 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+                  className="text-left rounded-2xl border-[6px] border-red-600 bg-primary-soft p-4 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
                 >
                   <div className="text-sm font-semibold text-slate-900">3) Decide</div>
                   <div className="mt-1 text-xs text-slate-800">
@@ -328,7 +328,7 @@ export default function HomePage() {
                       "Vamos a empezar. Escribe el nombre del candidato y entra a su ficha. Luego cambia entre HV, Plan y Actuar político."
                     )
                   }
-                  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 bg-gradient-to-r from-green-700 to-green-800 text-white text-sm font-semibold hover:from-green-800 hover:to-green-900 shadow-md hover:shadow-lg transition"
+                  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 bg-primary text-white text-sm font-semibold hover:brightness-95 shadow-md hover:shadow-lg transition"
                 >
                   🔎 Empezar búsqueda
                 </button>
@@ -346,7 +346,7 @@ export default function HomePage() {
                       e,
                     })
                   }
-                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 shadow-sm transition"
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-500 bg-primary text-white text-sm font-semibold hover:brightness-95 shadow-sm transition"
                 >
                   🧭 Cómo funciona
                 </button>
@@ -358,7 +358,7 @@ export default function HomePage() {
                       "Recuerda: un voto responsable empieza con información verificable. Primero busca, luego verifica, y recién al final decide."
                     )
                   }
-                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-400 bg-green-50 text-slate-900 text-sm hover:bg-green-100"
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-400 bg-primary-soft text-slate-900 text-sm hover:bg-backgroundparty transition"
                 >
                   “Un voto responsable empieza con información verificable.”
                 </button>
@@ -376,16 +376,16 @@ export default function HomePage() {
       <section id="buscar" className="mt-6 border-[6px] border-red-600 rounded-2xl p-6 bg-white shadow-sm">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
+            <h2 className="inline-block rounded-lg bg-primary-soft px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
               Buscar candidato
             </h2>
 
             <p className="text-sm text-slate-800 mt-1">
-              Escribe al menos 2 letras del candidato que buscas. Abre la ficha para consultar Hoja de
-              Vida (HV), Plan de Gobierno y Actuar Político.
+              Escribe al menos 2 letras del candidato que buscas. Abre la ficha para consultar Hoja de Vida (HV),
+              Plan de Gobierno y Actuar Político.
             </p>
           </div>
-          <div className="text-xs text-slate-800 border border-green-200 rounded-full px-3 py-1 bg-green-50">
+          <div className="text-xs text-slate-800 border border-borderparty rounded-full px-3 py-1 bg-primary-soft">
             Reglas: sin vida privada • con fuentes • sin inventar
           </div>
         </div>
@@ -397,13 +397,13 @@ export default function HomePage() {
               border-2 border-red-600
               rounded-xl
               px-4 py-3
-              bg-green-800
+              bg-primary
               text-white
               font-semibold
-              placeholder:text-green-100
+              placeholder:text-white/80
               focus:outline-none
               focus:ring-2
-              focus:ring-green-300
+              focus:ring-accent
             "
             placeholder="Escribe: 'Armando Massé', 'César Acuña', 'López Aliaga', 'Keiko Fujimori'..."
             value={q}
@@ -457,17 +457,17 @@ export default function HomePage() {
               e,
             })
           }
-          className="group text-left w-full rounded-2xl border-[6px] border-red-600 bg-green-50 p-5 shadow-sm hover:shadow-md hover:bg-green-100 transition"
+          className="group text-left w-full rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
         >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">🗳️</div>
             <div className="min-w-0">
               <div className="text-base font-semibold text-slate-900">Servicios al ciudadano</div>
               <p className="mt-1 text-sm text-slate-800">
-                Consulta tu local de votación, verifica si eres miembro de mesa, revisa planes de gobierno,
-                trámites oficiales y más.
+                Consulta tu local de votación, verifica si eres miembro de mesa, revisa planes de gobierno, trámites
+                oficiales y más.
               </p>
-              <div className="mt-3 inline-flex items-center text-sm font-semibold text-green-800 group-hover:text-green-900">
+              <div className="mt-3 inline-flex items-center text-sm font-semibold text-primary group-hover:brightness-90">
                 Abrir servicios →
               </div>
             </div>
@@ -487,17 +487,17 @@ export default function HomePage() {
               e,
             })
           }
-          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
         >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">🧠</div>
             <div className="min-w-0">
               <div className="text-base font-semibold text-slate-900">Reflexionar antes de votar</div>
               <p className="mt-1 text-sm text-slate-800">
-                Preguntas y reflexiones para pensar cuál es la realidad actual del país, qué esperas del Estado,
-                qué puedes aportar como ciudadano, qué atributos debería tener quien gobierne y más.
+                Preguntas y reflexiones para pensar cuál es la realidad actual del país, qué esperas del Estado, qué
+                puedes aportar como ciudadano, qué atributos debería tener quien gobierne y más.
               </p>
-              <div className="mt-3 inline-flex items-center text-sm font-semibold text-green-800 group-hover:text-green-900">
+              <div className="mt-3 inline-flex items-center text-sm font-semibold text-primary group-hover:brightness-90">
                 Abrir reflexiones →
               </div>
             </div>
@@ -518,15 +518,13 @@ export default function HomePage() {
                 e,
               })
             }
-            className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-blue-100 p-5 shadow-sm hover:shadow-md hover:bg-blue-200 transition"
+            className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
           >
             <div className="flex items-start gap-3">
               <div className="text-2xl leading-none">🔵</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-slate-900">ALIANZA PARA EL PROGRESO</div>
-                <p className="mt-1 text-sm text-slate-900">
-                  Explora la propuesta correspondiente al grupo APP.
-                </p>
+                <p className="mt-1 text-sm text-slate-900">Explora la propuesta correspondiente al grupo APP.</p>
                 <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
                   Abrir página →
                 </div>
@@ -546,15 +544,13 @@ export default function HomePage() {
                 e,
               })
             }
-            className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+            className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
           >
             <div className="flex items-start gap-3">
               <div className="text-2xl leading-none">🔥</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-slate-900">UN CAMBIO CON VALENTÍA</div>
-                <p className="mt-1 text-sm text-slate-900">
-                  Propuesta del Partido Democrático Perú Federal.
-                </p>
+                <p className="mt-1 text-sm text-slate-900">Propuesta del Partido Democrático Perú Federal.</p>
                 <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
                   Abrir página →
                 </div>
@@ -576,15 +572,15 @@ export default function HomePage() {
               e,
             })
           }
-          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
         >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">📊</div>
             <div className="min-w-0">
               <div className="text-base font-extrabold text-slate-900">INTENCIÓN DE VOTO</div>
               <p className="mt-1 text-sm text-slate-900">
-                Vista piloto (11 partidos + Nulo/Blanco) para explorar tendencias. Próximamente se incluirán
-                todos los partidos.
+                Vista piloto (11 partidos + Nulo/Blanco) para explorar tendencias. Próximamente se incluirán todos los
+                partidos.
               </p>
               <div className="mt-3 inline-flex items-center text-sm font-extrabold text-slate-900 group-hover:underline">
                 Abrir página →
@@ -606,7 +602,7 @@ export default function HomePage() {
               e,
             })
           }
-          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
         >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">🎯</div>
@@ -636,7 +632,7 @@ export default function HomePage() {
               e,
             })
           }
-          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-green-100 p-5 shadow-sm hover:shadow-md hover:bg-green-200 transition"
+          className="group text-left w-full md:col-span-2 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 shadow-sm hover:shadow-md hover:bg-backgroundparty transition"
         >
           <div className="flex items-start gap-3">
             <div className="text-2xl leading-none">💬</div>
