@@ -73,18 +73,20 @@ export default function PartyDocsBlock(props: { partyId?: string }) {
             Conversación del partido
           </h3>
           <p className="mt-2 text-sm md:text-base text-slate-800 font-semibold leading-relaxed break-words">
-            Responde de forma fluida y humana, pero siempre alineada a nuestros documentos base.
+            Responde de forma fluida y humana, pero siempre alineada a nuestros
+            documentos base.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* ✅ FIX MOBILE OVERFLOW: el select no se sale del card */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 w-full sm:w-auto">
           <span className="text-xs text-slate-700 font-extrabold uppercase tracking-wide">
             Modo
           </span>
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value as Mode)}
-            className={selectWarm}
+            className={selectWarm + " w-full sm:w-auto max-w-full min-w-0"}
             aria-label="Modo de respuesta"
           >
             <option value="SUMMARY">SUMMARY (fluido)</option>
