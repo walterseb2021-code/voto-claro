@@ -129,7 +129,18 @@ html[data-party="app"] .vc-app-surface {
   padding: clamp(12px, 1.2vw, 16px); /* ⬅️ un poco menos “aire” cian */
   min-height: calc(100vh - (clamp(24px, 4.2vw, 56px) * 2)); /* ⬅️ debe coincidir con frame */
 }
+/* =========================================================
+   ✅ APP: Evitar desbordes horizontales en mobile
+   ========================================================= */
 
+html[data-party="app"] .vc-app-surface,
+html[data-party="app"] .vc-app-surface * {
+  box-sizing: border-box;
+}
+
+html[data-party="app"] .vc-app-surface {
+  overflow-x: hidden;
+}
 /* =========================================================
    ✅ APP: Evitar que páginas tapen el sistema global
    - neutraliza: bg-gradient, bg-white, min-h-screen, etc.

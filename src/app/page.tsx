@@ -220,7 +220,7 @@ export default function HomePage() {
               Información clara para decidir mejor.
             </p>
             <p className="mt-1 text-sm md:text-base text-black">
-              Federalito te guía paso a paso por documentos, fuentes y comparaciones.
+              El Asistente te guía paso a paso por documentos, fuentes y comparaciones.
             </p>
 
             <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
