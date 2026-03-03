@@ -543,7 +543,7 @@ useEffect(() => {
                 type="button"
                 onClick={() =>
                   guideSpeak(
-                    "Virgilio Acuña Peralta. El Perú no se desarrollará mientras el poder siga concentrado en Lima. La descentralización es justicia territorial."
+                    "Cesar Acuña Peralta. El Perú no se desarrollará mientras el poder siga concentrado en Lima. La descentralización es justicia territorial."
                   )
                 }
                 className={btnGreenSm + " mt-3"}
