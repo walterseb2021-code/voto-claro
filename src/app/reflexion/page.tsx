@@ -113,14 +113,18 @@ export default function ReflexionPage() {
   }
 
   // ✅ Estilos base (para mantener coherencia)
-  const CARD =
-    "rounded-2xl border-4 border-red-700 bg-green-50 shadow-sm";
-  const CARD_HOVER =
-    "hover:bg-green-100 transition";
+  const CARD = "rounded-2xl border-4 border-red-700 bg-primary-soft shadow-sm";
+  const CARD_HOVER = "hover:bg-green-100 transition";
   const RED_OUTLINE_BTN =
     "inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-red-700 bg-white text-red-700 text-sm font-semibold hover:bg-red-50 transition";
   const BLUE_PRIMARY_BTN =
-  "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-white text-sm font-extrabold shadow-sm transition";
+    "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-white text-sm font-extrabold shadow-sm transition";
+
+  // ✅ Overrides SOLO cuando el html está en APP (no afecta Perú Federal)
+  const APP_ON_BLUE = "[html[data-party='app']_&]:text-white";
+const APP_ON_BLUE_MUTED =
+  "[html[data-party='app']_&]:text-white [html[data-party='app']_&]:opacity-80";
+
   return (
     <main className="vc-reflexion min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-100 via-green-50 to-green-100">
       {/* Header */}
@@ -173,12 +177,18 @@ export default function ReflexionPage() {
                   }}
                   className={`${CARD} ${CARD_HOVER} px-5 py-5 text-left`}
                 >
-                  <div className="text-base md:text-lg font-semibold text-slate-900">
+                  {/* ✅ FIX contraste en APP: título blanco */}
+                  <div
+                    className={`text-base md:text-lg font-semibold text-black ${APP_ON_BLUE}`}
+                  >
                     {axis.title}
                   </div>
 
+                  {/* ✅ FIX contraste en APP: subtítulo blanco suave */}
                   {axis.subtitle ? (
-                    <div className="mt-2 text-sm text-slate-700 leading-snug">
+                    <div
+                      className={`mt-2 text-sm text-slate-700 leading-snug ${APP_ON_BLUE_MUTED}`}
+                    >
                       {axis.subtitle}
                     </div>
                   ) : null}
@@ -218,25 +228,40 @@ export default function ReflexionPage() {
           <div className={`${CARD} p-5`}>
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
-                <div className="text-sm text-slate-600 font-semibold">
+                {/* ✅ FIX contraste en APP (solo este bloque de eje activo) */}
+                <div
+                  className={`text-sm text-slate-600 font-semibold ${APP_ON_BLUE_MUTED}`}
+                >
                   Eje temático
                 </div>
-                <h2 className="text-xl md:text-2xl font-semibold text-slate-900">
+                <h2
+                  className={`text-xl md:text-2xl font-semibold text-slate-900 ${APP_ON_BLUE}`}
+                >
                   {activeAxis.title}
                 </h2>
                 {activeAxis.subtitle ? (
-                  <p className="mt-1 text-sm md:text-base text-slate-700">
+                  <p
+                    className={`mt-1 text-sm md:text-base text-slate-700 ${APP_ON_BLUE_MUTED}`}
+                  >
                     {activeAxis.subtitle}
                   </p>
                 ) : null}
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <button type="button" onClick={goBackToQuestions} className={RED_OUTLINE_BTN}>
+                <button
+                  type="button"
+                  onClick={goBackToQuestions}
+                  className={RED_OUTLINE_BTN}
+                >
                   ← Ver preguntas
                 </button>
 
-                <button type="button" onClick={goBackToAxes} className={RED_OUTLINE_BTN}>
+                <button
+                  type="button"
+                  onClick={goBackToAxes}
+                  className={RED_OUTLINE_BTN}
+                >
                   ← Cambiar eje
                 </button>
               </div>
@@ -257,10 +282,16 @@ export default function ReflexionPage() {
                       aria-expanded={isOpen}
                     >
                       <div className="min-w-0">
-                        <div className="text-sm text-slate-600 font-semibold">
+                        {/* ✅ FIX contraste en APP: label blanco suave */}
+                        <div
+                          className={`text-sm text-slate-600 font-semibold ${APP_ON_BLUE_MUTED}`}
+                        >
                           Pregunta {idx + 1} de 5
                         </div>
-                        <div className="mt-1 text-base md:text-lg font-semibold text-slate-900">
+                        {/* ✅ FIX contraste en APP: pregunta blanco */}
+                        <div
+                          className={`mt-1 text-base md:text-lg font-semibold text-slate-900 ${APP_ON_BLUE}`}
+                        >
                           {q.question}
                         </div>
                       </div>
@@ -281,11 +312,15 @@ export default function ReflexionPage() {
                             type="button"
                             onClick={() => {
                               const follow = q.followups?.length
-                                ? `\n\nPara seguir reflexionando:\n- ${q.followups.join("\n- ")}`
+                                ? `\n\nPara seguir reflexionando:\n- ${q.followups.join(
+                                    "\n- "
+                                  )}`
                                 : "";
-                              const textToRead = `Eje: ${activeAxis.title}\n\nPregunta ${
-                                idx + 1
-                              }:\n${q.question}\n\n${q.reflection}${follow}`;
+                              const textToRead = `Eje: ${
+                                activeAxis.title
+                              }\n\nPregunta ${idx + 1}:\n${q.question}\n\n${
+                                q.reflection
+                              }${follow}`;
                               guideSay(textToRead);
                             }}
                             className={BLUE_PRIMARY_BTN}

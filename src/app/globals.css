@@ -142,6 +142,7 @@ html[data-party="app"] .vc-app-surface section {
   background-color: transparent !important;
   background-image: none !important;
 }
+
 /* =========================================================
    ✅ /cambio-app: el main NO puede ser transparente
    (si no, se ve el cian de la surface en el header)
@@ -151,6 +152,7 @@ html[data-party="app"] .vc-app-surface main.vc-cambio-app {
   background-image: none !important;
   border-radius: 22px;
 }
+
 /* =========================================================
    ✅ /cambio-app: el main NO debe ser transparente
    (si no, se ve el cian de la surface en el header)
@@ -160,6 +162,7 @@ html[data-party="app"] .vc-app-surface main.vc-cambio-app {
   background-image: none !important;
   border-radius: 22px; /* opcional: para que calce con la surface */
 }
+
 /* El gran “rompedor” del marco: min-h-screen dentro de la surface */
 html[data-party="app"] .vc-app-surface .min-h-screen {
   min-height: auto !important;
@@ -302,8 +305,8 @@ html[data-party="app"] .vc-app-surface .vc-cambio-app a.bg-\[\#2F61A6\] *,
 html[data-party="app"] .vc-app-surface .vc-cambio-app button.bg-\[\#2F61A6\] * {
   color: #ffffff !important;
 }
-html[data-party="app"] .vc-app-surface .vc-cambio-app [class*='bg-[#2F61A6]'],
-html[data-party="app"] .vc-app-surface .vc-cambio-app [class*='bg-[#2F61A6]'] * {
+html[data-party="app"] .vc-app-surface .vc-cambio-app [class*="bg-[#2F61A6]"],
+html[data-party="app"] .vc-app-surface .vc-cambio-app [class*="bg-[#2F61A6]"] * {
   color: #ffffff !important;
 }
 /* =========================================================
@@ -316,7 +319,7 @@ html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-\[\#2F61A6\] * {
 }
 /* Blindaje: si algún hijo trae text-slate/text-black, igual debe ser blanco */
 html[data-party="app"] .vc-app-surface .vc-cambio-app .vc-btn-blue [class*="text-"],
-html[data-party="app"] .vc-app-surface .vc-cambio-app [class*='bg-[#2F61A6]'] [class*="text-"] {
+html[data-party="app"] .vc-app-surface .vc-cambio-app [class*="bg-[#2F61A6]"] [class*="text-"] {
   color: #ffffff !important;
 }
 /* =========================================================
@@ -330,7 +333,7 @@ html[data-party="app"] .vc-app-surface .vc-cambio-app select.vc-select-blue {
 }
 html[data-party="app"] .vc-app-surface .vc-cambio-app select.vc-select-blue:disabled {
   background-color: #2f61a6 !important;
-  color: rgba(255,255,255,0.75) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
   border-color: #dc2626 !important;
 }
 html[data-party="app"] .vc-app-surface .vc-cambio-app select.vc-select-blue option {
@@ -351,16 +354,49 @@ html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-blue"] {
   font-weight: 800;
 }
 
-/* Convertir botones heredados verdes/teal/emerald a azul fuerte */
-html[data-party="app"] .vc-app-surface button[class*="bg-green"],
-html[data-party="app"] .vc-app-surface a[class*="bg-green"],
-html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-green"],
-html[data-party="app"] .vc-app-surface button[class*="bg-emerald"],
-html[data-party="app"] .vc-app-surface a[class*="bg-emerald"],
-html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-emerald"],
-html[data-party="app"] .vc-app-surface button[class*="bg-teal"],
-html[data-party="app"] .vc-app-surface a[class*="bg-teal"],
-html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-teal"] {
+/* =========================================================
+   ✅ APP: Convertir botones heredados VERDES a azul fuerte
+   🚨 FIX CRÍTICO: NO usar [class*="bg-green"] porque matchea hover:bg-green-100
+   ✅ Solo clases reales .bg-green-xxx (sin afectar hover:)
+   ========================================================= */
+
+/* green */
+html[data-party="app"] .vc-app-surface .bg-green-400,
+html[data-party="app"] .vc-app-surface .bg-green-500,
+html[data-party="app"] .vc-app-surface .bg-green-600,
+html[data-party="app"] .vc-app-surface .bg-green-700,
+html[data-party="app"] .vc-app-surface .bg-green-800,
+html[data-party="app"] .vc-app-surface .bg-green-900,
+html[data-party="app"] .vc-app-surface .bg-green-950,
+html[data-party="app"] .vc-app-surface .bg-green {
+  background-color: #1e4fa3 !important;
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+/* emerald */
+html[data-party="app"] .vc-app-surface .bg-emerald-400,
+html[data-party="app"] .vc-app-surface .bg-emerald-500,
+html[data-party="app"] .vc-app-surface .bg-emerald-600,
+html[data-party="app"] .vc-app-surface .bg-emerald-700,
+html[data-party="app"] .vc-app-surface .bg-emerald-800,
+html[data-party="app"] .vc-app-surface .bg-emerald-900,
+html[data-party="app"] .vc-app-surface .bg-emerald-950,
+html[data-party="app"] .vc-app-surface .bg-emerald {
+  background-color: #1e4fa3 !important;
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+/* teal */
+html[data-party="app"] .vc-app-surface .bg-teal-400,
+html[data-party="app"] .vc-app-surface .bg-teal-500,
+html[data-party="app"] .vc-app-surface .bg-teal-600,
+html[data-party="app"] .vc-app-surface .bg-teal-700,
+html[data-party="app"] .vc-app-surface .bg-teal-800,
+html[data-party="app"] .vc-app-surface .bg-teal-900,
+html[data-party="app"] .vc-app-surface .bg-teal-950,
+html[data-party="app"] .vc-app-surface .bg-teal {
   background-color: #1e4fa3 !important;
   color: #ffffff !important;
   font-weight: 800;
@@ -645,6 +681,7 @@ html[data-party="app"] .vc-app-surface .vc-cambio-app > div:first-of-type {
   background-image: none !important;
   border-color: #dc2626 !important;
 }
+
 /* =========================================================
    ✅ /reflexion: asegurar texto blanco en bg-[#2F61A6] (SOLO APP)
    ========================================================= */
@@ -652,25 +689,26 @@ html[data-party="app"] .vc-app-surface .vc-reflexion .bg-\[\#2F61A6\],
 html[data-party="app"] .vc-app-surface .vc-reflexion .bg-\[\#2F61A6\] * {
   color: #ffffff !important;
 }
+
 /* ================================
    FIX DEFINITIVO BOTONES AZULES APP
    (cubre TODO el surface, no solo cambio-app)
    ================================ */
-
 html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\],
 html[data-party="app"] .vc-app-surface button.bg-\[\#2F61A6\],
 html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] *,
 html[data-party="app"] .vc-app-surface button.bg-\[\#2F61A6\] * {
   color: #ffffff !important;
 }
+
 /* 🔥 FIX REAL BOTÓN VER */
 html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] {
   color: #ffffff !important;
 }
-
 html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] * {
   color: #ffffff !important;
 }
+
 /* =========================================================
    ✅ REFLEXION — Botones fuertes blancos (SOLO APP)
    ========================================================= */
@@ -680,11 +718,11 @@ html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-900,
 html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-900 * {
   color: #ffffff !important;
 }
+
 /* =========================================================
    ✅ REFLEXION — Ejes y Preguntas fondo azul → texto blanco
    SOLO APP
    ========================================================= */
-
 html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-blue"],
 html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-indigo"],
 html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-sky"] {
@@ -695,4 +733,14 @@ html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-blue"] *,
 html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-indigo"] *,
 html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-sky"] * {
   color: #ffffff !important;
+}
+
+/* =========================================================
+   FIX REFLEXION (SOLO APP)
+   No convertir hover:bg-green dentro de reflexion
+   ✅ Bloqueo seguro: si el botón SOLO trae hover:bg-green-xxx, NO lo conviertas
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="hover:bg-green"] {
+  background-color: var(--color-primary-soft) !important;
+  color: #000000 !important;
 }
