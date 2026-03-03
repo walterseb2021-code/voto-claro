@@ -121,9 +121,8 @@ export default function ReflexionPage() {
     "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-white text-sm font-extrabold shadow-sm transition";
 
   // ✅ Overrides SOLO cuando el html está en APP (no afecta Perú Federal)
-  const APP_ON_BLUE = "[html[data-party='app']_&]:text-white";
-const APP_ON_BLUE_MUTED =
-  "[html[data-party='app']_&]:text-white [html[data-party='app']_&]:opacity-80";
+  const APP_ON_BLUE = "[html[data-party='app']_&]:text-black";
+const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
 
   return (
     <main className="vc-reflexion min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-100 via-green-50 to-green-100">
