@@ -680,3 +680,19 @@ html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-900,
 html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-900 * {
   color: #ffffff !important;
 }
+/* =========================================================
+   ✅ REFLEXION — Ejes y Preguntas fondo azul → texto blanco
+   SOLO APP
+   ========================================================= */
+
+html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-blue"],
+html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-indigo"],
+html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-sky"] {
+  color: #ffffff !important;
+}
+
+html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-blue"] *,
+html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-indigo"] *,
+html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="bg-sky"] * {
+  color: #ffffff !important;
+}
