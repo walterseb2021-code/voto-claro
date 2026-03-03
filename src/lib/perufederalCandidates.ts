@@ -119,11 +119,11 @@ export const CANDIDATE_GROUPS: CandidateGroup[] = [
       "https://www.youtube.com/shorts/w2ycFYj1Vmc",
       },
       {
-        id: "veronica-rebeca-escobel-ordoñez",
-        name: "Verónica Rebeca Escobel Ordóñez",
+        id: "veronica-rebeca-escobal-ordoñez",
+        name: "Verónica Rebeca Escobal Ordóñez",
         cargo: "Diputado",
         dni: undefined,
-        photo: "/candidates/veronica-rebeca-escobel-ordoñez.png",
+        photo: "/candidates/veronica-rebeca-escobal-ordoñez.png",
         region: "LA LIBERTAD",
          profileLink:
       "https://www.youtube.com/shorts/w2ycFYj1Vmc",
