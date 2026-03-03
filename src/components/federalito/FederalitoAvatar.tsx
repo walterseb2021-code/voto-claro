@@ -16,7 +16,7 @@ export default function FederalitoAvatar({ className = "", size }: Props) {
       {/* BASE: tu PNG profesional (NO se anima, queda idéntico) */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/federalito.png"
+        src="/app-avatar.png"
         alt="Federalito AI"
         className="block w-full h-auto rounded-[22px]"
         draggable={false}
