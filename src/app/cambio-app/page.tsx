@@ -595,24 +595,22 @@ export default function CambioAppPage() {
                       url: "https://www.youtube.com/watch?v=DmRyvNO7Imc",
                     },
                   ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between gap-3 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3"
-                    >
-                      <span className="text-sm font-semibold text-slate-900 break-words">
-                        {item.label}
-                      </span>
+                   <div
+  key={item.label}
+  className="flex items-center justify-between gap-3 min-w-0 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3"
+>
+  <span className="text-sm font-semibold text-slate-900 break-words flex-1 min-w-0">
+    {item.label}
+  </span>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          window.open(item.url, "_blank", "noopener,noreferrer")
-                        }
-                        className="vc-btn-blue rounded-lg px-3 py-1 text-xs font-extrabold border border-red-500 transition shrink-0"
-                      >
-                        Ver
-                      </button>
-                    </div>
+  <button
+    type="button"
+    onClick={() => window.open(item.url, "_blank", "noopener,noreferrer")}
+    className="vc-btn-blue rounded-lg px-3 py-1 text-xs font-extrabold border border-red-500 transition shrink-0 max-w-full"
+  >
+    Ver
+  </button>
+</div>
                   ))}
                 </div>
               </div>
@@ -821,68 +819,66 @@ export default function CambioAppPage() {
           </h2>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="candidateCategory"
-                className="text-sm font-extrabold text-slate-800"
-              >
-                Categoría:
-              </label>
+  <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+    <label
+      htmlFor="candidateCategory"
+      className="text-sm font-extrabold text-slate-800"
+    >
+      Categoría:
+    </label>
 
-              <select
-                id="candidateCategory"
-                value={selectedCategory}
-                onChange={(e) =>
-                  setSelectedCategory(e.target.value as CategoryValue)
-                }
-                className={selectWarm}
-              >
-                {CATEGORY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+    <select
+      id="candidateCategory"
+      value={selectedCategory}
+      onChange={(e) => setSelectedCategory(e.target.value as CategoryValue)}
+      className={selectWarm + " w-full sm:w-auto max-w-full"}
+    >
+      {CATEGORY_OPTIONS.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  </div>
 
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="candidateRegion"
-                className="text-sm font-extrabold text-slate-800"
-              >
-                Distrito electoral:
-              </label>
+  <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+    <label
+      htmlFor="candidateRegion"
+      className="text-sm font-extrabold text-slate-800"
+    >
+      Distrito electoral:
+    </label>
 
-              {[
-                "PRESIDENCIAL",
-                "PARLAMENTO_ANDINO",
-                "SENADORES_DISTRITO_UNICO",
-              ].includes(selectedCategory) ? (
-                <select
-                  id="candidateRegion"
-                  value="NO_APLICA"
-                  disabled
-                  className="rounded-xl px-3 py-2 text-sm font-semibold shadow-sm focus:outline-none border-2 border-red-600 bg-slate-100 text-slate-400 cursor-not-allowed"
-                >
-                  <option value="NO_APLICA">Muestra todos</option>
-                </select>
-              ) : (
-                <select
-                  id="candidateRegion"
-                  value={selectedRegion}
-                  onChange={(e) => setSelectedRegion(e.target.value)}
-                  className={selectWarm}
-                >
-                  <option value="TODAS">Todos</option>
-                  {regionOptions.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </div>
+    {[
+      "PRESIDENCIAL",
+      "PARLAMENTO_ANDINO",
+      "SENADORES_DISTRITO_UNICO",
+    ].includes(selectedCategory) ? (
+      <select
+        id="candidateRegion"
+        value="NO_APLICA"
+        disabled
+        className="rounded-xl px-3 py-2 text-sm font-semibold shadow-sm focus:outline-none border-2 border-red-600 bg-slate-100 text-slate-400 cursor-not-allowed w-full sm:w-auto max-w-full"
+      >
+        <option value="NO_APLICA">Muestra todos</option>
+      </select>
+    ) : (
+      <select
+        id="candidateRegion"
+        value={selectedRegion}
+        onChange={(e) => setSelectedRegion(e.target.value)}
+        className={selectWarm + " w-full sm:w-auto max-w-full"}
+      >
+        <option value="TODAS">Todos</option>
+        {regionOptions.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
+        ))}
+      </select>
+    )}
+  </div>
+</div>
         </div>
 
         {/* Tarjetas */}
@@ -927,9 +923,9 @@ export default function CambioAppPage() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className={
-                    "vc-btn vc-btn-blue mt-3 inline-flex items-center justify-center " +
-                    "rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition"
+                   className={
+                    "vc-btn vc-btn-blue mt-3 inline-flex items-center justify-center w-full sm:w-auto " +
+                    "rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition max-w-full"
                   }
                   title="Ver"
                 >
