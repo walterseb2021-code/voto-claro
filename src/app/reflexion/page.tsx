@@ -123,7 +123,7 @@ export default function ReflexionPage() {
     "inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-900 bg-green-800 text-white text-sm font-semibold hover:bg-green-900 shadow-md transition";
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-100 via-green-50 to-green-100">
+    <main className="vc-reflexion min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-100 via-green-50 to-green-100">
       {/* Header */}
       <div className={`${CARD} p-5`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">

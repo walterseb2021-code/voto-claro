@@ -6,6 +6,7 @@ import FederalitoClientGate from "@/components/assistant/FederalitoClientGate";
 import HideOnPitch from "@/components/HideOnPitch";
 import PartyThemeInitializer from "@/components/PartyThemeInitializer";
 import AppSurfaceWrapper from "@/components/AppSurfaceWrapper";
+import BodyPathSetter from "@/components/BodyPathSetter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,8 +34,7 @@ export default function RootLayout({
         <meta charSet="utf-8" />
       </head>
 
-   <body
-  data-path={typeof window !== "undefined" ? window.location.pathname : ""}
+  <body
   className={[
     geistSans.variable,
     geistMono.variable,
@@ -43,6 +43,7 @@ export default function RootLayout({
   ].join(" ")}
 >
         {/* ✅ Activa theme global leyendo localStorage y seteando data-party en <html> */}
+        <BodyPathSetter />
         <PartyThemeInitializer />
 
         {/* ✅ Federalito (pero NO en /pitch) */}

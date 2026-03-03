@@ -59,7 +59,7 @@ body {
 
 /* =========================
    PARTY THEMES
-========================= */
+   ========================= */
 html[data-party="app"] {
   --color-primary: #1e4fa3; /* azul fuerte botones */
 
@@ -115,7 +115,7 @@ html[data-party="app"] .vc-app-frame {
   min-height: 100vh;
   display: flex;
   justify-content: center;
-  padding: clamp(14px, 2.2vw, 28px);
+  padding: clamp(24px, 4.2vw, 56px); /* ⬅️ más marco azul */
 }
 
 /* Surface cian uniforme, ancho controlado (marco visible) */
@@ -124,10 +124,10 @@ html[data-party="app"] .vc-app-surface {
   border-radius: 22px;
 
   width: 100%;
-  max-width: 1180px;
+  max-width: 980px; /* ⬅️ reduce el cian y deja más azul visible */
 
-  padding: clamp(14px, 1.6vw, 18px);
-  min-height: calc(100vh - (clamp(14px, 2.2vw, 28px) * 2));
+  padding: clamp(12px, 1.2vw, 16px); /* ⬅️ un poco menos “aire” cian */
+  min-height: calc(100vh - (clamp(24px, 4.2vw, 56px) * 2)); /* ⬅️ debe coincidir con frame */
 }
 
 /* =========================================================
@@ -142,7 +142,24 @@ html[data-party="app"] .vc-app-surface section {
   background-color: transparent !important;
   background-image: none !important;
 }
-
+/* =========================================================
+   ✅ /cambio-app: el main NO puede ser transparente
+   (si no, se ve el cian de la surface en el header)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface main.vc-cambio-app {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-radius: 22px;
+}
+/* =========================================================
+   ✅ /cambio-app: el main NO debe ser transparente
+   (si no, se ve el cian de la surface en el header)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface main.vc-cambio-app {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-radius: 22px; /* opcional: para que calce con la surface */
+}
 /* El gran “rompedor” del marco: min-h-screen dentro de la surface */
 html[data-party="app"] .vc-app-surface .min-h-screen {
   min-height: auto !important;
@@ -163,10 +180,29 @@ html[data-party="app"] .vc-app-surface .bg-backgroundparty {
   background-color: transparent !important;
 }
 
-/* ✅ Mini-bloques blancos deben verse celeste bajo */
+/* ✅ Mini-bloques blancos deben verse celeste bajo (GLOBAL APP) */
 html[data-party="app"] .vc-app-surface .bg-white {
   background-color: var(--color-primary-soft) !important;
   color: #000000 !important;
+}
+
+/* =========================================================
+   ✅ APP: /cambio-app NO debe convertir bg-white a celeste
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-white {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* =========================================================
+   ✅ APP: /cambio-app NO debe usar sky/cyan internos (uniformidad)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-sky-50,
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-sky-100,
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-sky-200,
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-cyan-50,
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-cyan-100 {
+  background-color: #ffffff !important;
 }
 
 /* =========================================================
@@ -199,25 +235,111 @@ html[data-party="app"] .vc-app-surface label {
   color: #000000;
 }
 
-/* Links azules (para que no se vean “muertos”) */
-html[data-party="app"] .vc-app-surface a {
+/* Links normales azules, pero NO los links que son botones */
+html[data-party="app"] .vc-app-surface a:not(.vc-btn):not([class*="bg-"]) {
   color: #1e4fa3;
 }
-html[data-party="app"] .vc-app-surface a:hover {
+html[data-party="app"] .vc-app-surface a:not(.vc-btn):not([class*="bg-"]):hover {
   text-decoration: underline;
 }
 
-/* Inputs siempre blancos y legibles sobre cian */
+/* =========================================================
+   ✅ APP: Botón institucional azul (sirve para <a> y <button>)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-btn-blue {
+  background-color: #2f61a6 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+html[data-party="app"] .vc-app-surface .vc-btn-blue:hover {
+  background-color: #244d86 !important;
+}
+
+/* =========================================================
+   ✅ APP: Select institucional azul
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-select-blue {
+  background-color: #2f61a6 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border-color: #dc2626 !important;
+}
+
+/* Opciones del select (cuando abres el desplegable) */
+html[data-party="app"] .vc-app-surface .vc-select-blue option {
+  color: #000000 !important;
+  background: #ffffff !important;
+}
+
+/* =========================================================
+   ✅ APP: Inputs siempre blancos y legibles
+   (NO pisar selects institucionales)
+   ========================================================= */
 html[data-party="app"] .vc-app-surface input,
-html[data-party="app"] .vc-app-surface textarea,
-html[data-party="app"] .vc-app-surface select {
+html[data-party="app"] .vc-app-surface textarea {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* Select blanco SOLO si NO es institucional */
+html[data-party="app"] .vc-app-surface select:not(.vc-select-blue) {
   background-color: #ffffff !important;
   color: #000000 !important;
 }
 
 /* =========================================================
-   ✅ APP: Botones
-   - Blanco SOLO en botones azul fuerte
+   ✅ /cambio-app (APP): Botones azules SIEMPRE texto blanco
+   - cubre vc-btn-blue y también bg-[#2F61A6]
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-cambio-app .vc-btn-blue,
+html[data-party="app"] .vc-app-surface .vc-cambio-app .vc-btn-blue * {
+  color: #ffffff !important;
+}
+/* FORZAR texto blanco en botones azules de cambio-app */
+html[data-party="app"] .vc-app-surface .vc-cambio-app a.bg-\[\#2F61A6\],
+html[data-party="app"] .vc-app-surface .vc-cambio-app button.bg-\[\#2F61A6\],
+html[data-party="app"] .vc-app-surface .vc-cambio-app a.bg-\[\#2F61A6\] *,
+html[data-party="app"] .vc-app-surface .vc-cambio-app button.bg-\[\#2F61A6\] * {
+  color: #ffffff !important;
+}
+html[data-party="app"] .vc-app-surface .vc-cambio-app [class*='bg-[#2F61A6]'],
+html[data-party="app"] .vc-app-surface .vc-cambio-app [class*='bg-[#2F61A6]'] * {
+  color: #ffffff !important;
+}
+/* =========================================================
+   ✅ /cambio-app: Tailwind arbitrary class REAL -> bg-[#2F61A6]
+   (selector escapado que Tailwind genera: .bg-\[\#2F61A6\])
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-\[\#2F61A6\],
+html[data-party="app"] .vc-app-surface .vc-cambio-app .bg-\[\#2F61A6\] * {
+  color: #ffffff !important;
+}
+/* Blindaje: si algún hijo trae text-slate/text-black, igual debe ser blanco */
+html[data-party="app"] .vc-app-surface .vc-cambio-app .vc-btn-blue [class*="text-"],
+html[data-party="app"] .vc-app-surface .vc-cambio-app [class*='bg-[#2F61A6]'] [class*="text-"] {
+  color: #ffffff !important;
+}
+/* =========================================================
+   ✅ /cambio-app (APP): Selects institucionales
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-cambio-app select.vc-select-blue {
+  background-color: #2f61a6 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border-color: #dc2626 !important;
+}
+html[data-party="app"] .vc-app-surface .vc-cambio-app select.vc-select-blue:disabled {
+  background-color: #2f61a6 !important;
+  color: rgba(255,255,255,0.75) !important;
+  border-color: #dc2626 !important;
+}
+html[data-party="app"] .vc-app-surface .vc-cambio-app select.vc-select-blue option {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* =========================================================
+   ✅ APP: Botones (genérico) - asegurar contraste en fondos azul/primary
    ========================================================= */
 html[data-party="app"] .vc-app-surface button[class*="bg-primary"],
 html[data-party="app"] .vc-app-surface a[class*="bg-primary"],
@@ -415,19 +537,16 @@ html[data-party="app"] .vc-app-surface button.bg-primary-soft {
 /* =========================================================
    🎯 COMO FUNCIONA — uniformizar bloques internos (SOLO APP)
    ========================================================= */
-
-/* (si estás usando body[data-path="/como-funciona"], este selector ahora está bien formado) */
-html[data-party="app"] body[data-path="/como-funciona"] .vc-app-surface .bg-white {
+html[data-party="app"] .vc-app-surface .vc-how .bg-white {
   background-color: var(--color-primary-soft) !important;
   color: #000000 !important;
 }
 
 /* =========================================================
    ✅ APP: /como-funciona -> uniformizar paneles a celeste bajo
-   (SOLO afecta cuando data-party="app" y SOLO esta pantalla)
    ========================================================= */
 html[data-party="app"] .vc-how section {
-  background-color: #bffcff !important; /* celeste bajo */
+  background-color: #bffcff !important;
   background-image: none !important;
 }
 
@@ -444,31 +563,25 @@ html[data-party="app"] .vc-how button {
 
 /* =========================================================
    RETO CIUDADANO — UNIFICAR BLOQUES DE NIVELES (solo APP)
-   Objetivo: Nivel 2 y 3 con la misma “arquitectura” que Nivel 1
-   Requiere: <section className="vc-reto-levels ...">
    ========================================================= */
 html[data-party="app"] .vc-reto .vc-reto-levels > div.rounded-2xl.border {
-  background-color: #bfeff2 !important; /* celeste bajo */
-  border-color: #d32f2f !important; /* borde rojo institucional */
+  background-color: #bfeff2 !important;
+  border-color: #d32f2f !important;
   box-shadow: none !important;
   padding: 1rem !important;
   border-radius: 1rem !important;
 }
 
-/* Si algún nivel llega como bg-white o bg-green-50, forzar igual */
 html[data-party="app"] .vc-reto .vc-reto-levels > div.rounded-2xl.border.bg-white,
 html[data-party="app"] .vc-reto .vc-reto-levels > div.rounded-2xl.border.bg-green-50 {
   background-color: #bfeff2 !important;
 }
-/* =========================================================
-   RETO CIUDADANO — Forzar contraste fuerte (SOLO APP)
-   ========================================================= */
 
+/* Contraste fuerte */
 html[data-party="app"] .vc-reto .vc-reto-levels {
   color: #000000;
 }
 
-/* Forzar todos los textos internos a negro sólido */
 html[data-party="app"] .vc-reto .vc-reto-levels p,
 html[data-party="app"] .vc-reto .vc-reto-levels span,
 html[data-party="app"] .vc-reto .vc-reto-levels div,
@@ -476,32 +589,85 @@ html[data-party="app"] .vc-reto .vc-reto-levels small,
 html[data-party="app"] .vc-reto .vc-reto-levels strong {
   color: #000000 !important;
 }
-/* =========================================================
-   RETO CIUDADANO — Botones Reiniciar institucionales (APP)
-   ========================================================= */
 
+/* Botones reiniciar */
 html[data-party="app"] .vc-reto .vc-reto-levels button {
   background-color: #1e4fa3 !important;
   color: #ffffff !important;
   border-color: #1e4fa3 !important;
 }
-
 html[data-party="app"] .vc-reto .vc-reto-levels button:hover {
   background-color: #173f85 !important;
 }
-/* =========================================================
-   RETO CIUDADANO — Botón "Volver al inicio" institucional
-   SOLO APP
-   ========================================================= */
 
+/* Volver al inicio en reto */
 html[data-party="app"] .vc-reto a[href="/"] {
   background-color: #1e4fa3 !important;
   color: #ffffff !important;
   border-color: #1e4fa3 !important;
   font-weight: 700;
 }
-
 html[data-party="app"] .vc-reto a[href="/"]:hover {
   background-color: #173f85 !important;
+  color: #ffffff !important;
+}
+
+/* =========================================================
+   REFLEXION — Cards azules con texto blanco (SOLO APP)
+   (selector seguro para arbitrary bg-[...])
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-blue"],
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-indigo"],
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-sky"],
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-["] {
+  color: #ffffff !important;
+}
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-blue"] *,
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-indigo"] *,
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-sky"] *,
+html[data-party="app"] .vc-app-surface .vc-reflexion [class*="bg-["] * {
+  color: #ffffff !important;
+}
+
+/* Ajuste secciones verdes transparentes en reflexion */
+html[data-party="app"] .vc-app-surface .vc-reflexion section[class*="bg-green-50"] {
+  background-color: var(--color-primary-soft) !important;
+  background-image: none !important;
+}
+
+/* =========================================================
+   /cambio-app — Hero panel como los bloques de abajo (SOLO APP)
+   (si el reset deja el primer panel transparente)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-cambio-app > section:first-of-type,
+html[data-party="app"] .vc-app-surface .vc-cambio-app > div:first-of-type {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: #dc2626 !important;
+}
+/* =========================================================
+   ✅ /reflexion: asegurar texto blanco en bg-[#2F61A6] (SOLO APP)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-reflexion .bg-\[\#2F61A6\],
+html[data-party="app"] .vc-app-surface .vc-reflexion .bg-\[\#2F61A6\] * {
+  color: #ffffff !important;
+}
+/* ================================
+   FIX DEFINITIVO BOTONES AZULES APP
+   (cubre TODO el surface, no solo cambio-app)
+   ================================ */
+
+html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\],
+html[data-party="app"] .vc-app-surface button.bg-\[\#2F61A6\],
+html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] *,
+html[data-party="app"] .vc-app-surface button.bg-\[\#2F61A6\] * {
+  color: #ffffff !important;
+}
+/* 🔥 FIX REAL BOTÓN VER */
+html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] {
+  color: #ffffff !important;
+}
+
+html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] * {
   color: #ffffff !important;
 }

@@ -259,24 +259,22 @@ export default function CambioAppPage() {
   }
 
   // ===== Estilos APP (azul) =====
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-sky-50/70 p-4 shadow-sm";
+  const sectionWrap = "mt-4 rounded-2xl border-4 border-red-700 p-4 shadow-sm";
 
-  const innerCard = "rounded-2xl border-2 border-red-600 bg-white/80 p-4";
+  const innerCard = "rounded-2xl border-2 border-red-600 bg-[#BFFCFf] p-4";
 
+  // ✅ Botón institucional (NO usar bg-[#2F61A6] en el markup)
   const btnGreen =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 bg-[#2F61A6] text-white text-sm font-extrabold " +
-    "hover:bg-[#244d86] transition shadow-sm";
+    "vc-btn vc-btn-blue inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
+    "border-2 border-red-600 text-sm font-extrabold shadow-sm transition";
 
   const btnGreenSm =
-    "inline-flex items-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-[#2F61A6] text-white text-xs font-extrabold " +
-    "hover:bg-[#244d86] transition";
+    "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-3 py-2 " +
+    "border-2 border-red-600 text-xs font-extrabold transition";
 
   const selectWarm =
-    "rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold text-slate-900 " +
-    "shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2F61A6]";
+    "vc-select-blue rounded-xl border-2 border-red-600 font-extrabold px-3 py-2 text-sm " +
+    "shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2F61A6]";
 
   // ===============================
   // ✅ EN VIVO: Supabase real + Realtime
@@ -381,7 +379,7 @@ export default function CambioAppPage() {
   }, [liveEntries, selectedCandidateForHistory]);
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-sky-50 via-white to-sky-100">
+    <main className="vc-cambio-app min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-sky-50 via-white to-sky-100">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
@@ -405,7 +403,7 @@ export default function CambioAppPage() {
               setActiveParty("app");
             } catch {}
           }}
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-[#2F61A6] text-white text-sm font-extrabold hover:bg-[#244d86] shadow-sm transition"
+          className="vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-sm font-extrabold shadow-sm transition"
         >
           ← Volver al inicio
         </Link>
@@ -413,66 +411,67 @@ export default function CambioAppPage() {
 
       {/* Imagen + frase + link */}
       <section className={sectionWrap}>
-        <div className="w-full flex justify-center">
+        <div className={innerCard}>
+          <div className="w-full flex justify-center">
+            <a
+              href="https://www.app.pe/es"
+              target="_blank"
+              rel="noreferrer"
+              onMouseEnter={onHoverSpeak}
+              onTouchStart={onHoverSpeak}
+              className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-[#2F61A6] border-2 border-red-600 hover:shadow-lg transition"
+              title="Abrir sitio oficial del Partido Alianza para el Progreso (APP)"
+            >
+              <Image
+                src="/app-bienvenida.png"
+                alt="APP"
+                fill
+                className="object-cover"
+                priority
+              />
+            </a>
+          </div>
+
+          {/* Nombre candidato */}
+          <div className="mt-4 text-center">
+            <div className="text-xs text-slate-700 font-extrabold tracking-wide">
+              CANDIDATO
+            </div>
+            <div className="mt-1 text-base md:text-lg font-extrabold text-slate-900 whitespace-normal break-words">
+              César Acuña Peralta
+            </div>
+          </div>
+
+          {/* Link destacado */}
+          <div className="mt-5 flex justify-center">
+            <a
+              href={CAMBIO_APP_PAGE_LINK_URL}
+              target="_blank"
+              rel="noreferrer"
+              className={
+                "vc-btn vc-btn-blue w-full sm:w-auto text-center rounded-2xl px-5 py-3 " +
+                "font-extrabold border-2 border-red-600 shadow-md hover:shadow-lg transition"
+              }
+            >
+              🔗 {CAMBIO_APP_PAGE_LINK_LABEL}
+            </a>
+          </div>
+
+          {/* Frase debajo del link */}
           <a
             href="https://www.app.pe/es"
             target="_blank"
             rel="noreferrer"
             onMouseEnter={onHoverSpeak}
             onTouchStart={onHoverSpeak}
-           className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-[#2F61A6] border-2 border-red-600 hover:shadow-lg transition"
+            className="mt-4 block rounded-2xl border-2 border-red-600 bg-sky-50 px-5 py-4 shadow-sm hover:bg-sky-100 hover:shadow-md transition"
             title="Abrir sitio oficial del Partido Alianza para el Progreso (APP)"
           >
-            <Image
-              src="/app-bienvenida.png"
-              alt="APP"
-              fill
-              className="object-cover"
-              priority
-            />
+            <p className="text-sm md:text-base font-extrabold text-slate-900 text-center uppercase leading-relaxed whitespace-normal break-words">
+              “{CAMBIO_APP_PAGE_PHRASE}”
+            </p>
           </a>
         </div>
-
-        {/* Nombre candidato */}
-        <div className="mt-4 text-center">
-          <div className="text-xs text-slate-700 font-extrabold tracking-wide">
-            CANDIDATO
-          </div>
-          <div className="mt-1 text-base md:text-lg font-extrabold text-slate-900 whitespace-normal break-words">
-            César Acuña Peralta
-          </div>
-        </div>
-
-        {/* Link destacado */}
-        <div className="mt-5 flex justify-center">
-          <a
-            href={CAMBIO_APP_PAGE_LINK_URL}
-            target="_blank"
-            rel="noreferrer"
-            className={
-              "w-full sm:w-auto text-center rounded-2xl px-5 py-3 " +
-              "font-extrabold text-white bg-[#2F61A6] border-2 border-red-600 " +
-              "shadow-md hover:shadow-lg hover:bg-[#244d86] transition"
-            }
-          >
-            🔗 {CAMBIO_APP_PAGE_LINK_LABEL}
-          </a>
-        </div>
-
-        {/* Frase debajo del link */}
-        <a
-          href="https://www.app.pe/es"
-          target="_blank"
-          rel="noreferrer"
-          onMouseEnter={onHoverSpeak}
-          onTouchStart={onHoverSpeak}
-         className="mt-4 block rounded-2xl border-2 border-red-600 bg-sky-50 px-5 py-4 shadow-sm hover:bg-sky-100 hover:shadow-md transition"
-          title="Abrir sitio oficial del Partido Alianza para el Progreso (APP)"
-        >
-          <p className="text-sm md:text-base font-extrabold text-slate-900 text-center uppercase leading-relaxed whitespace-normal break-words">
-            “{CAMBIO_APP_PAGE_PHRASE}”
-          </p>
-        </a>
       </section>
 
       <div className="mt-3 text-xs text-slate-600">
@@ -571,7 +570,7 @@ export default function CambioAppPage() {
               </button>
 
               {/* Perfil Multidisciplinario */}
-               <div className="mt-6 rounded-2xl border-2 border-red-600 bg-sky-50 p-4">
+              <div className="mt-6 rounded-2xl border-2 border-red-600 bg-sky-50 p-4">
                 <h3 className="text-sm md:text-base font-extrabold text-slate-900 text-center">
                   Perfil Multidisciplinario
                 </h3>
@@ -609,7 +608,7 @@ export default function CambioAppPage() {
                         onClick={() =>
                           window.open(item.url, "_blank", "noopener,noreferrer")
                         }
-                        className="rounded-lg px-3 py-1 bg-[#2F61A6] text-white text-xs font-extrabold border border-red-500 hover:bg-[#244d86] transition shrink-0"
+                        className="vc-btn-blue rounded-lg px-3 py-1 text-xs font-extrabold border border-red-500 transition shrink-0"
                       >
                         Ver
                       </button>
@@ -678,8 +677,8 @@ export default function CambioAppPage() {
                       type="button"
                       onClick={() => window.open(x.url, "_blank")}
                       className={
-                        "shrink-0 rounded-xl px-4 py-2 border-2 border-red-700 " +
-                        "bg-[#2F61A6] text-white text-xs font-extrabold hover:bg-[#244d86] transition"
+                        "vc-btn-blue shrink-0 rounded-xl px-4 py-2 border-2 border-red-700 " +
+                        "text-xs font-extrabold transition"
                       }
                       title="Ver en vivo"
                     >
@@ -796,10 +795,7 @@ export default function CambioAppPage() {
                       <button
                         type="button"
                         onClick={() => window.open(x.url, "_blank")}
-                        className={
-                          "rounded-xl px-4 py-2 border-2 border-red-600 " +
-                          "bg-[#2F61A6] text-white text-xs font-extrabold hover:bg-[#244d86] transition"
-                        }
+                        className="vc-btn-blue rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition"
                         title="Ver"
                       >
                         Ver
@@ -899,7 +895,12 @@ export default function CambioAppPage() {
               className="text-left rounded-2xl border-2 border-red-600 bg-white/85 shadow-sm hover:shadow-md transition overflow-hidden"
             >
               <div className="relative w-full aspect-[4/3] bg-sky-50 border-b-2 border-red-600">
-                <Image src={c.photo} alt={c.name} fill className="object-contain" />
+                <Image
+                  src={c.photo}
+                  alt={c.name}
+                  fill
+                  className="object-contain"
+                />
               </div>
 
               <div className="p-4">
@@ -927,9 +928,8 @@ export default function CambioAppPage() {
                   rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   className={
-                    "mt-3 inline-flex items-center justify-center " +
-                    "rounded-xl px-4 py-2 border-2 border-red-600 bg-[#2F61A6] " +
-                    "text-white text-xs font-extrabold hover:bg-[#244d86] transition"
+                    "vc-btn vc-btn-blue mt-3 inline-flex items-center justify-center " +
+                    "rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition"
                   }
                   title="Ver"
                 >
