@@ -1,8 +1,6 @@
 // src/app/api/vote/active/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getServerGroup } from "@/lib/server-group";
-import { getCookieValue } from "@/lib/http/cookies";
 
 export const runtime = "nodejs";
 
@@ -26,23 +24,26 @@ function getSupabaseAdmin() {
 export async function GET(req: Request) {
   try {
     const supabase = getSupabaseAdmin();
-   const cookieHeader = req.headers.get("cookie") ?? "";
-const group =
-  cookieHeader
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("vc_group="))
-    ?.split("=")[1] ?? null;
 
-if (!group) {
-  return NextResponse.json(
-    { error: "Falta cookie vc_group" },
-    { status: 400 }
-  );
-}
+    const cookieHeader = req.headers.get("cookie") ?? "";
+    const group =
+      cookieHeader
+        .split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith("vc_group="))
+        ?.split("=")[1] ?? null;
 
-    // 1) Ronda activa (por grupo)
-    const { data: round, error: roundErr } = await supabase
+    if (!group) {
+      return NextResponse.json(
+        { error: "Falta cookie vc_group" },
+        { status: 400 }
+      );
+    }
+
+    // =====================================================
+    // 1) Intentar ronda activa por grupo
+    // =====================================================
+    let { data: round, error: roundErr } = await supabase
       .from("vote_rounds")
       .select("id,name,is_active,created_at,group_code")
       .eq("is_active", true)
@@ -58,20 +59,44 @@ if (!group) {
       );
     }
 
+    // =====================================================
+    // 🔥 FALLBACK: si no existe ronda para el grupo actual
+    // usar cualquier ronda activa (ej: GRUPOA)
+    // =====================================================
     if (!round) {
-      return NextResponse.json(
-        { error: "No hay ronda activa (vote_rounds.is_active=true)." },
-        { status: 404 }
-      );
+      const { data: fallbackRound, error: fallbackErr } = await supabase
+        .from("vote_rounds")
+        .select("id,name,is_active,created_at,group_code")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fallbackErr) {
+        return NextResponse.json(
+          { error: "Error leyendo fallback vote_rounds", detail: fallbackErr.message },
+          { status: 500 }
+        );
+      }
+
+      if (!fallbackRound) {
+        return NextResponse.json(
+          { error: "No hay ronda activa disponible." },
+          { status: 404 }
+        );
+      }
+
+      round = fallbackRound;
     }
 
-    // 2) Partidos de la ronda activa (ordenados por position)
+    // =====================================================
+    // 2) Partidos de la ronda activa
+    // =====================================================
     const { data: parties, error: partiesErr } = await supabase
-     .from("vote_parties")
-.select("id,round_id,slug,name,enabled,position,created_at,group_code")
-.eq("round_id", round.id)
-.eq("group_code", group)
-.order("position", { ascending: true });
+      .from("vote_parties")
+      .select("id,round_id,slug,name,enabled,position,created_at,group_code")
+      .eq("round_id", round.id)
+      .order("position", { ascending: true });
 
     if (partiesErr) {
       return NextResponse.json(
@@ -80,12 +105,13 @@ if (!group) {
       );
     }
 
+    // =====================================================
     // 3) Conteo (vote_tally)
+    // =====================================================
     const { data: tallies, error: tallyErr } = await supabase
-  .from("vote_tally")
-  .select("party_id,total_votes,group_code")
-  .eq("round_id", round.id)
-  .eq("group_code", group);
+      .from("vote_tally")
+      .select("party_id,total_votes,group_code")
+      .eq("round_id", round.id);
 
     if (tallyErr) {
       return NextResponse.json(
