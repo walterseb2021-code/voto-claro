@@ -6,18 +6,15 @@
 :root {
   --background: #ffffff;
 
-  /* ✅ Regla: fondo claro => texto negro/oscuro */
+  /* ✅ Fondo claro => texto negro */
   --foreground: #000000;
-
-  /* ✅ “Muted” NO se permite en modo claro: igual al foreground */
   --foreground-muted: var(--foreground);
 
   /* =========================
      DEFAULT PARTY TOKENS (Perú Federal)
-     (no usar --color-background aquí para no chocar con @theme inline)
      ========================= */
-  --color-primary: #15803d; /* verde principal */
-  --color-primary-soft: #dcfce7; /* verde claro */
+  --color-primary: #15803d;
+  --color-primary-soft: #dcfce7;
   --color-accent: #16a34a;
   --color-border: #166534;
   --color-party-bg: #f0fdf4;
@@ -31,23 +28,13 @@
 }
 
 /* =========================
-   Modo oscuro (se mantiene)
-   ========================= */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-
-    /* ✅ Fondo oscuro => texto claro */
-    --foreground: #ffffff;
-
-    /* ✅ En oscuro sí puede existir “muted” (pero sigue legible) */
-    --foreground-muted: #e5e7eb; /* gris claro fuerte (no apagado) */
-  }
-}
-
-/* =========================
    Base global
    ========================= */
+html,
+body {
+  height: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -62,12 +49,7 @@ body {
   body {
     font-size: 15px;
   }
-
-  /* ✅ Nada de gris: p hereda color del body */
-  p {
-    color: inherit;
-  }
-
+  p,
   h1,
   h2,
   h3 {
@@ -76,44 +58,288 @@ body {
 }
 
 /* =========================
-   Federalito Animated Avatar
-   ========================= */
+   PARTY THEMES
+========================= */
+html[data-party="app"] {
+  --color-primary: #1e4fa3; /* azul fuerte botones */
 
+  /* ✅ CAMBIO (SOLO APP): celeste bajo para mini-bloques/pills */
+  --color-primary-soft: #bffcff;
+
+  --color-accent: #dc2626; /* rojo */
+  --color-border: #dc2626; /* rojo bordes */
+  --color-party-bg: #2f61a6; /* azul exterior */
+
+  --foreground: #000000;
+  --foreground-muted: #000000;
+
+  color-scheme: light;
+}
+
+html[data-party="perufederal"] {
+  --color-primary: #15803d;
+  --color-primary-soft: #dcfce7;
+  --color-accent: #16a34a;
+  --color-border: #166534;
+  --color-party-bg: #f0fdf4;
+
+  --foreground: #000000;
+  --foreground-muted: #000000;
+}
+
+/* =========================================================
+   SISTEMA GLOBAL: frame/surface
+   - Default: no imponer nada (Perú Federal intacto)
+   ========================================================= */
+.vc-app-frame {
+  padding: 0;
+  background: transparent;
+}
+.vc-app-surface {
+  background: transparent;
+}
+
+/* =========================================================
+   ✅ APP: Azul afuera / Cian adentro (institucional)
+   ========================================================= */
+
+/* Exterior siempre azul */
+html[data-party="app"] body {
+  background: #2f61a6 !important;
+  color: #000000;
+}
+
+/* Frame centrado para que el azul se vea como marco */
+html[data-party="app"] .vc-app-frame {
+  background: #2f61a6;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: clamp(14px, 2.2vw, 28px);
+}
+
+/* Surface cian uniforme, ancho controlado (marco visible) */
+html[data-party="app"] .vc-app-surface {
+  background: #00ffff;
+  border-radius: 22px;
+
+  width: 100%;
+  max-width: 1180px;
+
+  padding: clamp(14px, 1.6vw, 18px);
+  min-height: calc(100vh - (clamp(14px, 2.2vw, 28px) * 2));
+}
+
+/* =========================================================
+   ✅ APP: Evitar que páginas tapen el sistema global
+   - neutraliza: bg-gradient, bg-white, min-h-screen, etc.
+   - cubre también los gradientes que vienen de brands.ts
+   ========================================================= */
+
+/* main/section: siempre transparentes */
+html[data-party="app"] .vc-app-surface main,
+html[data-party="app"] .vc-app-surface section {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* El gran “rompedor” del marco: min-h-screen dentro de la surface */
+html[data-party="app"] .vc-app-surface .min-h-screen {
+  min-height: auto !important;
+}
+
+/* Neutralizar cualquier gradiente aplicado por Tailwind (incluye brands.ts) */
+html[data-party="app"] .vc-app-surface [class*="bg-gradient-to-"] {
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+/* Neutralizar fondos típicos que tapaban el cian */
+html[data-party="app"] .vc-app-surface .bg-slate-50,
+html[data-party="app"] .vc-app-surface .bg-slate-100,
+html[data-party="app"] .vc-app-surface .bg-gray-50,
+html[data-party="app"] .vc-app-surface .bg-gray-100,
+html[data-party="app"] .vc-app-surface .bg-backgroundparty {
+  background-color: transparent !important;
+}
+
+/* ✅ Mini-bloques blancos deben verse celeste bajo */
+html[data-party="app"] .vc-app-surface .bg-white {
+  background-color: var(--color-primary-soft) !important;
+  color: #000000 !important;
+}
+
+/* =========================================================
+   ✅ APP: FIX del problema actual
+   Mini-bloques/pills deben verse celeste bajo (NO transparentes)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .bg-primary-soft,
+html[data-party="app"] .vc-app-surface [class*="bg-primary-soft"] {
+  background-color: var(--color-primary-soft) !important;
+  color: #000000 !important;
+}
+
+/* =========================================================
+   ✅ APP: Texto SIEMPRE negro en contenido claro
+   ========================================================= */
+html[data-party="app"] .vc-app-surface {
+  color: #000000;
+}
+
+/* Texto negro SOLO para texto normal (no botones) */
+html[data-party="app"] .vc-app-surface p,
+html[data-party="app"] .vc-app-surface h1,
+html[data-party="app"] .vc-app-surface h2,
+html[data-party="app"] .vc-app-surface h3,
+html[data-party="app"] .vc-app-surface h4,
+html[data-party="app"] .vc-app-surface h5,
+html[data-party="app"] .vc-app-surface h6,
+html[data-party="app"] .vc-app-surface li,
+html[data-party="app"] .vc-app-surface label {
+  color: #000000;
+}
+
+/* Links azules (para que no se vean “muertos”) */
+html[data-party="app"] .vc-app-surface a {
+  color: #1e4fa3;
+}
+html[data-party="app"] .vc-app-surface a:hover {
+  text-decoration: underline;
+}
+
+/* Inputs siempre blancos y legibles sobre cian */
+html[data-party="app"] .vc-app-surface input,
+html[data-party="app"] .vc-app-surface textarea,
+html[data-party="app"] .vc-app-surface select {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* =========================================================
+   ✅ APP: Botones
+   - Blanco SOLO en botones azul fuerte
+   ========================================================= */
+html[data-party="app"] .vc-app-surface button[class*="bg-primary"],
+html[data-party="app"] .vc-app-surface a[class*="bg-primary"],
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-primary"],
+html[data-party="app"] .vc-app-surface button[class*="bg-blue"],
+html[data-party="app"] .vc-app-surface a[class*="bg-blue"],
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-blue"] {
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+/* Convertir botones heredados verdes/teal/emerald a azul fuerte */
+html[data-party="app"] .vc-app-surface button[class*="bg-green"],
+html[data-party="app"] .vc-app-surface a[class*="bg-green"],
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-green"],
+html[data-party="app"] .vc-app-surface button[class*="bg-emerald"],
+html[data-party="app"] .vc-app-surface a[class*="bg-emerald"],
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-emerald"],
+html[data-party="app"] .vc-app-surface button[class*="bg-teal"],
+html[data-party="app"] .vc-app-surface a[class*="bg-teal"],
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-teal"] {
+  background-color: #1e4fa3 !important;
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+/* Pills informativas bg-primary-soft => texto negro */
+html[data-party="app"] .vc-app-surface a[class*="bg-primary-soft"],
+html[data-party="app"] .vc-app-surface button[class*="bg-primary-soft"],
+html[data-party="app"] .vc-app-surface span[class*="bg-primary-soft"],
+html[data-party="app"] .vc-app-surface div[class*="bg-primary-soft"] {
+  color: #000000 !important;
+  font-weight: 700;
+}
+
+/* =========================================================
+   ✅ APP: Bordes rojos consistentes
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .border-borderparty,
+html[data-party="app"] .vc-app-surface [class*="border-borderparty"],
+html[data-party="app"] .vc-app-surface .border-accent,
+html[data-party="app"] .vc-app-surface [class*="border-accent"] {
+  border-color: #dc2626 !important;
+}
+
+/* =========================================================
+   ✅ APP: Homogeneizar bloques (vc-block/vc-block-inner)
+   - SOLO APP (Perú Federal NO se altera)
+   ========================================================= */
+html[data-party="app"] .vc-block {
+  margin: 0;
+}
+
+html[data-party="app"] .vc-block-inner {
+  border-radius: 24px;
+  border: 6px solid #dc2626; /* 🔴 fuerte */
+  background: #ffffff; /* panel claro sobre cian */
+}
+
+/* =========================================================
+   Federalito (se mantiene)
+   ========================= */
 @keyframes federalito-float {
-  0% { transform: translateY(0px) rotate(-0.6deg); }
-  50% { transform: translateY(-6px) rotate(0.6deg); }
-  100% { transform: translateY(0px) rotate(-0.6deg); }
+  0% {
+    transform: translateY(0px) rotate(-0.6deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(0.6deg);
+  }
+  100% {
+    transform: translateY(0px) rotate(-0.6deg);
+  }
 }
 
 @keyframes federalito-glow {
-  0% { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
-  50% { box-shadow: 0 14px 38px rgba(16,185,129,.28); }
-  100% { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+  0% {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  }
+  50% {
+    box-shadow: 0 14px 38px rgba(16, 185, 129, 0.28);
+  }
+  100% {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  }
 }
 
 @keyframes federalito-shine {
-  0% { transform: translateX(-120%) rotate(20deg); opacity: 0; }
-  10% { opacity: .35; }
-  50% { opacity: .15; }
-  100% { transform: translateX(120%) rotate(20deg); opacity: 0; }
+  0% {
+    transform: translateX(-120%) rotate(20deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.15;
+  }
+  100% {
+    transform: translateX(120%) rotate(20deg);
+    opacity: 0;
+  }
 }
 
-/* Pulso CTA suave */
 @keyframes federalito-cta-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.02); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .federalito-anim {
   position: relative;
-  animation:
-    federalito-float 2.8s ease-in-out infinite,
+  animation: federalito-float 2.8s ease-in-out infinite,
     federalito-glow 2.8s ease-in-out infinite;
   will-change: transform, box-shadow;
 }
 
-/* Shine */
 .federalito-anim::after {
   content: "";
   position: absolute;
@@ -121,7 +347,7 @@ body {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255,255,255,.55) 50%,
+    rgba(255, 255, 255, 0.55) 50%,
     transparent 100%
   );
   filter: blur(2px);
@@ -131,13 +357,8 @@ body {
   pointer-events: none;
 }
 
-/* ❌ ELIMINADO: banderita 🇵🇪 */
-/* .federalito-anim::before { ... } */
-
-/* Interacción */
 .federalito-anim.is-clickable {
-  animation:
-    federalito-float 2.8s ease-in-out infinite,
+  animation: federalito-float 2.8s ease-in-out infinite,
     federalito-glow 2.8s ease-in-out infinite,
     federalito-cta-pulse 1.9s ease-in-out infinite;
   cursor: pointer;
@@ -145,16 +366,13 @@ body {
 
 .federalito-anim.is-clickable:hover {
   transform: translateY(-2px) scale(1.01);
-  box-shadow: 0 18px 42px rgba(16,185,129,.22);
+  box-shadow: 0 18px 42px rgba(16, 185, 129, 0.22);
 }
 
 .federalito-anim.is-clickable:active {
   transform: translateY(0px) scale(0.99);
 }
 
-/* =========================
-   Accesibilidad
-   ========================= */
 @media (prefers-reduced-motion: reduce) {
   .federalito-anim,
   .federalito-anim::after {
@@ -163,22 +381,127 @@ body {
   }
 }
 
-/* =========================
-   PARTY THEMES
-========================= */
-
-html[data-party="app"] {
-  --color-primary: #2F61A6; /* azul institucional */
-  --color-primary-soft: #e0f2fe; /* celeste más encendido (sky-100) */
-  --color-accent: #dc2626; /* rojo borde */
-  --color-border: #dc2626;
-  --color-party-bg: #e0f2fe; /* celeste más encendido (sky-100) */
+/* =========================================================
+   🔒 FIX DEFINITIVO BOTONES HERO (SOLO APP)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface button.bg-primary {
+  background-color: #1e4fa3 !important;
+  color: #ffffff !important;
 }
 
-html[data-party="perufederal"] {
-  --color-primary: #15803d;
-  --color-primary-soft: #dcfce7;
-  --color-accent: #16a34a;
-  --color-border: #166534;
-  --color-party-bg: #f0fdf4;
+html[data-party="app"] .vc-app-surface button.bg-primary-soft {
+  background-color: var(--color-primary-soft) !important;
+  color: #000000 !important;
+}
+
+/* =========================
+   Modo oscuro (se mantiene)
+   ========================= */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ffffff;
+    --foreground-muted: #e5e7eb;
+  }
+
+  /* APP debe quedarse claro (institucional) */
+  html[data-party="app"] {
+    --background: #ffffff;
+    --foreground: #000000;
+    --foreground-muted: #000000;
+  }
+}
+
+/* =========================================================
+   🎯 COMO FUNCIONA — uniformizar bloques internos (SOLO APP)
+   ========================================================= */
+
+/* (si estás usando body[data-path="/como-funciona"], este selector ahora está bien formado) */
+html[data-party="app"] body[data-path="/como-funciona"] .vc-app-surface .bg-white {
+  background-color: var(--color-primary-soft) !important;
+  color: #000000 !important;
+}
+
+/* =========================================================
+   ✅ APP: /como-funciona -> uniformizar paneles a celeste bajo
+   (SOLO afecta cuando data-party="app" y SOLO esta pantalla)
+   ========================================================= */
+html[data-party="app"] .vc-how section {
+  background-color: #bffcff !important; /* celeste bajo */
+  background-image: none !important;
+}
+
+/* los mini-cards dentro de /como-funciona */
+html[data-party="app"] .vc-how section div[class*="bg-"] {
+  background-color: #bffcff !important;
+  background-image: none !important;
+}
+
+/* NO tocar botones */
+html[data-party="app"] .vc-how button {
+  background-image: none !important;
+}
+
+/* =========================================================
+   RETO CIUDADANO — UNIFICAR BLOQUES DE NIVELES (solo APP)
+   Objetivo: Nivel 2 y 3 con la misma “arquitectura” que Nivel 1
+   Requiere: <section className="vc-reto-levels ...">
+   ========================================================= */
+html[data-party="app"] .vc-reto .vc-reto-levels > div.rounded-2xl.border {
+  background-color: #bfeff2 !important; /* celeste bajo */
+  border-color: #d32f2f !important; /* borde rojo institucional */
+  box-shadow: none !important;
+  padding: 1rem !important;
+  border-radius: 1rem !important;
+}
+
+/* Si algún nivel llega como bg-white o bg-green-50, forzar igual */
+html[data-party="app"] .vc-reto .vc-reto-levels > div.rounded-2xl.border.bg-white,
+html[data-party="app"] .vc-reto .vc-reto-levels > div.rounded-2xl.border.bg-green-50 {
+  background-color: #bfeff2 !important;
+}
+/* =========================================================
+   RETO CIUDADANO — Forzar contraste fuerte (SOLO APP)
+   ========================================================= */
+
+html[data-party="app"] .vc-reto .vc-reto-levels {
+  color: #000000;
+}
+
+/* Forzar todos los textos internos a negro sólido */
+html[data-party="app"] .vc-reto .vc-reto-levels p,
+html[data-party="app"] .vc-reto .vc-reto-levels span,
+html[data-party="app"] .vc-reto .vc-reto-levels div,
+html[data-party="app"] .vc-reto .vc-reto-levels small,
+html[data-party="app"] .vc-reto .vc-reto-levels strong {
+  color: #000000 !important;
+}
+/* =========================================================
+   RETO CIUDADANO — Botones Reiniciar institucionales (APP)
+   ========================================================= */
+
+html[data-party="app"] .vc-reto .vc-reto-levels button {
+  background-color: #1e4fa3 !important;
+  color: #ffffff !important;
+  border-color: #1e4fa3 !important;
+}
+
+html[data-party="app"] .vc-reto .vc-reto-levels button:hover {
+  background-color: #173f85 !important;
+}
+/* =========================================================
+   RETO CIUDADANO — Botón "Volver al inicio" institucional
+   SOLO APP
+   ========================================================= */
+
+html[data-party="app"] .vc-reto a[href="/"] {
+  background-color: #1e4fa3 !important;
+  color: #ffffff !important;
+  border-color: #1e4fa3 !important;
+  font-weight: 700;
+}
+
+html[data-party="app"] .vc-reto a[href="/"]:hover {
+  background-color: #173f85 !important;
+  color: #ffffff !important;
 }

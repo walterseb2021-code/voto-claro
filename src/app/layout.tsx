@@ -5,6 +5,7 @@ import "./globals.css";
 import FederalitoClientGate from "@/components/assistant/FederalitoClientGate";
 import HideOnPitch from "@/components/HideOnPitch";
 import PartyThemeInitializer from "@/components/PartyThemeInitializer";
+import AppSurfaceWrapper from "@/components/AppSurfaceWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,21 +33,16 @@ export default function RootLayout({
         <meta charSet="utf-8" />
       </head>
 
-      <body
-        className={[
-          geistSans.variable,
-          geistMono.variable,
-          "antialiased",
-          "min-h-screen",
-          // ✅ Ahora el fondo también es por partido (APP vs Perú Federal)
-          "bg-gradient-to-b",
-          "from-primary-soft",
-          "via-white",
-          "to-backgroundparty",
-          "text-slate-900",
-        ].join(" ")}
-      >
-        {/* ✅ Activa el theme global leyendo localStorage y seteando data-party en <html> */}
+   <body
+  data-path={typeof window !== "undefined" ? window.location.pathname : ""}
+  className={[
+    geistSans.variable,
+    geistMono.variable,
+    "antialiased",
+    "min-h-screen",
+  ].join(" ")}
+>
+        {/* ✅ Activa theme global leyendo localStorage y seteando data-party en <html> */}
         <PartyThemeInitializer />
 
         {/* ✅ Federalito (pero NO en /pitch) */}
@@ -54,7 +50,8 @@ export default function RootLayout({
           <FederalitoClientGate />
         </HideOnPitch>
 
-        {children}
+        {/* ✅ Frame/surface global SOLO para APP, excluye /pitch y /admin */}
+        <AppSurfaceWrapper>{children}</AppSurfaceWrapper>
       </body>
     </html>
   );

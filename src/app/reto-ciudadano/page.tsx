@@ -1549,7 +1549,7 @@ async function registrarPremio() {
   }, [mode]);
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6">
+    <main className="vc-reto mx-auto max-w-4xl px-4 py-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-extrabold text-slate-900">RETO CIUDADANO</h1>
@@ -1655,7 +1655,7 @@ async function registrarPremio() {
     )}
   </section>
 )}
-      <section className="mt-5 grid grid-cols-1 gap-3">
+      <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
         {mode === "con_premio" && !premioAutorizado ? (
   <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
     🔒 Debes completar el registro para iniciar el Nivel 1.

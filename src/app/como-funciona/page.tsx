@@ -23,16 +23,16 @@ export default function ComoFuncionaPage() {
     );
 
     const t = setTimeout(() => {
-  window.dispatchEvent(
-    new CustomEvent("votoclaro:guide", {
-      detail: {
-        action: "SAY",
-        text: "Bienvenido a Cómo funciona VOTO CLARO. Aquí aprenderás cómo usar la app, cómo te ayuda el Asistente, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa.",
-        speak: true,
-      },
-    })
-  );
-}, 0);
+      window.dispatchEvent(
+        new CustomEvent("votoclaro:guide", {
+          detail: {
+            action: "SAY",
+            text: "Bienvenido a Cómo funciona VOTO CLARO. Aquí aprenderás cómo usar la app, cómo te ayuda el Asistente, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa.",
+            speak: true,
+          },
+        })
+      );
+    }, 0);
 
     return () => clearTimeout(t);
   }, []);
@@ -42,7 +42,7 @@ export default function ComoFuncionaPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
+    <main className="vc-how min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto">
       <header className="mb-6 relative">
         {/* ⬅ Volver a Inicio (arriba derecha) */}
         <div className="absolute right-0 top-0">
@@ -62,10 +62,11 @@ export default function ComoFuncionaPage() {
       </header>
 
       {/* 1) Qué es */}
-      <section className="rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+      <section className="rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5">
         <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VOTO CLARO?</h2>
         <p className="mt-2 text-slate-800 text-sm">
-          VOTO CLARO es una app informativa para ayudarte a entender información pública antes de votar. No es un juego, no es una red social y no reemplaza tu criterio.
+          VOTO CLARO es una app informativa para ayudarte a entender información pública antes de votar. No es un juego,
+          no es una red social y no reemplaza tu criterio.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -84,7 +85,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 2) Flujo de uso */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5">
         <h2 className="text-lg font-bold text-slate-900">2) ¿Cómo se usa la app? (flujo recomendado)</h2>
 
         <ol className="mt-3 space-y-3 text-sm text-slate-800 list-decimal pl-5">
@@ -99,8 +100,8 @@ export default function ComoFuncionaPage() {
             correcta.
           </li>
           <li>
-        <b>Revisa la información</b> con calma. Si algo no aparece en la app, se indicará claramente.
-        </li>
+            <b>Revisa la información</b> con calma. Si algo no aparece en la app, se indicará claramente.
+          </li>
           <li>
             <b>Luego decides tú</b>, con criterio.
           </li>
@@ -110,9 +111,9 @@ export default function ComoFuncionaPage() {
           <button
             type="button"
             onClick={() =>
-            sendGuide(
-            "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre Hoja de Vida, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa la información y luego decide tú."
-            )
+              sendGuide(
+                "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre Hoja de Vida, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa la información y luego decide tú."
+              )
             }
             className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
@@ -122,7 +123,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 3) Qué hace el Asistente */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5">
         <h2 className="text-lg font-bold text-slate-900">3) ¿Cómo te ayuda el Asistente?</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -157,7 +158,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 4) Límites técnicos */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-amber-50 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5">
         <h2 className="text-lg font-bold text-slate-900">4) Límites técnicos (para evitar falsas expectativas)</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -173,7 +174,7 @@ export default function ComoFuncionaPage() {
             <b>No habla de cualquier tema</b>. Responde sobre lo que existe en la app y sobre la sección actual. Si le
             preguntas algo fuera, te dirá que no corresponde.
           </li>
-             <li>
+          <li>
             <b>No adivina</b> ni inventa: si esa información no está disponible en la app, te lo dirá y te orientará.
           </li>
           <li>
@@ -197,7 +198,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 5) Política de uso */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5">
         <h2 className="text-lg font-bold text-slate-900">5) Política de uso (buen uso de la app)</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -239,7 +240,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 6) Qué hay en las secciones (resumen claro y completo) */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5">
         <h2 className="text-lg font-bold text-slate-900">6) ¿Qué encontrarás en cada sección?</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -248,7 +249,7 @@ export default function ComoFuncionaPage() {
         </p>
 
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Inicio</div>
             <div className="text-slate-800 mt-1">
               Es el centro de navegación. Desde aquí buscas candidatos y entras a todas las demás secciones.
@@ -258,10 +259,11 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Ficha del candidato</div>
             <div className="text-slate-800 mt-1">
-              Aquí exploras la información del candidato en tres partes: Hoja de Vida, Plan de Gobierno y Actuar Político.
+              Aquí exploras la información del candidato en tres partes: Hoja de Vida, Plan de Gobierno y Actuar
+              Político.
             </div>
             <div className="text-slate-700 mt-2 font-semibold">
               ¿Cómo se busca información? Entra a la pestaña correcta y escribe tu pregunta (o usa una de las preguntas
@@ -269,7 +271,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Hoja de Vida</div>
             <div className="text-slate-800 mt-1">
               Respuestas basadas en el documento oficial. Si no existe evidencia, la app lo indicará.
@@ -280,7 +282,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Plan de Gobierno</div>
             <div className="text-slate-800 mt-1">
               Respuestas basadas en el plan. Puedes preguntar por economía, salud, seguridad, educación y propuestas.
@@ -290,7 +292,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Actuar Político</div>
             <div className="text-slate-800 mt-1">
               Información basada en registros disponibles para revisar hechos relevantes del candidato.
@@ -300,7 +302,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Servicios al ciudadano</div>
             <div className="text-slate-800 mt-1">
               Enlaces oficiales para trámites electorales (local de votación, miembro de mesa, multas y más).
@@ -310,7 +312,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Reflexionar antes de votar</div>
             <div className="text-slate-800 mt-1">
               Preguntas y reflexiones por ejes (economía, salud, educación, seguridad y más).
@@ -320,18 +322,17 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Un cambio con valentía</div>
             <div className="text-slate-800 mt-1">
               Espacio institucional del partido: acceso a su web, bloques informativos y contenidos propios.
             </div>
-             <div className="text-slate-700 mt-2 font-semibold">
-              ¿Cómo se usa aquí? Puedes leer el contenido o preguntar en
-             “Conversación” para resolver dudas.
-          </div>
+            <div className="text-slate-700 mt-2 font-semibold">
+              ¿Cómo se usa aquí? Puedes leer el contenido o preguntar en “Conversación” para resolver dudas.
+            </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Videos y transmisiones</div>
             <div className="text-slate-800 mt-1">
               Reúne videos grabados o en vivo de candidatos (cuando estén disponibles en la plataforma).
@@ -341,7 +342,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Intención de voto</div>
             <div className="text-slate-800 mt-1">
               Registra tu preferencia de forma guiada. Incluye opción blanco / nulo con reflexión previa.
@@ -351,7 +352,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Reto ciudadano</div>
             <div className="text-slate-800 mt-1">
               Juego por niveles para aprender y participar. Tiene intentos limitados y tiempos de espera.
@@ -361,7 +362,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-green-50 p-4">
+          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4">
             <div className="font-bold text-slate-900">Comentarios ciudadanos</div>
             <div className="text-slate-800 mt-1">
               Espacio para publicar comentarios y leer aportes de otras personas, con reglas para evitar abusos.
@@ -376,9 +377,9 @@ export default function ComoFuncionaPage() {
           <button
             type="button"
             onClick={() =>
-             sendGuide(
-            "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexionar antes de votar te guía por ejes y preguntas. Un cambio con valentía reúne información institucional y conversación. También hay videos y transmisiones, intención de voto, reto ciudadano y comentarios ciudadanos."
-             )
+              sendGuide(
+                "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexionar antes de votar te guía por ejes y preguntas. Un cambio con valentía reúne información institucional y conversación. También hay videos y transmisiones, intención de voto, reto ciudadano y comentarios ciudadanos."
+              )
             }
             className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition"
           >
@@ -388,33 +389,32 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 7) Transparencia y autoría */}
-<section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-green-50/40 p-5">
-  <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
+      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5">
+        <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
 
-  <p className="mt-2 text-slate-800 text-sm">
-    Esta aplicación es una herramienta informativa para facilitar el acceso a información pública.{" "}
-    VOTO CLARO busca ayudar a entender información pública y{" "}
-    <b>no reemplaza el criterio personal</b> del usuario.
-    <br />
-    <span className="text-slate-600">
-      Desarrollado por: <b>WALTER SEBASTIAN CABANILLAS ALVAREZ</b>
-    </span>
-  </p>
+        <p className="mt-2 text-slate-800 text-sm">
+          Esta aplicación es una herramienta informativa para facilitar el acceso a información pública.{" "}
+          VOTO CLARO busca ayudar a entender información pública y <b>no reemplaza el criterio personal</b> del usuario.
+          <br />
+          <span className="text-slate-600">
+            Desarrollado por: <b>WALTER SEBASTIAN CABANILLAS ALVAREZ</b>
+          </span>
+        </p>
 
-  <div className="mt-4 flex flex-wrap gap-2">
-    <button
-      type="button"
-      onClick={() =>
-        sendGuide(
-          "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal. Desarrollado por: WALTER SEBASTIAN CABANILLAS ALVAREZ."
-        )
-      }
-      className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
-    >
-      🔊 Leer transparencia
-    </button>
-  </div>
-</section>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              sendGuide(
+                "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal. Desarrollado por: WALTER SEBASTIAN CABANILLAS ALVAREZ."
+              )
+            }
+            className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition"
+          >
+            🔊 Leer transparencia
+          </button>
+        </div>
+      </section>
 
       {/* ⬆ Subir */}
       <div className="mt-10 flex justify-center">
@@ -427,9 +427,7 @@ export default function ComoFuncionaPage() {
         </button>
       </div>
 
-      <footer className="mt-8 text-xs text-slate-600">
-      Gracias por usar VOTO CLARO.
-      </footer>
+      <footer className="mt-8 text-xs text-slate-600">Gracias por usar VOTO CLARO.</footer>
     </main>
   );
 }
