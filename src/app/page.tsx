@@ -271,17 +271,17 @@ export default function HomePage() {
             </div>
 
             <div className="mt-5 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  goToSearchAndGuide(
-                    "Vamos a empezar. Escribe el nombre del candidato y entra a su ficha. Luego cambia entre HV, Plan y Actuar político."
-                  )
-                }
-                
-              >className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-borderparty bg-primary-soft text-black font-extrabold text-sm hover:brightness-95 shadow-md hover:shadow-lg transition"
-                🔎 Empezar búsqueda
-              </button>
+                <button
+  type="button"
+  onClick={() =>
+    goToSearchAndGuide(
+      "Vamos a empezar. Escribe el nombre del candidato y entra a su ficha. Luego cambia entre HV, Plan y Actuar político."
+    )
+  }
+  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-borderparty bg-primary-soft text-black font-extrabold text-sm hover:brightness-95 shadow-md hover:shadow-lg transition"
+>
+  🔎 Empezar búsqueda
+</button>
 
               <button
                 type="button"
