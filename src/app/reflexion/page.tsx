@@ -119,9 +119,8 @@ export default function ReflexionPage() {
     "hover:bg-green-100 transition";
   const RED_OUTLINE_BTN =
     "inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-red-700 bg-white text-red-700 text-sm font-semibold hover:bg-red-50 transition";
-  const GREEN_PRIMARY_BTN =
-    "inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-green-900 bg-green-800 text-white text-sm font-semibold hover:bg-green-900 shadow-md transition";
-
+  const BLUE_PRIMARY_BTN =
+  "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-white text-sm font-extrabold shadow-sm transition";
   return (
     <main className="vc-reflexion min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-100 via-green-50 to-green-100">
       {/* Header */}
@@ -136,7 +135,7 @@ export default function ReflexionPage() {
             </p>
           </div>
 
-          <Link href="/" className={GREEN_PRIMARY_BTN}>
+          <Link href="/" className={BLUE_PRIMARY_BTN}>
             ← Volver al inicio
           </Link>
         </div>
@@ -206,7 +205,7 @@ export default function ReflexionPage() {
               <button
                 type="button"
                 onClick={() => guideSay(cierre)}
-                className={GREEN_PRIMARY_BTN}
+                className={BLUE_PRIMARY_BTN}
               >
                 🔊 Leer cierre
               </button>
@@ -289,7 +288,7 @@ export default function ReflexionPage() {
                               }:\n${q.question}\n\n${q.reflection}${follow}`;
                               guideSay(textToRead);
                             }}
-                            className={GREEN_PRIMARY_BTN}
+                            className={BLUE_PRIMARY_BTN}
                           >
                             🔊 Leer reflexión
                           </button>
@@ -327,7 +326,7 @@ export default function ReflexionPage() {
               <button
                 type="button"
                 onClick={() => guideSay(cierre)}
-                className={GREEN_PRIMARY_BTN}
+                className={BLUE_PRIMARY_BTN}
               >
                 🔊 Leer cierre
               </button>
@@ -340,7 +339,7 @@ export default function ReflexionPage() {
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="fixed bottom-5 left-1/2 -translate-x-[120%] z-[9999] rounded-full bg-green-800 text-white px-4 py-3 text-sm font-semibold shadow-lg hover:bg-green-900 transition"
+          className="vc-btn vc-btn-blue fixed bottom-5 left-1/2 -translate-x-[120%] z-[9999] rounded-full px-4 py-3 text-sm font-extrabold shadow-lg transition"
           aria-label="Subir"
         >
           ↑ Subir

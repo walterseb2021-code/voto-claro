@@ -671,3 +671,12 @@ html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] {
 html[data-party="app"] .vc-app-surface a.bg-\[\#2F61A6\] * {
   color: #ffffff !important;
 }
+/* =========================================================
+   ✅ REFLEXION — Botones fuertes blancos (SOLO APP)
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-800,
+html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-800 *,
+html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-900,
+html[data-party="app"] .vc-app-surface .vc-reflexion .bg-green-900 * {
+  color: #ffffff !important;
+}
