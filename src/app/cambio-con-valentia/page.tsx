@@ -531,7 +531,7 @@ useEffect(() => {
               </div>
 
               <h2 className="mt-1 text-base md:text-lg font-extrabold text-slate-900 break-words">
-                Virgilio Acuña Peralta
+                Cesar Acuña Peralta
               </h2>
 
               <p className="mt-2 text-sm md:text-base text-slate-800 font-semibold leading-relaxed break-words">
