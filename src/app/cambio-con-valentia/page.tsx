@@ -518,8 +518,8 @@ useEffect(() => {
           <div className="flex items-start gap-4 flex-wrap">
             <div className="relative w-36 h-36 md:w-40 md:h-40 rounded-2xl overflow-hidden border-2 border-red-600 bg-white shrink-0">
               <Image
-                src="/candidates/virgilio-acuña-peralta.png"
-                alt="Virgilio Acuña Peralta"
+                src="/candidates/cesar-acuña-peralta.png"
+                alt="Cesar Acuña Peralta"
                 fill
                 className="object-contain bg-white"
               />
