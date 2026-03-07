@@ -134,12 +134,17 @@ export default function ComentariosPage() {
   const [savingData, setSavingData] = useState(false);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("D7");
+  const [weeklyTopic, setWeeklyTopic] = useState<string>("");
+  const [weeklyQuestion, setWeeklyQuestion] = useState<string>("");
 
   useEffect(() => {
-    const g = readCookie("vc_group");
-    if (g) setGroupCode(g);
-    setDeviceId(getOrCreateDeviceId());
-  }, []);
+  const g = readCookie("vc_group");
+  if (g) setGroupCode(g);
+  setDeviceId(getOrCreateDeviceId());
+
+  loadWeeklyTopic();
+
+}, []);
 
   useEffect(() => {
     function onScroll() {
@@ -250,7 +255,24 @@ export default function ComentariosPage() {
       setPublicLoading(false);
     }
   }
+   
+  async function loadWeeklyTopic() {
+  try {
+    const { data, error } = await supabase
+      .from("weekly_topics")
+      .select("topic, question")
+      .eq("status", "active")
+      .limit(1)
+      .single();
 
+    if (error) return;
+
+    if (data) {
+      setWeeklyTopic(data.topic);
+      setWeeklyQuestion(data.question);
+    }
+  } catch {}
+}
   useEffect(() => {
     if (!showPublic) return;
 
@@ -465,17 +487,16 @@ export default function ComentariosPage() {
         <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/70 p-4">
           <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
             Tema
-          </div>
-          <div className="mt-1 text-xl md:text-2xl font-extrabold text-slate-900">
-            Corrupción
-          </div>
+           </div>
+           <div className="mt-1 text-xl md:text-2xl font-extrabold text-slate-900">
+           {weeklyTopic || "Tema en preparación"}
+           </div>
 
           <div className="mt-4 text-xs font-extrabold text-slate-700 uppercase tracking-wide">
             Pregunta guía
           </div>
           <div className="mt-1 text-sm md:text-base font-semibold text-slate-800 leading-relaxed">
-            ¿Qué medida concreta debería aplicarse primero para castigar la
-            corrupción política en el Perú?
+             {weeklyQuestion}
           </div>
 
           <div className="mt-4 text-xs text-slate-600 font-semibold">

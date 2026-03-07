@@ -15,6 +15,14 @@ type CommentRow = {
   message: string;
   status: "new" | "reviewed" | "archived" | "blocked";
 };
+type WeeklyTopicRow = {
+  id: string;
+  topic: string;
+  question: string;
+  status: string;
+  starts_at: string | null;
+  ends_at: string | null;
+};
 
 export default function AdminCommentsPage() {
   const router = useRouter();
@@ -28,12 +36,17 @@ export default function AdminCommentsPage() {
     return createClient(url, key);
   }, []);
 
-  const [items, setItems] = useState<CommentRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+   const [items, setItems] = useState<CommentRow[]>([]);
+const [loading, setLoading] = useState(false);
+const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [groupFilter, setGroupFilter] = useState<string>("ALL");
-  const [statusFilter, setStatusFilter] = useState<string>("new");
+const [groupFilter, setGroupFilter] = useState<string>("ALL");
+const [statusFilter, setStatusFilter] = useState<string>("new");
+
+const [weeklyTopic, setWeeklyTopic] = useState<WeeklyTopicRow | null>(null);
+const [topicDraft, setTopicDraft] = useState("");
+const [questionDraft, setQuestionDraft] = useState("");
+const [savingTopic, setSavingTopic] = useState(false);
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
@@ -93,7 +106,10 @@ export default function AdminCommentsPage() {
             : "Error desconocido.";
         throw new Error(msg);
       }
-
+       const topic = (json?.weeklyTopic ?? null) as WeeklyTopicRow | null;
+       setWeeklyTopic(topic);
+       setTopicDraft(topic?.topic ?? "");
+       setQuestionDraft(topic?.question ?? "");
       let list = (json?.items ?? []) as CommentRow[];
 
       // Filtro por grupo (lo hacemos aquí para no tocar el API)
@@ -139,7 +155,61 @@ export default function AdminCommentsPage() {
       setErrorMsg(e?.message ?? String(e));
     }
   }
+   async function saveWeeklyTopic() {
+  if (!weeklyTopic?.id) {
+    setErrorMsg("No se encontró un tema activo para actualizar.");
+    return;
+  }
 
+  const topic = topicDraft.trim();
+  const question = questionDraft.trim();
+
+  if (!topic) {
+    setErrorMsg("Escribe el tema.");
+    return;
+  }
+
+  if (!question) {
+    setErrorMsg("Escribe la pregunta guía.");
+    return;
+  }
+
+  setSavingTopic(true);
+  setErrorMsg(null);
+
+  try {
+    const res = await fetch("/api/admin/comments", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        id: weeklyTopic.id,
+        topic,
+        question,
+      }),
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        json?.reason
+          ? `No autorizado (${json.reason}).`
+          : json?.detail
+          ? json.detail
+          : json?.error
+          ? json.error
+          : "Error desconocido.";
+      throw new Error(msg);
+    }
+
+    await loadComments();
+  } catch (e: any) {
+    setErrorMsg(e?.message ?? String(e));
+  } finally {
+    setSavingTopic(false);
+  }
+}
   useEffect(() => {
     if (checking) return;
     loadComments();
@@ -196,9 +266,57 @@ export default function AdminCommentsPage() {
           </button>
         </div>
       </div>
-
+        
       <section className={sectionWrap}>
         <div className={inner}>
+           <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
+  <div className="text-sm font-extrabold text-slate-900">🗓 Tema de la semana</div>
+  <div className="mt-1 text-xs text-slate-600">
+    Este bloque controla lo que ve la página pública de comentarios.
+  </div>
+
+  <div className="mt-4 grid grid-cols-1 gap-3">
+    <div>
+      <div className="text-xs font-extrabold text-slate-700">Tema</div>
+      <input
+        value={topicDraft}
+        onChange={(e) => setTopicDraft(e.target.value)}
+        className="mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold"
+        placeholder="Ej: Corrupción"
+      />
+    </div>
+
+    <div>
+      <div className="text-xs font-extrabold text-slate-700">Pregunta guía</div>
+      <textarea
+        value={questionDraft}
+        onChange={(e) => setQuestionDraft(e.target.value)}
+        className="mt-2 w-full min-h-[100px] rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold"
+        placeholder="Escribe la pregunta guía del tema semanal..."
+      />
+    </div>
+
+    <div className="flex gap-2 flex-wrap">
+      <button
+        type="button"
+        onClick={saveWeeklyTopic}
+        className={btnSm}
+        disabled={savingTopic || loading}
+      >
+        {savingTopic ? "Guardando..." : "Guardar tema semanal"}
+      </button>
+
+      <button
+        type="button"
+        onClick={loadComments}
+        className={btnSm}
+        disabled={savingTopic || loading}
+      >
+        Recargar tema
+      </button>
+    </div>
+  </div>
+</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <div className="text-xs font-extrabold text-slate-700">Grupo</div>

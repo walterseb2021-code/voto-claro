@@ -70,10 +70,26 @@ export async function GET(req: Request) {
 
     if (status) q = q.eq("status", status);
 
-    const { data, error } = await q;
-    if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+   const { data, error } = await q;
+if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
-    return json({ ok: true, items: data ?? [] });
+const { data: topicRow, error: topicError } = await supabase
+  .from("weekly_topics")
+  .select("id,topic,question,status,starts_at,ends_at")
+  .eq("status", "active")
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+if (topicError) {
+  return json({ error: "SUPABASE_ERROR", detail: topicError.message }, 500);
+}
+
+return json({
+  ok: true,
+  items: data ?? [],
+  weeklyTopic: topicRow ?? null,
+});
   } catch (e: any) {
     return json({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
   }
@@ -101,6 +117,38 @@ export async function POST(req: Request) {
     const { error } = await supabase
       .from("user_comments")
       .update({ status })
+      .eq("id", id);
+
+    if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+
+    return json({ ok: true });
+  } catch (e: any) {
+    return json({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
+  }
+}
+// PATCH: actualizar tema semanal activo desde admin
+export async function PATCH(req: Request) {
+  try {
+    const auth = await requireAdminUser();
+    if (!auth.ok) return json({ error: "UNAUTHORIZED", reason: auth.reason }, 401);
+
+    const body = await req.json().catch(() => null);
+    const id = String(body?.id ?? "").trim();
+    const topic = String(body?.topic ?? "").trim();
+    const question = String(body?.question ?? "").trim();
+
+    if (!id) return json({ error: "MISSING_ID" }, 400);
+    if (!topic) return json({ error: "MISSING_TOPIC" }, 400);
+    if (!question) return json({ error: "MISSING_QUESTION" }, 400);
+
+    const supabase = supabaseAdmin();
+
+    const { error } = await supabase
+      .from("weekly_topics")
+      .update({
+        topic,
+        question,
+      })
       .eq("id", id);
 
     if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
