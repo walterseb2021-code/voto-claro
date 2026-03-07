@@ -307,7 +307,9 @@ export default function ComentariosPage() {
       if (error) throw new Error(error.message);
 
       setMessage("");
-      setOkMsg("¡Gracias! Tu comentario fue enviado.");
+     setOkMsg(
+  "¡Gracias! Tu comentario fue enviado y está en revisión. Aparecerá en 'Comentarios aprobados' si cumple las normas de respeto."
+);
 
       if (showPublic) {
         await loadPublicReviewed();
@@ -534,10 +536,11 @@ export default function ComentariosPage() {
       {/* BLOQUE 4: Debate público publicado */}
       <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
-          Debate público publicado
+          Comentarios aprobados
         </h2>
         <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Aquí se muestran los comentarios aprobados por moderación.
+           Los comentarios enviados no aparecen de inmediato. Primero pasan por revisión
+           y luego se publican si son aprobados.
         </p>
 
         <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
@@ -570,7 +573,7 @@ export default function ComentariosPage() {
           {showPublic ? (
             <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
               <div className="text-sm font-extrabold text-slate-900">
-                Comentarios publicados
+                Comentarios aprobados
               </div>
               <div className="mt-1 text-xs text-slate-600">
                 Se actualiza automáticamente cada pocos segundos.
