@@ -91,7 +91,6 @@ function getSinceDate(filter: TimeFilter): Date | null {
     return d;
   }
 
-  // D30
   const d = new Date(now);
   d.setDate(d.getDate() - 30);
   return d;
@@ -124,20 +123,16 @@ export default function ComentariosPage() {
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
-  // ✅ Botón “Subir”
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  // ✅ Verificación de datos (para permitir comentar)
   const [checkingData, setCheckingData] = useState(true);
   const [hasData, setHasData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
 
-  // ✅ Formulario de datos (correo o celular)
   const [email, setEmail] = useState("");
   const [celular, setCelular] = useState("");
   const [savingData, setSavingData] = useState(false);
 
-  // ✅ NUEVO: filtro por fecha para comentarios publicados
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("D7");
 
   useEffect(() => {
@@ -203,17 +198,19 @@ export default function ComentariosPage() {
 
     setSavingData(true);
     try {
-      // Guardamos (o actualizamos) tus datos usando tu device_id
       const payload: any = {
-  device_id: deviceId,
-  group_code: groupCode, // ← agrega esto
-};
+        device_id: deviceId,
+        group_code: groupCode,
+      };
+
       if (em) payload.email = em;
       if (ce) payload.celular = ce;
-          const { error } = await supabase
-  .from("reto_premio_participants")
-  .update(payload)
-  .eq("device_id", deviceId);
+
+      const { error } = await supabase
+        .from("reto_premio_participants")
+        .update(payload)
+        .eq("device_id", deviceId);
+
       if (error) throw new Error(error.message);
 
       setHasData(true);
@@ -254,8 +251,6 @@ export default function ComentariosPage() {
     }
   }
 
-  // ✅ Si la lista pública está abierta, se actualiza sola.
-  // También se refresca cuando cambias el filtro de fecha.
   useEffect(() => {
     if (!showPublic) return;
 
@@ -274,11 +269,11 @@ export default function ComentariosPage() {
     setOkMsg(null);
     setErrMsg(null);
 
-    // ✅ Primero: si no tiene datos, no puede comentar
     if (checkingData) {
       setErrMsg("Espera un momento… estamos verificando tus datos.");
       return;
     }
+
     if (!hasData) {
       setErrMsg("Para comentar, primero debes registrar tu correo o celular.");
       return;
@@ -290,7 +285,6 @@ export default function ComentariosPage() {
       return;
     }
 
-    // Filtro “amable” en pantalla (el filtro real ya está en la base de datos)
     if (hasSoeces(text)) {
       setErrMsg(
         "Aceptamos críticas negativas, pero sin insultos ni groserías. Por favor reescribe tu comentario con respeto."
@@ -315,7 +309,6 @@ export default function ComentariosPage() {
       setMessage("");
       setOkMsg("¡Gracias! Tu comentario fue enviado.");
 
-      // ✅ Si el usuario tiene abierta la lista pública, refrescamos ya
       if (showPublic) {
         await loadPublicReviewed();
       }
@@ -327,7 +320,7 @@ export default function ComentariosPage() {
   }
 
   const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-2xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
+    "min-h-screen px-4 sm:px-6 py-8 max-w-3xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
   const card = "mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-5 shadow-sm";
   const label = "text-xs font-extrabold text-slate-700";
   const input =
@@ -338,9 +331,10 @@ export default function ComentariosPage() {
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
     "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-
   const select =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
+  const placeholderCard =
+    "mt-4 rounded-2xl border-2 border-dashed border-red-500 bg-white/80 p-5 shadow-sm";
 
   return (
     <main className={wrap}>
@@ -350,10 +344,11 @@ export default function ComentariosPage() {
             Comentarios ciudadanos
           </h1>
           <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-            Para comentar, primero debes registrar tu correo o celular.
+            Participa en el tema de la semana, comenta con acceso verificado y sigue
+            el debate público.
             <br />
             <span className="text-xs text-slate-600">
-              Nadie verá tus datos. Solo se guardan para control y contacto si aplica.
+              La participación está sujeta a control de respeto y moderación.
             </span>
           </p>
         </div>
@@ -368,40 +363,46 @@ export default function ComentariosPage() {
         </div>
       </div>
 
+      {/* BLOQUE 1: Acceso verificado */}
       <section className={card}>
-        {/* Mensajes */}
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Acceso verificado
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Para comentar en esta sección, primero debes registrar por lo menos un
+          correo o un celular. Tus datos no se muestran públicamente.
+        </p>
+
         {okMsg ? (
-          <div className="rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
+          <div className="mt-4 rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
             {okMsg}
           </div>
         ) : null}
 
         {errMsg ? (
-          <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+          <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
             Error: {errMsg}
           </div>
         ) : null}
 
         {dataError ? (
-          <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+          <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
             Error al verificar datos: {dataError}
           </div>
         ) : null}
 
-        {/* Si está verificando */}
         {checkingData ? (
-          <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
+          <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
             Verificando si ya registraste tus datos…
           </div>
         ) : null}
 
-        {/* Si NO tiene datos: mostrar formulario para registrar */}
         {!checkingData && !hasData ? (
           <div className="mt-4 grid gap-4">
             <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
               Para poder comentar, registra por lo menos un correo o un celular.
               <div className="mt-1 text-xs text-slate-600">
-                Si ya dejaste tus datos en Reto Ciudadano, toca “Ya dejé mis datos” para verificar.
+                Si ya dejaste tus datos en otra sección, toca “Ya dejé mis datos” para verificar.
               </div>
             </div>
 
@@ -442,7 +443,54 @@ export default function ComentariosPage() {
           </div>
         ) : null}
 
-        {/* Si SÍ tiene datos: mostrar formulario normal de comentarios */}
+        {!checkingData && hasData ? (
+          <div className="mt-4 rounded-2xl border-2 border-green-700 bg-green-50 p-4">
+            <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
+            <div className="mt-1 text-sm font-semibold text-slate-800 leading-relaxed">
+              Ya puedes comentar en el tema activo y participar en las próximas
+              dinámicas de esta sección.
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      {/* BLOQUE 2: Tema de la semana */}
+      <section className={card}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Tema de la semana
+        </h2>
+
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/70 p-4">
+          <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+            Tema
+          </div>
+          <div className="mt-1 text-xl md:text-2xl font-extrabold text-slate-900">
+            Corrupción
+          </div>
+
+          <div className="mt-4 text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+            Pregunta guía
+          </div>
+          <div className="mt-1 text-sm md:text-base font-semibold text-slate-800 leading-relaxed">
+            ¿Qué medida concreta debería aplicarse primero para castigar la
+            corrupción política en el Perú?
+          </div>
+
+          <div className="mt-4 text-xs text-slate-600 font-semibold">
+            Estado actual: abierto para comentarios ciudadanos.
+          </div>
+        </div>
+      </section>
+
+      {/* BLOQUE 3: Comentario del tema */}
+      <section className={card}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Tu comentario sobre el tema de la semana
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Puedes opinar, criticar o proponer, pero siempre con respeto.
+        </p>
+
         {!checkingData && hasData ? (
           <form onSubmit={onSubmit} className="grid gap-4 mt-4">
             <div>
@@ -459,12 +507,12 @@ export default function ComentariosPage() {
             </div>
 
             <div>
-              <div className={label}>Tu comentario</div>
+              <div className={label}>Comentario</div>
               <textarea
                 className={textarea}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Escribe aquí…"
+                placeholder="Escribe aquí tu opinión sobre el tema de la semana..."
                 maxLength={500}
               />
               <div className="mt-1 text-xs text-slate-600">Máximo 500 caracteres.</div>
@@ -473,92 +521,169 @@ export default function ComentariosPage() {
             <button type="submit" className={btn} disabled={sending}>
               {sending ? "Enviando..." : "Enviar comentario"}
             </button>
-
-            {/* ✅ NUEVO: selector por fecha (arriba del botón de ver comentarios) */}
-            <div className="mt-2 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
-              <div className="text-sm font-extrabold text-slate-900">
-                Ver comentarios publicados
-              </div>
-              <div className="mt-1 text-xs text-slate-600">
-                Filtra por fecha para que cargue rápido.
-              </div>
-
-              <div className="mt-3">
-                <div className={label}>Mostrar</div>
-                <select
-                  className={select}
-                  value={timeFilter}
-                  onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
-                >
-                  <option value="TODAY">Hoy</option>
-                  <option value="D7">Últimos 7 días</option>
-                  <option value="D30">Últimos 30 días</option>
-                  <option value="ALL">Todos</option>
-                </select>
-              </div>
-
-              <button
-                type="button"
-                className={btn + " w-full mt-3"}
-                onClick={async () => {
-                  const next = !showPublic;
-                  setShowPublic(next);
-                  if (next && publicItems.length === 0 && !publicLoading) {
-                    await loadPublicReviewed();
-                  }
-                }}
-              >
-                {showPublic ? "▲ Ocultar comentarios publicados" : "▼ Ver comentarios publicados"}
-              </button>
-
-              {showPublic ? (
-                <div className="mt-3 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
-                  <div className="text-sm font-extrabold text-slate-900">
-                    Comentarios publicados (aprobados)
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600">
-                    Se actualiza automáticamente cada pocos segundos.
-                  </div>
-
-                  {publicError ? (
-                    <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
-                      Error al cargar comentarios: {publicError}
-                    </div>
-                  ) : null}
-
-                  {publicLoading ? (
-                    <div className="mt-3 text-sm font-semibold text-slate-700">Cargando...</div>
-                  ) : null}
-
-                  {!publicLoading && !publicError && publicItems.length === 0 ? (
-                    <div className="mt-3 text-sm font-semibold text-slate-700">
-                      Aún no hay comentarios publicados.
-                    </div>
-                  ) : null}
-
-                  <div className="mt-3 space-y-3">
-                    {publicItems.map((c) => (
-                      <div
-                        key={c.id}
-                        className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
-                      >
-                        <div className="text-xs font-extrabold text-slate-900">
-                          {c.group_code} • {new Date(c.created_at).toLocaleString()}
-                        </div>
-                        <div className="mt-2 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
-                          {c.message}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
           </form>
-        ) : null}
+        ) : (
+          !checkingData && (
+            <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
+              Primero activa tu acceso verificado para poder comentar en este tema.
+            </div>
+          )
+        )}
       </section>
 
-      {/* ✅ Botón flotante “Subir” */}
+      {/* BLOQUE 4: Debate público publicado */}
+      <section className={card}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Debate público publicado
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Aquí se muestran los comentarios aprobados por moderación.
+        </p>
+
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
+          <div className={label}>Mostrar</div>
+          <select
+            className={select}
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
+          >
+            <option value="TODAY">Hoy</option>
+            <option value="D7">Últimos 7 días</option>
+            <option value="D30">Últimos 30 días</option>
+            <option value="ALL">Todos</option>
+          </select>
+
+          <button
+            type="button"
+            className={btn + " w-full mt-3"}
+            onClick={async () => {
+              const next = !showPublic;
+              setShowPublic(next);
+              if (next && publicItems.length === 0 && !publicLoading) {
+                await loadPublicReviewed();
+              }
+            }}
+          >
+            {showPublic ? "▲ Ocultar comentarios publicados" : "▼ Ver comentarios publicados"}
+          </button>
+
+          {showPublic ? (
+            <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
+              <div className="text-sm font-extrabold text-slate-900">
+                Comentarios publicados
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Se actualiza automáticamente cada pocos segundos.
+              </div>
+
+              {publicError ? (
+                <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+                  Error al cargar comentarios: {publicError}
+                </div>
+              ) : null}
+
+              {publicLoading ? (
+                <div className="mt-3 text-sm font-semibold text-slate-700">Cargando...</div>
+              ) : null}
+
+              {!publicLoading && !publicError && publicItems.length === 0 ? (
+                <div className="mt-3 text-sm font-semibold text-slate-700">
+                  Aún no hay comentarios publicados.
+                </div>
+              ) : null}
+
+              <div className="mt-3 space-y-3">
+                {publicItems.map((c) => (
+                  <div
+                    key={c.id}
+                    className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                  >
+                    <div className="text-xs font-extrabold text-slate-900">
+                      {c.group_code} • {new Date(c.created_at).toLocaleString()}
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+                      {c.message}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {/* BLOQUE 5: Yo Político */}
+      <section className={placeholderCard}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          YO POLÍTICO
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Próximamente podrás participar subiendo el enlace de un video corto en
+          TikTok, YouTube o Facebook sobre el tema de la semana.
+        </p>
+
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/60 p-4">
+          <div className="text-sm font-extrabold text-slate-900">Participación en video</div>
+          <ul className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed pl-5 list-disc">
+            <li>Un video por usuario por semana.</li>
+            <li>Duración breve y mensaje preciso.</li>
+            <li>Sujeto a revisión y moderación.</li>
+            <li>Luego pasará a votación ciudadana.</li>
+          </ul>
+
+          <button
+            type="button"
+            disabled
+            className={
+              "mt-4 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
+              "border-2 border-red-600 bg-slate-300 text-slate-700 text-sm font-extrabold cursor-not-allowed"
+            }
+          >
+            Próximamente
+          </button>
+        </div>
+      </section>
+
+      {/* BLOQUE 6: Votación ciudadana */}
+      <section className={placeholderCard}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Votación ciudadana
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Cuando cierre la etapa de videos, aquí aparecerán las participaciones
+          aprobadas para votación del público validado.
+        </p>
+
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
+          <div className="text-sm font-extrabold text-slate-900">Estado actual</div>
+          <div className="mt-2 text-sm font-semibold text-slate-700">
+            Aún no disponible.
+          </div>
+          <div className="mt-2 text-xs text-slate-600 leading-relaxed">
+            La votación semanal estará habilitada cuando exista la fase de videos
+            ciudadanos y control de participación activa.
+          </div>
+        </div>
+      </section>
+
+      {/* BLOQUE 7: Debates anteriores */}
+      <section className={placeholderCard}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Debates anteriores
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Aquí se archivarán los temas semanales, sus comentarios aprobados,
+          participaciones destacadas y resultados.
+        </p>
+
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
+          <div className="text-sm font-extrabold text-slate-900">Archivo histórico</div>
+          <div className="mt-2 text-sm font-semibold text-slate-700">
+            Próximamente se mostrará el historial de temas de debate ciudadano.
+          </div>
+        </div>
+      </section>
+
       {showScrollTop ? (
         <button
           type="button"
