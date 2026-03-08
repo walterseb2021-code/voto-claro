@@ -47,6 +47,7 @@ const [weeklyTopic, setWeeklyTopic] = useState<WeeklyTopicRow | null>(null);
 const [topicDraft, setTopicDraft] = useState("");
 const [questionDraft, setQuestionDraft] = useState("");
 const [savingTopic, setSavingTopic] = useState(false);
+const [runningRotation, setRunningRotation] = useState(false);
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
@@ -154,12 +155,13 @@ const [savingTopic, setSavingTopic] = useState(false);
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
     }
-  }
+   }
+
    async function saveWeeklyTopic() {
-  if (!weeklyTopic?.id) {
+   if (!weeklyTopic?.id) {
     setErrorMsg("No se encontró un tema activo para actualizar.");
     return;
-  }
+   }
 
   const topic = topicDraft.trim();
   const question = questionDraft.trim();
@@ -208,6 +210,39 @@ const [savingTopic, setSavingTopic] = useState(false);
     setErrorMsg(e?.message ?? String(e));
   } finally {
     setSavingTopic(false);
+  }
+}
+async function runWeeklyRotationNow() {
+  setRunningRotation(true);
+  setErrorMsg(null);
+
+  try {
+    const res = await fetch("/api/cron/weekly-topic", {
+      method: "GET",
+      cache: "no-store",
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        json?.detail ??
+        json?.error ??
+        "No se pudo ejecutar la rotación semanal.";
+      throw new Error(msg);
+    }
+
+    const msg =
+      json?.activated
+        ? `Rotación ejecutada ✔ Archivado: ${json.archived} → Activado: ${json.activated}`
+        : json?.message ?? "Rotación ejecutada.";
+
+    setErrorMsg(msg);
+    await loadComments();
+  } catch (e: any) {
+    setErrorMsg(e?.message ?? String(e));
+  } finally {
+    setRunningRotation(false);
   }
 }
   useEffect(() => {
@@ -297,24 +332,34 @@ const [savingTopic, setSavingTopic] = useState(false);
     </div>
 
     <div className="flex gap-2 flex-wrap">
-      <button
-        type="button"
-        onClick={saveWeeklyTopic}
-        className={btnSm}
-        disabled={savingTopic || loading}
-      >
-        {savingTopic ? "Guardando..." : "Guardar tema semanal"}
-      </button>
+  <button
+    type="button"
+    onClick={saveWeeklyTopic}
+    className={btnSm}
+    disabled={savingTopic || loading || runningRotation}
+  >
+    {savingTopic ? "Guardando..." : "Guardar tema semanal"}
+  </button>
 
-      <button
-        type="button"
-        onClick={loadComments}
-        className={btnSm}
-        disabled={savingTopic || loading}
-      >
-        Recargar tema
-      </button>
-    </div>
+  <button
+    type="button"
+    onClick={loadComments}
+    className={btnSm}
+    disabled={savingTopic || loading || runningRotation}
+  >
+    Recargar tema
+  </button>
+
+  <button
+    type="button"
+    onClick={runWeeklyRotationNow}
+    className={btnSm}
+    disabled={savingTopic || loading || runningRotation}
+    title="Ejecuta ahora la rotación semanal sin esperar al cron"
+  >
+    {runningRotation ? "Ejecutando..." : "⏩ Ejecutar cambio semanal ahora"}
+  </button>
+</div>
   </div>
 </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
