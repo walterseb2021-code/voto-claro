@@ -163,6 +163,7 @@ export default function ComentariosPage() {
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
   const [showPublic, setShowPublic] = useState(false);
+  const [showPublicVideos, setShowPublicVideos] = useState(false);
   const [publicItems, setPublicItems] = useState<CommentRow[]>([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
@@ -173,7 +174,9 @@ export default function ComentariosPage() {
   const [myVotedVideoId, setMyVotedVideoId] = useState<string | null>(null);
   const [videoVoteCounts, setVideoVoteCounts] = useState<Record<string, number>>({});
 
-  const [latestOfficialWinner, setLatestOfficialWinner] = useState<LatestOfficialWinner | null>(null);
+  const [latestOfficialWinner, setLatestOfficialWinner] = useState<LatestOfficialWinner | null>(
+    null
+  );
   const [latestOfficialWinnerLoading, setLatestOfficialWinnerLoading] = useState(false);
   const [latestOfficialWinnerError, setLatestOfficialWinnerError] = useState<string | null>(null);
 
@@ -475,23 +478,33 @@ export default function ComentariosPage() {
   }
 
   useEffect(() => {
-    if (!showPublic) return;
+    if (!showPublic && !showPublicVideos) return;
 
-    void loadPublicReviewed();
-    void loadPublicReviewedVideos();
-    void loadMyVoteForWeeklyTopic();
-    void loadVideoVoteCounts();
-
-    const id = window.setInterval(() => {
+    if (showPublic) {
       void loadPublicReviewed();
+    }
+
+    if (showPublicVideos) {
       void loadPublicReviewedVideos();
       void loadMyVoteForWeeklyTopic();
       void loadVideoVoteCounts();
+    }
+
+    const id = window.setInterval(() => {
+      if (showPublic) {
+        void loadPublicReviewed();
+      }
+
+      if (showPublicVideos) {
+        void loadPublicReviewedVideos();
+        void loadMyVoteForWeeklyTopic();
+        void loadVideoVoteCounts();
+      }
     }, 8000);
 
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPublic, timeFilter, weeklyTopicId, deviceId]);
+  }, [showPublic, showPublicVideos, timeFilter, weeklyTopicId, deviceId]);
 
   const weeklyWinner = useMemo(() => {
     if (!publicVideos.length) return null;
@@ -731,8 +744,7 @@ export default function ComentariosPage() {
           </button>
         </div>
       </div>
-
-      {/* BLOQUE 1: Acceso verificado */}
+            {/* BLOQUE 1: Acceso verificado */}
       <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Acceso verificado
@@ -988,7 +1000,7 @@ export default function ComentariosPage() {
         )}
       </section>
 
-      {/* BLOQUE 4: Debate público publicado */}
+      {/* BLOQUE 4: Comentarios aprobados */}
       <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Comentarios aprobados
@@ -1018,13 +1030,8 @@ export default function ComentariosPage() {
               const next = !showPublic;
               setShowPublic(next);
 
-              if (next) {
-                if (publicItems.length === 0 && !publicLoading) {
-                  await loadPublicReviewed();
-                }
-                if (publicVideos.length === 0 && !publicVideosLoading) {
-                  await loadPublicReviewedVideos();
-                }
+              if (next && publicItems.length === 0 && !publicLoading) {
+                await loadPublicReviewed();
               }
             }}
           >
@@ -1070,113 +1077,6 @@ export default function ComentariosPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-
-              <div className="mt-6 border-t-2 border-red-200 pt-4">
-                <div className="text-sm font-extrabold text-slate-900">
-                  Videos aprobados – YO POLÍTICO
-                </div>
-                <div className="mt-1 text-xs text-slate-600">
-                  Aquí se muestran los videos aprobados del tema semanal activo.
-                </div>
-
-                {publicVideosError ? (
-                  <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
-                    Error al cargar videos: {publicVideosError}
-                  </div>
-                ) : null}
-
-                {publicVideosLoading ? (
-                  <div className="mt-3 text-sm font-semibold text-slate-700">Cargando videos...</div>
-                ) : null}
-
-                {!publicVideosLoading && !publicVideosError && publicVideos.length === 0 ? (
-                  <div className="mt-3 text-sm font-semibold text-slate-700">
-                    Aún no hay videos aprobados para este tema.
-                  </div>
-                ) : null}
-
-                {weeklyWinner ? (
-                  <div className="mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4">
-                    <div className="text-sm font-extrabold text-slate-900">
-                      🏆 Político de la semana
-                    </div>
-                    <div className="mt-2 text-base font-extrabold text-slate-900">
-                      {weeklyWinner.title || "Participación ciudadana destacada"}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-700">
-                      Plataforma: {weeklyWinner.platform}
-                    </div>
-                    <div className="mt-1 text-sm font-extrabold text-slate-800">
-                      Votos: {weeklyWinner.votes}
-                    </div>
-
-                    <a
-                      href={weeklyWinner.video_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
-                    >
-                      ▶ Ver video ganador
-                    </a>
-                  </div>
-                ) : null}
-
-                <div className="mt-3 space-y-3">
-                  {publicVideos.map((v) => (
-                    <div
-                      key={v.id}
-                      className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
-                    >
-                      <div className="text-xs font-extrabold text-slate-900">
-                        {v.group_code} • {new Date(v.created_at).toLocaleString()}
-                      </div>
-
-                      <div className="mt-2 text-sm font-semibold text-slate-900">
-                        Plataforma: {v.platform}
-                      </div>
-                      <div className="mt-1 text-xs font-extrabold text-slate-700">
-                        Votos: {videoVoteCounts[v.id] ?? 0}
-                      </div>
-
-                      {v.title ? (
-                        <div className="mt-1 text-sm font-semibold text-slate-800">
-                          {v.title}
-                        </div>
-                      ) : null}
-
-                      <div className="mt-2 text-xs text-slate-600 break-all">
-                        {v.video_url}
-                      </div>
-
-                      <div className="mt-3 flex gap-2 flex-wrap">
-                        <a
-                          href={v.video_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
-                        >
-                          ▶ Ver video
-                        </a>
-
-                        <button
-                          type="button"
-                          onClick={() => voteForVideo(v.id)}
-                          disabled={!!myVotedVideoId || votingVideoId === v.id}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          {votingVideoId === v.id
-                            ? "Votando..."
-                            : myVotedVideoId === v.id
-                            ? "✅ Tu voto"
-                            : myVotedVideoId
-                            ? "Voto cerrado"
-                            : "🗳 Votar"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           ) : null}
@@ -1253,25 +1153,146 @@ export default function ComentariosPage() {
         )}
       </section>
 
-      {/* BLOQUE 6: Votación ciudadana */}
-      <section className={placeholderCard}>
+      {/* BLOQUE 6: Videos aprobados – YO POLÍTICO */}
+      <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
-          Votación ciudadana
+          Videos aprobados – YO POLÍTICO
         </h2>
         <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Cuando cierre la etapa de videos, aquí aparecerán las participaciones
-          aprobadas para votación del público validado.
+          Aquí se muestran por separado las participaciones en video aprobadas del tema semanal activo.
         </p>
 
-        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
-          <div className="text-sm font-extrabold text-slate-900">Estado actual</div>
-          <div className="mt-2 text-sm font-semibold text-slate-700">
-            Aún no disponible.
-          </div>
-          <div className="mt-2 text-xs text-slate-600 leading-relaxed">
-            La votación semanal estará habilitada cuando exista la fase de videos
-            ciudadanos y control de participación activa.
-          </div>
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
+          <button
+            type="button"
+            className={btn + " w-full"}
+            onClick={async () => {
+              const next = !showPublicVideos;
+              setShowPublicVideos(next);
+
+              if (next) {
+                if (publicVideos.length === 0 && !publicVideosLoading) {
+                  await loadPublicReviewedVideos();
+                }
+                await loadMyVoteForWeeklyTopic();
+                await loadVideoVoteCounts();
+              }
+            }}
+          >
+            {showPublicVideos ? "▲ Ocultar videos aprobados" : "▼ Ver videos aprobados"}
+          </button>
+
+          {showPublicVideos ? (
+            <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
+              <div className="text-sm font-extrabold text-slate-900">
+                Videos aprobados – YO POLÍTICO
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Se actualiza automáticamente cada pocos segundos.
+              </div>
+
+              {publicVideosError ? (
+                <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+                  Error al cargar videos: {publicVideosError}
+                </div>
+              ) : null}
+
+              {publicVideosLoading ? (
+                <div className="mt-3 text-sm font-semibold text-slate-700">
+                  Cargando videos...
+                </div>
+              ) : null}
+
+              {!publicVideosLoading && !publicVideosError && publicVideos.length === 0 ? (
+                <div className="mt-3 text-sm font-semibold text-slate-700">
+                  Aún no hay videos aprobados para este tema.
+                </div>
+              ) : null}
+
+              {weeklyWinner ? (
+                <div className="mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4">
+                  <div className="text-sm font-extrabold text-slate-900">
+                    🏆 Político de la semana
+                  </div>
+                  <div className="mt-2 text-base font-extrabold text-slate-900">
+                    {weeklyWinner.title || "Participación ciudadana destacada"}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-slate-700">
+                    Plataforma: {weeklyWinner.platform}
+                  </div>
+                  <div className="mt-1 text-sm font-extrabold text-slate-800">
+                    Votos: {weeklyWinner.votes}
+                  </div>
+
+                  <a
+                    href={weeklyWinner.video_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                  >
+                    ▶ Ver video ganador
+                  </a>
+                </div>
+              ) : null}
+
+              <div className="mt-3 space-y-3">
+                {publicVideos.map((v) => (
+                  <div
+                    key={v.id}
+                    className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                  >
+                    <div className="text-xs font-extrabold text-slate-900">
+                      {v.group_code} • {new Date(v.created_at).toLocaleString()}
+                    </div>
+
+                    <div className="mt-2 text-sm font-semibold text-slate-900">
+                      Plataforma: {v.platform}
+                    </div>
+
+                    <div className="mt-1 text-xs font-extrabold text-slate-700">
+                      Votos: {videoVoteCounts[v.id] ?? 0}
+                    </div>
+
+                    {v.title ? (
+                      <div className="mt-1 text-sm font-semibold text-slate-800">
+                        {v.title}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-2 text-xs text-slate-600 break-all">
+                      {v.video_url}
+                    </div>
+
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      <a
+                        href={v.video_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                      >
+                        ▶ Ver video
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => voteForVideo(v.id)}
+                        disabled={!!myVotedVideoId || votingVideoId === v.id}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {votingVideoId === v.id
+                          ? "Votando..."
+                          : myVotedVideoId === v.id
+                          ? "✅ Tu voto"
+                          : myVotedVideoId
+                          ? "Voto cerrado"
+                          : "🗳 Votar"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
