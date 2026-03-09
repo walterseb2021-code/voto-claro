@@ -15,6 +15,7 @@ type CommentRow = {
   message: string;
   status: "new" | "reviewed" | "archived" | "blocked";
 };
+
 type WeeklyTopicRow = {
   id: string;
   topic: string;
@@ -22,6 +23,21 @@ type WeeklyTopicRow = {
   status: string;
   starts_at: string | null;
   ends_at: string | null;
+  winner_video_entry_id?: string | null;
+  winner_votes?: number | null;
+  winner_published_at?: string | null;
+};
+
+type VideoRow = {
+  id: string;
+  created_at: string;
+  weekly_topic_id: string;
+  device_id: string | null;
+  group_code: string;
+  platform: string;
+  video_url: string;
+  title: string | null;
+  status: "new" | "reviewed" | "archived" | "blocked";
 };
 
 export default function AdminCommentsPage() {
@@ -36,22 +52,28 @@ export default function AdminCommentsPage() {
     return createClient(url, key);
   }, []);
 
-   const [items, setItems] = useState<CommentRow[]>([]);
-const [loading, setLoading] = useState(false);
-const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [items, setItems] = useState<CommentRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-const [groupFilter, setGroupFilter] = useState<string>("ALL");
-const [statusFilter, setStatusFilter] = useState<string>("new");
+  const [groupFilter, setGroupFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("new");
 
-const [weeklyTopic, setWeeklyTopic] = useState<WeeklyTopicRow | null>(null);
-const [topicDraft, setTopicDraft] = useState("");
-const [questionDraft, setQuestionDraft] = useState("");
-const [savingTopic, setSavingTopic] = useState(false);
-const [runningRotation, setRunningRotation] = useState(false);
+  const [weeklyTopic, setWeeklyTopic] = useState<WeeklyTopicRow | null>(null);
+  const [topicDraft, setTopicDraft] = useState("");
+  const [questionDraft, setQuestionDraft] = useState("");
+  const [savingTopic, setSavingTopic] = useState(false);
+  const [runningRotation, setRunningRotation] = useState(false);
+
+  const [videoItems, setVideoItems] = useState<VideoRow[]>([]);
+  const [archivedTopics, setArchivedTopics] = useState<WeeklyTopicRow[]>([]);
 
   function goBack() {
-    if (typeof window !== "undefined" && window.history.length > 1) router.back();
-    else router.push("/admin");
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/admin");
+    }
   }
 
   useEffect(() => {
@@ -85,8 +107,9 @@ const [runningRotation, setRunningRotation] = useState(false);
       const params = new URLSearchParams();
       params.set("limit", "200");
 
-      // Si eliges "Todos", no mandamos status
-      if (statusFilter !== "ALL") params.set("status", statusFilter);
+      if (statusFilter !== "ALL") {
+        params.set("status", statusFilter);
+      }
 
       const res = await fetch(`/api/admin/comments?${params.toString()}`, {
         method: "GET",
@@ -97,23 +120,29 @@ const [runningRotation, setRunningRotation] = useState(false);
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        const msg =
-          json?.reason
-            ? `No autorizado (${json.reason}).`
-            : json?.detail
-            ? json.detail
-            : json?.error
-            ? json.error
-            : "Error desconocido.";
+        const msg = json?.reason
+          ? `No autorizado (${json.reason}).`
+          : json?.detail
+          ? json.detail
+          : json?.error
+          ? json.error
+          : "Error desconocido.";
         throw new Error(msg);
       }
-       const topic = (json?.weeklyTopic ?? null) as WeeklyTopicRow | null;
-       setWeeklyTopic(topic);
-       setTopicDraft(topic?.topic ?? "");
-       setQuestionDraft(topic?.question ?? "");
+
+      const topic = (json?.weeklyTopic ?? null) as WeeklyTopicRow | null;
+      setWeeklyTopic(topic);
+      setTopicDraft(topic?.topic ?? "");
+      setQuestionDraft(topic?.question ?? "");
+
+      const archived = (json?.archivedTopics ?? []) as WeeklyTopicRow[];
+      setArchivedTopics(archived);
+
+      const videos = (json?.videoItems ?? []) as VideoRow[];
+      setVideoItems(videos);
+
       let list = (json?.items ?? []) as CommentRow[];
 
-      // Filtro por grupo (lo hacemos aquí para no tocar el API)
       if (groupFilter !== "ALL") {
         list = list.filter((x) => x.group_code === groupFilter);
       }
@@ -140,14 +169,13 @@ const [runningRotation, setRunningRotation] = useState(false);
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        const msg =
-          json?.reason
-            ? `No autorizado (${json.reason}).`
-            : json?.detail
-            ? json.detail
-            : json?.error
-            ? json.error
-            : "Error desconocido.";
+        const msg = json?.reason
+          ? `No autorizado (${json.reason}).`
+          : json?.detail
+          ? json.detail
+          : json?.error
+          ? json.error
+          : "Error desconocido.";
         throw new Error(msg);
       }
 
@@ -155,99 +183,129 @@ const [runningRotation, setRunningRotation] = useState(false);
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
     }
-   }
-
-   async function saveWeeklyTopic() {
-   if (!weeklyTopic?.id) {
-    setErrorMsg("No se encontró un tema activo para actualizar.");
-    return;
-   }
-
-  const topic = topicDraft.trim();
-  const question = questionDraft.trim();
-
-  if (!topic) {
-    setErrorMsg("Escribe el tema.");
-    return;
   }
 
-  if (!question) {
-    setErrorMsg("Escribe la pregunta guía.");
-    return;
-  }
+  async function setVideoStatus(id: string, status: "reviewed" | "archived") {
+    setErrorMsg(null);
 
-  setSavingTopic(true);
-  setErrorMsg(null);
+    try {
+      const res = await fetch("/api/admin/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ id, status, target: "video" }),
+      });
 
-  try {
-    const res = await fetch("/api/admin/comments", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({
-        id: weeklyTopic.id,
-        topic,
-        question,
-      }),
-    });
+      const json = await res.json().catch(() => null);
 
-    const json = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      const msg =
-        json?.reason
+      if (!res.ok) {
+        const msg = json?.reason
           ? `No autorizado (${json.reason}).`
           : json?.detail
           ? json.detail
           : json?.error
           ? json.error
           : "Error desconocido.";
-      throw new Error(msg);
-    }
+        throw new Error(msg);
+      }
 
-    await loadComments();
-  } catch (e: any) {
-    setErrorMsg(e?.message ?? String(e));
-  } finally {
-    setSavingTopic(false);
+      await loadComments();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? String(e));
+    }
   }
-}
-async function runWeeklyRotationNow() {
-  setRunningRotation(true);
-  setErrorMsg(null);
 
-  try {
-    const res = await fetch("/api/cron/weekly-topic", {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    const json = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      const msg =
-        json?.detail ??
-        json?.error ??
-        "No se pudo ejecutar la rotación semanal.";
-      throw new Error(msg);
+  async function saveWeeklyTopic() {
+    if (!weeklyTopic?.id) {
+      setErrorMsg("No se encontró un tema activo para actualizar.");
+      return;
     }
 
-    const msg =
-      json?.activated
+    const topic = topicDraft.trim();
+    const question = questionDraft.trim();
+
+    if (!topic) {
+      setErrorMsg("Escribe el tema.");
+      return;
+    }
+
+    if (!question) {
+      setErrorMsg("Escribe la pregunta guía.");
+      return;
+    }
+
+    setSavingTopic(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/admin/comments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          id: weeklyTopic.id,
+          topic,
+          question,
+        }),
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg = json?.reason
+          ? `No autorizado (${json.reason}).`
+          : json?.detail
+          ? json.detail
+          : json?.error
+          ? json.error
+          : "Error desconocido.";
+        throw new Error(msg);
+      }
+
+      await loadComments();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? String(e));
+    } finally {
+      setSavingTopic(false);
+    }
+  }
+
+  async function runWeeklyRotationNow() {
+    setRunningRotation(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/cron/weekly-topic", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg =
+          json?.detail ??
+          json?.error ??
+          "No se pudo ejecutar la rotación semanal.";
+        throw new Error(msg);
+      }
+
+      const msg = json?.activated
         ? `Rotación ejecutada ✔ Archivado: ${json.archived} → Activado: ${json.activated}`
         : json?.message ?? "Rotación ejecutada.";
 
-    setErrorMsg(msg);
-    await loadComments();
-  } catch (e: any) {
-    setErrorMsg(e?.message ?? String(e));
-  } finally {
-    setRunningRotation(false);
+      setErrorMsg(msg);
+      await loadComments();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? String(e));
+    } finally {
+      setRunningRotation(false);
+    }
   }
-}
+
   useEffect(() => {
     if (checking) return;
-    loadComments();
+    void loadComments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking, groupFilter, statusFilter]);
 
@@ -259,9 +317,13 @@ async function runWeeklyRotationNow() {
   const btnSm =
     "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm";
+    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
   const select =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
+  const input =
+    "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
+  const textarea =
+    "mt-2 w-full min-h-[100px] rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
 
   if (checking) {
     return (
@@ -292,6 +354,7 @@ async function runWeeklyRotationNow() {
         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
           Admin – Comentarios
         </h1>
+
         <div className="flex gap-2 flex-wrap">
           <Link href="/admin" className={btnSm}>
             🛠 Admin Central
@@ -301,67 +364,118 @@ async function runWeeklyRotationNow() {
           </button>
         </div>
       </div>
-        
+
       <section className={sectionWrap}>
         <div className={inner}>
-           <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
-  <div className="text-sm font-extrabold text-slate-900">🗓 Tema de la semana</div>
-  <div className="mt-1 text-xs text-slate-600">
-    Este bloque controla lo que ve la página pública de comentarios.
-  </div>
+          <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
+            <div className="text-sm font-extrabold text-slate-900">
+              🗓 Tema de la semana
+            </div>
+            <div className="mt-1 text-xs text-slate-600">
+              Este bloque controla lo que ve la página pública de comentarios.
+            </div>
 
-  <div className="mt-4 grid grid-cols-1 gap-3">
-    <div>
-      <div className="text-xs font-extrabold text-slate-700">Tema</div>
-      <input
-        value={topicDraft}
-        onChange={(e) => setTopicDraft(e.target.value)}
-        className="mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold"
-        placeholder="Ej: Corrupción"
-      />
-    </div>
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <div>
+                <div className="text-xs font-extrabold text-slate-700">Tema</div>
+                <input
+                  value={topicDraft}
+                  onChange={(e) => setTopicDraft(e.target.value)}
+                  className={input}
+                  placeholder="Ej: Corrupción"
+                />
+              </div>
 
-    <div>
-      <div className="text-xs font-extrabold text-slate-700">Pregunta guía</div>
-      <textarea
-        value={questionDraft}
-        onChange={(e) => setQuestionDraft(e.target.value)}
-        className="mt-2 w-full min-h-[100px] rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold"
-        placeholder="Escribe la pregunta guía del tema semanal..."
-      />
-    </div>
+              <div>
+                <div className="text-xs font-extrabold text-slate-700">
+                  Pregunta guía
+                </div>
+                <textarea
+                  value={questionDraft}
+                  onChange={(e) => setQuestionDraft(e.target.value)}
+                  className={textarea}
+                  placeholder="Escribe la pregunta guía del tema semanal..."
+                />
+              </div>
 
-    <div className="flex gap-2 flex-wrap">
-  <button
-    type="button"
-    onClick={saveWeeklyTopic}
-    className={btnSm}
-    disabled={savingTopic || loading || runningRotation}
-  >
-    {savingTopic ? "Guardando..." : "Guardar tema semanal"}
-  </button>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={saveWeeklyTopic}
+                  className={btnSm}
+                  disabled={savingTopic || loading || runningRotation}
+                >
+                  {savingTopic ? "Guardando..." : "Guardar tema semanal"}
+                </button>
 
-  <button
-    type="button"
-    onClick={loadComments}
-    className={btnSm}
-    disabled={savingTopic || loading || runningRotation}
-  >
-    Recargar tema
-  </button>
+                <button
+                  type="button"
+                  onClick={loadComments}
+                  className={btnSm}
+                  disabled={savingTopic || loading || runningRotation}
+                >
+                  Recargar tema
+                </button>
 
-  <button
-    type="button"
-    onClick={runWeeklyRotationNow}
-    className={btnSm}
-    disabled={savingTopic || loading || runningRotation}
-    title="Ejecuta ahora la rotación semanal sin esperar al cron"
-  >
-    {runningRotation ? "Ejecutando..." : "⏩ Ejecutar cambio semanal ahora"}
-  </button>
-</div>
-  </div>
-</div>
+                <button
+                  type="button"
+                  onClick={runWeeklyRotationNow}
+                  className={btnSm}
+                  disabled={savingTopic || loading || runningRotation}
+                  title="Ejecuta ahora la rotación semanal sin esperar al cron"
+                >
+                  {runningRotation ? "Ejecutando..." : "⏩ Ejecutar cambio semanal ahora"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
+            <div className="text-sm font-extrabold text-slate-900">
+              🏆 Historial oficial de ganadores
+            </div>
+            <div className="mt-1 text-xs text-slate-600">
+              Aquí se muestran los temas semanales ya cerrados con su resultado oficial.
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {archivedTopics.length === 0 ? (
+                <div className="text-sm font-semibold text-slate-700">
+                  Aún no hay semanas cerradas con ganador oficial guardado.
+                </div>
+              ) : null}
+
+              {archivedTopics.map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                >
+                  <div className="text-sm font-extrabold text-slate-900">{t.topic}</div>
+
+                  <div className="mt-1 text-xs text-slate-600">
+                    Estado: {t.status}
+                    {t.winner_published_at
+                      ? ` • Publicado: ${new Date(t.winner_published_at).toLocaleString()}`
+                      : ""}
+                  </div>
+
+                  <div className="mt-2 text-sm font-semibold text-slate-800 leading-relaxed">
+                    {t.question}
+                  </div>
+
+                  <div className="mt-3 text-sm font-extrabold text-slate-900">
+                    Ganador oficial:{" "}
+                    {t.winner_video_entry_id ? "Sí registrado" : "Sin video ganador"}
+                  </div>
+
+                  <div className="mt-1 text-sm font-semibold text-slate-700">
+                    Votos ganadores: {t.winner_votes ?? 0}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <div className="text-xs font-extrabold text-slate-700">Grupo</div>
@@ -395,7 +509,11 @@ async function runWeeklyRotationNow() {
             </div>
 
             <div className="flex items-end">
-              <button type="button" onClick={loadComments} className={btnSm + " w-full"}>
+              <button
+                type="button"
+                onClick={loadComments}
+                className={btnSm + " w-full"}
+              >
                 {loading ? "Cargando..." : "Recargar"}
               </button>
             </div>
@@ -403,9 +521,98 @@ async function runWeeklyRotationNow() {
 
           {errorMsg ? (
             <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
-              Error: {errorMsg}
+              {errorMsg}
             </div>
           ) : null}
+
+          <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
+            <div className="text-sm font-extrabold text-slate-900">
+              🎥 Videos enviados – YO POLÍTICO
+            </div>
+            <div className="mt-1 text-xs text-slate-600">
+              Aquí se revisan los enlaces enviados por ciudadanos para el tema semanal.
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {videoItems.length === 0 && !loading ? (
+                <div className="text-sm font-semibold text-slate-700">
+                  No hay videos enviados todavía.
+                </div>
+              ) : null}
+
+              {videoItems.map((v) => (
+                <div
+                  key={v.id}
+                  className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                >
+                  <div className="flex flex-wrap gap-2 items-center justify-between">
+                    <div className="text-xs font-extrabold text-slate-900">
+                      {v.group_code} • {new Date(v.created_at).toLocaleString()}
+                    </div>
+                    <div className="text-xs font-extrabold text-slate-700">
+                      status:{" "}
+                      {v.status === "new"
+                        ? "Nuevo"
+                        : v.status === "reviewed"
+                        ? "Revisado"
+                        : v.status === "archived"
+                        ? "Archivado"
+                        : "Bloqueado"}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-sm font-semibold text-slate-900">
+                    Plataforma: {v.platform}
+                  </div>
+
+                  {v.title ? (
+                    <div className="mt-1 text-sm font-semibold text-slate-800">
+                      Título: {v.title}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-2 text-xs text-slate-600 break-all">
+                    {v.video_url}
+                  </div>
+
+                  <div className="mt-2 text-xs text-slate-600">
+                    device: {v.device_id ?? "-"} • id: {v.id}
+                  </div>
+
+                  <div className="mt-3 flex gap-2 flex-wrap">
+                    <a
+                      href={v.video_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1 rounded-lg border-2 border-red-600 bg-green-700 text-white text-xs font-bold"
+                    >
+                      Ver video
+                    </a>
+
+                    {v.status !== "reviewed" && v.status !== "blocked" && (
+                      <button
+                        type="button"
+                        className="px-3 py-1 rounded-lg border-2 border-red-600 bg-green-700 text-white text-xs font-bold"
+                        onClick={() => setVideoStatus(v.id, "reviewed")}
+                      >
+                        Marcar como Revisado
+                      </button>
+                    )}
+
+                    {v.status !== "archived" && (
+                      <button
+                        type="button"
+                        className="px-3 py-1 rounded-lg border-2 border-red-600 bg-slate-700 text-white text-xs font-bold"
+                        onClick={() => setVideoStatus(v.id, "archived")}
+                      >
+                        Marcar como Archivado
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="mt-4 space-y-3">
             {items.length === 0 && !loading ? (
