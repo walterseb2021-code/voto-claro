@@ -15,8 +15,22 @@ function supabaseAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
-export async function GET() {
+function isAuthorizedCronRequest(req: Request) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    throw new Error("Missing CRON_SECRET");
+  }
+
+  const authHeader = req.headers.get("authorization") ?? "";
+  return authHeader === `Bearer ${cronSecret}`;
+}
+
+export async function GET(req: Request) {
   try {
+    if (!isAuthorizedCronRequest(req)) {
+      return json({ error: "UNAUTHORIZED" }, 401);
+    }
+
     const supabase = supabaseAdmin();
     const now = new Date().toISOString();
 

@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     if (!auth.ok) return json({ error: "UNAUTHORIZED", reason: auth.reason }, 401);
 
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status"); // optional: new/reviewed/archived/blocked
+    const status = searchParams.get("status");
     const limit = Math.min(parseInt(searchParams.get("limit") ?? "200", 10) || 200, 500);
 
     const supabase = supabaseAdmin();
@@ -70,86 +70,120 @@ export async function GET(req: Request) {
 
     if (status) q = q.eq("status", status);
 
-   const { data, error } = await q;
-if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+    const { data, error } = await q;
+    if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
-const { data: topicRow, error: topicError } = await supabase
-  .from("weekly_topics")
-  .select("id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at")
-  .eq("status", "active")
-  .order("created_at", { ascending: false })
-  .limit(1)
-  .maybeSingle();
+    const { data: topicRow, error: topicError } = await supabase
+      .from("weekly_topics")
+      .select("id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-if (topicError) {
-  return json({ error: "SUPABASE_ERROR", detail: topicError.message }, 500);
-}
-const { data: archivedTopics, error: archivedTopicsError } = await supabase
-  .from("weekly_topics")
-  .select("id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at")
-  .eq("status", "archived")
-  .order("winner_published_at", { ascending: false })
-  .limit(10);
+    if (topicError) {
+      return json({ error: "SUPABASE_ERROR", detail: topicError.message }, 500);
+    }
 
-if (archivedTopicsError) {
-  return json({ error: "SUPABASE_ERROR", detail: archivedTopicsError.message }, 500);
-}
-const { data: videoRows, error: videoError } = await supabase
-  .from("weekly_video_entries")
-  .select("id,created_at,weekly_topic_id,device_id,group_code,platform,video_url,title,status")
-  .order("created_at", { ascending: false })
-  .limit(100);
+    const { data: archivedTopics, error: archivedTopicsError } = await supabase
+      .from("weekly_topics")
+      .select("id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at")
+      .eq("status", "archived")
+      .order("winner_published_at", { ascending: false })
+      .limit(10);
 
-if (videoError) {
-  return json({ error: "SUPABASE_ERROR", detail: videoError.message }, 500);
-}
+    if (archivedTopicsError) {
+      return json({ error: "SUPABASE_ERROR", detail: archivedTopicsError.message }, 500);
+    }
 
-return json({
-  ok: true,
-  items: data ?? [],
-  weeklyTopic: topicRow ?? null,
-  archivedTopics: archivedTopics ?? [],
-  videoItems: videoRows ?? [],
-});
+    const { data: videoRows, error: videoError } = await supabase
+      .from("weekly_video_entries")
+      .select("id,created_at,weekly_topic_id,device_id,group_code,platform,video_url,title,status")
+      .order("created_at", { ascending: false })
+      .limit(100);
 
+    if (videoError) {
+      return json({ error: "SUPABASE_ERROR", detail: videoError.message }, 500);
+    }
+
+    return json({
+      ok: true,
+      items: data ?? [],
+      weeklyTopic: topicRow ?? null,
+      archivedTopics: archivedTopics ?? [],
+      videoItems: videoRows ?? [],
+    });
   } catch (e: any) {
     return json({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
   }
 }
 
-// POST: cambia status (reviewed / archived) desde admin
+// POST: cambia status / ejecuta acciones admin
 export async function POST(req: Request) {
   try {
     const auth = await requireAdminUser();
     if (!auth.ok) return json({ error: "UNAUTHORIZED", reason: auth.reason }, 401);
 
     const body = await req.json().catch(() => null);
+    const action = String(body?.action ?? "").trim();
+
+    if (action === "run_weekly_rotation") {
+      const cronSecret = process.env.CRON_SECRET;
+      if (!cronSecret) {
+        return json({ error: "MISSING_CRON_SECRET" }, 500);
+      }
+
+      const origin = new URL(req.url).origin;
+
+      const res = await fetch(`${origin}/api/cron/weekly-topic`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${cronSecret}`,
+        },
+        cache: "no-store",
+      });
+
+      const result = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        return json(
+          {
+            error: result?.error ?? "CRON_EXECUTION_FAILED",
+            detail: result?.detail ?? result?.message ?? "No se pudo ejecutar la rotación semanal.",
+          },
+          res.status
+        );
+      }
+
+      return json(result ?? { ok: true });
+    }
+
     const id = body?.id;
     const status = body?.status;
     const target = String(body?.target ?? "comment");
+
     if (!id) return json({ error: "MISSING_ID" }, 400);
     if (!status) return json({ error: "MISSING_STATUS" }, 400);
 
-    // Solo permitimos cambios desde admin a estos estados
     const allowed = new Set(["reviewed", "archived"]);
     if (!allowed.has(status)) return json({ error: "STATUS_NOT_ALLOWED" }, 400);
 
     const supabase = supabaseAdmin();
+    const tableName = target === "video" ? "weekly_video_entries" : "user_comments";
 
-const tableName = target === "video" ? "weekly_video_entries" : "user_comments";
+    const { error } = await supabase
+      .from(tableName)
+      .update({ status })
+      .eq("id", id);
 
-const { error } = await supabase
-  .from(tableName)
-  .update({ status })
-  .eq("id", id);
-
-if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+    if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
     return json({ ok: true });
   } catch (e: any) {
     return json({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
   }
 }
+
 // PATCH: actualizar tema semanal activo desde admin
 export async function PATCH(req: Request) {
   try {

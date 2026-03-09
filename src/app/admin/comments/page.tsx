@@ -59,11 +59,13 @@ export default function AdminCommentsPage() {
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("new");
 
-  const [weeklyTopic, setWeeklyTopic] = useState<WeeklyTopicRow | null>(null);
+    const [weeklyTopic, setWeeklyTopic] = useState<WeeklyTopicRow | null>(null);
   const [topicDraft, setTopicDraft] = useState("");
   const [questionDraft, setQuestionDraft] = useState("");
   const [savingTopic, setSavingTopic] = useState(false);
   const [runningRotation, setRunningRotation] = useState(false);
+  const [rotationMsg, setRotationMsg] = useState<string | null>(null);
+  const [rotationMsgType, setRotationMsgType] = useState<"success" | "error" | null>(null);
 
   const [videoItems, setVideoItems] = useState<VideoRow[]>([]);
   const [archivedTopics, setArchivedTopics] = useState<WeeklyTopicRow[]>([]);
@@ -272,12 +274,18 @@ export default function AdminCommentsPage() {
 
   async function runWeeklyRotationNow() {
     setRunningRotation(true);
+    setRotationMsg(null);
+    setRotationMsgType(null);
     setErrorMsg(null);
 
     try {
-      const res = await fetch("/api/cron/weekly-topic", {
-        method: "GET",
+      const res = await fetch("/api/admin/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         cache: "no-store",
+        body: JSON.stringify({
+          action: "run_weekly_rotation",
+        }),
       });
 
       const json = await res.json().catch(() => null);
@@ -294,10 +302,12 @@ export default function AdminCommentsPage() {
         ? `Rotación ejecutada ✔ Archivado: ${json.archived} → Activado: ${json.activated}`
         : json?.message ?? "Rotación ejecutada.";
 
-      setErrorMsg(msg);
+      setRotationMsg(msg);
+      setRotationMsgType("success");
       await loadComments();
     } catch (e: any) {
-      setErrorMsg(e?.message ?? String(e));
+      setRotationMsg(e?.message ?? String(e));
+      setRotationMsgType("error");
     } finally {
       setRunningRotation(false);
     }
@@ -427,6 +437,23 @@ export default function AdminCommentsPage() {
                   {runningRotation ? "Ejecutando..." : "⏩ Ejecutar cambio semanal ahora"}
                 </button>
               </div>
+                            {runningRotation ? (
+                <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
+                  Ejecutando rotación semanal...
+                </div>
+              ) : null}
+
+              {rotationMsg ? (
+                <div
+                  className={
+                    rotationMsgType === "success"
+                      ? "rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800"
+                      : "rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700"
+                  }
+                >
+                  {rotationMsg}
+                </div>
+              ) : null}
             </div>
           </div>
 
