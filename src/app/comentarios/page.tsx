@@ -36,6 +36,7 @@ type LatestOfficialWinner = {
     created_at: string;
     weekly_topic_id: string;
     device_id: string | null;
+    participant_device_id: string | null;
     group_code: string;
     platform: string;
     video_url: string;
@@ -534,7 +535,7 @@ export default function ComentariosPage() {
 
       const { data: videoData, error: videoError } = await supabase
         .from("weekly_video_entries")
-        .select("id,created_at,weekly_topic_id,device_id,group_code,platform,video_url,title,status")
+        .select("id,created_at,weekly_topic_id,device_id,participant_device_id,group_code,platform,video_url,title,status")
         .eq("id", topicData.winner_video_entry_id)
         .limit(1)
         .maybeSingle();
@@ -548,19 +549,20 @@ export default function ComentariosPage() {
         winnerVideoEntryId: topicData.winner_video_entry_id,
         winnerVotes: Number(topicData.winner_votes ?? 0),
         winnerPublishedAt: topicData.winner_published_at ?? null,
-        video: videoData
-          ? ({
-              id: videoData.id,
-              created_at: videoData.created_at,
-              weekly_topic_id: videoData.weekly_topic_id,
-              device_id: videoData.device_id ?? null,
-              group_code: videoData.group_code,
-              platform: videoData.platform,
-              video_url: videoData.video_url,
-              title: videoData.title,
-              status: videoData.status,
-            } as LatestOfficialWinner["video"])
-          : null,
+       video: videoData
+  ? ({
+      id: videoData.id,
+      created_at: videoData.created_at,
+      weekly_topic_id: videoData.weekly_topic_id,
+      device_id: videoData.device_id ?? null,
+      participant_device_id: videoData.participant_device_id ?? null,
+      group_code: videoData.group_code,
+      platform: videoData.platform,
+      video_url: videoData.video_url,
+      title: videoData.title,
+      status: videoData.status,
+    } as LatestOfficialWinner["video"])
+  : null,
       });
     } catch (e: any) {
       setLatestOfficialWinner(null);
@@ -776,7 +778,10 @@ export default function ComentariosPage() {
     setWinnerQuestionOk(null);
 
     try {
-      const winnerDeviceId = currentWinner.video?.device_id ?? null;
+      const winnerDeviceId =
+  currentWinner.video?.participant_device_id ??
+  currentWinner.video?.device_id ??
+  null;
       const isWinner = !!winnerDeviceId && winnerDeviceId === currentDeviceId;
 
       setIsOfficialWinnerUser(isWinner);
@@ -964,15 +969,16 @@ export default function ComentariosPage() {
 
     setSendingVideo(true);
     try {
-      const payload: any = {
-        weekly_topic_id: weeklyTopicId,
-        device_id: deviceId,
-        group_code: groupCode?.trim() || "GENERAL",
-        platform: videoPlatform,
-        video_url: url,
-        title: title || null,
-        status: "new",
-      };
+       const payload: any = {
+  weekly_topic_id: weeklyTopicId,
+  device_id: deviceId,
+  participant_device_id: deviceId,
+  group_code: groupCode?.trim() || "GENERAL",
+  platform: videoPlatform,
+  video_url: url,
+  title: title || null,
+  status: "new",
+};
 
       const { error } = await supabase.from("weekly_video_entries").insert(payload);
       if (error) throw new Error(error.message);
