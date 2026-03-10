@@ -44,13 +44,14 @@ async function requireAdminUser() {
   const email = data?.user?.email ?? null;
 
   if (!email) return { ok: false as const, reason: "NO_EMAIL" as const };
-  if (email.toLowerCase() !== adminEmail.toLowerCase())
+  if (email.toLowerCase() !== adminEmail.toLowerCase()) {
     return { ok: false as const, reason: "NOT_ADMIN" as const };
+  }
 
   return { ok: true as const, email };
 }
 
-// GET: lista comentarios (para admin)
+// GET: lista comentarios + videos + temas + preguntas fundador + premios trimestrales
 export async function GET(req: Request) {
   try {
     const auth = await requireAdminUser();
@@ -75,7 +76,9 @@ export async function GET(req: Request) {
 
     const { data: topicRow, error: topicError } = await supabase
       .from("weekly_topics")
-      .select("id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at")
+      .select(
+        "id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
+      )
       .eq("status", "active")
       .order("created_at", { ascending: false })
       .limit(1)
@@ -87,7 +90,9 @@ export async function GET(req: Request) {
 
     const { data: archivedTopics, error: archivedTopicsError } = await supabase
       .from("weekly_topics")
-      .select("id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at")
+      .select(
+        "id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
+      )
       .eq("status", "archived")
       .order("winner_published_at", { ascending: false })
       .limit(10);
@@ -106,19 +111,45 @@ export async function GET(req: Request) {
       return json({ error: "SUPABASE_ERROR", detail: videoError.message }, 500);
     }
 
+    const { data: founderQuestions, error: founderQuestionsError } = await supabase
+      .from("weekly_founder_questions")
+      .select(
+        "id,created_at,weekly_topic_id,weekly_video_entry_id,device_id,group_code,question_text,question_status,founder_answer_text,founder_answer_video_url,founder_answered_at,published"
+      )
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (founderQuestionsError) {
+      return json({ error: "SUPABASE_ERROR", detail: founderQuestionsError.message }, 500);
+    }
+
+    const { data: commentAwards, error: commentAwardsError } = await supabase
+      .from("comment_awards")
+      .select(
+        "id,created_at,user_comment_id,device_id,group_code,award_year,award_quarter,award_title,award_note,contact_status,logistics_note,includes_companion,published,published_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (commentAwardsError) {
+      return json({ error: "SUPABASE_ERROR", detail: commentAwardsError.message }, 500);
+    }
+
     return json({
       ok: true,
       items: data ?? [],
       weeklyTopic: topicRow ?? null,
       archivedTopics: archivedTopics ?? [],
       videoItems: videoRows ?? [],
+      founderQuestions: founderQuestions ?? [],
+      commentAwards: commentAwards ?? [],
     });
   } catch (e: any) {
     return json({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
   }
 }
 
-// POST: cambia status / ejecuta acciones admin
+// POST: cambia status / ejecuta acciones admin / responde fundador / crea premio trimestral
 export async function POST(req: Request) {
   try {
     const auth = await requireAdminUser();
@@ -126,6 +157,7 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => null);
     const action = String(body?.action ?? "").trim();
+    const supabase = supabaseAdmin();
 
     if (action === "run_weekly_rotation") {
       const cronSecret = process.env.CRON_SECRET;
@@ -158,6 +190,124 @@ export async function POST(req: Request) {
       return json(result ?? { ok: true });
     }
 
+    if (action === "answer_founder_question") {
+      const id = String(body?.id ?? "").trim();
+      const founderAnswerText = String(body?.founder_answer_text ?? "").trim();
+      const founderAnswerVideoUrl = String(body?.founder_answer_video_url ?? "").trim();
+      const published = Boolean(body?.published ?? false);
+
+      if (!id) return json({ error: "MISSING_ID" }, 400);
+      if (!founderAnswerText && !founderAnswerVideoUrl) {
+        return json({ error: "MISSING_FOUNDER_ANSWER" }, 400);
+      }
+
+      const payload: Record<string, any> = {
+        founder_answer_text: founderAnswerText || null,
+        founder_answer_video_url: founderAnswerVideoUrl || null,
+        founder_answered_at: new Date().toISOString(),
+        question_status: "answered",
+        published,
+      };
+
+      const { error } = await supabase
+        .from("weekly_founder_questions")
+        .update(payload)
+        .eq("id", id);
+
+      if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+
+      return json({ ok: true });
+    }
+
+    if (action === "set_founder_question_publish") {
+      const id = String(body?.id ?? "").trim();
+      const published = Boolean(body?.published ?? false);
+
+      if (!id) return json({ error: "MISSING_ID" }, 400);
+
+      const { error } = await supabase
+        .from("weekly_founder_questions")
+        .update({ published })
+        .eq("id", id);
+
+      if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+
+      return json({ ok: true });
+    }
+
+    if (action === "create_comment_award") {
+      const userCommentId = String(body?.user_comment_id ?? "").trim();
+      const deviceId = body?.device_id ? String(body.device_id).trim() : null;
+      const groupCode = String(body?.group_code ?? "GENERAL").trim() || "GENERAL";
+      const awardYear = Number(body?.award_year ?? 0);
+      const awardQuarter = Number(body?.award_quarter ?? 0);
+      const awardTitle = String(body?.award_title ?? "").trim();
+      const awardNote = String(body?.award_note ?? "").trim();
+      const contactStatus = String(body?.contact_status ?? "pending").trim() || "pending";
+      const logisticsNote = String(body?.logistics_note ?? "").trim();
+      const includesCompanion = body?.includes_companion !== false;
+      const published = Boolean(body?.published ?? false);
+
+      if (!userCommentId) return json({ error: "MISSING_USER_COMMENT_ID" }, 400);
+      if (!awardYear) return json({ error: "MISSING_AWARD_YEAR" }, 400);
+      if (![1, 2, 3, 4].includes(awardQuarter)) {
+        return json({ error: "INVALID_AWARD_QUARTER" }, 400);
+      }
+
+      const payload = {
+        user_comment_id: userCommentId,
+        device_id: deviceId,
+        group_code: groupCode,
+        award_year: awardYear,
+        award_quarter: awardQuarter,
+        award_title: awardTitle || null,
+        award_note: awardNote || null,
+        contact_status: contactStatus,
+        logistics_note: logisticsNote || null,
+        includes_companion: includesCompanion,
+        published,
+        published_at: published ? new Date().toISOString() : null,
+      };
+
+      const { error } = await supabase.from("comment_awards").insert(payload);
+
+      if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+
+      return json({ ok: true });
+    }
+
+    if (action === "update_comment_award") {
+      const id = String(body?.id ?? "").trim();
+      const awardTitle = String(body?.award_title ?? "").trim();
+      const awardNote = String(body?.award_note ?? "").trim();
+      const contactStatus = String(body?.contact_status ?? "").trim();
+      const logisticsNote = String(body?.logistics_note ?? "").trim();
+      const includesCompanion = body?.includes_companion !== false;
+      const published = Boolean(body?.published ?? false);
+
+      if (!id) return json({ error: "MISSING_ID" }, 400);
+
+      const payload: Record<string, any> = {
+        award_title: awardTitle || null,
+        award_note: awardNote || null,
+        includes_companion: includesCompanion,
+        published,
+      };
+
+      if (contactStatus) payload.contact_status = contactStatus;
+      payload.logistics_note = logisticsNote || null;
+      payload.published_at = published ? new Date().toISOString() : null;
+
+      const { error } = await supabase
+        .from("comment_awards")
+        .update(payload)
+        .eq("id", id);
+
+      if (error) return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+
+      return json({ ok: true });
+    }
+
     const id = body?.id;
     const status = body?.status;
     const target = String(body?.target ?? "comment");
@@ -168,7 +318,6 @@ export async function POST(req: Request) {
     const allowed = new Set(["reviewed", "archived"]);
     if (!allowed.has(status)) return json({ error: "STATUS_NOT_ALLOWED" }, 400);
 
-    const supabase = supabaseAdmin();
     const tableName = target === "video" ? "weekly_video_entries" : "user_comments";
 
     const { error } = await supabase
