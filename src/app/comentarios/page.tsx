@@ -43,6 +43,58 @@ type LatestOfficialWinner = {
   } | null;
 };
 
+type ArchivedTopicPublicItem = {
+  id: string;
+  topic: string;
+  question: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  winnerVideoEntryId: string | null;
+  winnerVotes: number;
+  winnerPublishedAt: string | null;
+  video: {
+    id: string;
+    created_at: string;
+    weekly_topic_id: string;
+    group_code: string;
+    platform: string;
+    video_url: string;
+    title: string | null;
+    status: "new" | "reviewed" | "archived" | "blocked";
+  } | null;
+};
+
+type FounderQuestionPublicRow = {
+  id: string;
+  created_at: string;
+  weekly_topic_id: string;
+  weekly_video_entry_id: string;
+  group_code: string;
+  question_text: string;
+  founder_answer_text: string | null;
+  founder_answer_video_url: string | null;
+  founder_answered_at: string | null;
+  published: boolean;
+  topicTitle: string | null;
+  videoTitle: string | null;
+};
+
+type CommentAwardPublicRow = {
+  id: string;
+  created_at: string;
+  user_comment_id: string;
+  group_code: string;
+  award_year: number;
+  award_quarter: number;
+  award_title: string | null;
+  award_note: string | null;
+  contact_status: string;
+  includes_companion: boolean;
+  published: boolean;
+  published_at: string | null;
+  commentMessage: string | null;
+};
+
 type VideoVoteCountRow = {
   weekly_video_entry_id: string;
   count: number;
@@ -180,6 +232,22 @@ export default function ComentariosPage() {
   const [latestOfficialWinnerLoading, setLatestOfficialWinnerLoading] = useState(false);
   const [latestOfficialWinnerError, setLatestOfficialWinnerError] = useState<string | null>(null);
 
+  const [archivedTopicsPublic, setArchivedTopicsPublic] = useState<ArchivedTopicPublicItem[]>([]);
+  const [archivedTopicsPublicLoading, setArchivedTopicsPublicLoading] = useState(false);
+  const [archivedTopicsPublicError, setArchivedTopicsPublicError] = useState<string | null>(null);
+
+  const [founderQuestionsPublic, setFounderQuestionsPublic] = useState<FounderQuestionPublicRow[]>(
+    []
+  );
+  const [founderQuestionsPublicLoading, setFounderQuestionsPublicLoading] = useState(false);
+  const [founderQuestionsPublicError, setFounderQuestionsPublicError] = useState<string | null>(
+    null
+  );
+
+  const [commentAwardsPublic, setCommentAwardsPublic] = useState<CommentAwardPublicRow[]>([]);
+  const [commentAwardsPublicLoading, setCommentAwardsPublicLoading] = useState(false);
+  const [commentAwardsPublicError, setCommentAwardsPublicError] = useState<string | null>(null);
+
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const [checkingData, setCheckingData] = useState(true);
@@ -206,6 +274,9 @@ export default function ComentariosPage() {
 
     void loadWeeklyTopic();
     void loadLatestOfficialWinner();
+    void loadArchivedTopicsPublic();
+    void loadFounderQuestionsPublic();
+    void loadCommentAwardsPublic();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -477,6 +548,206 @@ export default function ComentariosPage() {
     }
   }
 
+  async function loadArchivedTopicsPublic() {
+    setArchivedTopicsPublicLoading(true);
+    setArchivedTopicsPublicError(null);
+
+    try {
+      const { data: topicsData, error: topicsError } = await supabase
+        .from("weekly_topics")
+        .select(
+          "id,topic,question,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
+        )
+        .eq("status", "archived")
+        .order("winner_published_at", { ascending: false })
+        .order("ends_at", { ascending: false })
+        .limit(12);
+
+      if (topicsError) throw new Error(topicsError.message);
+
+      const rows = topicsData ?? [];
+      const winnerIds = rows.map((row: any) => row.winner_video_entry_id).filter(Boolean);
+
+      let videosMap: Record<string, ArchivedTopicPublicItem["video"]> = {};
+
+      if (winnerIds.length > 0) {
+        const { data: videosData, error: videosError } = await supabase
+          .from("weekly_video_entries")
+          .select("id,created_at,weekly_topic_id,group_code,platform,video_url,title,status")
+          .in("id", winnerIds);
+
+        if (videosError) throw new Error(videosError.message);
+
+        videosMap = Object.fromEntries(
+          (videosData ?? []).map((video: any) => [
+            video.id,
+            {
+              id: video.id,
+              created_at: video.created_at,
+              weekly_topic_id: video.weekly_topic_id,
+              group_code: video.group_code,
+              platform: video.platform,
+              video_url: video.video_url,
+              title: video.title,
+              status: video.status,
+            },
+          ])
+        );
+      }
+
+      const normalized: ArchivedTopicPublicItem[] = rows.map((row: any) => ({
+        id: row.id,
+        topic: row.topic ?? "",
+        question: row.question ?? "",
+        starts_at: row.starts_at ?? null,
+        ends_at: row.ends_at ?? null,
+        winnerVideoEntryId: row.winner_video_entry_id ?? null,
+        winnerVotes: Number(row.winner_votes ?? 0),
+        winnerPublishedAt: row.winner_published_at ?? null,
+        video: row.winner_video_entry_id ? videosMap[row.winner_video_entry_id] ?? null : null,
+      }));
+
+      setArchivedTopicsPublic(normalized);
+    } catch (e: any) {
+      setArchivedTopicsPublic([]);
+      setArchivedTopicsPublicError(e?.message ?? String(e));
+    } finally {
+      setArchivedTopicsPublicLoading(false);
+    }
+  }
+
+  async function loadFounderQuestionsPublic() {
+    setFounderQuestionsPublicLoading(true);
+    setFounderQuestionsPublicError(null);
+
+    try {
+      const { data: questionsData, error: questionsError } = await supabase
+        .from("weekly_founder_questions")
+        .select(
+          "id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published"
+        )
+        .eq("published", true)
+        .order("founder_answered_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (questionsError) throw new Error(questionsError.message);
+
+      const rows = questionsData ?? [];
+      const topicIds = [...new Set(rows.map((row: any) => row.weekly_topic_id).filter(Boolean))];
+      const videoIds = [
+        ...new Set(rows.map((row: any) => row.weekly_video_entry_id).filter(Boolean)),
+      ];
+
+      let topicsMap: Record<string, string> = {};
+      let videosMap: Record<string, string | null> = {};
+
+      if (topicIds.length > 0) {
+        const { data: topicsData, error: topicsError } = await supabase
+          .from("weekly_topics")
+          .select("id,topic")
+          .in("id", topicIds);
+
+        if (topicsError) throw new Error(topicsError.message);
+
+        topicsMap = Object.fromEntries((topicsData ?? []).map((row: any) => [row.id, row.topic]));
+      }
+
+      if (videoIds.length > 0) {
+        const { data: videosData, error: videosError } = await supabase
+          .from("weekly_video_entries")
+          .select("id,title")
+          .in("id", videoIds);
+
+        if (videosError) throw new Error(videosError.message);
+
+        videosMap = Object.fromEntries((videosData ?? []).map((row: any) => [row.id, row.title]));
+      }
+
+      const normalized: FounderQuestionPublicRow[] = rows.map((row: any) => ({
+        id: row.id,
+        created_at: row.created_at,
+        weekly_topic_id: row.weekly_topic_id,
+        weekly_video_entry_id: row.weekly_video_entry_id,
+        group_code: row.group_code,
+        question_text: row.question_text,
+        founder_answer_text: row.founder_answer_text ?? null,
+        founder_answer_video_url: row.founder_answer_video_url ?? null,
+        founder_answered_at: row.founder_answered_at ?? null,
+        published: !!row.published,
+        topicTitle: topicsMap[row.weekly_topic_id] ?? null,
+        videoTitle: videosMap[row.weekly_video_entry_id] ?? null,
+      }));
+
+      setFounderQuestionsPublic(normalized);
+    } catch (e: any) {
+      setFounderQuestionsPublic([]);
+      setFounderQuestionsPublicError(e?.message ?? String(e));
+    } finally {
+      setFounderQuestionsPublicLoading(false);
+    }
+  }
+
+  async function loadCommentAwardsPublic() {
+    setCommentAwardsPublicLoading(true);
+    setCommentAwardsPublicError(null);
+
+    try {
+      const { data: awardsData, error: awardsError } = await supabase
+        .from("comment_awards")
+        .select(
+          "id,created_at,user_comment_id,group_code,award_year,award_quarter,award_title,award_note,contact_status,includes_companion,published,published_at"
+        )
+        .eq("published", true)
+        .order("published_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(12);
+
+      if (awardsError) throw new Error(awardsError.message);
+
+      const rows = awardsData ?? [];
+      const commentIds = [...new Set(rows.map((row: any) => row.user_comment_id).filter(Boolean))];
+
+      let commentsMap: Record<string, string | null> = {};
+
+      if (commentIds.length > 0) {
+        const { data: commentsData, error: commentsError } = await supabase
+          .from("user_comments")
+          .select("id,message")
+          .in("id", commentIds);
+
+        if (commentsError) throw new Error(commentsError.message);
+
+        commentsMap = Object.fromEntries(
+          (commentsData ?? []).map((row: any) => [row.id, row.message ?? null])
+        );
+      }
+
+      const normalized: CommentAwardPublicRow[] = rows.map((row: any) => ({
+        id: row.id,
+        created_at: row.created_at,
+        user_comment_id: row.user_comment_id,
+        group_code: row.group_code,
+        award_year: Number(row.award_year ?? 0),
+        award_quarter: Number(row.award_quarter ?? 0),
+        award_title: row.award_title ?? null,
+        award_note: row.award_note ?? null,
+        contact_status: row.contact_status,
+        includes_companion: !!row.includes_companion,
+        published: !!row.published,
+        published_at: row.published_at ?? null,
+        commentMessage: commentsMap[row.user_comment_id] ?? null,
+      }));
+
+      setCommentAwardsPublic(normalized);
+    } catch (e: any) {
+      setCommentAwardsPublic([]);
+      setCommentAwardsPublicError(e?.message ?? String(e));
+    } finally {
+      setCommentAwardsPublicLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!showPublic && !showPublicVideos) return;
 
@@ -713,10 +984,9 @@ export default function ComentariosPage() {
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
     "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
+
   const select =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
-  const placeholderCard =
-    "mt-4 rounded-2xl border-2 border-dashed border-red-500 bg-white/80 p-5 shadow-sm";
 
   return (
     <main className={wrap}>
@@ -744,7 +1014,8 @@ export default function ComentariosPage() {
           </button>
         </div>
       </div>
-            {/* BLOQUE 1: Acceso verificado */}
+
+      {/* BLOQUE 1: Acceso verificado */}
       <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Acceso verificado
@@ -834,8 +1105,7 @@ export default function ComentariosPage() {
           </div>
         ) : null}
       </section>
-
-      {/* BLOQUE 2: Tema de la semana */}
+            {/* BLOQUE 2: Tema de la semana */}
       <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Tema de la semana
@@ -1296,20 +1566,338 @@ export default function ComentariosPage() {
         </div>
       </section>
 
-      {/* BLOQUE 7: Debates anteriores */}
-      <section className={placeholderCard}>
+      {/* BLOQUE 7: Pregunta al fundador */}
+      <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
-          Debates anteriores
+          Pregunta al fundador
         </h2>
         <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Aquí se archivarán los temas semanales, sus comentarios aprobados,
-          participaciones destacadas y resultados.
+          Aquí se publican las preguntas hechas por ganadores semanales y la respuesta oficial
+          del fundador, ya sea por escrito o mediante video.
+        </p>
+
+        {founderQuestionsPublicError ? (
+          <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+            Error al cargar preguntas al fundador: {founderQuestionsPublicError}
+          </div>
+        ) : null}
+
+        {founderQuestionsPublicLoading ? (
+          <div className="mt-4 text-sm font-semibold text-slate-700">
+            Cargando preguntas al fundador...
+          </div>
+        ) : null}
+
+        {!founderQuestionsPublicLoading &&
+        !founderQuestionsPublicError &&
+        founderQuestionsPublic.length === 0 ? (
+          <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4 text-sm font-semibold text-slate-700">
+            Aún no hay preguntas publicadas al fundador.
+          </div>
+        ) : null}
+
+        <div className="mt-4 space-y-4">
+          {founderQuestionsPublic.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+            >
+              <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                Ganador semanal
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-800">
+                Grupo: {item.group_code}
+              </div>
+
+              {item.topicTitle ? (
+                <div className="mt-1 text-sm font-semibold text-slate-800">
+                  Tema: {item.topicTitle}
+                </div>
+              ) : null}
+
+              {item.videoTitle ? (
+                <div className="mt-1 text-sm font-semibold text-slate-800">
+                  Video ganador: {item.videoTitle}
+                </div>
+              ) : null}
+
+              <div className="mt-4 text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                Pregunta
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+                {item.question_text}
+              </div>
+
+              {item.founder_answer_text ? (
+                <>
+                  <div className="mt-4 text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                    Respuesta del fundador
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+                    {item.founder_answer_text}
+                  </div>
+                </>
+              ) : null}
+
+              {item.founder_answer_video_url ? (
+                <a
+                  href={item.founder_answer_video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                >
+                  ▶ Ver video de respuesta
+                </a>
+              ) : null}
+
+              {item.founder_answered_at ? (
+                <div className="mt-3 text-xs font-semibold text-slate-600">
+                  Publicado: {new Date(item.founder_answered_at).toLocaleString()}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* BLOQUE 8: Ganador trimestral de comentarios */}
+      <section className={card}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Ganador trimestral de comentarios
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Cada 3 meses podrá seleccionarse una participación ciudadana destacada entre
+          los comentarios aprobados. La coordinación del evento, viaje, estadía y
+          acompañante se realiza con el contacto ya registrado.
+        </p>
+
+        {commentAwardsPublicError ? (
+          <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+            Error al cargar ganadores trimestrales: {commentAwardsPublicError}
+          </div>
+        ) : null}
+
+        {commentAwardsPublicLoading ? (
+          <div className="mt-4 text-sm font-semibold text-slate-700">
+            Cargando ganadores trimestrales...
+          </div>
+        ) : null}
+
+        {!commentAwardsPublicLoading &&
+        !commentAwardsPublicError &&
+        commentAwardsPublic.length === 0 ? (
+          <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4 text-sm font-semibold text-slate-700">
+            Aún no hay ganadores trimestrales publicados.
+          </div>
+        ) : null}
+
+        <div className="mt-4 space-y-4">
+          {commentAwardsPublic.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+            >
+              <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                Premio trimestral
+              </div>
+              <div className="mt-1 text-sm font-extrabold text-slate-900">
+                {item.award_title || "Participación ciudadana destacada"}
+              </div>
+
+              <div className="mt-1 text-sm font-semibold text-slate-700">
+                Grupo: {item.group_code}
+              </div>
+
+              <div className="mt-1 text-sm font-semibold text-slate-700">
+                Periodo: {item.award_year} - Trimestre {item.award_quarter}
+              </div>
+
+              {item.award_note ? (
+                <div className="mt-3 text-sm font-semibold text-slate-800 whitespace-pre-wrap">
+                  {item.award_note}
+                </div>
+              ) : null}
+
+              {item.commentMessage ? (
+                <>
+                  <div className="mt-4 text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                    Comentario ganador
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+                    {item.commentMessage}
+                  </div>
+                </>
+              ) : null}
+
+              <div className="mt-3 text-xs font-semibold text-slate-600">
+                Acompañante incluido: {item.includes_companion ? "Sí" : "No"}
+              </div>
+
+              {item.published_at ? (
+                <div className="mt-1 text-xs font-semibold text-slate-600">
+                  Publicado: {new Date(item.published_at).toLocaleString()}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* BLOQUE 9: Historial público de ganadores */}
+      <section className={card}>
+        <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+          Historial público de ganadores
+        </h2>
+        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Este bloque mantiene la transparencia de la premiación semanal y trimestral,
+          mostrando los ganadores a través del tiempo.
         </p>
 
         <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
-          <div className="text-sm font-extrabold text-slate-900">Archivo histórico</div>
-          <div className="mt-2 text-sm font-semibold text-slate-700">
-            Próximamente se mostrará el historial de temas de debate ciudadano.
+          <div className="text-sm font-extrabold text-slate-900">
+            🏆 Ganadores semanales de video
+          </div>
+          <div className="mt-1 text-xs text-slate-600">
+            Historial oficial de semanas cerradas con video ganador.
+          </div>
+
+          {archivedTopicsPublicError ? (
+            <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+              Error al cargar historial semanal: {archivedTopicsPublicError}
+            </div>
+          ) : null}
+
+          {archivedTopicsPublicLoading ? (
+            <div className="mt-3 text-sm font-semibold text-slate-700">
+              Cargando historial semanal...
+            </div>
+          ) : null}
+
+          {!archivedTopicsPublicLoading &&
+          !archivedTopicsPublicError &&
+          archivedTopicsPublic.length === 0 ? (
+            <div className="mt-3 text-sm font-semibold text-slate-700">
+              Aún no hay semanas cerradas publicadas.
+            </div>
+          ) : null}
+
+          <div className="mt-4 space-y-4">
+            {archivedTopicsPublic.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-2xl border-2 border-red-600 bg-green-50/50 p-4"
+              >
+                <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                  Semana cerrada
+                </div>
+                <div className="mt-1 text-base font-extrabold text-slate-900">
+                  {item.topic}
+                </div>
+
+                {item.question ? (
+                  <div className="mt-2 text-sm font-semibold text-slate-800 leading-relaxed">
+                    {item.question}
+                  </div>
+                ) : null}
+
+                <div className="mt-3 text-sm font-extrabold text-slate-900">
+                  Votos oficiales: {item.winnerVotes}
+                </div>
+
+                {item.winnerPublishedAt ? (
+                  <div className="mt-1 text-xs font-semibold text-slate-600">
+                    Publicado: {new Date(item.winnerPublishedAt).toLocaleString()}
+                  </div>
+                ) : null}
+
+                {item.video ? (
+                  <div className="mt-4 rounded-2xl border-2 border-red-200 bg-white/90 p-4">
+                    <div className="text-sm font-extrabold text-slate-900">
+                      {item.video.title || "Participación ciudadana destacada"}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-700">
+                      Grupo: {item.video.group_code}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-700">
+                      Plataforma: {item.video.platform}
+                    </div>
+
+                    <a
+                      href={item.video.video_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                    >
+                      ▶ Ver video ganador
+                    </a>
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm font-semibold text-slate-700">
+                    Esta semana cerró sin video ganador publicado.
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
+          <div className="text-sm font-extrabold text-slate-900">
+            ✈ Ganadores trimestrales de comentarios
+          </div>
+          <div className="mt-1 text-xs text-slate-600">
+            Historial público de reconocimientos trimestrales.
+          </div>
+
+          {commentAwardsPublicError ? (
+            <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+              Error al cargar historial trimestral: {commentAwardsPublicError}
+            </div>
+          ) : null}
+
+          {commentAwardsPublicLoading ? (
+            <div className="mt-3 text-sm font-semibold text-slate-700">
+              Cargando historial trimestral...
+            </div>
+          ) : null}
+
+          {!commentAwardsPublicLoading &&
+          !commentAwardsPublicError &&
+          commentAwardsPublic.length === 0 ? (
+            <div className="mt-3 text-sm font-semibold text-slate-700">
+              Aún no hay reconocimientos trimestrales publicados.
+            </div>
+          ) : null}
+
+          <div className="mt-4 space-y-4">
+            {commentAwardsPublic.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-2xl border-2 border-red-600 bg-green-50/50 p-4"
+              >
+                <div className="text-sm font-extrabold text-slate-900">
+                  {item.award_title || "Participación ciudadana destacada"}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700">
+                  Grupo: {item.group_code}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700">
+                  Periodo: {item.award_year} - Trimestre {item.award_quarter}
+                </div>
+
+                {item.award_note ? (
+                  <div className="mt-2 text-sm font-semibold text-slate-800 whitespace-pre-wrap">
+                    {item.award_note}
+                  </div>
+                ) : null}
+
+                {item.published_at ? (
+                  <div className="mt-2 text-xs font-semibold text-slate-600">
+                    Publicado: {new Date(item.published_at).toLocaleString()}
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
         </div>
       </section>
