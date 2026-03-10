@@ -966,6 +966,24 @@ export default function ComentariosPage() {
       setErrMsg("El título corto no debe superar 120 caracteres.");
       return;
     }
+         const participantId = deviceId;
+
+    const { data: existingVideo, error: existingVideoError } = await supabase
+      .from("weekly_video_entries")
+      .select("id")
+      .eq("weekly_topic_id", weeklyTopicId)
+      .eq("participant_device_id", participantId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingVideoError) {
+      throw new Error(existingVideoError.message);
+    }
+
+    if (existingVideo) {
+      setErrMsg("Ya enviaste un video para este tema semanal.");
+      return;
+    }
 
     setSendingVideo(true);
     try {
