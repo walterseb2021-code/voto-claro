@@ -317,7 +317,7 @@ export default function ComentariosPage() {
 
     try {
       const { data, error } = await supabase
-        .from("reto_premio_participants")
+        .from("comment_access_participants")
         .select("device_id")
         .eq("device_id", currentDeviceId)
         .limit(1);
@@ -368,7 +368,7 @@ export default function ComentariosPage() {
     if (ce) payload.celular = ce;
 
     const { error } = await supabase
-      .from("reto_premio_participants")
+      .from("comment_access_participants")
       .upsert(payload, { onConflict: "device_id" });
 
     if (error) throw new Error(error.message);
