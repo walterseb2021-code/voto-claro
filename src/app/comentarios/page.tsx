@@ -35,6 +35,7 @@ type LatestOfficialWinner = {
     id: string;
     created_at: string;
     weekly_topic_id: string;
+    device_id: string | null;
     group_code: string;
     platform: string;
     video_url: string;
@@ -93,6 +94,19 @@ type CommentAwardPublicRow = {
   published: boolean;
   published_at: string | null;
   commentMessage: string | null;
+};
+
+type WinnerFounderQuestionRow = {
+  id: string;
+  created_at: string;
+  weekly_topic_id: string;
+  weekly_video_entry_id: string;
+  group_code: string;
+  question_text: string;
+  founder_answer_text: string | null;
+  founder_answer_video_url: string | null;
+  founder_answered_at: string | null;
+  published: boolean;
 };
 
 type VideoVoteCountRow = {
@@ -267,6 +281,14 @@ export default function ComentariosPage() {
   const [weeklyQuestion, setWeeklyQuestion] = useState<string>("");
   const [weeklyTopicId, setWeeklyTopicId] = useState<string>("");
 
+  const [winnerQuestionText, setWinnerQuestionText] = useState("");
+  const [winnerQuestionSending, setWinnerQuestionSending] = useState(false);
+  const [winnerQuestionError, setWinnerQuestionError] = useState<string | null>(null);
+  const [winnerQuestionOk, setWinnerQuestionOk] = useState<string | null>(null);
+  const [winnerQuestionLoading, setWinnerQuestionLoading] = useState(false);
+  const [isOfficialWinnerUser, setIsOfficialWinnerUser] = useState(false);
+  const [myWinnerQuestion, setMyWinnerQuestion] = useState<WinnerFounderQuestionRow | null>(null);
+
   useEffect(() => {
     const g = readCookie("vc_group");
     if (g) setGroupCode(g);
@@ -317,49 +339,48 @@ export default function ComentariosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId]);
 
-  async function saveMyData() {
-    setOkMsg(null);
-    setErrMsg(null);
-    setDataError(null);
+ async function saveMyData() {
+  setOkMsg(null);
+  setErrMsg(null);
+  setDataError(null);
 
-    if (!deviceId) {
-      setErrMsg("No se pudo identificar tu dispositivo. Recarga la página.");
-      return;
-    }
-
-    const em = email.trim();
-    const ce = celular.trim();
-
-    if (!em && !ce) {
-      setErrMsg("Escribe al menos un correo o un celular.");
-      return;
-    }
-
-    setSavingData(true);
-    try {
-      const payload: any = {
-        device_id: deviceId,
-        group_code: groupCode,
-      };
-
-      if (em) payload.email = em;
-      if (ce) payload.celular = ce;
-
-      const { error } = await supabase
-        .from("reto_premio_participants")
-        .update(payload)
-        .eq("device_id", deviceId);
-
-      if (error) throw new Error(error.message);
-
-      setHasData(true);
-      setOkMsg("Listo. Tus datos fueron guardados. Ya puedes comentar.");
-    } catch (e: any) {
-      setErrMsg(e?.message ?? String(e));
-    } finally {
-      setSavingData(false);
-    }
+  if (!deviceId) {
+    setErrMsg("No se pudo identificar tu dispositivo. Recarga la página.");
+    return;
   }
+
+  const em = email.trim();
+  const ce = celular.trim();
+
+  if (!em && !ce) {
+    setErrMsg("Escribe al menos un correo o un celular.");
+    return;
+  }
+
+  setSavingData(true);
+  try {
+    const payload: any = {
+      device_id: deviceId,
+      group_code: groupCode?.trim() || "GENERAL",
+    };
+
+    if (em) payload.email = em;
+    if (ce) payload.celular = ce;
+
+    const { error } = await supabase
+      .from("reto_premio_participants")
+      .upsert(payload, { onConflict: "device_id" });
+
+    if (error) throw new Error(error.message);
+
+    setHasData(true);
+    setOkMsg("Listo. Tus datos fueron guardados. Ya puedes comentar.");
+  } catch (e: any) {
+    setErrMsg(e?.message ?? String(e));
+  } finally {
+    setSavingData(false);
+  }
+}
 
   async function loadPublicReviewed() {
     setPublicLoading(true);
@@ -513,7 +534,7 @@ export default function ComentariosPage() {
 
       const { data: videoData, error: videoError } = await supabase
         .from("weekly_video_entries")
-        .select("id,created_at,weekly_topic_id,group_code,platform,video_url,title,status")
+        .select("id,created_at,weekly_topic_id,device_id,group_code,platform,video_url,title,status")
         .eq("id", topicData.winner_video_entry_id)
         .limit(1)
         .maybeSingle();
@@ -532,6 +553,7 @@ export default function ComentariosPage() {
               id: videoData.id,
               created_at: videoData.created_at,
               weekly_topic_id: videoData.weekly_topic_id,
+              device_id: videoData.device_id ?? null,
               group_code: videoData.group_code,
               platform: videoData.platform,
               video_url: videoData.video_url,
@@ -747,6 +769,56 @@ export default function ComentariosPage() {
       setCommentAwardsPublicLoading(false);
     }
   }
+
+  async function loadMyWinnerQuestion(currentWinner: LatestOfficialWinner, currentDeviceId: string) {
+    setWinnerQuestionLoading(true);
+    setWinnerQuestionError(null);
+    setWinnerQuestionOk(null);
+
+    try {
+      const winnerDeviceId = currentWinner.video?.device_id ?? null;
+      const isWinner = !!winnerDeviceId && winnerDeviceId === currentDeviceId;
+
+      setIsOfficialWinnerUser(isWinner);
+
+      if (!isWinner) {
+        setMyWinnerQuestion(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("weekly_founder_questions")
+        .select(
+          "id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published"
+        )
+        .eq("weekly_topic_id", currentWinner.topicId)
+        .eq("weekly_video_entry_id", currentWinner.winnerVideoEntryId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+
+      setMyWinnerQuestion((data as WinnerFounderQuestionRow | null) ?? null);
+    } catch (e: any) {
+      setIsOfficialWinnerUser(false);
+      setMyWinnerQuestion(null);
+      setWinnerQuestionError(e?.message ?? String(e));
+    } finally {
+      setWinnerQuestionLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!deviceId || !latestOfficialWinner?.winnerVideoEntryId || !latestOfficialWinner.video) {
+      setIsOfficialWinnerUser(false);
+      setMyWinnerQuestion(null);
+      return;
+    }
+
+    void loadMyWinnerQuestion(latestOfficialWinner, deviceId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId, latestOfficialWinner?.winnerVideoEntryId]);
 
   useEffect(() => {
     if (!showPublic && !showPublicVideos) return;
@@ -972,6 +1044,102 @@ export default function ComentariosPage() {
     }
   }
 
+  async function onSubmitWinnerQuestion(e: React.FormEvent) {
+    e.preventDefault();
+    setWinnerQuestionError(null);
+    setWinnerQuestionOk(null);
+
+    if (!deviceId) {
+      setWinnerQuestionError("No se pudo identificar tu dispositivo.");
+      return;
+    }
+
+    if (!latestOfficialWinner || !latestOfficialWinner.video) {
+      setWinnerQuestionError("No se encontró un ganador oficial habilitado para esta acción.");
+      return;
+    }
+
+    if (!isOfficialWinnerUser) {
+      setWinnerQuestionError("Este formulario solo está disponible para el ganador semanal oficial.");
+      return;
+    }
+
+    if (myWinnerQuestion) {
+      setWinnerQuestionError("Ya registraste tu pregunta al fundador y no puede editarse.");
+      return;
+    }
+
+    const text = winnerQuestionText.trim();
+
+    if (!text) {
+      setWinnerQuestionError("Escribe tu pregunta antes de enviarla.");
+      return;
+    }
+
+    if (text.length > 500) {
+      setWinnerQuestionError("La pregunta no debe superar 500 caracteres.");
+      return;
+    }
+
+    setWinnerQuestionSending(true);
+
+    try {
+      const { data: existingQuestion, error: existingError } = await supabase
+        .from("weekly_founder_questions")
+        .select("id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published")
+        .eq("weekly_topic_id", latestOfficialWinner.topicId)
+        .eq("weekly_video_entry_id", latestOfficialWinner.winnerVideoEntryId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) throw new Error(existingError.message);
+
+      if (existingQuestion) {
+        setMyWinnerQuestion(existingQuestion as WinnerFounderQuestionRow);
+        setWinnerQuestionError("Ya existe una pregunta registrada para este ganador.");
+        return;
+      }
+
+      const payload = {
+        weekly_topic_id: latestOfficialWinner.topicId,
+        weekly_video_entry_id: latestOfficialWinner.winnerVideoEntryId,
+        group_code: latestOfficialWinner.video.group_code || groupCode?.trim() || "GENERAL",
+        question_text: text,
+        published: false,
+      };
+
+      const { data, error } = await supabase
+        .from("weekly_founder_questions")
+        .insert(payload)
+        .select(
+          "id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published"
+        )
+        .single();
+
+       if (error) {
+  const msg = error.message?.toLowerCase() || "";
+
+  if (msg.includes("duplicate") || msg.includes("unique")) {
+    throw new Error("Ya existe una pregunta registrada para este ganador.");
+  }
+
+  throw new Error(error.message);
+}
+
+      setMyWinnerQuestion(data as WinnerFounderQuestionRow);
+      setWinnerQuestionText("");
+      setWinnerQuestionOk(
+        "Tu pregunta fue registrada correctamente. Quedará pendiente hasta la respuesta oficial del fundador."
+      );
+      await loadFounderQuestionsPublic();
+    } catch (e: any) {
+      setWinnerQuestionError(e?.message ?? String(e));
+    } finally {
+      setWinnerQuestionSending(false);
+    }
+  }
+
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-3xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
   const card = "mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-5 shadow-sm";
@@ -1105,7 +1273,8 @@ export default function ComentariosPage() {
           </div>
         ) : null}
       </section>
-            {/* BLOQUE 2: Tema de la semana */}
+
+      {/* BLOQUE 2: Tema de la semana */}
       <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Tema de la semana
@@ -1575,6 +1744,84 @@ export default function ComentariosPage() {
           Aquí se publican las preguntas hechas por ganadores semanales y la respuesta oficial
           del fundador, ya sea por escrito o mediante video.
         </p>
+
+        {winnerQuestionLoading ? (
+          <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-semibold text-slate-700">
+            Verificando si puedes enviar tu pregunta al fundador...
+          </div>
+        ) : null}
+
+        {isOfficialWinnerUser && latestOfficialWinner ? (
+          <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/70 p-4">
+            <div className="text-sm font-extrabold text-slate-900">
+              Tu pregunta al fundador
+            </div>
+            <div className="mt-1 text-xs text-slate-600">
+              Este formulario solo está habilitado para el ganador semanal oficial. Solo se permite una pregunta y no puede editarse después.
+            </div>
+
+            {winnerQuestionOk ? (
+              <div className="mt-4 rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
+                {winnerQuestionOk}
+              </div>
+            ) : null}
+
+            {winnerQuestionError ? (
+              <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+                Error: {winnerQuestionError}
+              </div>
+            ) : null}
+
+            {myWinnerQuestion ? (
+              <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
+                <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                  Tu pregunta registrada
+                </div>
+                <div className="mt-2 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+                  {myWinnerQuestion.question_text}
+                </div>
+
+                <div className="mt-3 text-xs font-semibold text-slate-600">
+                  Enviada: {new Date(myWinnerQuestion.created_at).toLocaleString()}
+                </div>
+
+                {!myWinnerQuestion.founder_answer_text && !myWinnerQuestion.founder_answer_video_url ? (
+                  <div className="mt-3 rounded-xl border-2 border-red-600 bg-green-50 p-3 text-sm font-semibold text-slate-800">
+                    Tu pregunta ya fue enviada y está pendiente de respuesta del fundador.
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <form onSubmit={onSubmitWinnerQuestion} className="grid gap-4 mt-4">
+                <div>
+                  <div className={label}>Tema ganador</div>
+                  <div className="mt-2 rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                    {latestOfficialWinner.topic}
+                  </div>
+                </div>
+
+                <div>
+                  <div className={label}>Tu pregunta</div>
+                  <textarea
+                    className={textarea}
+                    value={winnerQuestionText}
+                    onChange={(e) => setWinnerQuestionText(e.target.value)}
+                    placeholder="Escribe aquí tu pregunta al fundador..."
+                    maxLength={500}
+                  />
+                  <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-600">
+                    <span>Máximo 500 caracteres. Solo puedes enviarla una vez.</span>
+                    <span>{winnerQuestionText.length}/500</span>
+                  </div>
+                </div>
+
+                <button type="submit" className={btn} disabled={winnerQuestionSending}>
+                  {winnerQuestionSending ? "Enviando pregunta..." : "Enviar pregunta al fundador"}
+                </button>
+              </form>
+            )}
+          </div>
+        ) : null}
 
         {founderQuestionsPublicError ? (
           <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
