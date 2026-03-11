@@ -340,7 +340,7 @@ export default function ComentariosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId]);
 
- async function saveMyData() {
+   async function saveMyData() {
   setOkMsg(null);
   setErrMsg(null);
   setDataError(null);
@@ -359,23 +359,61 @@ export default function ComentariosPage() {
   }
 
   setSavingData(true);
+
   try {
-    const payload: any = {
-      device_id: deviceId,
-      group_code: groupCode?.trim() || "GENERAL",
-    };
+    let participant: any = null;
 
-    if (em) payload.email = em;
-    if (ce) payload.celular = ce;
+    if (em) {
+      const { data } = await supabase
+        .from("comment_access_participants")
+        .select("*")
+        .eq("email", em)
+        .limit(1)
+        .maybeSingle();
 
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .upsert(payload, { onConflict: "device_id" });
+      if (data) participant = data;
+    }
 
-    if (error) throw new Error(error.message);
+    if (!participant && ce) {
+      const { data } = await supabase
+        .from("comment_access_participants")
+        .select("*")
+        .eq("celular", ce)
+        .limit(1)
+        .maybeSingle();
+
+      if (data) participant = data;
+    }
+
+    if (participant) {
+      const { error } = await supabase
+        .from("comment_access_participants")
+        .update({
+          device_id: deviceId,
+          group_code: groupCode?.trim() || "GENERAL",
+        })
+        .eq("id", participant.id);
+
+      if (error) throw new Error(error.message);
+    } else {
+      const payload: any = {
+        device_id: deviceId,
+        group_code: groupCode?.trim() || "GENERAL",
+      };
+
+      if (em) payload.email = em;
+      if (ce) payload.celular = ce;
+
+      const { error } = await supabase
+        .from("comment_access_participants")
+        .insert(payload);
+
+      if (error) throw new Error(error.message);
+    }
 
     setHasData(true);
     setOkMsg("Listo. Tus datos fueron guardados. Ya puedes comentar.");
+
   } catch (e: any) {
     setErrMsg(e?.message ?? String(e));
   } finally {
@@ -929,7 +967,7 @@ export default function ComentariosPage() {
     }
   }
 
-   async function onSubmitVideo(e: React.FormEvent) {
+ async function onSubmitVideo(e: React.FormEvent) {
   e.preventDefault();
   setOkMsg(null);
   setErrMsg(null);
@@ -1034,7 +1072,6 @@ export default function ComentariosPage() {
     setSendingVideo(false);
   }
 }
-
   async function voteForVideo(videoId: string) {
     setOkMsg(null);
     setErrMsg(null);
