@@ -929,91 +929,111 @@ export default function ComentariosPage() {
     }
   }
 
-  async function onSubmitVideo(e: React.FormEvent) {
-    e.preventDefault();
-    setOkMsg(null);
-    setErrMsg(null);
+   async function onSubmitVideo(e: React.FormEvent) {
+  e.preventDefault();
+  setOkMsg(null);
+  setErrMsg(null);
 
-    if (checkingData) {
-      setErrMsg("Espera un momento… estamos verificando tus datos.");
-      return;
-    }
-
-    if (!hasData) {
-      setErrMsg("Para participar con video, primero debes registrar tu correo o celular.");
-      return;
-    }
-
-    if (!weeklyTopicId) {
-      setErrMsg("No se encontró un tema semanal activo.");
-      return;
-    }
-
-    const url = videoUrl.trim();
-    const title = videoTitle.trim();
-
-    if (!url) {
-      setErrMsg("Pega el enlace del video.");
-      return;
-    }
-
-    if (!isValidVideoUrl(url)) {
-      setErrMsg("Pega un enlace válido (https://...).");
-      return;
-    }
-
-    if (title.length > 120) {
-      setErrMsg("El título corto no debe superar 120 caracteres.");
-      return;
-    }
-         const participantId = deviceId;
-
-    const { data: existingVideo, error: existingVideoError } = await supabase
-      .from("weekly_video_entries")
-      .select("id")
-      .eq("weekly_topic_id", weeklyTopicId)
-      .eq("participant_device_id", participantId)
-      .limit(1)
-      .maybeSingle();
-
-    if (existingVideoError) {
-      throw new Error(existingVideoError.message);
-    }
-
-    if (existingVideo) {
-      setErrMsg("Ya enviaste un video para este tema semanal.");
-      return;
-    }
-
-    setSendingVideo(true);
-    try {
-       const payload: any = {
-  weekly_topic_id: weeklyTopicId,
-  device_id: deviceId,
-  participant_device_id: deviceId,
-  group_code: groupCode?.trim() || "GENERAL",
-  platform: videoPlatform,
-  video_url: url,
-  title: title || null,
-  status: "new",
-};
-
-      const { error } = await supabase.from("weekly_video_entries").insert(payload);
-      if (error) throw new Error(error.message);
-
-      setVideoUrl("");
-      setVideoTitle("");
-      setVideoPlatform("YOUTUBE");
-
-      setOkMsg(
-        "Tu video fue enviado y está en revisión. Se publicará cuando sea aprobado por moderación."
-      );
-    } catch (e: any) {
-      setErrMsg(e?.message ?? String(e));
-    } finally {
-      setSendingVideo(false);
-    }
+  if (checkingData) {
+    setErrMsg("Espera un momento… estamos verificando tus datos.");
+    return;
   }
+
+  if (!hasData) {
+    setErrMsg("Para participar con video, primero debes registrar tu correo o celular.");
+    return;
+  }
+
+  if (!weeklyTopicId) {
+    setErrMsg("No se encontró un tema semanal activo.");
+    return;
+  }
+
+  const url = videoUrl.trim();
+  const title = videoTitle.trim();
+
+  if (!url) {
+    setErrMsg("Pega el enlace del video.");
+    return;
+  }
+
+  if (!isValidVideoUrl(url)) {
+    setErrMsg("Pega un enlace válido (https://...).");
+    return;
+  }
+
+  if (title.length > 120) {
+    setErrMsg("El título corto no debe superar 120 caracteres.");
+    return;
+  }
+
+  const { data: participantRow, error: participantRowError } = await supabase
+    .from("comment_access_participants")
+    .select("id")
+    .eq("device_id", deviceId)
+    .limit(1)
+    .maybeSingle();
+
+  if (participantRowError) {
+    setErrMsg(participantRowError.message);
+    return;
+  }
+
+  if (!participantRow?.id) {
+    setErrMsg("No se encontró tu acceso verificado. Vuelve a guardar tus datos.");
+    return;
+  }
+
+  const accessParticipantId = participantRow.id;
+
+  const { data: existingVideo, error: existingVideoError } = await supabase
+    .from("weekly_video_entries")
+    .select("id")
+    .eq("weekly_topic_id", weeklyTopicId)
+    .eq("access_participant_id", accessParticipantId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingVideoError) {
+    setErrMsg(existingVideoError.message);
+    return;
+  }
+
+  if (existingVideo) {
+    setErrMsg("Ya enviaste un video para este tema semanal.");
+    return;
+  }
+
+  setSendingVideo(true);
+  try {
+    const payload: any = {
+      weekly_topic_id: weeklyTopicId,
+      device_id: deviceId,
+      participant_device_id: deviceId,
+      access_participant_id: accessParticipantId,
+      group_code: groupCode?.trim() || "GENERAL",
+      platform: videoPlatform,
+      video_url: url,
+      title: title || null,
+      status: "new",
+    };
+
+    const { error } = await supabase.from("weekly_video_entries").insert(payload);
+    if (error) throw new Error(error.message);
+
+    setVideoUrl("");
+    setVideoTitle("");
+    setVideoPlatform("YOUTUBE");
+
+    setOkMsg(
+      "Tu video fue enviado y está en revisión. Se publicará cuando sea aprobado por moderación."
+    );
+  } catch (e: any) {
+    setErrMsg(e?.message ?? String(e));
+  } finally {
+    setSendingVideo(false);
+  }
+}
 
   async function voteForVideo(videoId: string) {
     setOkMsg(null);
