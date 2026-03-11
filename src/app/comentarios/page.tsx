@@ -250,7 +250,9 @@ export default function ComentariosPage() {
   const [archivedTopicsPublic, setArchivedTopicsPublic] = useState<ArchivedTopicPublicItem[]>([]);
   const [archivedTopicsPublicLoading, setArchivedTopicsPublicLoading] = useState(false);
   const [archivedTopicsPublicError, setArchivedTopicsPublicError] = useState<string | null>(null);
-
+  const [forumTopics, setForumTopics] = useState<ArchivedTopicPublicItem[]>([]);
+  const [forumTopicsLoading, setForumTopicsLoading] = useState(false);
+  const [forumTopicsError, setForumTopicsError] = useState<string | null>(null);
   const [founderQuestionsPublic, setFounderQuestionsPublic] = useState<FounderQuestionPublicRow[]>(
     []
   );
@@ -300,6 +302,7 @@ export default function ComentariosPage() {
     void loadArchivedTopicsPublic();
     void loadFounderQuestionsPublic();
     void loadCommentAwardsPublic();
+     void loadForumTopics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -677,7 +680,44 @@ export default function ComentariosPage() {
       setArchivedTopicsPublicLoading(false);
     }
   }
+   
+  async function loadForumTopics() {
+  setForumTopicsLoading(true);
+  setForumTopicsError(null);
 
+  try {
+    const { data, error } = await supabase
+      .from("weekly_topics")
+      .select(
+        "id,topic,question,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
+      )
+      .eq("status", "archived")
+      .order("winner_published_at", { ascending: false })
+      .order("ends_at", { ascending: false })
+      .limit(20);
+
+    if (error) throw new Error(error.message);
+
+    const normalized: ArchivedTopicPublicItem[] = (data ?? []).map((row: any) => ({
+      id: row.id,
+      topic: row.topic ?? "",
+      question: row.question ?? "",
+      starts_at: row.starts_at ?? null,
+      ends_at: row.ends_at ?? null,
+      winnerVideoEntryId: row.winner_video_entry_id ?? null,
+      winnerVotes: Number(row.winner_votes ?? 0),
+      winnerPublishedAt: row.winner_published_at ?? null,
+      video: null,
+    }));
+
+    setForumTopics(normalized);
+  } catch (e: any) {
+    setForumTopics([]);
+    setForumTopicsError(e?.message ?? String(e));
+  } finally {
+    setForumTopicsLoading(false);
+  }
+}
   async function loadFounderQuestionsPublic() {
     setFounderQuestionsPublicLoading(true);
     setFounderQuestionsPublicError(null);
@@ -2310,7 +2350,69 @@ async function voteForVideo(videoId: string) {
           </div>
         </div>
       </section>
+       <section className={card}>
+  <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
+    Foros abiertos de debate ciudadano
+  </h2>
+  <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+    Cada tema semanal que ya cerró pasa a formar parte del foro abierto de la comunidad.
+    Entra al tema que quieras y participa en el debate ciudadano.
+  </p>
 
+  {forumTopicsError ? (
+    <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+      Error al cargar foros abiertos: {forumTopicsError}
+    </div>
+  ) : null}
+
+  {forumTopicsLoading ? (
+    <div className="mt-4 text-sm font-semibold text-slate-700">
+      Cargando foros abiertos...
+    </div>
+  ) : null}
+
+  {!forumTopicsLoading && !forumTopicsError && forumTopics.length === 0 ? (
+    <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4 text-sm font-semibold text-slate-700">
+      Aún no hay temas archivados disponibles para foro abierto.
+    </div>
+  ) : null}
+
+  <div className="mt-4 space-y-4">
+    {forumTopics.map((item) => (
+      <div
+        key={item.id}
+        className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+      >
+        <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+          Tema abierto al foro
+        </div>
+
+        <div className="mt-1 text-base md:text-lg font-extrabold text-slate-900">
+          {item.topic}
+        </div>
+
+        {item.question ? (
+          <div className="mt-2 text-sm font-semibold text-slate-800 leading-relaxed">
+            {item.question}
+          </div>
+        ) : null}
+
+        {item.winnerPublishedAt ? (
+          <div className="mt-2 text-xs font-semibold text-slate-600">
+            Semana cerrada: {new Date(item.winnerPublishedAt).toLocaleString()}
+          </div>
+        ) : null}
+
+        <Link
+          href={`/comentarios/foro/${item.id}`}
+          className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+        >
+          💬 Entrar al foro
+        </Link>
+      </div>
+    ))}
+  </div>
+</section>
       {showScrollTop ? (
         <button
           type="button"
