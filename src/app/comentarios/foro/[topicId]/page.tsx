@@ -40,8 +40,11 @@ export default function TopicForumPage() {
   const [comments, setComments] = useState<ForumCommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [deviceId, setDeviceId] = useState<string | null>(null);
+ const [deviceId, setDeviceId] = useState<string | null>(null);
 const [hasAccess, setHasAccess] = useState(false);
+const [forumAlias, setForumAlias] = useState<string>("");
+const [forumAliasDraft, setForumAliasDraft] = useState<string>("");
+const [savingForumAlias, setSavingForumAlias] = useState(false);
 const [forumMessage, setForumMessage] = useState("");
 const [sendingForumComment, setSendingForumComment] = useState(false);
 const [forumOkMsg, setForumOkMsg] = useState<string | null>(null);
@@ -63,19 +66,24 @@ const [forumOkMsg, setForumOkMsg] = useState<string | null>(null);
   return id;
 }
 
-async function checkForumAccess(currentDeviceId: string) {
+   async function checkForumAccess(currentDeviceId: string) {
   try {
     const { data, error } = await supabase
       .from("comment_access_participants")
-      .select("id")
+      .select("id, forum_alias")
       .eq("device_id", currentDeviceId)
-      .limit(1);
+      .limit(1)
+      .maybeSingle();
 
     if (error) throw new Error(error.message);
 
-    setHasAccess(!!(data && data.length > 0));
+    setHasAccess(!!data);
+    setForumAlias(data?.forum_alias ?? "");
+    setForumAliasDraft(data?.forum_alias ?? "");
   } catch {
     setHasAccess(false);
+    setForumAlias("");
+    setForumAliasDraft("");
   }
 }
   async function loadForum() {
@@ -225,6 +233,74 @@ async function submitForumComment(e: React.FormEvent) {
     setSendingForumComment(false);
   }
 }
+  async function saveForumAlias(e: React.FormEvent) {
+  e.preventDefault();
+  setForumOkMsg(null);
+  setErrorMsg(null);
+
+  if (!deviceId) {
+    setErrorMsg("No se pudo identificar tu dispositivo.");
+    return;
+  }
+
+  if (!hasAccess) {
+    setErrorMsg("Primero debes registrar tu correo o celular.");
+    return;
+  }
+
+  const alias = forumAliasDraft.trim();
+
+  if (!alias) {
+    setErrorMsg("Escribe un alias para participar en el foro.");
+    return;
+  }
+
+  setSavingForumAlias(true);
+
+  try {
+    const { data: participantRow, error: participantError } = await supabase
+      .from("comment_access_participants")
+      .select("id")
+      .eq("device_id", deviceId)
+      .limit(1)
+      .maybeSingle();
+
+    if (participantError) throw new Error(participantError.message);
+
+    if (!participantRow?.id) {
+      setErrorMsg("No se encontró tu acceso verificado.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("comment_access_participants")
+      .update({ forum_alias: alias })
+      .eq("id", participantRow.id);
+
+    if (error) throw new Error(error.message);
+
+    setForumAlias(alias);
+    setForumOkMsg("Tu alias del foro fue guardado correctamente.");
+    await checkForumAccess(deviceId);
+    await loadForum();
+  } catch (e: any) {
+    const msg = (e?.message || "").toLowerCase();
+
+    if (msg.includes("forum_alias_invalid_length")) {
+      setErrorMsg("Tu alias debe tener entre 3 y 20 caracteres.");
+    } else if (msg.includes("forum_alias_invalid_characters")) {
+      setErrorMsg("Tu alias solo puede usar letras, números y guion bajo.");
+    } else if (msg.includes("forum_alias_bad_word")) {
+      setErrorMsg("Tu alias contiene palabras no permitidas.");
+    } else if (msg.includes("duplicate") || msg.includes("unique")) {
+      setErrorMsg("Ese alias ya está en uso. Elige otro.");
+    } else {
+      setErrorMsg(e?.message ?? String(e));
+    }
+  } finally {
+    setSavingForumAlias(false);
+  }
+}
   useEffect(() => {
     void loadForum();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -301,7 +377,7 @@ async function submitForumComment(e: React.FormEvent) {
               Este foro permanece abierto para debate ciudadano.
             </div>
           </section>
-           <section className={card}>
+            <section className={card}>
   <div className="text-sm font-extrabold text-slate-900">
     Participa en este foro
   </div>
@@ -319,8 +395,32 @@ async function submitForumComment(e: React.FormEvent) {
     <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4 text-sm font-semibold text-slate-700">
       Para participar en el foro, primero debes registrar tu correo o celular en la sección principal de comentarios.
     </div>
+  ) : !forumAlias ? (
+    <form onSubmit={saveForumAlias} className="grid gap-4 mt-4">
+      <div>
+        <div className="text-xs font-extrabold text-slate-700">Elige tu alias del foro</div>
+        <input
+          className="mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold"
+          value={forumAliasDraft}
+          onChange={(e) => setForumAliasDraft(e.target.value)}
+          placeholder="Ej: VozCiudadana"
+          maxLength={20}
+        />
+        <div className="mt-1 text-xs text-slate-600">
+          Entre 3 y 20 caracteres. Solo letras, números y guion bajo.
+        </div>
+      </div>
+
+      <button type="submit" className={btn} disabled={savingForumAlias}>
+        {savingForumAlias ? "Guardando alias..." : "Guardar alias"}
+      </button>
+    </form>
   ) : (
     <form onSubmit={submitForumComment} className="grid gap-4 mt-4">
+      <div className="rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold text-slate-800">
+        Alias del foro: <span className="font-extrabold">{forumAlias}</span>
+      </div>
+
       <div>
         <div className="text-xs font-extrabold text-slate-700">Tu comentario</div>
         <textarea
