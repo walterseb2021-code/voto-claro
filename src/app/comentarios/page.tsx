@@ -998,9 +998,17 @@ export default function ComentariosPage() {
     if (showPublic) {
       await loadPublicReviewed();
     }
-  } catch (e: any) {
+  }
+   catch (e: any) {
+  const msg = (e?.message || "").toLowerCase();
+
+  if (msg.includes("max_3_comments_per_topic")) {
+    setErrMsg("Ya alcanzaste el máximo de 3 comentarios para este tema semanal.");
+  } else {
     setErrMsg(e?.message ?? String(e));
-  } finally {
+  }
+}
+  finally {
     setSending(false);
   }
 }
