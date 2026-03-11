@@ -37,55 +37,55 @@ function AdminLoginInner() {
     })();
   }, [supabase, router, nextPath]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg("");
-    setLoading(true);
+   async function onSubmit(e: React.FormEvent) {
+  e.preventDefault();
+  setMsg("");
+  setLoading(true);
 
-    try {
-      // 1) Login en el cliente
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+  try {
+    // 1) Login en el cliente
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
 
-      if (error) {
-        setMsg(error.message);
-        return;
-      }
-
-      // 2) Leer tokens de sesión del cliente
-      const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
-      const session = sessionData?.session;
-
-      if (sessErr || !session) {
-        setMsg("No se pudo obtener la sesión (session null).");
-        return;
-      }
-
-      // 3) Enviar tokens al server para que cree cookies (compatibles con proxy.ts)
-      const r = await fetch("/api/admin/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        }),
-      });
-
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        setMsg(j?.detail ? String(j.detail) : "No se pudo crear sesión en servidor.");
-        return;
-      }
-
-      // 4) Ya con cookies server-side, entrar al panel
-      router.replace(nextPath);
-      router.refresh();
-    } finally {
-      setLoading(false);
+    if (error) {
+      setMsg(error.message);
+      return;
     }
+
+    // 2) Leer tokens de sesión del cliente
+    const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
+    const session = sessionData?.session;
+
+    if (sessErr || !session) {
+      setMsg("No se pudo obtener la sesión (session null).");
+      return;
+    }
+
+    // 3) Enviar tokens al server para que cree cookies
+    const r = await fetch("/api/admin/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }),
+    });
+
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      setMsg(j?.detail ? String(j.detail) : "No se pudo crear sesión en servidor.");
+      return;
+    }
+
+    // 4) Entrar al panel
+    router.replace(nextPath);
+    router.refresh();
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>

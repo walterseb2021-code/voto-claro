@@ -910,7 +910,7 @@ export default function ComentariosPage() {
     };
   }, [publicVideos, videoVoteCounts]);
 
-   async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
   e.preventDefault();
   setOkMsg(null);
   setErrMsg(null);
@@ -947,7 +947,6 @@ export default function ComentariosPage() {
   setSending(true);
 
   try {
-    // 1️⃣ Buscar participante verificado
     const { data: participantRow, error: participantError } = await supabase
       .from("comment_access_participants")
       .select("id")
@@ -964,13 +963,12 @@ export default function ComentariosPage() {
 
     const accessParticipantId = participantRow.id;
 
-    // 2️⃣ Contar comentarios de esta persona en este tema
     const { count, error: countError } = await supabase
       .from("user_comments")
       .select("id", { count: "exact", head: true })
       .eq("page", "/comentarios")
-      .eq("access_participant_id", accessParticipantId)
-      .gte("created_at", new Date(new Date().setHours(0,0,0,0)).toISOString());
+      .eq("weekly_topic_id", weeklyTopicId)
+      .eq("access_participant_id", accessParticipantId);
 
     if (countError) throw new Error(countError.message);
 
@@ -979,11 +977,11 @@ export default function ComentariosPage() {
       return;
     }
 
-    // 3️⃣ Guardar comentario
     const payload: any = {
       message: text,
       status: "new",
       page: "/comentarios",
+      weekly_topic_id: weeklyTopicId,
       device_id: deviceId,
       access_participant_id: accessParticipantId,
       group_code: groupCode?.trim() || "GENERAL",
@@ -993,7 +991,6 @@ export default function ComentariosPage() {
     if (error) throw new Error(error.message);
 
     setMessage("");
-
     setOkMsg(
       "¡Gracias! Tu comentario fue enviado y está en revisión. Aparecerá en 'Comentarios aprobados' si cumple las normas de respeto."
     );
@@ -1001,7 +998,6 @@ export default function ComentariosPage() {
     if (showPublic) {
       await loadPublicReviewed();
     }
-
   } catch (e: any) {
     setErrMsg(e?.message ?? String(e));
   } finally {
