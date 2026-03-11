@@ -1072,58 +1072,93 @@ export default function ComentariosPage() {
     setSendingVideo(false);
   }
 }
-  async function voteForVideo(videoId: string) {
-    setOkMsg(null);
-    setErrMsg(null);
+async function voteForVideo(videoId: string) {
+  setOkMsg(null);
+  setErrMsg(null);
 
-    if (checkingData) {
-      setErrMsg("Espera un momento… estamos verificando tus datos.");
+  if (checkingData) {
+    setErrMsg("Espera un momento… estamos verificando tus datos.");
+    return;
+  }
+
+  if (!hasData) {
+    setErrMsg("Para votar, primero debes registrar tu correo o celular.");
+    return;
+  }
+
+  if (!deviceId) {
+    setErrMsg("No se pudo identificar tu dispositivo.");
+    return;
+  }
+
+  if (!weeklyTopicId) {
+    setErrMsg("No se encontró un tema semanal activo.");
+    return;
+  }
+
+  if (myVotedVideoId) {
+    setErrMsg("Ya registraste tu voto en este tema semanal.");
+    return;
+  }
+
+  setVotingVideoId(videoId);
+
+  try {
+    // 1️⃣ Buscar el participante verificado real
+    const { data: participantRow, error: participantError } = await supabase
+      .from("comment_access_participants")
+      .select("id")
+      .eq("device_id", deviceId)
+      .limit(1)
+      .maybeSingle();
+
+    if (participantError) throw new Error(participantError.message);
+
+    if (!participantRow?.id) {
+      setErrMsg("No se encontró tu acceso verificado.");
       return;
     }
 
-    if (!hasData) {
-      setErrMsg("Para votar, primero debes registrar tu correo o celular.");
-      return;
-    }
+    const accessParticipantId = participantRow.id;
 
-    if (!deviceId) {
-      setErrMsg("No se pudo identificar tu dispositivo.");
-      return;
-    }
+    // 2️⃣ Verificar si ya votó en este tema
+    const { data: existingVote, error: existingVoteError } = await supabase
+      .from("weekly_video_votes")
+      .select("id")
+      .eq("weekly_topic_id", weeklyTopicId)
+      .eq("access_participant_id", accessParticipantId)
+      .limit(1)
+      .maybeSingle();
 
-    if (!weeklyTopicId) {
-      setErrMsg("No se encontró un tema semanal activo.");
-      return;
-    }
+    if (existingVoteError) throw new Error(existingVoteError.message);
 
-    if (myVotedVideoId) {
+    if (existingVote) {
       setErrMsg("Ya registraste tu voto en este tema semanal.");
       return;
     }
 
-    setVotingVideoId(videoId);
+    // 3️⃣ Registrar el voto
+    const payload = {
+      weekly_topic_id: weeklyTopicId,
+      weekly_video_entry_id: videoId,
+      device_id: deviceId,
+      access_participant_id: accessParticipantId,
+      group_code: groupCode?.trim() || "GENERAL",
+    };
 
-    try {
-      const payload = {
-        weekly_topic_id: weeklyTopicId,
-        weekly_video_entry_id: videoId,
-        device_id: deviceId,
-        group_code: groupCode?.trim() || "GENERAL",
-      };
+    const { error } = await supabase.from("weekly_video_votes").insert(payload);
+    if (error) throw new Error(error.message);
 
-      const { error } = await supabase.from("weekly_video_votes").insert(payload);
-      if (error) throw new Error(error.message);
+    setOkMsg("Tu voto fue registrado correctamente.");
+    setMyVotedVideoId(videoId);
 
-      setOkMsg("Tu voto fue registrado correctamente.");
-      setMyVotedVideoId(videoId);
-      await loadVideoVoteCounts();
-      setMyVotedVideoId(videoId);
-    } catch (e: any) {
-      setErrMsg(e?.message ?? String(e));
-    } finally {
-      setVotingVideoId(null);
-    }
+    await loadVideoVoteCounts();
+  } catch (e: any) {
+    setErrMsg(e?.message ?? String(e));
+  } finally {
+    setVotingVideoId(null);
   }
+}
 
   async function onSubmitWinnerQuestion(e: React.FormEvent) {
     e.preventDefault();
