@@ -40,14 +40,14 @@ export default function TopicForumPage() {
   const [comments, setComments] = useState<ForumCommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
- const [deviceId, setDeviceId] = useState<string | null>(null);
-const [hasAccess, setHasAccess] = useState(false);
-const [forumAlias, setForumAlias] = useState<string>("");
-const [forumAliasDraft, setForumAliasDraft] = useState<string>("");
-const [savingForumAlias, setSavingForumAlias] = useState(false);
-const [forumMessage, setForumMessage] = useState("");
-const [sendingForumComment, setSendingForumComment] = useState(false);
-const [forumOkMsg, setForumOkMsg] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [forumAlias, setForumAlias] = useState<string>("");
+  const [forumAliasDraft, setForumAliasDraft] = useState<string>("");
+  const [savingForumAlias, setSavingForumAlias] = useState(false);
+  const [forumMessage, setForumMessage] = useState("");
+  const [sendingForumComment, setSendingForumComment] = useState(false);
+  const [forumOkMsg, setForumOkMsg] = useState<string | null>(null);
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -160,6 +160,40 @@ const [forumOkMsg, setForumOkMsg] = useState<string | null>(null);
       setLoading(false);
     }
   }
+    async function appendForumComment(newRow: {
+  id: string;
+  created_at: string;
+  weekly_topic_id: string;
+  access_participant_id: string;
+  group_code: string;
+  message: string;
+  status: string;
+}) {
+  let alias: string | null = null;
+
+  if (newRow.access_participant_id) {
+    const { data } = await supabase
+      .from("comment_access_participants")
+      .select("forum_alias")
+      .eq("id", newRow.access_participant_id)
+      .maybeSingle();
+
+    alias = data?.forum_alias ?? null;
+  }
+
+  setComments((prev) => {
+    const exists = prev.some((item) => item.id === newRow.id);
+    if (exists) return prev;
+
+    return [
+      {
+        ...newRow,
+        forum_alias: alias,
+      },
+      ...prev,
+    ];
+  });
+}
 async function submitForumComment(e: React.FormEvent) {
   e.preventDefault();
   setForumOkMsg(null);
@@ -208,15 +242,20 @@ async function submitForumComment(e: React.FormEvent) {
       status: "published",
     };
 
-    const { error } = await supabase
-      .from("archived_topic_forum_comments")
-      .insert(payload);
+     const { data, error } = await supabase
+  .from("archived_topic_forum_comments")
+  .insert(payload)
+  .select("id, created_at, weekly_topic_id, access_participant_id, group_code, message, status")
+  .single();
 
-    if (error) throw new Error(error.message);
+if (error) throw new Error(error.message);
 
-    setForumMessage("");
-    setForumOkMsg("Tu comentario fue publicado en el foro.");
-    await loadForum();
+setForumMessage("");
+setForumOkMsg("Tu comentario fue publicado en el foro.");
+
+if (data) {
+  await appendForumComment(data);
+}
   } catch (e: any) {
     const msg = (e?.message || "").toLowerCase();
 
@@ -282,7 +321,6 @@ async function submitForumComment(e: React.FormEvent) {
     setForumAlias(alias);
     setForumOkMsg("Tu alias del foro fue guardado correctamente.");
     await checkForumAccess(deviceId);
-    await loadForum();
   } catch (e: any) {
     const msg = (e?.message || "").toLowerCase();
 
@@ -305,6 +343,42 @@ async function submitForumComment(e: React.FormEvent) {
     void loadForum();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topicId]);
+
+    useEffect(() => {
+  if (!topicId) return;
+
+  const channel = supabase
+    .channel(`forum-comments-${topicId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "archived_topic_forum_comments",
+        filter: `weekly_topic_id=eq.${topicId}`,
+      },
+      async (payload) => {
+        const newComment = payload.new as {
+          id: string;
+          created_at: string;
+          weekly_topic_id: string;
+          access_participant_id: string;
+          group_code: string;
+          message: string;
+          status: string;
+        };
+
+        if (newComment.status !== "published") return;
+
+        await appendForumComment(newComment);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [supabase, topicId]);
    useEffect(() => {
   const currentDeviceId = getOrCreateDeviceId();
   setDeviceId(currentDeviceId);
