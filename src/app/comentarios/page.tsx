@@ -306,10 +306,15 @@ export default function ComentariosPage() {
     void loadFounderQuestionsPublic();
     void loadCommentAwardsPublic();
     void loadForumTopics();
-    void loadVotingVideos();
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
+     
+  useEffect(() => {
+  if (!votingTopicId) return;
+  void loadVotingVideos();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [votingTopicId]);
   useEffect(() => {
     function onScroll() {
       setShowScrollTop(window.scrollY > 300);
