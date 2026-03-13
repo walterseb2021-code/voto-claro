@@ -526,14 +526,14 @@ if (!alias) {
   const ids = data.map(v => v.id);
 
   const { data: votes } = await supabase
-    .from("weekly_video_votes")
-    .select("video_entry_id")
-    .in("video_entry_id", ids);
-
+  .from("weekly_video_votes")
+  .select("weekly_video_entry_id")
+  .in("weekly_video_entry_id", ids);
   const counts: Record<string, number> = {};
 
   votes?.forEach(v => {
-    counts[v.video_entry_id] = (counts[v.video_entry_id] || 0) + 1;
+    counts[v.weekly_video_entry_id] =
+  (counts[v.weekly_video_entry_id] || 0) + 1;
   });
 
   setVideoVoteCounts(counts);
