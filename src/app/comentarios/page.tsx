@@ -5,14 +5,13 @@ import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-type CommentRow = {
+ type CommentRow = {
   id: string;
   created_at: string;
   group_code: string;
   message: string;
-  status: "new" | "reviewed" | "archived" | "blocked";
+  status: "published" | "archived" | "blocked";
 };
-
 type PublicVideoRow = {
   id: string;
   created_at: string;
@@ -440,7 +439,7 @@ if (!alias) {
       let q = supabase
         .from("user_comments")
         .select("id,created_at,group_code,message,status")
-        .eq("status", "reviewed")
+        .eq("status", "published")
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -1025,23 +1024,22 @@ if (!alias) {
       return;
     }
 
-    const payload: any = {
-      message: text,
-      status: "new",
-      page: "/comentarios",
-      weekly_topic_id: weeklyTopicId,
-      device_id: deviceId,
-      access_participant_id: accessParticipantId,
-      group_code: groupCode?.trim() || "GENERAL",
-    };
-
+     const payload: any = {
+  message: text,
+  status: "published",
+  page: "/comentarios",
+  weekly_topic_id: weeklyTopicId,
+  device_id: deviceId,
+  access_participant_id: accessParticipantId,
+  group_code: groupCode?.trim() || "GENERAL",
+};
     const { error } = await supabase.from("user_comments").insert(payload);
     if (error) throw new Error(error.message);
 
     setMessage("");
-    setOkMsg(
-      "¡Gracias! Tu comentario fue enviado y está en revisión. Aparecerá en 'Comentarios aprobados' si cumple las normas de respeto."
-    );
+      setOkMsg(
+  "¡Gracias! Tu comentario fue publicado correctamente."
+   );
 
     if (showPublic) {
       await loadPublicReviewed();
@@ -1624,9 +1622,9 @@ async function voteForVideo(videoId: string) {
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Tu comentario sobre el tema de la semana
         </h2>
-        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Puedes opinar, criticar o proponer, pero siempre con respeto.
-        </p>
+       <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+       Puedes opinar, criticar o proponer. Si tu comentario cumple las reglas, se publicará automáticamente.
+       </p>
 
         {!checkingData && hasData ? (
           <form onSubmit={onSubmit} className="grid gap-4 mt-4">
@@ -1673,11 +1671,9 @@ async function voteForVideo(videoId: string) {
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Comentarios aprobados
         </h2>
-        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Los comentarios enviados no aparecen de inmediato. Primero pasan por revisión
-          y luego se publican si son aprobados.
+           <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Los comentarios que cumplen las reglas se publican automáticamente.
         </p>
-
         <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
           <div className={label}>Mostrar</div>
           <select
@@ -1708,9 +1704,9 @@ async function voteForVideo(videoId: string) {
 
           {showPublic ? (
             <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
-              <div className="text-sm font-extrabold text-slate-900">
-                Comentarios aprobados
-              </div>
+               <div className="text-sm font-extrabold text-slate-900">
+            Comentarios publicados
+            </div>
               <div className="mt-1 text-xs text-slate-600">
                 Se actualiza automáticamente cada pocos segundos.
               </div>
