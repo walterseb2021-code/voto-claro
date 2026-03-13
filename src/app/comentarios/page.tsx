@@ -283,6 +283,7 @@ export default function ComentariosPage() {
   const [weeklyTopic, setWeeklyTopic] = useState<string>("");
   const [weeklyQuestion, setWeeklyQuestion] = useState<string>("");
   const [weeklyTopicId, setWeeklyTopicId] = useState<string>("");
+  const [votingTopicId, setVotingTopicId] = useState<string>("");
 
   const [winnerQuestionText, setWinnerQuestionText] = useState("");
   const [winnerQuestionSending, setWinnerQuestionSending] = useState(false);
@@ -298,6 +299,7 @@ export default function ComentariosPage() {
     setDeviceId(getOrCreateDeviceId());
 
     void loadWeeklyTopic();
+    void loadVotingTopic();
     void loadLatestOfficialWinner();
     void loadArchivedTopicsPublic();
     void loadFounderQuestionsPublic();
@@ -490,7 +492,7 @@ if (!alias) {
 
   async function loadMyVoteForWeeklyTopic() {
     try {
-      if (!deviceId || !weeklyTopicId) {
+      if (!deviceId || (!weeklyTopicId && !votingTopicId)) {
         setMyVotedVideoId(null);
         return;
       }
@@ -499,7 +501,7 @@ if (!alias) {
         .from("weekly_video_votes")
         .select("weekly_video_entry_id")
         .eq("device_id", deviceId)
-        .eq("weekly_topic_id", weeklyTopicId)
+        .eq("weekly_topic_id", votingTopicId || weeklyTopicId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -514,7 +516,7 @@ if (!alias) {
 
   async function loadVideoVoteCounts() {
     try {
-      if (!weeklyTopicId) {
+      if (!weeklyTopicId && !votingTopicId) {
         setVideoVoteCounts({});
         return;
       }
@@ -522,8 +524,8 @@ if (!alias) {
       const { data, error } = await supabase
         .from("weekly_video_votes")
         .select("weekly_video_entry_id")
-        .eq("weekly_topic_id", weeklyTopicId);
-
+        .eq("weekly_topic_id", votingTopicId || weeklyTopicId)
+        
       if (error) throw new Error(error.message);
 
       const counts: Record<string, number> = {};
@@ -558,7 +560,20 @@ if (!alias) {
       }
     } catch {}
   }
+    async function loadVotingTopic() {
+  try {
+    const { data, error } = await supabase
+      .from("weekly_topics")
+      .select("id")
+      .eq("status", "voting")
+      .limit(1)
+      .maybeSingle();
 
+    if (error) return;
+
+    setVotingTopicId(data?.id ?? "");
+  } catch {}
+}
   async function loadLatestOfficialWinner() {
     setLatestOfficialWinnerLoading(true);
     setLatestOfficialWinnerError(null);
