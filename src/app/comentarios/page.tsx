@@ -2046,7 +2046,9 @@ async function voteForVideo(videoId: string) {
           <div className="mt-2 text-xs text-slate-600 break-all">
             {v.video_url}
           </div>
-
+           <div className="mt-2 text-sm font-bold text-slate-900">
+            Votos: {videoVoteCounts[v.id] ?? 0}
+           </div>
           <div className="mt-3 flex gap-2 flex-wrap">
             <a
               href={v.video_url}
