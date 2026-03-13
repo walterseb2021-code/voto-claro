@@ -273,6 +273,7 @@ export default function ComentariosPage() {
 
   const [email, setEmail] = useState("");
   const [celular, setCelular] = useState("");
+  const [forumAlias, setForumAlias] = useState("");
   const [savingData, setSavingData] = useState(false);
   const [videoPlatform, setVideoPlatform] = useState("YOUTUBE");
   const [videoUrl, setVideoUrl] = useState("");
@@ -355,7 +356,12 @@ export default function ComentariosPage() {
 
   const em = email.trim();
   const ce = celular.trim();
+   const alias = forumAlias.trim();
 
+if (!alias) {
+  setErrMsg("Debes elegir un alias ciudadano.");
+  return;
+}
   if (!em && !ce) {
     setErrMsg("Escribe al menos un correo o un celular.");
     return;
@@ -391,10 +397,11 @@ export default function ComentariosPage() {
     if (participant) {
       const { error } = await supabase
         .from("comment_access_participants")
-        .update({
+         .update({
           device_id: deviceId,
           group_code: groupCode?.trim() || "GENERAL",
-        })
+          forum_alias: alias,
+         })
         .eq("id", participant.id);
 
       if (error) throw new Error(error.message);
@@ -402,6 +409,7 @@ export default function ComentariosPage() {
       const payload: any = {
         device_id: deviceId,
         group_code: groupCode?.trim() || "GENERAL",
+        forum_alias: alias,
       };
 
       if (em) payload.email = em;
@@ -1440,6 +1448,19 @@ async function voteForVideo(videoId: string) {
 
             <div>
               <div className={label}>Celular (opcional si pones correo)</div>
+                   <div>
+  <div className={label}>Alias ciudadano</div>
+  <input
+    className={input}
+    value={forumAlias}
+    onChange={(e) => setForumAlias(e.target.value)}
+    placeholder="Ej: VozCiudadana"
+    maxLength={20}
+  />
+  <div className="mt-1 text-xs text-slate-600">
+    Entre 3 y 20 caracteres. Solo letras, números y guion bajo.
+  </div>
+</div>
               <input
                 className={input}
                 value={celular}
@@ -1465,15 +1486,21 @@ async function voteForVideo(videoId: string) {
           </div>
         ) : null}
 
-        {!checkingData && hasData ? (
-          <div className="mt-4 rounded-2xl border-2 border-green-700 bg-green-50 p-4">
-            <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
-            <div className="mt-1 text-sm font-semibold text-slate-800 leading-relaxed">
-              Ya puedes comentar en el tema activo y participar en las próximas
-              dinámicas de esta sección.
-            </div>
-          </div>
-        ) : null}
+          {!checkingData && hasData ? (
+  <div className="mt-4 rounded-2xl border-2 border-green-700 bg-green-50 p-4">
+    <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
+
+    <div className="mt-1 text-sm font-semibold text-slate-800 leading-relaxed">
+      Ya puedes comentar en el tema activo y participar en las próximas
+      dinámicas de esta sección.
+    </div>
+
+    <div className="mt-2 text-sm font-semibold text-slate-800">
+      Alias ciudadano: <span className="font-extrabold">{forumAlias}</span>
+    </div>
+
+  </div>
+) : null}
       </section>
 
       {/* BLOQUE 2: Tema de la semana */}
