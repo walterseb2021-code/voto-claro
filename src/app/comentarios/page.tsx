@@ -234,6 +234,7 @@ export default function ComentariosPage() {
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
   const [publicVideos, setPublicVideos] = useState<PublicVideoRow[]>([]);
+  const [votingVideos, setVotingVideos] = useState<any[]>([]);
   const [publicVideosLoading, setPublicVideosLoading] = useState(false);
   const [publicVideosError, setPublicVideosError] = useState<string | null>(null);
   const [votingVideoId, setVotingVideoId] = useState<string | null>(null);
@@ -304,7 +305,8 @@ export default function ComentariosPage() {
     void loadArchivedTopicsPublic();
     void loadFounderQuestionsPublic();
     void loadCommentAwardsPublic();
-     void loadForumTopics();
+    void loadForumTopics();
+    void loadVotingVideos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -489,7 +491,27 @@ if (!alias) {
       setPublicVideosLoading(false);
     }
   }
+      async function loadVotingVideos() {
+  try {
+    if (!votingTopicId) {
+      setVotingVideos([]);
+      return;
+    }
 
+    const { data, error } = await supabase
+      .from("weekly_video_entries")
+      .select("id,created_at,group_code,platform,video_url,title")
+      .eq("weekly_topic_id", votingTopicId)
+      .eq("status", "reviewed")
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    setVotingVideos(data ?? []);
+  } catch (e) {
+    setVotingVideos([]);
+  }
+}
   async function loadMyVoteForWeeklyTopic() {
     try {
       if (!deviceId || (!weeklyTopicId && !votingTopicId)) {
