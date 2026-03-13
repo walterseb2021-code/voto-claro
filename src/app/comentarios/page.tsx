@@ -1311,7 +1311,7 @@ async function voteForVideo(videoId: string) {
     setOkMsg("Tu voto fue registrado correctamente.");
     setMyVotedVideoId(videoId);
 
-    await loadVideoVoteCounts();
+    await loadVotingVideos();
   } catch (e: any) {
     setErrMsg(e?.message ?? String(e));
   } finally {
