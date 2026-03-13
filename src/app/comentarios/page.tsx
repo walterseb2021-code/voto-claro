@@ -315,6 +315,7 @@ export default function ComentariosPage() {
   void loadVotingVideos();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [votingTopicId]);
+
   useEffect(() => {
     function onScroll() {
       setShowScrollTop(window.scrollY > 300);
@@ -505,7 +506,15 @@ if (!alias) {
 
     const { data, error } = await supabase
       .from("weekly_video_entries")
-      .select("id,created_at,group_code,platform,video_url,title")
+       .select(`
+  id,
+  created_at,
+  group_code,
+  platform,
+  video_url,
+  title,
+  weekly_video_votes(count)
+`)
       .eq("weekly_topic_id", votingTopicId)
       .eq("status", "reviewed")
       .order("created_at", { ascending: false });
