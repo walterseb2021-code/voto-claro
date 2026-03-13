@@ -522,6 +522,22 @@ if (!alias) {
     if (error) throw new Error(error.message);
 
     setVotingVideos(data ?? []);
+    if (data && data.length > 0) {
+  const ids = data.map(v => v.id);
+
+  const { data: votes } = await supabase
+    .from("weekly_video_votes")
+    .select("video_entry_id")
+    .in("video_entry_id", ids);
+
+  const counts: Record<string, number> = {};
+
+  votes?.forEach(v => {
+    counts[v.video_entry_id] = (counts[v.video_entry_id] || 0) + 1;
+  });
+
+  setVideoVoteCounts(counts);
+}
   } catch (e) {
     setVotingVideos([]);
   }
@@ -2024,58 +2040,60 @@ async function voteForVideo(videoId: string) {
     </div>
   ) : (
     <div className="mt-4 space-y-4">
-      {votingVideos.map((v) => (
-        <div
-          key={v.id}
-          className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
-        >
-          <div className="text-xs font-extrabold text-slate-900">
-            {new Date(v.created_at).toLocaleString()}
-          </div>
+     {votingVideos.map((v) => (
+  <div
+    key={v.id}
+    className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+  >
+    <div className="text-xs font-extrabold text-slate-900">
+      {new Date(v.created_at).toLocaleString()}
+    </div>
 
-          <div className="mt-2 text-sm font-semibold text-slate-900">
-            Plataforma: {v.platform}
-          </div>
+    <div className="mt-2 text-sm font-semibold text-slate-900">
+      Plataforma: {v.platform}
+    </div>
 
-          {v.title ? (
-            <div className="mt-1 text-sm font-semibold text-slate-800">
-              {v.title}
-            </div>
-          ) : null}
+    {v.title ? (
+      <div className="mt-1 text-sm font-semibold text-slate-800">
+        {v.title}
+      </div>
+    ) : null}
 
-          <div className="mt-2 text-xs text-slate-600 break-all">
-            {v.video_url}
-          </div>
-           <div className="mt-2 text-sm font-bold text-slate-900">
-            Votos: {videoVoteCounts[v.id] ?? 0}
-           </div>
-          <div className="mt-3 flex gap-2 flex-wrap">
-            <a
-              href={v.video_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
-            >
-              ▶ Ver video
-            </a>
+    <div className="mt-2 text-xs text-slate-600 break-all">
+      {v.video_url}
+    </div>
 
-            <button
-              type="button"
-              onClick={() => voteForVideo(v.id)}
-              disabled={!!myVotedVideoId || votingVideoId === v.id}
-              className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {votingVideoId === v.id
-                ? "Votando..."
-                : myVotedVideoId === v.id
-                ? "✅ Tu voto"
-                : myVotedVideoId
-                ? "Voto cerrado"
-                : "🗳 Votar"}
-            </button>
-          </div>
-        </div>
-      ))}
+    <div className="mt-2 text-sm font-bold text-slate-900">
+      Votos: {videoVoteCounts[v.id] ?? 0}
+    </div>
+
+    <div className="mt-3 flex gap-2 flex-wrap">
+      <a
+        href={v.video_url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+      >
+        ▶ Ver video
+      </a>
+
+      <button
+        type="button"
+        onClick={() => voteForVideo(v.id)}
+        disabled={!!myVotedVideoId || votingVideoId === v.id}
+        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {votingVideoId === v.id
+          ? "Votando..."
+          : myVotedVideoId === v.id
+          ? "✅ Tu voto"
+          : myVotedVideoId
+          ? "Voto cerrado"
+          : "🗳 Votar"}
+      </button>
+    </div>
+  </div>
+))}
     </div>
   )}
 </section>
