@@ -194,7 +194,7 @@ export default function TopicForumPage() {
     ];
   });
 }
-async function submitForumComment(e: React.FormEvent) {
+  async function submitForumComment(e: React.FormEvent) {
   e.preventDefault();
   setForumOkMsg(null);
   setErrorMsg(null);
@@ -210,7 +210,6 @@ async function submitForumComment(e: React.FormEvent) {
   }
 
   const text = forumMessage.trim();
-
   if (!text) {
     setErrorMsg("Escribe un comentario antes de publicarlo.");
     return;
@@ -219,6 +218,7 @@ async function submitForumComment(e: React.FormEvent) {
   setSendingForumComment(true);
 
   try {
+    // 1️⃣ Obtener participant ID
     const { data: participantRow, error: participantError } = await supabase
       .from("comment_access_participants")
       .select("id")
@@ -227,12 +227,22 @@ async function submitForumComment(e: React.FormEvent) {
       .maybeSingle();
 
     if (participantError) throw new Error(participantError.message);
-
     if (!participantRow?.id) {
       setErrorMsg("No se encontró tu acceso verificado.");
       return;
     }
 
+    // 2️⃣ Verificar si el usuario puede comentar usando la función SQL
+    const { data: canCommentData, error: canCommentError } = await supabase
+      .rpc("can_user_comment", { p_user_id: participantRow.id });
+
+    if (canCommentError) throw new Error(canCommentError.message);
+    if (!canCommentData || !canCommentData.can_comment) {
+      setErrorMsg("No puedes comentar aún, espera un momento antes de publicar de nuevo.");
+      return;
+    }
+
+    // 3️⃣ Preparar payload y enviar comentario
     const payload = {
       weekly_topic_id: topicId,
       access_participant_id: participantRow.id,
@@ -242,20 +252,18 @@ async function submitForumComment(e: React.FormEvent) {
       status: "published",
     };
 
-     const { data, error } = await supabase
-  .from("archived_topic_forum_comments")
-  .insert(payload)
-  .select("id, created_at, weekly_topic_id, access_participant_id, group_code, message, status")
-  .single();
+    const { data, error } = await supabase
+      .from("archived_topic_forum_comments")
+      .insert(payload)
+      .select("id, created_at, weekly_topic_id, access_participant_id, group_code, message, status")
+      .single();
 
-if (error) throw new Error(error.message);
+    if (error) throw new Error(error.message);
 
-setForumMessage("");
-setForumOkMsg("Tu comentario fue publicado en el foro.");
+    setForumMessage("");
+    setForumOkMsg("Tu comentario fue publicado en el foro.");
+    if (data) await appendForumComment(data);
 
-if (data) {
-  await appendForumComment(data);
-}
   } catch (e: any) {
     const msg = (e?.message || "").toLowerCase();
 
