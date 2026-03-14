@@ -233,11 +233,13 @@ export default function TopicForumPage() {
     }
 
     // 2️⃣ Verificar si el usuario puede comentar usando la función SQL
-    const { data: canCommentData, error: canCommentError } = await supabase
-      .rpc("can_user_comment", { p_user_id: participantRow.id });
+    const canCommentResult: any = await supabase
+      .rpc('can_user_comment', { p_user_id: participantRow.id })
+      .maybeSingle();
 
-    if (canCommentError) throw new Error(canCommentError.message);
-    if (!canCommentData || !canCommentData.can_comment) {
+    if (canCommentResult.error) throw new Error(canCommentResult.error.message);
+
+    if (!canCommentResult.data?.can_comment) {
       setErrorMsg("No puedes comentar aún, espera un momento antes de publicar de nuevo.");
       return;
     }
@@ -252,17 +254,20 @@ export default function TopicForumPage() {
       status: "published",
     };
 
-    const { data, error } = await supabase
+    const { data: insertedData, error: insertError } = await supabase
       .from("archived_topic_forum_comments")
       .insert(payload)
       .select("id, created_at, weekly_topic_id, access_participant_id, group_code, message, status")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (insertError) throw new Error(insertError.message);
 
     setForumMessage("");
     setForumOkMsg("Tu comentario fue publicado en el foro.");
-    if (data) await appendForumComment(data);
+
+    if (insertedData) {
+      await appendForumComment(insertedData);
+    }
 
   } catch (e: any) {
     const msg = (e?.message || "").toLowerCase();
