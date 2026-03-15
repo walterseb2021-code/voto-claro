@@ -869,18 +869,27 @@ function Nivel3Ruleta(props: {
         )}
 
         <div className="mt-4 w-full rounded-2xl border bg-white p-4">
-          <div className="text-sm font-extrabold text-slate-900">Premios por número</div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {segments.map((s) => (
-              <div key={s.n} className="flex items-center justify-between rounded-xl border bg-white p-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold text-slate-900">#{s.n}</span>
-                  <span className="inline-block h-4 w-4 rounded border" style={{ background: s.color }} />
-                </div>
-                <div className="text-xs font-semibold text-slate-700">{s.label}</div>
-              </div>
-            ))}
-          </div>
+         <div className="mt-4 w-full rounded-2xl border bg-white p-4">
+  <div className="text-sm font-extrabold text-slate-900 mb-3">Premios por número</div>
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    {segments.map((s) => (
+      <div 
+        key={s.n} 
+        className="flex items-center justify-between rounded-xl border bg-white p-2 min-h-[48px]"
+        style={{ borderLeft: `6px solid ${s.color}` }}
+      >
+        <div className="flex items-center gap-2 min-w-[40px]">
+          <span className="text-xs font-extrabold text-slate-900 bg-slate-100 rounded-full w-6 h-6 flex items-center justify-center">
+            {s.n}
+          </span>
+        </div>
+        <div className="text-[11px] font-semibold text-slate-700 text-right flex-1 ml-2 break-words">
+          {s.label}
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
 
           {!result && (
             <div className="mt-3 text-[11px] text-slate-600">
