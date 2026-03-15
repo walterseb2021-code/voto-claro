@@ -9,6 +9,7 @@
     "lint": "eslint . || exit 0"
   },
   "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
     "dommatrix": "^0.1.1",
