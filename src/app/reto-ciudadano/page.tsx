@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 type PlayMode = "sin_premio" | "con_premio";
 
@@ -12,6 +13,13 @@ type YesNoQuestion = {
   q: string;
   a: boolean; // true = SÍ, false = NO
   note?: string; // opcional: explicación breve
+};
+
+type Winner = {
+  alias: string;
+  created_at: string;
+  segmento: number;
+  premio: string;
 };
 
 /** Shuffle simple */
@@ -496,9 +504,10 @@ function Nivel3Ruleta(props: {
   enabled: boolean;
   mode: PlayMode;
   onRestartToLevel1?: () => void;
- onFinishPick?: (pick: number) => void; // ✅ NUEVO: mandamos el número exacto (1..8)
- }) {
-  const { enabled, mode, onRestartToLevel1, onFinishPick } = props;
+  onFinishPick?: (pick: number) => void;
+  winnerData?: { alias: string; celular: string; email: string; dni: string } | null;
+}) {
+  const { enabled, mode, onRestartToLevel1, onFinishPick, winnerData } = props;
 
   const [started, setStarted] = useState(false);
 
@@ -546,17 +555,16 @@ function Nivel3Ruleta(props: {
   } | null>(null);
 
   const [rotation, setRotation] = useState(0);
-    // ✅ WIN FX: glow + pulso + confetti corto
   const [winPulse, setWinPulse] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
   const confetti = useMemo(() => {
     return Array.from({ length: 28 }, (_, i) => ({
       id: i,
-      left: Math.round(Math.random() * 100),     // 0..100 vw
-      delay: Math.random() * 0.25,               // 0..0.25s
-      duration: 1.8 + Math.random() * 0.6,       // 1.8..2.4s
-      size: 6 + Math.round(Math.random() * 8),   // 6..14px
+      left: Math.round(Math.random() * 100),
+      delay: Math.random() * 0.25,
+      duration: 1.8 + Math.random() * 0.6,
+      size: 6 + Math.round(Math.random() * 8),
       rot: Math.round(Math.random() * 360),
     }));
   }, []);
@@ -587,7 +595,7 @@ function Nivel3Ruleta(props: {
   useEffect(() => {
     return () => cleanupTimer();
   }, []);
-  // ✅ Disparar FX cuando hay resultado
+
   useEffect(() => {
     if (!result) return;
 
@@ -595,11 +603,9 @@ function Nivel3Ruleta(props: {
 
     if (!isWinnerNumber) return;
 
-    // glow/pulso siempre en 2/6
     setWinPulse(true);
     const t1 = window.setTimeout(() => setWinPulse(false), 4200);
 
-    // confetti SOLO si es premio REAL (mode con premio + isPrize)
     if (result.isPrize && mode === "con_premio") {
       setShowConfetti(true);
       const t2 = window.setTimeout(() => setShowConfetti(false), 2200);
@@ -614,6 +620,7 @@ function Nivel3Ruleta(props: {
       window.clearTimeout(t1);
     };
   }, [result, mode]);
+
   function resetLevel3() {
     cleanupTimer();
     setStarted(false);
@@ -622,7 +629,7 @@ function Nivel3Ruleta(props: {
     setRotation(0);
   }
 
-  function startLevel3() {
+  async function startLevel3() {
     if (!enabled) return;
     if (spinning) return;
     if (l3Locked) return;
@@ -646,15 +653,15 @@ function Nivel3Ruleta(props: {
     setRotation(targetRotation);
 
     cleanupTimer();
-    timerRef.current = window.setTimeout(() => {
+    timerRef.current = window.setTimeout(async () => {
       const seg = segments.find((x) => x.n === pick)!;
       const isPrize = pick === 2 || pick === 6;
 
-    let message = isPrize ? "🎉 ¡Ganaste!" : "😅 Inténtalo nuevamente";
+      let message = isPrize ? "🎉 ¡Ganaste!" : "😅 Inténtalo nuevamente";
 
-if (isPrize && mode === "sin_premio") {
-  message = "✨ Cayó en un número premiado, pero estás en modo SIN premio (no se entrega premio).";
-}
+      if (isPrize && mode === "sin_premio") {
+        message = "✨ Cayó en un número premiado, pero estás en modo SIN premio (no se entrega premio).";
+      }
 
       setResult({
         n: pick,
@@ -665,6 +672,31 @@ if (isPrize && mode === "sin_premio") {
 
       setSpinsUsed((x) => x + 1);
       setSpinning(false);
+
+      // ✅ Si es premio en modo con premio Y tenemos datos del ganador, guardar en BD
+      if (isPrize && mode === "con_premio" && winnerData) {
+        try {
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+          );
+
+          await supabase.from("reto_ganadores").insert({
+            alias: winnerData.alias,
+            dni: winnerData.dni,
+            celular: winnerData.celular,
+            email: winnerData.email,
+            nivel: 3,
+            segmento: pick,
+            premio: "Premio ruleta",
+            device_id: "WEB",
+            group_code: "GRUPOA"
+          });
+        } catch (e) {
+          console.error("Error guardando ganador:", e);
+        }
+      }
+
       onFinishPick?.(pick);
     }, 2800);
   }
@@ -747,7 +779,6 @@ if (isPrize && mode === "sin_premio") {
 
       {/* Ruleta */}
       <div className="mt-4 flex flex-col items-center">
-                {/* ✅ Confetti corto (solo al ganar en modo con premio) */}
         {showConfetti && (
           <div className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
             {confetti.map((p) => (
@@ -767,7 +798,6 @@ if (isPrize && mode === "sin_premio") {
           </div>
         )}
         <div className="relative" style={{ width: 280, height: 280 }}>
-          {/* Puntero */}
           <div
             className="absolute left-1/2 -translate-x-1/2 -top-2 z-20"
             style={{
@@ -780,8 +810,7 @@ if (isPrize && mode === "sin_premio") {
             }}
           />
 
-          {/* Círculo */}
-                         <div
+          <div
             className={`absolute inset-0 rounded-full border ${winPulse ? "vc-win-pulse" : ""}`}
             style={{
               background: wheelBg,
@@ -790,7 +819,6 @@ if (isPrize && mode === "sin_premio") {
               boxShadow: "0 18px 45px rgba(0,0,0,.18)",
             }}
           >
-            {/* Centro */}
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="rounded-full border bg-white px-4 py-3 text-center shadow-sm">
                 <div className="text-[10px] text-slate-600">Voto Claro</div>
@@ -798,7 +826,6 @@ if (isPrize && mode === "sin_premio") {
               </div>
             </div>
 
-            {/* Números */}
             {segments.map((s) => {
               const angle = (s.n - 1) * 45 + 22.5;
               return (
@@ -819,7 +846,6 @@ if (isPrize && mode === "sin_premio") {
           </div>
         </div>
 
-        {/* Resultado */}
         {result && (
           <div className="mt-4 w-full rounded-2xl border bg-slate-50 p-4">
             <div className="text-sm font-extrabold text-slate-900">Resultado</div>
@@ -842,7 +868,6 @@ if (isPrize && mode === "sin_premio") {
           </div>
         )}
 
-        {/* Tabla/lista de premios */}
         <div className="mt-4 w-full rounded-2xl border bg-white p-4">
           <div className="text-sm font-extrabold text-slate-900">Premios por número</div>
           <div className="mt-2 grid grid-cols-2 gap-2">
@@ -858,12 +883,12 @@ if (isPrize && mode === "sin_premio") {
           </div>
 
           {!result && (
-  <div className="mt-3 text-[11px] text-slate-600">
-    {mode === "con_premio"
-      ? "Modo con premio: #2 y #6 entregan premio."
-      : "Modo sin premio: #2 y #6 no entregan premio."}
-  </div>
-)}
+            <div className="mt-3 text-[11px] text-slate-600">
+              {mode === "con_premio"
+                ? "Modo con premio: #2 y #6 entregan premio."
+                : "Modo sin premio: #2 y #6 no entregan premio."}
+            </div>
+          )}
         </div>
 
         {l3Locked && (
@@ -880,41 +905,41 @@ if (isPrize && mode === "sin_premio") {
             </button>
           </div>
         )}
-              <style>{`
-        .vc-win-pulse{
-          animation: vcWinPulse 4.2s ease-in-out;
-          box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 0 0 rgba(245,158,11,.0);
-        }
-        @keyframes vcWinPulse{
-          0%   { filter: brightness(1);   transform: scale(1); }
-          10%  { filter: brightness(1.2); transform: scale(1.01); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 18px 6px rgba(245,158,11,.35); }
-          25%  { filter: brightness(0.95);transform: scale(0.995); }
-          40%  { filter: brightness(1.18);transform: scale(1.01); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 18px 6px rgba(245,158,11,.32); }
-          60%  { filter: brightness(0.97);transform: scale(0.997); }
-          85%  { filter: brightness(1.10);transform: scale(1.005); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 12px 4px rgba(245,158,11,.22); }
-          100% { filter: brightness(1);   transform: scale(1); }
-        }
+        <style>{`
+          .vc-win-pulse{
+            animation: vcWinPulse 4.2s ease-in-out;
+            box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 0 0 rgba(245,158,11,.0);
+          }
+          @keyframes vcWinPulse{
+            0%   { filter: brightness(1);   transform: scale(1); }
+            10%  { filter: brightness(1.2); transform: scale(1.01); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 18px 6px rgba(245,158,11,.35); }
+            25%  { filter: brightness(0.95);transform: scale(0.995); }
+            40%  { filter: brightness(1.18);transform: scale(1.01); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 18px 6px rgba(245,158,11,.32); }
+            60%  { filter: brightness(0.97);transform: scale(0.997); }
+            85%  { filter: brightness(1.10);transform: scale(1.005); box-shadow: 0 18px 45px rgba(0,0,0,.18), 0 0 12px 4px rgba(245,158,11,.22); }
+            100% { filter: brightness(1);   transform: scale(1); }
+          }
 
-        .vc-confetti{
-          position: absolute;
-          top: -16px;
-          border-radius: 4px;
-          background: rgba(245,158,11,.95);
-          box-shadow: 0 6px 18px rgba(0,0,0,.15);
-          animation-name: vcConfettiFall;
-          animation-timing-function: ease-in;
-          animation-fill-mode: both;
-        }
-        .vc-confetti:nth-child(3n){ background: rgba(34,197,94,.95); }
-        .vc-confetti:nth-child(4n){ background: rgba(59,130,246,.95); }
-        .vc-confetti:nth-child(5n){ background: rgba(168,85,247,.95); }
+          .vc-confetti{
+            position: absolute;
+            top: -16px;
+            border-radius: 4px;
+            background: rgba(245,158,11,.95);
+            box-shadow: 0 6px 18px rgba(0,0,0,.15);
+            animation-name: vcConfettiFall;
+            animation-timing-function: ease-in;
+            animation-fill-mode: both;
+          }
+          .vc-confetti:nth-child(3n){ background: rgba(34,197,94,.95); }
+          .vc-confetti:nth-child(4n){ background: rgba(59,130,246,.95); }
+          .vc-confetti:nth-child(5n){ background: rgba(168,85,247,.95); }
 
-        @keyframes vcConfettiFall{
-          0%   { transform: translateY(-10px) rotate(0deg); opacity: 0; }
-          10%  { opacity: 1; }
-          100% { transform: translateY(105vh) rotate(420deg); opacity: 0; }
-        }
-      `}</style>
+          @keyframes vcConfettiFall{
+            0%   { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+            10%  { opacity: 1; }
+            100% { transform: translateY(105vh) rotate(420deg); opacity: 0; }
+          }
+        `}</style>
       </div>
     </div>
   );
@@ -930,9 +955,8 @@ function Nivel2Partido(props: {
   partyLoading: boolean;
   partyError: string | null;
   onStatus?: (s: { good: number; passed: boolean }) => void;
-  // ✅ NUEVO: si Nivel 2 se bloquea → volver a empezar desde Nivel 1
   onHardResetToLevel1?: () => void;
- }) {
+}) {
   const TOTAL = 25;
   const PASS = 23;
 
@@ -950,7 +974,7 @@ function Nivel2Partido(props: {
   const LS_ATT = `reto_ciudadano:l2:attempts:${mode}`;
   const LS_LOCK = `reto_ciudadano:l2:lockUntil:${mode}`;
 
-   function readLSNumber(key: string, fallback = 0) {
+  function readLSNumber(key: string, fallback = 0) {
     try {
       const v = Number(localStorage.getItem(key) || "");
       return Number.isFinite(v) ? v : fallback;
@@ -959,7 +983,6 @@ function Nivel2Partido(props: {
     }
   }
 
-  // ✅ CRÍTICO: hidratar desde localStorage SIN esperar useEffect (evita “race” de bloqueo)
   const [attemptsUsed, setAttemptsUsed] = useState<number>(() => readLSNumber(LS_ATT, 0));
   const [lockUntil, setLockUntil] = useState<number>(() => readLSNumber(LS_LOCK, 0));
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
@@ -1024,11 +1047,10 @@ function Nivel2Partido(props: {
   const finished = started && (idx >= TOTAL || poolLeft <= 0);
   const passed = finished && good >= PASS;
 
-   useEffect(() => {
+  useEffect(() => {
     if (!finished) return;
     if (passed) return;
 
-    // ✅ Bloquear SOLO cuando realmente se agotaron los intentos
     if (attemptsUsed >= ATTEMPTS_MAX) {
       lockOneHourAndHardReset();
     }
@@ -1121,7 +1143,7 @@ function Nivel2Partido(props: {
     setStarted(true);
     await resetRun(pid);
   }
-  // Tick timers SOLO si started y enabled
+
   useEffect(() => {
     if (!enabled) return;
     if (!started) return;
@@ -1136,7 +1158,6 @@ function Nivel2Partido(props: {
     return () => window.clearInterval(t);
   }, [enabled, started, loading, error, finished]);
 
-  // Auto-skip cuando qLeft llega a 0
   useEffect(() => {
     if (!enabled) return;
     if (!started) return;
@@ -1213,7 +1234,7 @@ function Nivel2Partido(props: {
       </div>
     );
   }
-  // ✅ NUEVO: si está en lock, debe verse bloqueado aunque enabled=true
+
   if (locked) {
     return (
       <div className="rounded-2xl border bg-white p-4 shadow-sm opacity-90">
@@ -1315,10 +1336,10 @@ function Nivel2Partido(props: {
               disabled={!partyId || locked}
               onClick={startLevel2}
               className={`w-full rounded-xl border px-5 py-3 text-sm font-extrabold ${
-             !partyId || locked
-            ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-            : "bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
-          }`}
+                !partyId || locked
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                  : "bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
+              }`}
             >
               COMENZAR NIVEL 2
             </button>
@@ -1435,56 +1456,178 @@ function Nivel2Partido(props: {
   );
 }
 
+// ============================================
+// COMPONENTE DE LISTA DE GANADORES
+// ============================================
+function ListaGanadores() {
+  const [filtro, setFiltro] = useState<string>("HOY");
+  const [ganadores, setGanadores] = useState<Winner[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const supabase = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    return createClient(url, key);
+  }, []);
+
+  async function cargarGanadores() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data, error } = await supabase
+        .rpc('get_reto_ganadores', { filtro });
+
+      if (error) throw error;
+
+      setGanadores(data || []);
+    } catch (e: any) {
+      console.error('Error cargando ganadores:', e);
+      setError(e?.message || 'Error al cargar ganadores');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    cargarGanadores();
+  }, [filtro]);
+
+  const filtros = [
+    { value: "HOY", label: "Hoy" },
+    { value: "AYER", label: "Ayer" },
+    { value: "SEMANA", label: "Última semana" },
+    { value: "MES", label: "Último mes" },
+    { value: "TODOS", label: "Todos" },
+  ];
+
+  return (
+    <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-extrabold text-slate-900">🏆 Ganadores del Reto</h2>
+          <p className="text-xs text-slate-600">Lista de ciudadanos que ganaron premios</p>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          {filtros.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFiltro(f.value)}
+              className={`rounded-xl border px-3 py-1 text-xs font-semibold transition ${
+                filtro === f.value
+                  ? "bg-green-100 text-green-900 border-green-300"
+                  : "bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        {loading && <div className="text-sm text-slate-600">Cargando ganadores...</div>}
+
+        {error && (
+          <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+            Error: {error}
+          </div>
+        )}
+
+        {!loading && !error && ganadores.length === 0 && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-600">
+            No hay ganadores en este período
+          </div>
+        )}
+
+        {!loading && !error && ganadores.length > 0 && (
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            {ganadores.map((g, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-green-200 bg-green-50 p-3 flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-extrabold text-slate-900">{g.alias}</div>
+                  <div className="text-xs text-slate-600">
+                    {new Date(g.created_at).toLocaleString('es-PE')}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="inline-block rounded-full bg-green-600 text-white px-2 py-0.5 text-xs font-bold">
+                    #{g.segmento}
+                  </span>
+                  <div className="text-xs text-slate-700 mt-1">{g.premio}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function RetoCiudadanoPage() {
   const [mode, setMode] = useState<PlayMode>("sin_premio");
   const [dni, setDni] = useState("");
-const [celular, setCelular] = useState("");
-const [email, setEmail] = useState("");
-const [premioAutorizado, setPremioAutorizado] = useState(false);
-const [premioError, setPremioError] = useState<string | null>(null);
+  const [celular, setCelular] = useState("");
+  const [email, setEmail] = useState("");
+  const [alias, setAlias] = useState(""); // ✅ NUEVO CAMPO OBLIGATORIO
+  const [premioAutorizado, setPremioAutorizado] = useState(false);
+  const [premioError, setPremioError] = useState<string | null>(null);
 
-async function registrarPremio() {
-  setPremioError(null);
+  async function registrarPremio() {
+    setPremioError(null);
 
-  if (!dni || !celular || !email) {
-    setPremioError("Todos los campos son obligatorios.");
-    return;
-  }
-
-  try {
-    const res = await fetch("/api/reto-ciudadano/premio/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dni,
-        celular,
-        email,
-        device_id: "WEB",
-        group_code: "GRUPOA",
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      if (data.error === "BLOQUEO_24H") {
-        setPremioError("Estás bloqueado por 24 horas.");
-        return;
-      }
-      if (data.error === "BLOQUEO_PREMIO") {
-        setPremioError("Ya ganaste premio. Debes esperar 1 mes.");
-        return;
-      }
-
-      setPremioError("No se pudo registrar.");
+    if (!dni || !celular || !email || !alias) {
+      setPremioError("Todos los campos son obligatorios, incluido el alias.");
       return;
     }
 
-    setPremioAutorizado(true);
-  } catch {
-    setPremioError("Error de conexión.");
+    if (alias.length < 3 || alias.length > 20) {
+      setPremioError("El alias debe tener entre 3 y 20 caracteres.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/reto-ciudadano/premio/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dni,
+          celular,
+          email,
+          alias, // ✅ ENVIAR ALIAS
+          device_id: "WEB",
+          group_code: "GRUPOA",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.error === "BLOQUEO_24H") {
+          setPremioError("Estás bloqueado por 24 horas.");
+          return;
+        }
+        if (data.error === "BLOQUEO_PREMIO") {
+          setPremioError("Ya ganaste premio. Debes esperar 1 mes.");
+          return;
+        }
+
+        setPremioError("No se pudo registrar.");
+        return;
+      }
+
+      setPremioAutorizado(true);
+    } catch {
+      setPremioError("Error de conexión.");
+    }
   }
-}
+
   const [partyId, setPartyId] = useState<string>("perufederal");
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [partyLoading, setPartyLoading] = useState(false);
@@ -1497,18 +1640,18 @@ async function registrarPremio() {
 
   const [sessionKey, setSessionKey] = useState(0);
 
- function hardResetToLevel1() {
-  setNivel1Passed(false);
-  setNivel1Good(0);
-  setNivel2Passed(false);
-  setNivel2Good(0);
+  function hardResetToLevel1() {
+    setNivel1Passed(false);
+    setNivel1Good(0);
+    setNivel2Passed(false);
+    setNivel2Good(0);
 
-  // fuerza remount de los componentes para limpiar "started" internos
-  setSessionKey((k) => k + 1);
+    // fuerza remount de los componentes para limpiar "started" internos
+    setSessionKey((k) => k + 1);
 
-  // ✅ llevar arriba
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
+    // ✅ llevar arriba
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   useEffect(() => {
     if (!nivel1Passed) return;
@@ -1547,6 +1690,9 @@ async function registrarPremio() {
   const modeLabel = useMemo(() => {
     return mode === "sin_premio" ? "Sin premio" : "Con premio";
   }, [mode]);
+
+  // ✅ Datos del ganador para pasar a la ruleta
+  const winnerData = premioAutorizado ? { alias, dni, celular, email } : null;
 
   return (
     <main className="vc-reto mx-auto max-w-4xl px-4 py-6">
@@ -1602,74 +1748,85 @@ async function registrarPremio() {
           Nota: el sistema de premios puede estar desactivado durante campaña por normativa.
         </p>
       </section>
+
       {mode === "con_premio" && (
-  <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
-    <div className="text-sm font-extrabold text-slate-900">
-      Registro obligatorio para participar con premio
-    </div>
-
-    {!premioAutorizado ? (
-      <>
-        <div className="mt-3 grid gap-3">
-          <input
-            type="text"
-            placeholder="DNI"
-            value={dni}
-            onChange={(e) => setDni(e.target.value)}
-            className="rounded-xl border px-3 py-2 text-sm"
-          />
-          <input
-            type="text"
-            placeholder="Celular"
-            value={celular}
-            onChange={(e) => setCelular(e.target.value)}
-            className="rounded-xl border px-3 py-2 text-sm"
-          />
-          <input
-            type="email"
-            placeholder="Correo electrónico"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="rounded-xl border px-3 py-2 text-sm"
-          />
-        </div>
-
-        {premioError && (
-          <div className="mt-3 text-xs font-semibold text-red-700">
-            {premioError}
+        <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-sm font-extrabold text-slate-900">
+            Registro obligatorio para participar con premio
           </div>
-        )}
 
-        <button
-          type="button"
-          onClick={registrarPremio}
-          className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
-        >
-          Registrarme y continuar
-        </button>
-      </>
-    ) : (
-      <div className="mt-3 text-xs font-semibold text-green-700">
-        ✅ Registro validado. Puedes iniciar el reto.
-      </div>
-    )}
-  </section>
-)}
+          {!premioAutorizado ? (
+            <>
+              <div className="mt-3 grid gap-3">
+                <input
+                  type="text"
+                  placeholder="DNI"
+                  value={dni}
+                  onChange={(e) => setDni(e.target.value)}
+                  className="rounded-xl border px-3 py-2 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Celular"
+                  value={celular}
+                  onChange={(e) => setCelular(e.target.value)}
+                  className="rounded-xl border px-3 py-2 text-sm"
+                />
+                <input
+                  type="email"
+                  placeholder="Correo electrónico"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="rounded-xl border px-3 py-2 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Alias (cómo quieres aparecer en la lista de ganadores)"
+                  value={alias}
+                  onChange={(e) => setAlias(e.target.value)}
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  maxLength={20}
+                />
+                <p className="text-xs text-slate-600">El alias será público en la lista de ganadores. Entre 3 y 20 caracteres.</p>
+              </div>
+
+              {premioError && (
+                <div className="mt-3 text-xs font-semibold text-red-700">
+                  {premioError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={registrarPremio}
+                className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
+              >
+                Registrarme y continuar
+              </button>
+            </>
+          ) : (
+            <div className="mt-3 text-xs font-semibold text-green-700">
+              ✅ Registro validado. Puedes iniciar el reto. Alias: <span className="font-bold">{alias}</span>
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
         {mode === "con_premio" && !premioAutorizado ? (
-  <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
-    🔒 Debes completar el registro para iniciar el Nivel 1.
-  </div>
-) : (
-  <Nivel1General
-    key={`l1-${sessionKey}-${mode}`}
-    mode={mode}
-    onStatus={(s) => {
-      setNivel1Good(s.good);
-      setNivel1Passed(s.passed);
-    }}
-  />
-)}
+          <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+            🔒 Debes completar el registro para iniciar el Nivel 1.
+          </div>
+        ) : (
+          <Nivel1General
+            key={`l1-${sessionKey}-${mode}`}
+            mode={mode}
+            onStatus={(s) => {
+              setNivel1Good(s.good);
+              setNivel1Passed(s.passed);
+            }}
+          />
+        )}
 
         <Nivel2Partido
           key={`l2-${sessionKey}-${mode}`}
@@ -1688,52 +1845,56 @@ async function registrarPremio() {
           onHardResetToLevel1={hardResetToLevel1}
         />
 
-       <Nivel3Ruleta
-  enabled={nivel2Passed}
-  mode={mode}
-  onRestartToLevel1={hardResetToLevel1}
-  onFinishPick={async (pick) => {
-    if (mode !== "con_premio") return;
+        <Nivel3Ruleta
+          enabled={nivel2Passed}
+          mode={mode}
+          onRestartToLevel1={hardResetToLevel1}
+          winnerData={winnerData}
+          onFinishPick={async (pick) => {
+            if (mode !== "con_premio") return;
 
-    // Si no tenemos celular, no podemos bloquear server-side
-    if (!celular) {
-      setPremioAutorizado(false);
-      hardResetToLevel1();
-      return;
-    }
+            // Si no tenemos celular, no podemos bloquear server-side
+            if (!celular) {
+              setPremioAutorizado(false);
+              hardResetToLevel1();
+              return;
+            }
 
-    const isPrize = pick === 2 || pick === 6;
+            const isPrize = pick === 2 || pick === 6;
 
-    try {
-      if (isPrize) {
-        await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            celular,
-            prize_segment: pick,      // ✅ AQUÍ VA 2 o 6
-            prize_note: "Premio ruleta",
-          }),
-        });
-      } else {
-        await fetch("/api/reto-ciudadano/premio/lock24h", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ celular }),
-        });
-      }
-    } catch {}
+            try {
+              if (isPrize) {
+                await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    celular,
+                    prize_segment: pick,
+                    prize_note: "Premio ruleta",
+                  }),
+                });
+              } else {
+                await fetch("/api/reto-ciudadano/premio/lock24h", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ celular }),
+                });
+              }
+            } catch {}
 
-    // Fuerza que vuelva a pedir registro
-    setPremioAutorizado(false);
+            // Fuerza que vuelva a pedir registro
+            setPremioAutorizado(false);
 
-    // ✅ Deja 2.4s para ver el glow/confetti antes de resetear
-    window.setTimeout(() => {
-      hardResetToLevel1();
-    }, 2400);
-  }}
-/>
+            // ✅ Deja 2.4s para ver el glow/confetti antes de resetear
+            window.setTimeout(() => {
+              hardResetToLevel1();
+            }, 2400);
+          }}
+        />
       </section>
+
+      {/* ✅ NUEVO: LISTA DE GANADORES */}
+      <ListaGanadores />
     </main>
   );
 }
