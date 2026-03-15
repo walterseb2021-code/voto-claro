@@ -6,8 +6,11 @@ import { useEffect, useMemo, useState, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
+// ============================================
+// TIPOS
+// ============================================
 type VoteOption = {
-  id: string; // UUID (vote_parties.id)
+  id: string;
   slug: string;
   name: string;
   enabled: boolean;
@@ -15,8 +18,17 @@ type VoteOption = {
   total_votes: number;
 };
 
+type VoteRound = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+};
+
 type ActiveResponse = {
-  round: { id: string; name: string; is_active: boolean; created_at: string };
+  round: VoteRound;
   options: VoteOption[];
   meta: { options_total: number; enabled_total: number };
 };
@@ -28,6 +40,66 @@ type IntentionQuestions = {
   question_3: string;
 };
 
+// ============================================
+// FUNCIONES DE FILTRO (copiadas del sistema de comentarios)
+// ============================================
+function normalizeText(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[0]/g, "o")
+    .replace(/[1]/g, "i")
+    .replace(/[3]/g, "e")
+    .replace(/[4]/g, "a")
+    .replace(/[5]/g, "s")
+    .replace(/[7]/g, "t")
+    .replace(/[^a-z0-9\s]/g, " ");
+}
+
+function hasSoeces(text: string) {
+  if (!text) return false;
+  const t = normalizeText(text);
+  const words = t.split(/\s+/).filter(Boolean);
+
+  const banned = new Set([
+    "porqueria", "basura", "asco", "mierda", "carajo", "puta", "puto",
+    "culo", "verga", "cabron", "cabrona", "joder", "maldito", "maldita",
+    "idiota", "imbecil", "pendejo", "pendeja", "cojudo", "cojuda",
+  ]);
+
+  return words.some((w) => banned.has(w));
+}
+
+function hasLinks(text: string): boolean {
+  if (!text) return false;
+  const linkRegex = /https?:\/\/|www\./i;
+  return linkRegex.test(text);
+}
+
+function validateAnswer(text: string): { valid: boolean; error?: string } {
+  if (!text || !text.trim()) return { valid: true }; // Vacío es válido (opcional)
+  
+  const trimmed = text.trim();
+  
+  if (trimmed.length < 10) {
+    return { valid: false, error: "Cada respuesta debe tener al menos 10 caracteres" };
+  }
+  
+  if (hasSoeces(trimmed)) {
+    return { valid: false, error: "Tus respuestas contienen palabras no permitidas" };
+  }
+  
+  if (hasLinks(trimmed)) {
+    return { valid: false, error: "No está permitido incluir enlaces en las respuestas" };
+  }
+  
+  return { valid: true };
+}
+
+// ============================================
+// FUNCIONES UTILITARIAS
+// ============================================
 function logoSrc(slug: string) {
   return `/voto/parties/${slug}.png`;
 }
@@ -58,8 +130,10 @@ function Pill({ children }: { children: ReactNode }) {
   );
 }
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 function IntencionDeVotoContent() {
-  // Inicializar Supabase de la misma forma que en el foro
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -69,27 +143,21 @@ function IntencionDeVotoContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
-  // Identidad del dispositivo (persistente)
+  // Estados principales
   const [deviceId, setDeviceId] = useState<string>("");
-
-  // Datos reales (ronda activa + opciones + tally)
   const [active, setActive] = useState<ActiveResponse | null>(null);
   const [loadingActive, setLoadingActive] = useState(true);
   const [activeErr, setActiveErr] = useState<string | null>(null);
 
-  // Flujo "selección editable hasta confirmar"
+  // Flujo de votación
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [confirmedPartyId, setConfirmedPartyId] = useState<string | null>(null);
   const [confirmedPartyName, setConfirmedPartyName] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
-
-  // UI de reflexión (solo cuando selecciona Nulo/Blanco)
   const [showReflection, setShowReflection] = useState(false);
-
-  // Mensaje sobrio (sin alert)
   const [notice, setNotice] = useState<string | null>(null);
 
-  // ========== NUEVO: Estado para las preguntas ==========
+  // Estados para preguntas
   const [showQuestions, setShowQuestions] = useState(false);
   const [questions, setQuestions] = useState<IntentionQuestions | null>(null);
   const [answers, setAnswers] = useState({
@@ -100,24 +168,20 @@ function IntencionDeVotoContent() {
   const [submittingAnswers, setSubmittingAnswers] = useState(false);
   const [answersSubmitted, setAnswersSubmitted] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
-  // ======================================================
+  const [answerValidations, setAnswerValidations] = useState({
+    answer_1: { valid: true, error: "" },
+    answer_2: { valid: true, error: "" },
+    answer_3: { valid: true, error: "" }
+  });
 
-  // Subir
-  function scrollToTop() {
-    try {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch {
-      window.scrollTo(0, 0);
-    }
-  }
-
-  // 1) Inicializar deviceId
+  // ============================================
+  // FUNCIONES DE CARGA
+  // ============================================
   useEffect(() => {
     const id = getOrCreateDeviceId();
     setDeviceId(id);
   }, []);
 
-  // 2) Cargar ronda activa + opciones (tally)
   async function loadActive() {
     setLoadingActive(true);
     setActiveErr(null);
@@ -136,11 +200,42 @@ function IntencionDeVotoContent() {
         .sort((a, b) => a.position - b.position);
 
       setActive(data);
+      
+      // Si hay ronda activa, verificar si ya votó en ESTA ronda
+      if (data.round?.id && deviceId) {
+        await checkIfVotedInCurrentRound(deviceId, data.round.id);
+      }
     } catch (e) {
       setActive(null);
       setActiveErr("Error de conexión cargando la ronda activa.");
     } finally {
       setLoadingActive(false);
+    }
+  }
+
+  async function checkIfVotedInCurrentRound(devId: string, roundId: string) {
+    try {
+      const res = await fetch(`/api/vote/status?device_id=${encodeURIComponent(devId)}&round_id=${roundId}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+
+      if (res.ok && data?.voted && data?.party_id) {
+        setConfirmedPartyId(String(data.party_id));
+        
+        const party = active?.options?.find(o => o.id === data.party_id);
+        if (party) {
+          setConfirmedPartyName(party.name);
+        }
+        
+        setLocked(true);
+        setNotice(`Ya votaste en la ronda ${active?.round?.name || 'actual'}.`);
+        
+        // Verificar si ya respondió las preguntas en ESTA ronda
+        await checkIfAlreadyAnswered(devId, roundId, data.party_id);
+      }
+    } catch {
+      // Silencio
     }
   }
 
@@ -163,48 +258,13 @@ function IntencionDeVotoContent() {
       await loadActive();
     }
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 3) Si ya votó este device en la ronda activa, bloquear automáticamente
-  useEffect(() => {
-    async function checkStatus() {
-      if (!deviceId) return;
-      if (!active?.round?.id) return;
-
-      try {
-        const res = await fetch(`/api/vote/status?device_id=${encodeURIComponent(deviceId)}`, {
-          cache: "no-store",
-        });
-        const data = await res.json();
-
-        if (res.ok && data?.voted && data?.party_id) {
-          setConfirmedPartyId(String(data.party_id));
-          
-          // Buscar el nombre del partido
-          const party = active?.options?.find(o => o.id === data.party_id);
-          if (party) {
-            setConfirmedPartyName(party.name);
-          }
-          
-          setLocked(true);
-          setNotice("Tu intención de voto ya quedó registrada en esta encuesta.");
-          
-          // ===== NUEVO: Verificar si ya respondió las preguntas =====
-          checkIfAlreadyAnswered(data.party_id);
-        }
-      } catch {
-        // silencio
-      }
-    }
-
-    checkStatus();
-  }, [deviceId, active?.round?.id, active?.options]);
-
-  // ========== NUEVO: Cargar preguntas activas ==========
+  // ============================================
+  // FUNCIONES DE PREGUNTAS
+  // ============================================
   async function loadActiveQuestions() {
     try {
-      // Intentar usar la función RPC si existe
       const { data, error } = await supabase
         .rpc('get_active_questions');
       
@@ -213,7 +273,6 @@ function IntencionDeVotoContent() {
         return;
       }
 
-      // Si no existe la función o no hay datos, usar consulta directa
       const { data: questionsData, error: questionsError } = await supabase
         .from('vote_intention_questions')
         .select('id, question_1, question_2, question_3')
@@ -224,7 +283,6 @@ function IntencionDeVotoContent() {
       if (!questionsError && questionsData && questionsData.length > 0) {
         setQuestions(questionsData[0]);
       } else {
-        // Preguntas por defecto si no hay en la BD
         setQuestions({
           id: 'default',
           question_1: '¿Cuál es la principal razón por la que elegiste este partido?',
@@ -234,7 +292,6 @@ function IntencionDeVotoContent() {
       }
     } catch (e) {
       console.error('Error cargando preguntas:', e);
-      // Preguntas por defecto en caso de error
       setQuestions({
         id: 'default',
         question_1: '¿Cuál es la principal razón por la que elegiste este partido?',
@@ -244,16 +301,13 @@ function IntencionDeVotoContent() {
     }
   }
 
-  // ========== NUEVO: Verificar si ya respondió ==========
-  async function checkIfAlreadyAnswered(partyId: string) {
-    if (!deviceId || !active?.round?.id || !partyId) return;
-    
+  async function checkIfAlreadyAnswered(devId: string, roundId: string, partyId: string) {
     try {
       const { data, error } = await supabase
         .from('vote_intention_answers')
         .select('id')
-        .eq('device_id', deviceId)
-        .eq('round_id', active.round.id)
+        .eq('device_id', devId)
+        .eq('round_id', roundId)
         .eq('party_id', partyId)
         .maybeSingle();
       
@@ -262,19 +316,37 @@ function IntencionDeVotoContent() {
       if (data) {
         setAnswersSubmitted(true);
       } else {
-        // Si no ha respondido, cargar preguntas y mostrar el formulario
         await loadActiveQuestions();
         setShowQuestions(true);
       }
     } catch (e) {
       console.error('Error verificando respuestas:', e);
-      // En caso de error, igual mostramos las preguntas
       await loadActiveQuestions();
       setShowQuestions(true);
     }
   }
 
-  // ========== NUEVO: Enviar respuestas ==========
+  // ============================================
+  // VALIDACIÓN DE RESPUESTAS EN TIEMPO REAL
+  // ============================================
+  function validateAnswerField(field: keyof typeof answers, value: string) {
+    const result = validateAnswer(value);
+    setAnswerValidations(prev => ({
+      ...prev,
+      [field]: { valid: result.valid, error: result.error || "" }
+    }));
+    return result.valid;
+  }
+
+  function handleAnswerChange(question: keyof typeof answers, value: string) {
+    setAnswers(prev => ({ ...prev, [question]: value }));
+    validateAnswerField(question, value);
+    if (questionsError) setQuestionsError(null);
+  }
+
+  // ============================================
+  // ENVÍO DE RESPUESTAS CON VALIDACIONES
+  // ============================================
   async function submitAnswers() {
     if (!deviceId || !active?.round?.id || !confirmedPartyId || !confirmedSlug || !questions) {
       setQuestionsError('Faltan datos para enviar las respuestas');
@@ -284,6 +356,25 @@ function IntencionDeVotoContent() {
     // Validar que al menos una respuesta tenga texto
     if (!answers.answer_1.trim() && !answers.answer_2.trim() && !answers.answer_3.trim()) {
       setQuestionsError('Por favor responde al menos una pregunta');
+      return;
+    }
+
+    // Validar cada respuesta individualmente
+    const validations = {
+      answer_1: validateAnswer(answers.answer_1),
+      answer_2: validateAnswer(answers.answer_2),
+      answer_3: validateAnswer(answers.answer_3)
+    };
+
+    setAnswerValidations({
+      answer_1: { valid: validations.answer_1.valid, error: validations.answer_1.error || "" },
+      answer_2: { valid: validations.answer_2.valid, error: validations.answer_2.error || "" },
+      answer_3: { valid: validations.answer_3.valid, error: validations.answer_3.error || "" }
+    });
+
+    // Si alguna respuesta no es válida, cancelar
+    if (!validations.answer_1.valid || !validations.answer_2.valid || !validations.answer_3.valid) {
+      setQuestionsError('Por favor corrige los errores en las respuestas');
       return;
     }
 
@@ -312,19 +403,23 @@ function IntencionDeVotoContent() {
       setNotice('¡Gracias por compartir tu opinión!');
     } catch (e: any) {
       console.error('Error enviando respuestas:', e);
-      setQuestionsError(e?.message || 'Error al enviar las respuestas');
+      
+      // Si es error de unique, ya respondió en esta ronda
+      if (e.message?.includes('unique') || e.code === '23505') {
+        setQuestionsError('Ya respondiste estas preguntas en esta ronda.');
+        setAnswersSubmitted(true);
+        setShowQuestions(false);
+      } else {
+        setQuestionsError(e?.message || 'Error al enviar las respuestas');
+      }
     } finally {
       setSubmittingAnswers(false);
     }
   }
 
-  // ========== NUEVO: Manejar cambios en las respuestas ==========
-  function handleAnswerChange(question: keyof typeof answers, value: string) {
-    setAnswers(prev => ({ ...prev, [question]: value }));
-    if (questionsError) setQuestionsError(null);
-  }
-
-  // Derivados
+  // ============================================
+  // FUNCIONES DE VOTACIÓN
+  // ============================================
   const total = useMemo(() => {
     const opts = active?.options ?? [];
     return opts.reduce((acc, o) => acc + (o.total_votes ?? 0), 0);
@@ -335,7 +430,6 @@ function IntencionDeVotoContent() {
     return MOTIVATIONAL[idx];
   }, [total]);
 
-  // Selección editable (NO guarda en Supabase)
   function voteSelect(slug: string) {
     if (locked) return;
     setPendingSlug(slug);
@@ -343,7 +437,6 @@ function IntencionDeVotoContent() {
     setShowReflection(slug === "nulo-blanco");
   }
 
-  // Confirmación (recién aquí se guarda en Supabase)
   async function confirmVote() {
     if (locked) return;
     if (!deviceId) return;
@@ -379,19 +472,17 @@ function IntencionDeVotoContent() {
       setLocked(true);
       setConfirmedPartyId(String(data?.party?.id ?? ""));
       
-      // Buscar y guardar el nombre del partido
       const party = active?.options?.find(o => o.id === data?.party?.id);
       if (party) {
         setConfirmedPartyName(party.name);
       }
       
-      setNotice("Listo. Tu intención de voto quedó registrada.");
+      setNotice(`Listo. Tu voto en la ronda ${active?.round?.name || 'actual'} quedó registrado.`);
       if (pendingSlug === "nulo-blanco") setShowReflection(true);
 
-      // refrescar tally real
       await loadActive();
       
-      // ===== NUEVO: Cargar preguntas y mostrarlas =====
+      // Cargar preguntas para ESTA ronda
       await loadActiveQuestions();
       setShowQuestions(true);
       
@@ -400,13 +491,23 @@ function IntencionDeVotoContent() {
     }
   }
 
-  // Para resaltar el "voto confirmado", convertimos party_id -> slug usando options
   const confirmedSlug = useMemo(() => {
     if (!confirmedPartyId) return null;
     const opt = (active?.options ?? []).find((o) => o.id === confirmedPartyId);
     return opt?.slug ?? null;
   }, [confirmedPartyId, active?.options]);
 
+  function scrollToTop() {
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      window.scrollTo(0, 0);
+    }
+  }
+
+  // ============================================
+  // RENDER
+  // ============================================
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100">
       <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
@@ -421,13 +522,25 @@ function IntencionDeVotoContent() {
                     Intención de voto
                   </h1>
 
+                  {active?.round && (
+                    <div className="mt-2">
+                      <span className="inline-block bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                        Ronda: {active.round.name}
+                      </span>
+                      <span className="ml-2 text-xs text-slate-600">
+                        {new Date(active.round.starts_at).toLocaleDateString()} - {new Date(active.round.ends_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+
                   <p className="mt-2 text-sm md:text-base text-slate-800">
-                    Selecciona tu opción y luego presiona <b>Confirmar</b>. Después de confirmar, no podrás cambiar.
+                    Cada mes puedes votar nuevamente. Tu voto anterior queda guardado para análisis histórico.
                   </p>
 
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
                     <Pill>Editable hasta confirmar</Pill>
-                    <Pill>1 voto por dispositivo</Pill>
+                    <Pill>1 voto por ronda</Pill>
+                    <Pill>Nueva ronda cada mes</Pill>
                   </div>
 
                   <div className="mt-4 text-sm text-slate-900">
@@ -437,7 +550,7 @@ function IntencionDeVotoContent() {
                   </div>
 
                   <div className="mt-4 text-xs text-slate-700">
-                    Total registrado en esta encuesta: <b>{total}</b>
+                    Total registrado en esta ronda: <b>{total}</b>
                   </div>
 
                   {notice ? (
@@ -476,7 +589,7 @@ function IntencionDeVotoContent() {
 
             <div className="text-xs text-slate-800 border border-green-200 rounded-full px-3 py-1 bg-green-50">
               Estado:{" "}
-              {locked ? <b>confirmado</b> : pendingSlug ? <b>selección pendiente</b> : <b>sin selección</b>}
+              {locked ? <b>voto confirmado</b> : pendingSlug ? <b>selección pendiente</b> : <b>sin selección</b>}
             </div>
           </div>
 
@@ -536,8 +649,8 @@ function IntencionDeVotoContent() {
                         <div className="mt-2 text-[11px] text-slate-700">
                           {locked
                             ? isConfirmed
-                              ? "Tu voto quedó registrado."
-                              : "Voto ya confirmado."
+                              ? "Tu voto en esta ronda"
+                              : "Voto ya registrado"
                             : "Toca para seleccionar."}
                         </div>
                       </div>
@@ -546,12 +659,11 @@ function IntencionDeVotoContent() {
                 })}
               </div>
 
-              {/* Reflexión SOLO al seleccionar Nulo/Blanco (antes de confirmar) */}
+              {/* Reflexión para Nulo/Blanco */}
               {!locked && showReflection && pendingSlug === "nulo-blanco" ? (
                 <div className="mt-6 p-4 rounded-xl border-2 border-red-500 bg-green-50 text-sm text-slate-900 text-center">
                   “Antes de optar por <b>nulo</b> o <b>en blanco</b>, asegúrate de haber investigado, comparado y
-                  reflexionado. Si nadie te convence, que sea una decisión consciente: tu voto vale y exige
-                  responsabilidad a quien pretende gobernar.”
+                  reflexionado. Si nadie te convence, que sea una decisión consciente.”
                 </div>
               ) : null}
 
@@ -562,7 +674,7 @@ function IntencionDeVotoContent() {
                     <div className="text-xs text-slate-700 text-center">
                       {pendingSlug ? (
                         <>
-                          Selección actual: <b>{pendingSlug}</b>. Si ya estás seguro, presiona <b>Confirmar</b>.
+                          Selección actual: <b>{pendingSlug}</b>. Si estás seguro, presiona <b>Confirmar</b>.
                         </>
                       ) : (
                         <>Selecciona una opción para habilitar “Confirmar”.</>
@@ -580,12 +692,12 @@ function IntencionDeVotoContent() {
                           : "bg-slate-200 text-slate-600 cursor-not-allowed",
                       ].join(" ")}
                     >
-                      ✅ Confirmar
+                      ✅ Confirmar voto en {active?.round?.name || 'ronda actual'}
                     </button>
                   </>
                 ) : (
                   <div className="text-sm text-slate-900 text-center">
-                    ✅ Tu intención de voto ya quedó registrada.
+                    ✅ Ya votaste en la ronda {active?.round?.name || 'actual'}
                   </div>
                 )}
               </div>
@@ -593,16 +705,19 @@ function IntencionDeVotoContent() {
           )}
         </section>
 
-        {/* ========== NUEVO: SECCIÓN DE PREGUNTAS ========== */}
+        {/* SECCIÓN DE PREGUNTAS */}
         {locked && showQuestions && !answersSubmitted && questions && (
           <section className="mt-6 border-[6px] border-red-600 rounded-2xl p-6 bg-white shadow-sm">
             <div className="mb-4">
               <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
-                Cuéntanos ¿por qué {confirmedPartyName ? `elegiste ${confirmedPartyName}` : 'elegiste este partido'}?
+                Ronda {active?.round?.name || 'actual'}: Cuéntanos ¿por qué {confirmedPartyName ? `elegiste ${confirmedPartyName}` : 'elegiste este partido'}?
               </h2>
               <p className="text-sm text-slate-800 mt-2">
-                Tus respuestas nos ayudan a entender mejor qué motiva a los ciudadanos. 
+                Tus respuestas nos ayudan a entender cómo evoluciona la opinión ciudadana mes a mes.
                 Puedes responder una, dos o las tres preguntas.
+              </p>
+              <p className="text-xs text-slate-600 mt-1">
+                <span className="font-bold">Reglas:</span> Mínimo 10 caracteres por respuesta • Sin groserías • Sin enlaces
               </p>
             </div>
 
@@ -616,10 +731,17 @@ function IntencionDeVotoContent() {
                   value={answers.answer_1}
                   onChange={(e) => handleAnswerChange('answer_1', e.target.value)}
                   rows={3}
-                  className="w-full rounded-xl border-2 border-red-500 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className={`w-full rounded-xl border-2 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                    !answerValidations.answer_1.valid && answers.answer_1.trim() 
+                      ? 'border-red-600' 
+                      : 'border-red-500'
+                  }`}
                   placeholder="Escribe tu respuesta aquí..."
                   disabled={submittingAnswers}
                 />
+                {!answerValidations.answer_1.valid && answers.answer_1.trim() && (
+                  <p className="text-xs text-red-600 mt-1">{answerValidations.answer_1.error}</p>
+                )}
               </div>
 
               {/* Pregunta 2 */}
@@ -631,10 +753,17 @@ function IntencionDeVotoContent() {
                   value={answers.answer_2}
                   onChange={(e) => handleAnswerChange('answer_2', e.target.value)}
                   rows={3}
-                  className="w-full rounded-xl border-2 border-red-500 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className={`w-full rounded-xl border-2 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                    !answerValidations.answer_2.valid && answers.answer_2.trim() 
+                      ? 'border-red-600' 
+                      : 'border-red-500'
+                  }`}
                   placeholder="Escribe tu respuesta aquí..."
                   disabled={submittingAnswers}
                 />
+                {!answerValidations.answer_2.valid && answers.answer_2.trim() && (
+                  <p className="text-xs text-red-600 mt-1">{answerValidations.answer_2.error}</p>
+                )}
               </div>
 
               {/* Pregunta 3 */}
@@ -646,10 +775,17 @@ function IntencionDeVotoContent() {
                   value={answers.answer_3}
                   onChange={(e) => handleAnswerChange('answer_3', e.target.value)}
                   rows={3}
-                  className="w-full rounded-xl border-2 border-red-500 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className={`w-full rounded-xl border-2 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                    !answerValidations.answer_3.valid && answers.answer_3.trim() 
+                      ? 'border-red-600' 
+                      : 'border-red-500'
+                  }`}
                   placeholder="Escribe tu respuesta aquí..."
                   disabled={submittingAnswers}
                 />
+                {!answerValidations.answer_3.valid && answers.answer_3.trim() && (
+                  <p className="text-xs text-red-600 mt-1">{answerValidations.answer_3.error}</p>
+                )}
               </div>
 
               {questionsError && (
@@ -675,13 +811,13 @@ function IntencionDeVotoContent() {
               </div>
 
               <p className="text-xs text-slate-600 text-center mt-2">
-                Tus respuestas son anónimas y nos ayudan a entender mejor la opinión ciudadana.
+                Tus respuestas son anónimas y nos ayudan a entender la evolución de la opinión ciudadana.
               </p>
             </div>
           </section>
         )}
 
-        {/* ========== NUEVO: Mensaje de agradecimiento si ya respondió ========== */}
+        {/* Mensaje de agradecimiento si ya respondió */}
         {locked && answersSubmitted && (
           <section className="mt-6 border-[6px] border-red-600 rounded-2xl p-6 bg-green-50 shadow-sm">
             <div className="text-center">
@@ -689,15 +825,15 @@ function IntencionDeVotoContent() {
                 ¡Gracias por compartir tu opinión!
               </h2>
               <p className="text-sm text-slate-800">
-                Tus respuestas nos ayudan a entender mejor qué motiva a los ciudadanos 
-                en su decisión de voto.
+                Tus respuestas en la ronda {active?.round?.name || 'actual'} han sido guardadas.
+                Podrás votar nuevamente el próximo mes.
               </p>
             </div>
           </section>
         )}
 
         <footer className="mt-6 text-xs text-slate-700">
-          VOTO CLARO • Intención de voto (confirmación) • “Infórmate, Reflexiona y Decide.”
+          VOTO CLARO • Intención de voto (rondas mensuales) • “Infórmate, Reflexiona y Decide cada mes.”
         </footer>
 
         {/* Botón Subir */}
