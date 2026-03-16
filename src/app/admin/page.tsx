@@ -61,54 +61,72 @@ export default function AdminHubPage() {
     };
   }, [router, supabase.auth]);
 
-  // Cargar dispositivos
-  const loadDevices = async () => {
-    setLoadingDevices(true);
-    setMessage(null);
+  // Cargar dispositivos - VERSIÓN CORREGIDA (con manejo de error tipo unknown)
+const loadDevices = async () => {
+  setLoadingDevices(true);
+  setMessage(null);
 
-    try {
-      // Obtener dispositivos con sus conteos
-      const { data: participants, error } = await supabase
-        .from('comment_access_participants')
-        .select(`
-          device_id,
-          created_at,
-          email,
-          celular,
-          forum_alias,
-          vote_intention_answers(count),
-          archived_topic_forum_comments(count)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
+  try {
+    // 1. Obtener todos los participantes
+    const { data: participants, error } = await supabase
+      .from('comment_access_participants')
+      .select(`
+        device_id,
+        created_at,
+        email,
+        celular,
+        forum_alias
+      `)
+      .order('created_at', { ascending: false })
+      .limit(50);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      // También obtener ganadores del reto
-      const { data: winners } = await supabase
-        .from('reto_ganadores')
-        .select('device_id, count');
-
-      // Mapear ganadores por device_id
-      const winnersMap = new Map();
-      winners?.forEach(w => {
-        winnersMap.set(w.device_id, (winnersMap.get(w.device_id) || 0) + 1);
-      });
-
-      // Combinar datos
-      const devicesWithWinners = (participants || []).map(d => ({
-        ...d,
-        reto_ganadores: [{ count: winnersMap.get(d.device_id) || 0 }]
-      }));
-
-      setDevices(devicesWithWinners as Device[]);
-    } catch (error) {
-      console.error('Error cargando dispositivos:', error);
-      setMessage({ type: 'error', text: 'Error al cargar dispositivos' });
-    } finally {
-      setLoadingDevices(false);
+    if (!participants || participants.length === 0) {
+      setDevices([]);
+      return;
     }
-  };
+
+    // 2. Para cada dispositivo, obtener sus conteos por separado
+    const devicesWithCounts = await Promise.all(
+      participants.map(async (p) => {
+        // Conteo de intención de voto
+        const { count: voteCount } = await supabase
+          .from('vote_intention_answers')
+          .select('*', { count: 'exact', head: true })
+          .eq('device_id', p.device_id);
+
+        // Conteo de comentarios en foros
+        const { count: commentCount } = await supabase
+          .from('archived_topic_forum_comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('device_id', p.device_id);
+
+        // Conteo de ganadores del reto
+        const { count: retoCount } = await supabase
+          .from('reto_ganadores')
+          .select('*', { count: 'exact', head: true })
+          .eq('device_id', p.device_id);
+
+        return {
+          ...p,
+          vote_intention_answers: [{ count: voteCount || 0 }],
+          archived_topic_forum_comments: [{ count: commentCount || 0 }],
+          reto_ganadores: [{ count: retoCount || 0 }]
+        };
+      })
+    );
+
+    setDevices(devicesWithCounts);
+  } catch (err) {
+    // CORRECCIÓN: Manejar error de tipo unknown
+    const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+    console.error('Error cargando dispositivos:', err);
+    setMessage({ type: 'error', text: 'Error al cargar dispositivos: ' + errorMessage });
+  } finally {
+    setLoadingDevices(false);
+  }
+};
 
   // Resetear un dispositivo específico
   const resetDevice = async (deviceId: string) => {
