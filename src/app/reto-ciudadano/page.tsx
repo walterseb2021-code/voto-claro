@@ -1232,7 +1232,7 @@ function Nivel2Partido(props: {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">
-              Nivel 2 — Partido (según “Un cambio con valentía”)
+              Nivel 2 — Partido (según “Alianza para el Progreso”)
             </div>
             <div className="mt-1 text-xs text-slate-700">Bloqueado hasta aprobar Nivel 1 (23 buenas).</div>
           </div>
@@ -1250,13 +1250,13 @@ function Nivel2Partido(props: {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">
-              Nivel 2 — Partido (según “Un cambio con valentía”)
+              Nivel 2 — Partido (según “Alianza para el Progreso”)
             </div>
             <div className="mt-1 text-xs text-slate-700">
               🔒 Bloqueado temporalmente por {formatRemaining(lockUntil - nowTick)}.
             </div>
             <div className="mt-2 text-[11px] text-slate-600">
-              Te recomendamos revisar “Un cambio con valentía” y volver luego.
+              Te recomendamos revisar “Alianza para el Progreso” y volver luego.
             </div>
           </div>
 
@@ -1283,7 +1283,7 @@ function Nivel2Partido(props: {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-extrabold text-slate-900">
-            Nivel 2 — Partido (según “Un cambio con valentía”)
+            Nivel 2 — Partido (según “Alianza para el Progreso”)
           </div>
           <div className="mt-1 text-xs text-slate-700">
             ✅ Desbloqueado • {TOTAL} preguntas • Umbral: <b>{PASS}</b> • {QUESTION_SEC}s/pregunta • Pool:{" "}
@@ -1294,7 +1294,7 @@ function Nivel2Partido(props: {
             Intentos restantes: <b>{attemptsLeft}</b> de {ATTEMPTS_MAX}
             {locked && (
               <span className="ml-2 text-red-700 font-semibold">
-                ⏳ Bloqueado por {formatRemaining(lockUntil - nowTick)} — revisa “Un cambio con valentía” y vuelve luego.
+                ⏳ Bloqueado por {formatRemaining(lockUntil - nowTick)} — revisa “Alianza para el Progreso” y vuelve luego.
               </span>
             )}
           </div>
