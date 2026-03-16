@@ -43,6 +43,10 @@ const BTN_TEXT = "#ffffff";
 export default function PitchPage() {
   const [access, setAccess] = React.useState<AccessState>("CHECKING");
   const [party, setParty] = React.useState<"perufederal" | "app">("perufederal");
+  
+  // 🔹 NUEVO: Estado para la instalación PWA
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+  const [isInstallable, setIsInstallable] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -56,7 +60,7 @@ export default function PitchPage() {
 
         // ✅ Definir partido activo según token (reactivo + persistido)
         // GRUPOB y GRUPOC apuntan a Alianza por el Progreso (app)
-const nextParty = (token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")) ? "app" : "perufederal";
+        const nextParty = (token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")) ? "app" : "perufederal";
         setParty(nextParty);
         setActiveParty(nextParty);
 
@@ -126,6 +130,39 @@ const nextParty = (token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")) ?
       alive = false;
     };
   }, []);
+
+  // 🔹 NUEVO: Detectar si la app es instalable (PWA)
+  React.useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      // Prevenir que Chrome muestre el mini-infobar automáticamente
+      e.preventDefault();
+      // Guardar el evento para usarlo después
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  // 🔹 NUEVO: Función para instalar la app
+  const installApp = async () => {
+    if (!deferredPrompt) return;
+    
+    // Mostrar el diálogo de instalación
+    deferredPrompt.prompt();
+    
+    // Esperar a que el usuario responda al diálogo
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`Usuario ${outcome === 'accepted' ? 'instaló' : 'canceló'} la app`);
+    
+    // Limpiar el evento guardado
+    setDeferredPrompt(null);
+    setIsInstallable(false);
+  };
 
   if (access === "CHECKING") {
     return (
@@ -246,10 +283,14 @@ const nextParty = (token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")) ?
     );
   }
 
-  return <FederalitoSplash partyId={party} />;
+  return <FederalitoSplash partyId={party} isInstallable={isInstallable} installApp={installApp} />;
 }
 
-function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
+function FederalitoSplash(props: { 
+  partyId: "perufederal" | "app";
+  isInstallable: boolean;
+  installApp: () => Promise<void>;
+}) {
   const isApp = props.partyId === "app";
   const assets = partyWelcomeAssets(props.partyId);
 
@@ -457,6 +498,26 @@ function FederalitoSplash(props: { partyId: "perufederal" | "app" }) {
           </p>
 
           <div style={{ marginTop: 16, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            {/* 🔹 NUEVO: Botón de instalación PWA */}
+            {props.isInstallable && (
+              <button
+                onClick={props.installApp}
+                style={{
+                  border: `2px solid ${RED_BORDER}`,
+                  background: "#0537A8",
+                  color: BTN_TEXT,
+                  fontWeight: 900,
+                  borderRadius: 12,
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 25px rgba(0,0,0,.20)",
+                }}
+              >
+                📲 Instalar App
+              </button>
+            )}
+            
             <button
               id="federalito-splash-skip"
               type="button"
