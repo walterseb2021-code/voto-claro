@@ -55,7 +55,8 @@ export default function PitchPage() {
         const token = (url.searchParams.get("t") ?? "").trim();
 
         // ✅ Definir partido activo según token (reactivo + persistido)
-        const nextParty = token.startsWith("GRUPOB-") ? "app" : "perufederal";
+        // GRUPOB y GRUPOC apuntan a Alianza por el Progreso (app)
+const nextParty = (token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")) ? "app" : "perufederal";
         setParty(nextParty);
         setActiveParty(nextParty);
 
