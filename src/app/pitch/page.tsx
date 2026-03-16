@@ -175,21 +175,49 @@ export default function PitchPage() {
     };
   }, [deferredPrompt]);
 
-  // 🔹 NUEVO: Función para instalar la app
-  const installApp = async () => {
-    if (!deferredPrompt) return;
-    
-    // Mostrar el diálogo de instalación
+// 🔹 NUEVO: Función para instalar la app (con fallback)
+const installApp = async () => {
+  if (deferredPrompt) {
+    // Si tenemos el evento guardado, úsalo
     deferredPrompt.prompt();
-    
-    // Esperar a que el usuario responda al diálogo
     const { outcome } = await deferredPrompt.userChoice;
     console.log(`Usuario ${outcome === 'accepted' ? 'instaló' : 'canceló'} la app`);
-    
-    // Limpiar el evento guardado
     setDeferredPrompt(null);
     setIsInstallable(false);
-  };
+  } else {
+    // Fallback: instrucciones manuales
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Voto Claro',
+          text: 'Instala la app desde el menú del navegador',
+          url: window.location.href
+        });
+      } catch (e) {
+        showManualInstructions();
+      }
+    } else {
+      showManualInstructions();
+    }
+  }
+};
+
+// Función auxiliar para mostrar instrucciones
+const showManualInstructions = () => {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  
+  let message = '';
+  if (isIOS) {
+    message = 'Para instalar en iPhone:\n\n1. Toca el icono de compartir (cuadro con flecha)\n2. Desliza hacia abajo\n3. Toca "Agregar a pantalla de inicio"';
+  } else if (isAndroid) {
+    message = 'Para instalar en Android:\n\n1. Toca los 3 puntos (menú)\n2. Selecciona "Instalar aplicación"';
+  } else {
+    message = 'Para instalar:\n\nBusca "Instalar aplicación" en el menú del navegador';
+  }
+  
+  alert(message);
+};
 
   if (access === "CHECKING") {
     return (
