@@ -522,17 +522,13 @@ function IntencionDeVotoContent() {
                     Intención de voto
                   </h1>
 
-                  {active?.round && (
-                    <div className="mt-2">
-                      <span className="inline-block bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
-                        Ronda: {active.round.name}
-                      </span>
-                      <span className="ml-2 text-xs text-slate-600">
-                        {new Date(active.round.starts_at).toLocaleDateString()} - {new Date(active.round.ends_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  )}
-
+                    {active?.round && (
+                  <div className="mt-2">
+                  <span className="inline-block bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                  Ronda: {active.round.name}
+                  </span>
+                  </div>
+                 )}
                   <p className="mt-2 text-sm md:text-base text-slate-800">
                     Cada mes puedes votar nuevamente. Tu voto anterior queda guardado para análisis histórico.
                   </p>
