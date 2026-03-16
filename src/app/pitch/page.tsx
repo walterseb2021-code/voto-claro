@@ -131,22 +131,49 @@ export default function PitchPage() {
     };
   }, []);
 
-  // 🔹 NUEVO: Detectar si la app es instalable (PWA)
+  // 🔹 NUEVO: Detectar si la app es instalable (PWA) - VERSIÓN MEJORADA
   React.useEffect(() => {
+    let isMounted = true;
+    
     const handleBeforeInstallPrompt = (e: any) => {
+      console.log("📲 Evento beforeinstallprompt CAPTURADO");
       // Prevenir que Chrome muestre el mini-infobar automáticamente
       e.preventDefault();
       // Guardar el evento para usarlo después
-      setDeferredPrompt(e);
-      setIsInstallable(true);
+      if (isMounted) {
+        setDeferredPrompt(e);
+        setIsInstallable(true);
+      }
+    };
+
+    // También verificar si ya está instalada
+    const checkIfInstalled = () => {
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        console.log("📱 App ya está instalada");
+        if (isMounted) setIsInstallable(false);
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    // Verificar estado actual
+    checkIfInstalled();
+
+    // Forzar re-evaluación después de 2 segundos (para casos lentos)
+    const timeoutId = setTimeout(() => {
+      if (isMounted && !deferredPrompt) {
+        console.log("🔍 Re-verificando instalabilidad...");
+        // Intentar disparar manualmente (simula interacción)
+        window.dispatchEvent(new Event('beforeinstallprompt'));
+      }
+    }, 2000);
 
     return () => {
+      isMounted = false;
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      clearTimeout(timeoutId);
     };
-  }, []);
+  }, [deferredPrompt]);
 
   // 🔹 NUEVO: Función para instalar la app
   const installApp = async () => {
@@ -497,14 +524,35 @@ function FederalitoSplash(props: {
             <i>“Un voto responsable empieza con información verificable.”</i>
           </p>
 
-          <div style={{ marginTop: 16, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-            {/* 🔹 NUEVO: Botón de instalación PWA */}
-            {props.isInstallable && (
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* Botones principales en fila */}
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+              {/* 🔹 Botón de instalación PWA (solo si es instalable) */}
+              {props.isInstallable && (
+                <button
+                  onClick={props.installApp}
+                  style={{
+                    border: `2px solid ${RED_BORDER}`,
+                    background: "#0537A8",
+                    color: BTN_TEXT,
+                    fontWeight: 900,
+                    borderRadius: 12,
+                    padding: "10px 14px",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    boxShadow: "0 10px 25px rgba(0,0,0,.20)",
+                  }}
+                >
+                  📲 Instalar App
+                </button>
+              )}
+              
               <button
-                onClick={props.installApp}
+                id="federalito-splash-skip"
+                type="button"
                 style={{
                   border: `2px solid ${RED_BORDER}`,
-                  background: "#0537A8",
+                  background: isApp ? BTN_BG_APP : BTN_BG,
                   color: BTN_TEXT,
                   fontWeight: 900,
                   borderRadius: 12,
@@ -514,45 +562,63 @@ function FederalitoSplash(props: {
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 }}
               >
-                📲 Instalar App
+                Saltar
               </button>
-            )}
-            
-            <button
-              id="federalito-splash-skip"
-              type="button"
-              style={{
-                border: `2px solid ${RED_BORDER}`,
-                background: isApp ? BTN_BG_APP : BTN_BG,
-                color: BTN_TEXT,
-                fontWeight: 900,
-                borderRadius: 12,
-                padding: "10px 14px",
-                fontSize: 13,
-                cursor: "pointer",
-                boxShadow: "0 10px 25px rgba(0,0,0,.20)",
-              }}
-            >
-              Saltar
-            </button>
 
-            <button
-              id="federalito-splash-continue"
-              type="button"
-              style={{
-                border: `2px solid ${RED_BORDER}`,
-                background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
-                color: BTN_TEXT,
-                fontWeight: 900,
-                borderRadius: 12,
-                padding: "10px 14px",
-                fontSize: 13,
-                cursor: "pointer",
-                boxShadow: "0 10px 25px rgba(0,0,0,.20)",
-              }}
-            >
-              Entrar a VOTO CLARO
-            </button>
+              <button
+                id="federalito-splash-continue"
+                type="button"
+                style={{
+                  border: `2px solid ${RED_BORDER}`,
+                  background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
+                  color: BTN_TEXT,
+                  fontWeight: 900,
+                  borderRadius: 12,
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 25px rgba(0,0,0,.20)",
+                }}
+              >
+                Entrar a VOTO CLARO
+              </button>
+            </div>
+
+            {/* 🔹 Botón de respaldo con instrucciones (siempre visible si no es instalable) */}
+            {!props.isInstallable && (
+              <div style={{ marginTop: 8, width: "100%" }}>
+                <button
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Voto Claro',
+                        text: 'Instala la app desde el menú del navegador',
+                        url: window.location.href
+                      });
+                    } else {
+                      alert('Para instalar la app:\n\n1. Toca los 3 puntos (menú)\n2. Selecciona "Instalar aplicación"');
+                    }
+                  }}
+                  style={{
+                    border: `2px solid ${RED_BORDER}`,
+                    background: "#ffffff",
+                    color: "#0537A8",
+                    fontWeight: 900,
+                    borderRadius: 12,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    boxShadow: "0 10px 25px rgba(0,0,0,.20)",
+                    width: "100%"
+                  }}
+                >
+                  ℹ️ Cómo instalar esta app
+                </button>
+                <p style={{ fontSize: 11, color: TEXT_DARK, margin: "8px 0 0 0" }}>
+                  Si no ves el botón "Instalar App", toca los 3 puntos del navegador y elige "Instalar aplicación"
+                </p>
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 1, color: "#0b1220", fontWeight: 700 }}>
