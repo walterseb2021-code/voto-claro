@@ -18,19 +18,12 @@ type VoteOption = {
   total_votes: number;
 };
 
-type VoteRound = {
+type GlobalRound = {
   id: string;
   name: string;
   is_active: boolean;
-  starts_at: string;
-  ends_at: string;
+  group_code: string;
   created_at: string;
-};
-
-type ActiveResponse = {
-  round: VoteRound;
-  options: VoteOption[];
-  meta: { options_total: number; enabled_total: number };
 };
 
 type IntentionQuestions = {
@@ -41,7 +34,7 @@ type IntentionQuestions = {
 };
 
 // ============================================
-// FUNCIONES DE FILTRO (copiadas del sistema de comentarios)
+// FUNCIONES DE FILTRO
 // ============================================
 function normalizeText(s: string) {
   return s
@@ -78,7 +71,7 @@ function hasLinks(text: string): boolean {
 }
 
 function validateAnswer(text: string): { valid: boolean; error?: string } {
-  if (!text || !text.trim()) return { valid: true }; // Vacío es válido (opcional)
+  if (!text || !text.trim()) return { valid: true };
   
   const trimmed = text.trim();
   
@@ -115,6 +108,20 @@ function getOrCreateDeviceId(): string {
   return newId;
 }
 
+function getGroupFromToken(): string {
+  if (typeof window === "undefined") return "GRUPOB"; // default
+  const url = new URL(window.location.href);
+  const token = url.searchParams.get("t") || "";
+  
+  if (token.startsWith("GRUPOA-")) return "GRUPOA";
+  if (token.startsWith("GRUPOB-")) return "GRUPOB";
+  if (token.startsWith("GRUPOC-")) return "GRUPOC";
+  if (token.startsWith("GRUPOD-")) return "GRUPOD";
+  if (token.startsWith("GRUPOE-")) return "GRUPOE";
+  
+  return "GRUPOB"; // default
+}
+
 const MOTIVATIONAL: string[] = [
   "Un voto responsable empieza con información verificable.",
   "Decidir bien es un acto de respeto por tu futuro y el de tu familia.",
@@ -145,9 +152,11 @@ function IntencionDeVotoContent() {
 
   // Estados principales
   const [deviceId, setDeviceId] = useState<string>("");
-  const [active, setActive] = useState<ActiveResponse | null>(null);
-  const [loadingActive, setLoadingActive] = useState(true);
-  const [activeErr, setActiveErr] = useState<string | null>(null);
+  const [globalRound, setGlobalRound] = useState<GlobalRound | null>(null);
+  const [parties, setParties] = useState<VoteOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userGroup, setUserGroup] = useState<string>("GRUPOB");
 
   // Flujo de votación
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
@@ -180,36 +189,70 @@ function IntencionDeVotoContent() {
   useEffect(() => {
     const id = getOrCreateDeviceId();
     setDeviceId(id);
+    setUserGroup(getGroupFromToken());
   }, []);
 
-  async function loadActive() {
-    setLoadingActive(true);
-    setActiveErr(null);
+  async function loadGlobalRound() {
     try {
-      const res = await fetch("/api/vote/active", { cache: "no-store" });
-      const data = (await res.json()) as ActiveResponse;
+      const { data, error } = await supabase
+        .from('vote_rounds')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      if (!res.ok) {
-        setActive(null);
-        setActiveErr((data as any)?.error ?? "Error cargando /api/vote/active");
-        return;
-      }
+      if (error) throw error;
+      setGlobalRound(data);
+      return data;
+    } catch (e) {
+      console.error('Error cargando ronda global:', e);
+      setError('No se pudo cargar la ronda actual');
+      return null;
+    }
+  }
 
-      data.options = (data.options ?? [])
-        .filter((o) => o.enabled)
-        .sort((a, b) => a.position - b.position);
+  async function loadParties(groupCode: string) {
+    try {
+      const { data, error } = await supabase
+        .from('vote_parties')
+        .select('*')
+        .eq('group_code', groupCode)
+        .eq('enabled', true)
+        .order('position');
 
-      setActive(data);
+      if (error) throw error;
+      setParties(data || []);
       
-      // Si hay ronda activa, verificar si ya votó en ESTA ronda
-      if (data.round?.id && deviceId) {
-        await checkIfVotedInCurrentRound(deviceId, data.round.id);
+      // Calcular total de votos (esto podría venir de otra tabla)
+      const total = (data || []).reduce((acc, p) => acc + (p.total_votes || 0), 0);
+      return total;
+    } catch (e) {
+      console.error('Error cargando partidos:', e);
+      setError('No se pudieron cargar los partidos');
+      return 0;
+    }
+  }
+
+  async function loadActive() {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // 1. Cargar ronda global activa
+      const round = await loadGlobalRound();
+      
+      // 2. Cargar partidos del grupo del usuario
+      await loadParties(userGroup);
+      
+      // 3. Verificar si ya votó en esta ronda
+      if (round?.id && deviceId) {
+        await checkIfVotedInCurrentRound(deviceId, round.id);
       }
     } catch (e) {
-      setActive(null);
-      setActiveErr("Error de conexión cargando la ronda activa.");
+      setError('Error al cargar los datos');
     } finally {
-      setLoadingActive(false);
+      setLoading(false);
     }
   }
 
@@ -223,13 +266,13 @@ function IntencionDeVotoContent() {
       if (res.ok && data?.voted && data?.party_id) {
         setConfirmedPartyId(String(data.party_id));
         
-        const party = active?.options?.find(o => o.id === data.party_id);
+        const party = parties.find(o => o.id === data.party_id);
         if (party) {
           setConfirmedPartyName(party.name);
         }
         
         setLocked(true);
-        setNotice(`Ya votaste en la ronda ${active?.round?.name || 'actual'}.`);
+        setNotice(`Ya votaste en la ronda ${globalRound?.name || 'actual'}.`);
         
         // Verificar si ya respondió las preguntas en ESTA ronda
         await checkIfAlreadyAnswered(devId, roundId, data.party_id);
@@ -258,7 +301,7 @@ function IntencionDeVotoContent() {
       await loadActive();
     }
     init();
-  }, []);
+  }, [deviceId, userGroup]);
 
   // ============================================
   // FUNCIONES DE PREGUNTAS
@@ -327,7 +370,7 @@ function IntencionDeVotoContent() {
   }
 
   // ============================================
-  // VALIDACIÓN DE RESPUESTAS EN TIEMPO REAL
+  // VALIDACIÓN DE RESPUESTAS
   // ============================================
   function validateAnswerField(field: keyof typeof answers, value: string) {
     const result = validateAnswer(value);
@@ -345,10 +388,10 @@ function IntencionDeVotoContent() {
   }
 
   // ============================================
-  // ENVÍO DE RESPUESTAS CON VALIDACIONES
+  // ENVÍO DE RESPUESTAS
   // ============================================
   async function submitAnswers() {
-    if (!deviceId || !active?.round?.id || !confirmedPartyId || !confirmedSlug || !questions) {
+    if (!deviceId || !globalRound?.id || !confirmedPartyId || !confirmedSlug || !questions) {
       setQuestionsError('Faltan datos para enviar las respuestas');
       return;
     }
@@ -372,7 +415,6 @@ function IntencionDeVotoContent() {
       answer_3: { valid: validations.answer_3.valid, error: validations.answer_3.error || "" }
     });
 
-    // Si alguna respuesta no es válida, cancelar
     if (!validations.answer_1.valid || !validations.answer_2.valid || !validations.answer_3.valid) {
       setQuestionsError('Por favor corrige los errores en las respuestas');
       return;
@@ -386,7 +428,7 @@ function IntencionDeVotoContent() {
         .from('vote_intention_answers')
         .insert({
           device_id: deviceId,
-          round_id: active.round.id,
+          round_id: globalRound.id,
           party_id: confirmedPartyId,
           party_slug: confirmedSlug,
           questions_id: questions.id !== 'default' ? questions.id : null,
@@ -404,7 +446,6 @@ function IntencionDeVotoContent() {
     } catch (e: any) {
       console.error('Error enviando respuestas:', e);
       
-      // Si es error de unique, ya respondió en esta ronda
       if (e.message?.includes('unique') || e.code === '23505') {
         setQuestionsError('Ya respondiste estas preguntas en esta ronda.');
         setAnswersSubmitted(true);
@@ -421,9 +462,8 @@ function IntencionDeVotoContent() {
   // FUNCIONES DE VOTACIÓN
   // ============================================
   const total = useMemo(() => {
-    const opts = active?.options ?? [];
-    return opts.reduce((acc, o) => acc + (o.total_votes ?? 0), 0);
-  }, [active?.options]);
+    return parties.reduce((acc, o) => acc + (o.total_votes ?? 0), 0);
+  }, [parties]);
 
   const quote = useMemo(() => {
     const idx = Math.abs(total) % MOTIVATIONAL.length;
@@ -444,6 +484,10 @@ function IntencionDeVotoContent() {
       setNotice("Selecciona una opción antes de confirmar.");
       return;
     }
+    if (!globalRound) {
+      setNotice("No hay una ronda activa.");
+      return;
+    }
 
     setNotice("Registrando tu intención de voto…");
 
@@ -455,6 +499,7 @@ function IntencionDeVotoContent() {
         body: JSON.stringify({
           device_id: deviceId,
           party_slug: pendingSlug,
+          round_id: globalRound.id,  // ← enviamos la ronda global
         }),
       });
 
@@ -472,12 +517,12 @@ function IntencionDeVotoContent() {
       setLocked(true);
       setConfirmedPartyId(String(data?.party?.id ?? ""));
       
-      const party = active?.options?.find(o => o.id === data?.party?.id);
+      const party = parties.find(o => o.id === data?.party?.id);
       if (party) {
         setConfirmedPartyName(party.name);
       }
       
-      setNotice(`Listo. Tu voto en la ronda ${active?.round?.name || 'actual'} quedó registrado.`);
+      setNotice(`Listo. Tu voto en la ronda ${globalRound.name} quedó registrado.`);
       if (pendingSlug === "nulo-blanco") setShowReflection(true);
 
       await loadActive();
@@ -493,9 +538,9 @@ function IntencionDeVotoContent() {
 
   const confirmedSlug = useMemo(() => {
     if (!confirmedPartyId) return null;
-    const opt = (active?.options ?? []).find((o) => o.id === confirmedPartyId);
+    const opt = parties.find((o) => o.id === confirmedPartyId);
     return opt?.slug ?? null;
-  }, [confirmedPartyId, active?.options]);
+  }, [confirmedPartyId, parties]);
 
   function scrollToTop() {
     try {
@@ -522,13 +567,17 @@ function IntencionDeVotoContent() {
                     Intención de voto
                   </h1>
 
-                    {active?.round && (
-                  <div className="mt-2">
-                  <span className="inline-block bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
-                  Ronda: {active.round.name}
-                  </span>
-                  </div>
-                 )}
+                  {globalRound && (
+                    <div className="mt-2">
+                      <span className="inline-block bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                        {globalRound.name}
+                      </span>
+                      <span className="ml-2 text-xs text-slate-600">
+                        Grupo: {userGroup}
+                      </span>
+                    </div>
+                  )}
+
                   <p className="mt-2 text-sm md:text-base text-slate-800">
                     Cada mes puedes votar nuevamente. Tu voto anterior queda guardado para análisis histórico.
                   </p>
@@ -589,14 +638,14 @@ function IntencionDeVotoContent() {
             </div>
           </div>
 
-          {loadingActive ? (
+          {loading ? (
             <div className="mt-6 text-sm text-slate-700">Cargando opciones…</div>
-          ) : activeErr ? (
-            <div className="mt-6 text-sm text-red-700">{activeErr}</div>
+          ) : error ? (
+            <div className="mt-6 text-sm text-red-700">{error}</div>
           ) : (
             <>
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(active?.options ?? []).map((opt) => {
+                {parties.map((opt) => {
                   const isSelected = pendingSlug === opt.slug;
                   const isConfirmed = confirmedSlug === opt.slug;
                   const isBlank = opt.slug === "nulo-blanco";
@@ -688,12 +737,12 @@ function IntencionDeVotoContent() {
                           : "bg-slate-200 text-slate-600 cursor-not-allowed",
                       ].join(" ")}
                     >
-                      ✅ Confirmar voto en {active?.round?.name || 'ronda actual'}
+                      ✅ Confirmar voto en {globalRound?.name || 'ronda actual'}
                     </button>
                   </>
                 ) : (
                   <div className="text-sm text-slate-900 text-center">
-                    ✅ Ya votaste en la ronda {active?.round?.name || 'actual'}
+                    ✅ Ya votaste en la ronda {globalRound?.name || 'actual'}
                   </div>
                 )}
               </div>
@@ -706,7 +755,7 @@ function IntencionDeVotoContent() {
           <section className="mt-6 border-[6px] border-red-600 rounded-2xl p-6 bg-white shadow-sm">
             <div className="mb-4">
               <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
-                Ronda {active?.round?.name || 'actual'}: Cuéntanos ¿por qué {confirmedPartyName ? `elegiste ${confirmedPartyName}` : 'elegiste este partido'}?
+                {globalRound?.name}: Cuéntanos ¿por qué {confirmedPartyName ? `elegiste ${confirmedPartyName}` : 'elegiste este partido'}?
               </h2>
               <p className="text-sm text-slate-800 mt-2">
                 Tus respuestas nos ayudan a entender cómo evoluciona la opinión ciudadana mes a mes.
@@ -821,7 +870,7 @@ function IntencionDeVotoContent() {
                 ¡Gracias por compartir tu opinión!
               </h2>
               <p className="text-sm text-slate-800">
-                Tus respuestas en la ronda {active?.round?.name || 'actual'} han sido guardadas.
+                Tus respuestas en la ronda {globalRound?.name || 'actual'} han sido guardadas.
                 Podrás votar nuevamente el próximo mes.
               </p>
             </div>

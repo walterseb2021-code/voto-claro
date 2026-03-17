@@ -1,4 +1,3 @@
-// src/app/api/vote/active/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -41,13 +40,12 @@ export async function GET(req: Request) {
     }
 
     // =====================================================
-    // 1) Intentar ronda activa por grupo
+    // 1) Ronda activa GLOBAL (ya no filtramos por grupo)
     // =====================================================
     let { data: round, error: roundErr } = await supabase
       .from("vote_rounds")
       .select("id,name,is_active,created_at,group_code")
       .eq("is_active", true)
-      .eq("group_code", group)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -59,10 +57,7 @@ export async function GET(req: Request) {
       );
     }
 
-    // =====================================================
-    // 🔥 FALLBACK: si no existe ronda para el grupo actual
-    // usar cualquier ronda activa (ej: GRUPOA)
-    // =====================================================
+    // Mantenemos el FALLBACK por si no hay ronda activa (por compatibilidad)
     if (!round) {
       const { data: fallbackRound, error: fallbackErr } = await supabase
         .from("vote_rounds")
@@ -90,12 +85,13 @@ export async function GET(req: Request) {
     }
 
     // =====================================================
-    // 2) Partidos de la ronda activa
+    // 2) Partidos del GRUPO del usuario (activos)
     // =====================================================
     const { data: parties, error: partiesErr } = await supabase
       .from("vote_parties")
       .select("id,round_id,slug,name,enabled,position,created_at,group_code")
-      .eq("round_id", round.id)
+      .eq("group_code", group)
+      .eq("enabled", true)
       .order("position", { ascending: true });
 
     if (partiesErr) {
@@ -106,12 +102,13 @@ export async function GET(req: Request) {
     }
 
     // =====================================================
-    // 3) Conteo (vote_tally)
+    // 3) Conteo (vote_tally) para esta ronda y grupo
     // =====================================================
     const { data: tallies, error: tallyErr } = await supabase
       .from("vote_tally")
       .select("party_id,total_votes,group_code")
-      .eq("round_id", round.id);
+      .eq("round_id", round.id)
+      .eq("group_code", group);
 
     if (tallyErr) {
       return NextResponse.json(
