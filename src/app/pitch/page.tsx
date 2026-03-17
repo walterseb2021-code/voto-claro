@@ -44,7 +44,7 @@ export default function PitchPage() {
   const [access, setAccess] = React.useState<AccessState>("CHECKING");
   const [party, setParty] = React.useState<"perufederal" | "app">("perufederal");
   
-  // 🔹 NUEVO: Estado para la instalación PWA
+  // 🔹 Estado para la instalación PWA
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
   const [isInstallable, setIsInstallable] = React.useState(false);
 
@@ -131,22 +131,19 @@ export default function PitchPage() {
     };
   }, []);
 
-  // 🔹 NUEVO: Detectar si la app es instalable (PWA) - VERSIÓN MEJORADA
+  // 🔹 Detectar si la app es instalable (PWA)
   React.useEffect(() => {
     let isMounted = true;
     
     const handleBeforeInstallPrompt = (e: any) => {
       console.log("📲 Evento beforeinstallprompt CAPTURADO");
-      // Prevenir que Chrome muestre el mini-infobar automáticamente
       e.preventDefault();
-      // Guardar el evento para usarlo después
       if (isMounted) {
         setDeferredPrompt(e);
         setIsInstallable(true);
       }
     };
 
-    // También verificar si ya está instalada
     const checkIfInstalled = () => {
       if (window.matchMedia('(display-mode: standalone)').matches) {
         console.log("📱 App ya está instalada");
@@ -155,15 +152,11 @@ export default function PitchPage() {
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    
-    // Verificar estado actual
     checkIfInstalled();
 
-    // Forzar re-evaluación después de 2 segundos (para casos lentos)
     const timeoutId = setTimeout(() => {
       if (isMounted && !deferredPrompt) {
         console.log("🔍 Re-verificando instalabilidad...");
-        // Intentar disparar manualmente (simula interacción)
         window.dispatchEvent(new Event('beforeinstallprompt'));
       }
     }, 2000);
@@ -175,49 +168,56 @@ export default function PitchPage() {
     };
   }, [deferredPrompt]);
 
-// 🔹 NUEVO: Función para instalar la app (con fallback)
-const installApp = async () => {
-  if (deferredPrompt) {
-    // Si tenemos el evento guardado, úsalo
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`Usuario ${outcome === 'accepted' ? 'instaló' : 'canceló'} la app`);
-    setDeferredPrompt(null);
-    setIsInstallable(false);
-  } else {
-    // Fallback: instrucciones manuales
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Voto Claro',
-          text: 'Instala la app desde el menú del navegador',
-          url: window.location.href
-        });
-      } catch (e) {
-        showManualInstructions();
-      }
-    } else {
-      showManualInstructions();
-    }
-  }
-};
+  // 🔹 FUNCIÓN DE INSTALACIÓN UNIVERSAL (MODIFICADA)
+  const installApp = async () => {
+    console.log("Botón Instalar App clickeado");
 
-// Función auxiliar para mostrar instrucciones
-const showManualInstructions = () => {
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isAndroid = /Android/.test(navigator.userAgent);
-  
-  let message = '';
-  if (isIOS) {
-    message = 'Para instalar en iPhone:\n\n1. Toca el icono de compartir (cuadro con flecha)\n2. Desliza hacia abajo\n3. Toca "Agregar a pantalla de inicio"';
-  } else if (isAndroid) {
-    message = 'Para instalar en Android:\n\n1. Toca los 3 puntos (menú)\n2. Selecciona "Instalar aplicación"';
-  } else {
-    message = 'Para instalar:\n\nBusca "Instalar aplicación" en el menú del navegador';
-  }
-  
-  alert(message);
-};
+    // Opción 1: Usar el evento guardado (si existe)
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`Usuario ${outcome === 'accepted' ? 'instaló' : 'canceló'} la app`);
+        setDeferredPrompt(null);
+        setIsInstallable(false);
+        if (outcome === 'accepted') return;
+      } catch (e) {
+        console.log("Error con deferredPrompt, usando fallback", e);
+      }
+    }
+
+    // Opción 2: Detectar si ya está instalada
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    if (isStandalone) {
+      alert('La app ya está instalada en tu dispositivo.');
+      return;
+    }
+
+    // Opción 3: Instrucciones manuales según dispositivo
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isAndroid = /Android/.test(ua);
+
+    let message = '';
+    
+    if (isIOS) {
+      message = '📱 Para instalar en iPhone/iPad:\n\n' +
+                '1. Toca el icono "Compartir" (cuadrado con flecha hacia arriba)\n' +
+                '2. Desplázate hacia abajo\n' +
+                '3. Toca "Agregar a pantalla de inicio"\n' +
+                '4. Confirma tocando "Agregar"';
+    } else if (isAndroid) {
+      message = '📱 Para instalar en Android:\n\n' +
+                '1. Toca los 3 puntos (menú) en la esquina superior derecha\n' +
+                '2. Busca y toca "Instalar aplicación"\n' +
+                '3. Confirma la instalación';
+    } else {
+      message = '💻 Para instalar en computadora:\n\n' +
+                'Busca el icono de instalación (+) en la barra de direcciones';
+    }
+
+    alert(message);
+  };
 
   if (access === "CHECKING") {
     return (
@@ -366,7 +366,6 @@ function FederalitoSplash(props: {
         inset: 0,
         zIndex: 9999,
         display: "block",
-        // ✅ APP: sólido EXACTO #0537A8 (sin gradientes/overlays)
         background: isApp ? BG_APP : `${BG_JASPE_SOFT_GREEN}, ${BG_GREEN}`,
         color: TEXT_DARK,
       }}
@@ -386,14 +385,13 @@ function FederalitoSplash(props: {
         }}
       >
         <div
-            className="federalito-anim"
-            style={{
+          className="federalito-anim"
+          style={{
             width: isApp ? "min(600px, 95vw)" : "min(520px, 92vw)",
             borderRadius: 22,
             overflow: "hidden",
             border: "none",
             boxShadow: "0 20px 60px rgba(0,0,0,.35)",
-            // ✅ APP: contenedor EXACTO #0537A8 (bloque uniforme)
             background: isApp ? BG_APP : "transparent",
             position: "relative",
             aspectRatio: "9 / 16",
@@ -401,7 +399,6 @@ function FederalitoSplash(props: {
             pointerEvents: "none",
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             id="federalito-splash-poster"
             src={assets.avatarSrc}
@@ -417,7 +414,6 @@ function FederalitoSplash(props: {
               objectPosition: "50% 50%",
               transform: isApp ? "scale(0.90)" : "none",
               transformOrigin: "center",
-              // ✅ APP: fondo EXACTO #0537A8
               background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 1,
@@ -438,12 +434,10 @@ function FederalitoSplash(props: {
               inset: 0,
               width: "100%",
               height: "100%",
-              // ✅ SIEMPRE contain (no cover)
               objectFit: "contain",
               objectPosition: "50% 50%",
               transform: isApp ? "scale(1.46)" : "none",
               transformOrigin: "center",
-              // ✅ APP: el video “rellena” con EXACTO #0537A8
               background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 0,
@@ -460,8 +454,6 @@ function FederalitoSplash(props: {
               inset: 0,
               width: "100%",
               height: "100%",
-              // (No aplica objectFit a div, se deja limpio)
-              // ✅ APP: si llegara a mostrarse, mantiene EXACTO #0537A8
               background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 0,
@@ -553,28 +545,28 @@ function FederalitoSplash(props: {
           </p>
 
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            {/* Botones principales en fila */}
+            {/* Botón de instalación UNIVERSAL - SIEMPRE VISIBLE */}
+            <button
+              onClick={props.installApp}
+              style={{
+                border: `2px solid ${RED_BORDER}`,
+                background: "#0537A8",
+                color: BTN_TEXT,
+                fontWeight: 900,
+                borderRadius: 12,
+                padding: "12px 18px",
+                fontSize: 14,
+                cursor: "pointer",
+                boxShadow: "0 10px 25px rgba(0,0,0,.20)",
+                width: "100%",
+                marginBottom: "8px"
+              }}
+            >
+              📲 INSTALAR APP EN MI CELULAR
+            </button>
+
+            {/* Botones existentes */}
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              {/* 🔹 Botón de instalación PWA (solo si es instalable) */}
-              {props.isInstallable && (
-                <button
-                  onClick={props.installApp}
-                  style={{
-                    border: `2px solid ${RED_BORDER}`,
-                    background: "#0537A8",
-                    color: BTN_TEXT,
-                    fontWeight: 900,
-                    borderRadius: 12,
-                    padding: "10px 14px",
-                    fontSize: 13,
-                    cursor: "pointer",
-                    boxShadow: "0 10px 25px rgba(0,0,0,.20)",
-                  }}
-                >
-                  📲 Instalar App
-                </button>
-              )}
-              
               <button
                 id="federalito-splash-skip"
                 type="button"
@@ -611,42 +603,6 @@ function FederalitoSplash(props: {
                 Entrar a VOTO CLARO
               </button>
             </div>
-
-            {/* 🔹 Botón de respaldo con instrucciones (siempre visible si no es instalable) */}
-            {!props.isInstallable && (
-              <div style={{ marginTop: 8, width: "100%" }}>
-                <button
-                  onClick={() => {
-                    if (navigator.share) {
-                      navigator.share({
-                        title: 'Voto Claro',
-                        text: 'Instala la app desde el menú del navegador',
-                        url: window.location.href
-                      });
-                    } else {
-                      alert('Para instalar la app:\n\n1. Toca los 3 puntos (menú)\n2. Selecciona "Instalar aplicación"');
-                    }
-                  }}
-                  style={{
-                    border: `2px solid ${RED_BORDER}`,
-                    background: "#ffffff",
-                    color: "#0537A8",
-                    fontWeight: 900,
-                    borderRadius: 12,
-                    padding: "8px 12px",
-                    fontSize: 12,
-                    cursor: "pointer",
-                    boxShadow: "0 10px 25px rgba(0,0,0,.20)",
-                    width: "100%"
-                  }}
-                >
-                  ℹ️ Cómo instalar esta app
-                </button>
-                <p style={{ fontSize: 11, color: TEXT_DARK, margin: "8px 0 0 0" }}>
-                  Si no ves el botón "Instalar App", toca los 3 puntos del navegador y elige "Instalar aplicación"
-                </p>
-              </div>
-            )}
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 1, color: "#0b1220", fontWeight: 700 }}>
@@ -670,8 +626,6 @@ function FederalitoSplash(props: {
             user-select: none !important;
           }
 
-          /* ✅ SOLO PerúFederal puede aplicar “cover” en móvil.
-             ✅ APP mantiene contain (sin forzar cover, sin bordes lavados) */
           #federalito-splash[data-party="perufederal"] #federalito-splash-video{
             object-fit: cover !important;
             object-position: 50% 12% !important;
@@ -701,31 +655,25 @@ function goHome(){
   try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
   try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
 
-  // ✅ Detectar party actual (app o perufederal)
   var party = "";
   try{ party = (splash && splash.dataset && splash.dataset.party) ? splash.dataset.party : ""; }catch(e){}
 
-  // ✅ Persistir party de forma "a prueba de balas" (varias keys + cookie)
   try{
     if(party){
-      // sessionStorage
       sessionStorage.setItem("votoclaro_active_party_v1", party);
       sessionStorage.setItem("active_party", party);
       sessionStorage.setItem("party", party);
       sessionStorage.setItem("votoclaro_party", party);
 
-      // localStorage
       localStorage.setItem("votoclaro_active_party_v1", party);
       localStorage.setItem("active_party", party);
       localStorage.setItem("party", party);
       localStorage.setItem("votoclaro_party", party);
 
-      // cookie (por si el middleware/SSR lo usa)
       document.cookie = "votoclaro_party=" + encodeURIComponent(party) + "; path=/; max-age=31536000; samesite=lax";
     }
   }catch(e){}
 
-  // ✅ Ir a inicio SIEMPRE, pero pasando party en la URL también
   var qp = party ? ("&party=" + encodeURIComponent(party)) : "";
   try{ window.location.assign("/?fromPitch=1" + qp); }
   catch(e){ window.location.href = "/?fromPitch=1" + qp; }
@@ -793,8 +741,6 @@ function goHome(){
           if(poster) void poster.offsetHeight;
         }catch(e){}
 
-        /* ✅ En APP NO hacemos “flash overlay” (evita cambio de tono).
-           ✅ Mantiene el resto de animaciones (fade poster/video). */
         try{
           var isApp = false;
           try{
