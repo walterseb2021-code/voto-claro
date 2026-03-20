@@ -40,24 +40,24 @@ export default function CaminoCiudadano({ mode, onGameWin }: CaminoCiudadanoProp
         />
       </div>
 
-      <div className="mt-4 text-center text-sm text-slate-600">
+               <div className="mt-4 text-center text-sm text-slate-600">
         {state.gameOver && (
-          <div className="text-red-600 font-bold">¡Has perdido! Reinicia para intentarlo.</div>
+          <div className="text-red-600 font-bold mb-2">¡Has perdido! Reinicia para intentarlo.</div>
         )}
         {state.won && (
-          <div className="text-green-600 font-bold animate-pulse">¡Ganaste! Llegaste a la meta.</div>
+          <div className="text-green-600 font-bold animate-pulse mb-2">¡Ganaste! Llegaste a la meta.</div>
         )}
         {!state.gameOver && !state.won && state.turnsLeft === 0 && (
-          <div className="text-red-600 font-bold">¡Sin turnos! Reinicia.</div>
+          <div className="text-red-600 font-bold mb-2">¡Sin turnos! Reinicia para intentarlo.</div>
         )}
-        {!state.gameOver && !state.won && state.turnsLeft > 0 && (
-          <button
-            onClick={resetGame}
-            className="mt-2 px-4 py-2 bg-slate-200 rounded-xl text-sm font-bold hover:bg-slate-300"
-          >
-            Reiniciar juego
-          </button>
-        )}
+
+        {/* Botón de reinicio visible siempre */}
+        <button
+          onClick={resetGame}
+          className="mt-2 px-4 py-2 bg-slate-200 rounded-xl text-sm font-bold hover:bg-slate-300"
+        >
+          Reiniciar juego
+        </button>
       </div>
 
       <QuestionPopup
