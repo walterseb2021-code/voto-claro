@@ -65,6 +65,7 @@ export default function CaminoCiudadano({ mode, onGameWin }: CaminoCiudadanoProp
         timeLeft={state.timeLeft}
         onAnswer={handleAnswer}
         visible={state.showQuestion}
+        diceResult={state.currentRoll}
       />
     </div>
   );

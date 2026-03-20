@@ -30,29 +30,28 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     };
   }, []);
 
-  // Obtener pregunta aleatoria NO usada en esta partida
+  // Obtener pregunta aleatoria, evitando repetir en la misma partida
   const fetchRandomQuestion = useCallback(async (excludeIds: string[]) => {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('reto_questions')
         .select('id, question, answer')
         .eq('level', 2)
-        .eq('party_id', 'app');
-
-      // Si hay IDs excluidos, agregar condición NOT IN
-      if (excludeIds.length > 0) {
-        query = query.not('id', 'in', `(${excludeIds.map(id => `'${id}'`).join(',')})`);
-      }
-
-      // Limitar a 1 resultado aleatorio
-      const { data, error } = await query.limit(50); // traemos varios para luego elegir uno al azar
+        .eq('party_id', 'app')
+        .limit(100);
 
       if (error) throw error;
       if (!data || data.length === 0) return null;
 
-      // Elegir uno aleatorio de los disponibles
-      const randomIndex = Math.floor(Math.random() * data.length);
-      return data[randomIndex] as Question;
+      const available = data.filter(q => !excludeIds.includes(q.id));
+      if (available.length === 0) {
+        // Si ya respondió todas, repetir una (pero no debería ocurrir con muchas preguntas)
+        const randomIndex = Math.floor(Math.random() * data.length);
+        return data[randomIndex] as Question;
+      }
+
+      const randomIndex = Math.floor(Math.random() * available.length);
+      return available[randomIndex] as Question;
     } catch (error) {
       console.error('Error fetching question:', error);
       return null;
@@ -65,7 +64,7 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
       setState(prev => {
         if (prev.timeLeft <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
-          // Respuesta incorrecta por tiempo agotado
+          // Tiempo agotado → respuesta incorrecta
           handleAnswer(false);
           return { ...prev, timeLeft: 0 };
         }
@@ -74,15 +73,16 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     }, 1000);
   }, []);
 
+  // Manejar la respuesta del jugador (llamada desde el modal)
   const handleAnswer = useCallback((isCorrect: boolean) => {
-    // Si no hay pregunta pendiente, no hacer nada
-    if (!state.currentQuestion || !state.pendingRoll) return;
+    if (!state.currentQuestion || state.pendingRoll === null) return;
 
+    // Detener el temporizador
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
 
-    let newPosition = state.position;
     const roll = state.pendingRoll;
+    let newPosition = state.position;
 
     if (isCorrect) {
       newPosition = Math.min(state.position + roll, TOTAL_SQUARES);
@@ -91,7 +91,9 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     }
 
     const newTurnsLeft = state.turnsLeft - 1;
-    const gameFinished = newPosition === TOTAL_SQUARES || newTurnsLeft === 0;
+    const reachedEnd = newPosition === TOTAL_SQUARES;
+    const noTurnsLeft = newTurnsLeft === 0;
+    const gameFinished = reachedEnd || noTurnsLeft;
 
     setState(prev => ({
       ...prev,
@@ -100,37 +102,35 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
       answeredQuestions: [...prev.answeredQuestions, prev.currentQuestion!.id],
       showQuestion: false,
       currentQuestion: null,
-      pendingRoll: null,
+      // Mantenemos pendingRoll y currentRoll para mostrar el último número
+      // pero la próxima tirada los reemplazará
       timeLeft: QUESTION_TIME_SEC,
-      gameOver: gameFinished && newPosition !== TOTAL_SQUARES,
-      won: newPosition === TOTAL_SQUARES,
+      gameOver: gameFinished && !reachedEnd,
+      won: reachedEnd,
     }));
 
-    if (newPosition === TOTAL_SQUARES && mode === 'con_premio') {
+    if (reachedEnd && mode === 'con_premio') {
       onWin?.();
     }
   }, [state, mode, onWin]);
 
+  // Lanzar el dado: muestra número, carga pregunta, activa modal
   const rollDice = useCallback(async () => {
-    // Condiciones para lanzar
-    if (state.gameOver || state.won || state.showQuestion || state.turnsLeft === 0) {
-      console.log('No se puede lanzar dado en este estado');
-      return;
-    }
+    // No se puede lanzar si el juego terminó, ganó, ya hay pregunta activa, o no quedan turnos
+    if (state.gameOver || state.won || state.showQuestion || state.turnsLeft === 0) return;
 
+    // Generar número del dado
     const roll = Math.floor(Math.random() * 6) + 1;
-    console.log('Dado:', roll);
 
-    // Obtener pregunta aleatoria
+    // Obtener pregunta (puede ser asíncrono)
     const question = await fetchRandomQuestion(state.answeredQuestions);
     if (!question) {
-      console.warn('No hay preguntas disponibles');
+      // Si no hay pregunta, termina el juego (error)
       setState(prev => ({ ...prev, gameOver: true }));
       return;
     }
 
-    console.log('Pregunta obtenida:', question.id);
-
+    // Actualizar estado: mostrar el número, guardar el roll pendiente, mostrar la pregunta
     setState(prev => ({
       ...prev,
       currentRoll: roll,
@@ -142,6 +142,7 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     startTimer();
   }, [state, fetchRandomQuestion, startTimer]);
 
+  // Reiniciar completamente
   const resetGame = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     setState({

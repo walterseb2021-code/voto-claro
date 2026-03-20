@@ -1,6 +1,5 @@
 ﻿// src/app/reto-ciudadano/components/CaminoCiudadano/QuestionPopup.tsx
 'use client';
-import { useEffect } from 'react';
 import { Question } from './types';
 
 interface QuestionPopupProps {
@@ -8,9 +7,10 @@ interface QuestionPopupProps {
   timeLeft: number;
   onAnswer: (correct: boolean) => void;
   visible: boolean;
+  diceResult?: number | null;   // opcional: número del dado para mostrar
 }
 
-export default function QuestionPopup({ question, timeLeft, onAnswer, visible }: QuestionPopupProps) {
+export default function QuestionPopup({ question, timeLeft, onAnswer, visible, diceResult }: QuestionPopupProps) {
   if (!visible || !question) return null;
 
   const correctAnswer = question.answer;
@@ -19,6 +19,11 @@ export default function QuestionPopup({ question, timeLeft, onAnswer, visible }:
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl border-4 border-red-600 max-w-md w-full p-6 shadow-2xl">
         <div className="text-center mb-4">
+          {diceResult && (
+            <div className="text-lg font-bold text-yellow-600 mb-2">
+              🎲 Número obtenido: {diceResult}
+            </div>
+          )}
           <div className="text-sm font-mono text-slate-500">Tiempo restante: {timeLeft}s</div>
           <div className="mt-2 text-xl font-bold text-slate-900">{question.question}</div>
         </div>
