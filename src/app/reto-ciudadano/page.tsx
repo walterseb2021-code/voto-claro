@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import CaminoCiudadano from './components/CaminoCiudadano';
 
 type PlayMode = "sin_premio" | "con_premio";
 
@@ -1900,6 +1901,26 @@ export default function RetoCiudadanoPage() {
             }, 2400);
           }}
         />
+          <CaminoCiudadano
+    mode={mode}
+    onGameWin={async () => {
+      if (mode !== 'con_premio') return;
+      if (!celular) return;
+      try {
+        await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            celular,
+            prize_segment: 0, // indicador de que es premio del juego Camino Ciudadano
+            prize_note: "Premio Camino Ciudadano",
+          }),
+        });
+      } catch (error) {
+        console.error("Error registrando premio:", error);
+      }
+    }}
+  />
       </section>
 
       {/* ✅ NUEVO: LISTA DE GANADORES */}
