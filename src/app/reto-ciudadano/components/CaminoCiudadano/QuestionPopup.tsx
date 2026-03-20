@@ -7,7 +7,7 @@ interface QuestionPopupProps {
   timeLeft: number;
   onAnswer: (correct: boolean) => void;
   visible: boolean;
-  diceResult?: number | null;   // opcional: número del dado para mostrar
+  diceResult?: number | null;
 }
 
 export default function QuestionPopup({ question, timeLeft, onAnswer, visible, diceResult }: QuestionPopupProps) {
@@ -16,30 +16,32 @@ export default function QuestionPopup({ question, timeLeft, onAnswer, visible, d
   const correctAnswer = question.answer;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl border-4 border-red-600 max-w-md w-full p-6 shadow-2xl">
-        <div className="text-center mb-4">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-gradient-to-br from-white to-amber-50 rounded-2xl border-4 border-amber-600 max-w-md w-full p-6 shadow-2xl transform transition-all">
+        <div className="text-center">
           {diceResult && (
-            <div className="text-lg font-bold text-yellow-600 mb-2">
-              🎲 Número obtenido: {diceResult}
+            <div className="inline-block bg-amber-100 rounded-full px-4 py-1 mb-3 text-amber-800 font-bold">
+              🎲 Número: {diceResult}
             </div>
           )}
-          <div className="text-sm font-mono text-slate-500">Tiempo restante: {timeLeft}s</div>
-          <div className="mt-2 text-xl font-bold text-slate-900">{question.question}</div>
+          <div className="text-sm font-mono text-slate-500 bg-slate-100 inline-block px-3 py-1 rounded-full">
+            ⏱️ Tiempo: {timeLeft}s
+          </div>
+          <div className="mt-4 text-xl font-bold text-slate-900 leading-relaxed">{question.question}</div>
         </div>
 
-        <div className="flex justify-center gap-4 mt-6">
+        <div className="flex justify-center gap-6 mt-8">
           <button
             onClick={() => onAnswer(correctAnswer === true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition"
+            className="px-8 py-3 bg-green-600 text-white rounded-xl font-bold text-lg shadow-md hover:bg-green-700 transition transform hover:scale-105"
           >
-            Sí
+            Sí ✅
           </button>
           <button
             onClick={() => onAnswer(correctAnswer === false)}
-            className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition"
+            className="px-8 py-3 bg-red-600 text-white rounded-xl font-bold text-lg shadow-md hover:bg-red-700 transition transform hover:scale-105"
           >
-            No
+            No ❌
           </button>
         </div>
       </div>
