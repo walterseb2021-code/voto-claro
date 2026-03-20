@@ -30,22 +30,33 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     };
   }, []);
 
+  // Obtener pregunta aleatoria NO usada en esta partida
   const fetchRandomQuestion = useCallback(async (excludeIds: string[]) => {
-    // Excluir IDs vacíos correctamente
-    const excludeClause = excludeIds.length > 0 ? `not (id in (${excludeIds.map(id => `'${id}'`).join(',')}))` : '';
-    const { data, error } = await supabase
-      .from('reto_questions')
-      .select('id, question, answer')
-      .eq('level', 2)
-      .eq('party_id', 'app')
-      .limit(1);
-    // Aplicar exclusión manual si hay IDs
-    let filteredData = data;
-    if (excludeIds.length > 0 && filteredData) {
-      filteredData = filteredData.filter(q => !excludeIds.includes(q.id));
+    try {
+      let query = supabase
+        .from('reto_questions')
+        .select('id, question, answer')
+        .eq('level', 2)
+        .eq('party_id', 'app');
+
+      // Si hay IDs excluidos, agregar condición NOT IN
+      if (excludeIds.length > 0) {
+        query = query.not('id', 'in', `(${excludeIds.map(id => `'${id}'`).join(',')})`);
+      }
+
+      // Limitar a 1 resultado aleatorio
+      const { data, error } = await query.limit(50); // traemos varios para luego elegir uno al azar
+
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+
+      // Elegir uno aleatorio de los disponibles
+      const randomIndex = Math.floor(Math.random() * data.length);
+      return data[randomIndex] as Question;
+    } catch (error) {
+      console.error('Error fetching question:', error);
+      return null;
     }
-    if (error || !filteredData || filteredData.length === 0) return null;
-    return filteredData[0] as Question;
   }, []);
 
   const startTimer = useCallback(() => {
@@ -54,6 +65,7 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
       setState(prev => {
         if (prev.timeLeft <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
+          // Respuesta incorrecta por tiempo agotado
           handleAnswer(false);
           return { ...prev, timeLeft: 0 };
         }
@@ -62,7 +74,8 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     }, 1000);
   }, []);
 
-  const handleAnswer = useCallback(async (isCorrect: boolean) => {
+  const handleAnswer = useCallback((isCorrect: boolean) => {
+    // Si no hay pregunta pendiente, no hacer nada
     if (!state.currentQuestion || !state.pendingRoll) return;
 
     if (timerRef.current) clearInterval(timerRef.current);
@@ -99,19 +112,29 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
   }, [state, mode, onWin]);
 
   const rollDice = useCallback(async () => {
-    if (state.gameOver || state.won || state.showQuestion || state.turnsLeft === 0) return;
+    // Condiciones para lanzar
+    if (state.gameOver || state.won || state.showQuestion || state.turnsLeft === 0) {
+      console.log('No se puede lanzar dado en este estado');
+      return;
+    }
 
     const roll = Math.floor(Math.random() * 6) + 1;
-    setState(prev => ({ ...prev, currentRoll: roll, pendingRoll: roll }));
+    console.log('Dado:', roll);
 
+    // Obtener pregunta aleatoria
     const question = await fetchRandomQuestion(state.answeredQuestions);
     if (!question) {
+      console.warn('No hay preguntas disponibles');
       setState(prev => ({ ...prev, gameOver: true }));
       return;
     }
 
+    console.log('Pregunta obtenida:', question.id);
+
     setState(prev => ({
       ...prev,
+      currentRoll: roll,
+      pendingRoll: roll,
       showQuestion: true,
       currentQuestion: question,
       timeLeft: QUESTION_TIME_SEC,
