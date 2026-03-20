@@ -6,50 +6,50 @@ interface GameBoardProps {
   totalSquares: number;
 }
 
-// Íconos temáticos para cada tipo de casilla (puedes cambiarlos según prefieras)
-const getSquareIcon = (num: number): string => {
-  if (num === 1) return '🏁'; // Salida
-  if (num === 30) return '🏆'; // Meta
-  if (num % 5 === 0) return '🏛️'; // Instituciones
-  if (num % 3 === 0) return '🗳️'; // Voto
-  if (num % 2 === 0) return '📊'; // Datos
-  return '⭐'; // Genérico
+// Iconos minimalistas (emoji en gris suave)
+const getIcon = (num: number): string => {
+  if (num === 1) return '🏁';
+  if (num === 30) return '🏆';
+  if (num % 5 === 0) return '🏛️';
+  if (num % 3 === 0) return '🗳️';
+  if (num % 2 === 0) return '📊';
+  return '✨';
 };
 
-// Colores de fondo según el tipo de casilla
-const getSquareColor = (num: number): string => {
-  if (num === 1) return 'bg-yellow-200';
-  if (num === 30) return 'bg-purple-200';
-  if (num % 5 === 0) return 'bg-blue-200';
-  if (num % 3 === 0) return 'bg-green-200';
-  if (num % 2 === 0) return 'bg-orange-200';
-  return 'bg-gray-100';
+// Colores suaves y profesionales
+const getColor = (num: number): string => {
+  if (num === 1) return 'bg-slate-100';
+  if (num === 30) return 'bg-indigo-100';
+  if (num % 5 === 0) return 'bg-blue-50';
+  if (num % 3 === 0) return 'bg-emerald-50';
+  if (num % 2 === 0) return 'bg-amber-50';
+  return 'bg-white';
 };
 
 export default function GameBoard({ position, totalSquares }: GameBoardProps) {
   const squares = Array.from({ length: totalSquares }, (_, i) => i + 1);
 
   return (
-    <div className="grid grid-cols-6 gap-2 p-4 bg-amber-100 rounded-xl border-4 border-amber-800 shadow-inner">
+    <div className="grid grid-cols-6 gap-2 p-4 bg-white/60 rounded-2xl shadow-inner border border-slate-200">
       {squares.map((num) => {
         const isCurrent = position === num;
-        const bgColor = getSquareColor(num);
-        const icon = getSquareIcon(num);
+        const bgColor = getColor(num);
+        const icon = getIcon(num);
 
         return (
           <div
             key={num}
             className={`
-              relative aspect-square rounded-lg flex flex-col items-center justify-center text-center
-              ${bgColor} border-2 border-amber-700 shadow-md transition-all duration-300
-              ${isCurrent ? 'ring-4 ring-yellow-500 scale-105 shadow-xl' : ''}
+              relative aspect-square rounded-xl flex flex-col items-center justify-center
+              ${bgColor} border border-slate-200 shadow-sm transition-all duration-200
+              ${isCurrent ? 'ring-2 ring-indigo-400 ring-offset-2 scale-105 shadow-md' : 'hover:shadow-md hover:scale-95'}
             `}
           >
-            <span className="text-lg font-bold text-gray-800">{num}</span>
-            <span className="text-2xl mt-1">{icon}</span>
+            <span className="text-sm font-medium text-slate-600">{num}</span>
+            <span className="text-xl mt-1 opacity-70">{icon}</span>
             {isCurrent && (
-              <div className="absolute -top-3 -right-3 w-8 h-8 bg-green-600 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold animate-pulse">
-                🧑
+              <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                👤
               </div>
             )}
           </div>

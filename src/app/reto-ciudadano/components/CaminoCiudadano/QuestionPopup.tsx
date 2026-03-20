@@ -13,35 +13,33 @@ interface QuestionPopupProps {
 export default function QuestionPopup({ question, timeLeft, onAnswer, visible, diceResult }: QuestionPopupProps) {
   if (!visible || !question) return null;
 
-  const correctAnswer = question.answer;
-
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-gradient-to-br from-white to-amber-50 rounded-2xl border-4 border-amber-600 max-w-md w-full p-6 shadow-2xl transform transition-all">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
+      <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl border border-indigo-100 max-w-md w-full p-6 transform transition-all scale-100 animate-fade-in">
         <div className="text-center">
           {diceResult && (
-            <div className="inline-block bg-amber-100 rounded-full px-4 py-1 mb-3 text-amber-800 font-bold">
+            <div className="inline-block bg-indigo-100 text-indigo-800 rounded-full px-4 py-1 text-sm font-semibold mb-3">
               🎲 Número: {diceResult}
             </div>
           )}
-          <div className="text-sm font-mono text-slate-500 bg-slate-100 inline-block px-3 py-1 rounded-full">
-            ⏱️ Tiempo: {timeLeft}s
+          <div className="text-sm text-slate-500 mb-2">
+            ⏱️ Tiempo restante: <span className="font-mono font-bold">{timeLeft}s</span>
           </div>
-          <div className="mt-4 text-xl font-bold text-slate-900 leading-relaxed">{question.question}</div>
+          <h3 className="text-xl font-semibold text-slate-800 leading-relaxed">{question.question}</h3>
         </div>
 
         <div className="flex justify-center gap-6 mt-8">
           <button
-            onClick={() => onAnswer(correctAnswer === true)}
-            className="px-8 py-3 bg-green-600 text-white rounded-xl font-bold text-lg shadow-md hover:bg-green-700 transition transform hover:scale-105"
+            onClick={() => onAnswer(question.answer === true)}
+            className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-medium shadow-md hover:bg-emerald-700 transition transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-emerald-400"
           >
-            Sí ✅
+            Sí
           </button>
           <button
-            onClick={() => onAnswer(correctAnswer === false)}
-            className="px-8 py-3 bg-red-600 text-white rounded-xl font-bold text-lg shadow-md hover:bg-red-700 transition transform hover:scale-105"
+            onClick={() => onAnswer(question.answer === false)}
+            className="px-6 py-2.5 bg-rose-600 text-white rounded-xl font-medium shadow-md hover:bg-rose-700 transition transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-rose-400"
           >
-            No ❌
+            No
           </button>
         </div>
       </div>

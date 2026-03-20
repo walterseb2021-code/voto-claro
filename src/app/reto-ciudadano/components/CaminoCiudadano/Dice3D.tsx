@@ -9,41 +9,43 @@ interface Dice3DProps {
   disabled: boolean;
 }
 
+const diceFaces: Record<number, string> = {
+  1: '⚀',
+  2: '⚁',
+  3: '⚂',
+  4: '⚃',
+  5: '⚄',
+  6: '⚅',
+};
+
 export default function Dice3D({ rolling, result, onClick, disabled }: Dice3DProps) {
-  const [isSpinning, setIsSpinning] = useState(false);
+  const [spinning, setSpinning] = useState(false);
 
   useEffect(() => {
     if (rolling) {
-      setIsSpinning(true);
-      const timer = setTimeout(() => setIsSpinning(false), 500);
+      setSpinning(true);
+      const timer = setTimeout(() => setSpinning(false), 400);
       return () => clearTimeout(timer);
     }
   }, [rolling]);
 
-  // Mapeo de números a puntos para el dado (opcional)
-  const dotsMap: Record<number, string> = {
-    1: '⚀',
-    2: '⚁',
-    3: '⚂',
-    4: '⚃',
-    5: '⚄',
-    6: '⚅',
-  };
-
-  const display = result !== null ? (dotsMap[result] || result.toString()) : '?';
+  const display = result !== null ? diceFaces[result] : '?';
 
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={`
-        w-24 h-24 bg-white rounded-2xl shadow-2xl border-4 border-red-600
-        flex items-center justify-center text-5xl font-black text-slate-900
+        relative w-24 h-24 bg-gradient-to-br from-slate-50 to-slate-200 rounded-2xl shadow-xl
+        flex items-center justify-center text-5xl font-bold text-slate-700
         transition-all duration-200
-        ${isSpinning ? 'animate-spin-slow scale-110' : 'hover:scale-105'}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        ${spinning ? 'animate-spin-slow' : ''}
+        ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105 hover:shadow-2xl cursor-pointer'}
       `}
-      style={{ boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}
+      style={{
+        boxShadow: '0 12px 24px -8px rgba(0,0,0,0.2)',
+        transformStyle: 'preserve-3d',
+      }}
     >
       {display}
     </button>

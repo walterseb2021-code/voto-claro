@@ -762,3 +762,18 @@ html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="hover:bg-gre
 .animate-spin-slow {
   animation: spin-slow 0.5s linear;
 }
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin-slow 0.5s linear;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}

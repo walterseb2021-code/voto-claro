@@ -15,68 +15,55 @@ export default function CaminoCiudadano({ mode, onGameWin }: CaminoCiudadanoProp
   const { state, rollDice, handleAnswer, resetGame } = useCaminoCiudadano(mode, onGameWin);
 
   return (
-    <div className="relative bg-gradient-to-br from-amber-50 to-yellow-100 p-6 rounded-3xl border-4 border-amber-800 shadow-2xl">
-      {/* Fondo decorativo sutil */}
-      <div className="absolute inset-0 bg-[url('/images/board-texture.png')] bg-repeat opacity-5 rounded-3xl pointer-events-none" />
-      
-      <div className="relative z-10">
-        {/* Cabecera con estilo Monopoly */}
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-extrabold text-amber-900 drop-shadow-md">
-            🏆 Camino Ciudadano
-          </h3>
-          <div className="flex gap-3">
-            <div className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full border border-amber-600 shadow">
-              <span className="text-sm font-bold">🎲 Turnos: {state.turnsLeft}</span>
-            </div>
-            <div className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full border border-amber-600 shadow">
-              <span className="text-sm font-bold">📍 Casilla: {state.position}/30</span>
-            </div>
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-200 p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
+          <span className="text-indigo-500">🏆</span> Camino Ciudadano
+        </h2>
+        <div className="flex gap-4 text-sm text-slate-600">
+          <div className="bg-slate-100 px-3 py-1 rounded-full shadow-sm">
+            <span className="font-medium">🎲 Turnos:</span> {state.turnsLeft}
+          </div>
+          <div className="bg-slate-100 px-3 py-1 rounded-full shadow-sm">
+            <span className="font-medium">📍 Casilla:</span> {state.position}/30
           </div>
         </div>
+      </div>
 
-        {/* Tablero */}
-        <GameBoard position={state.position} totalSquares={30} />
+      <GameBoard position={state.position} totalSquares={30} />
 
-        {/* Dado */}
-        <div className="flex justify-center mt-6">
-          <Dice3D
-            rolling={state.currentRoll !== null && state.showQuestion === false}
-            result={state.currentRoll}
-            onClick={rollDice}
-            disabled={state.gameOver || state.won || state.showQuestion}
-          />
-        </div>
-
-        {/* Mensajes y botón de reinicio */}
-        <div className="mt-4 text-center text-sm text-slate-600">
-          {state.gameOver && (
-            <div className="text-red-600 font-bold mb-2">¡Has perdido! Reinicia para intentarlo.</div>
-          )}
-          {state.won && (
-            <div className="text-green-600 font-bold animate-pulse mb-2">¡Ganaste! Llegaste a la meta.</div>
-          )}
-          {!state.gameOver && !state.won && state.turnsLeft === 0 && (
-            <div className="text-red-600 font-bold mb-2">¡Sin turnos! Reinicia para intentarlo.</div>
-          )}
-
-          <button
-            onClick={resetGame}
-            className="mt-2 px-4 py-2 bg-amber-700 text-white rounded-xl text-sm font-bold hover:bg-amber-800 transition shadow-md"
-          >
-            Reiniciar juego
-          </button>
-        </div>
-
-        {/* Modal de pregunta */}
-        <QuestionPopup
-          question={state.currentQuestion}
-          timeLeft={state.timeLeft}
-          onAnswer={handleAnswer}
-          visible={state.showQuestion}
-          diceResult={state.currentRoll}
+      <div className="flex justify-center mt-8">
+        <Dice3D
+          rolling={state.currentRoll !== null && !state.showQuestion}
+          result={state.currentRoll}
+          onClick={rollDice}
+          disabled={state.gameOver || state.won || state.showQuestion}
         />
       </div>
+
+      <div className="mt-6 text-center">
+        {(state.gameOver || state.won || state.turnsLeft === 0) && (
+          <div className={`mb-3 text-sm font-medium ${state.won ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {state.gameOver && '❌ Has perdido. Reinicia para intentarlo.'}
+            {state.won && '🎉 ¡Felicidades! Has llegado a la meta.'}
+            {!state.gameOver && !state.won && state.turnsLeft === 0 && '⏰ Sin turnos. Reinicia el juego.'}
+          </div>
+        )}
+        <button
+          onClick={resetGame}
+          className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium shadow-md hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        >
+          Reiniciar juego
+        </button>
+      </div>
+
+      <QuestionPopup
+        question={state.currentQuestion}
+        timeLeft={state.timeLeft}
+        onAnswer={handleAnswer}
+        visible={state.showQuestion}
+        diceResult={state.currentRoll}
+      />
     </div>
   );
 }
