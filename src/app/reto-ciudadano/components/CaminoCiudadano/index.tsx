@@ -20,24 +20,23 @@ export default function CaminoCiudadano({ mode, onGameWin }: CaminoCiudadanoProp
         <h2 className="text-xl font-semibold text-slate-800">Camino Ciudadano</h2>
         <div className="flex gap-4">
           <div className="text-sm text-slate-600">
-            <span className="font-medium">🎲 Turnos:</span> {state.turnsLeft}
+            <span className="font-medium">Turnos:</span> {state.turnsLeft}
           </div>
           <div className="text-sm text-slate-600">
-            <span className="font-medium">📍 Casilla:</span> {state.position}/30
+            <span className="font-medium">Casilla:</span> {state.position}/30
           </div>
         </div>
       </div>
 
-      <GameBoard position={state.position} totalSquares={30} />
-
-      <div className="flex justify-center mt-6">
+      {/* Tablero con el dado dentro (centrado) */}
+      <GameBoard position={state.position} totalSquares={30}>
         <Dice3D
           rolling={state.currentRoll !== null && !state.showQuestion}
           result={state.currentRoll}
           onClick={rollDice}
           disabled={state.gameOver || state.won || state.showQuestion}
         />
-      </div>
+      </GameBoard>
 
       <div className="mt-6 text-center">
         {(state.gameOver || state.won || state.turnsLeft === 0) && (
