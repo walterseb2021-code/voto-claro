@@ -8,42 +8,80 @@ interface GameBoardProps {
   children?: ReactNode;
 }
 
-// Definimos las coordenadas (fila, columna) para cada casilla según la espiral descrita.
-// Grilla de 7x7 (filas 0-6, columnas 0-6)
-const squarePositions: Record<number, { row: number; col: number; segment: string }> = {
-  1:  { row: 0, col: 0, segment: 'A' }, // inicio
-  2:  { row: 0, col: 1, segment: 'A' },
-  3:  { row: 0, col: 2, segment: 'A' },
-  4:  { row: 0, col: 3, segment: 'A' },
-  5:  { row: 0, col: 4, segment: 'A' },
-  6:  { row: 1, col: 4, segment: 'B' },
-  7:  { row: 2, col: 4, segment: 'B' },
-  8:  { row: 3, col: 4, segment: 'B' },
-  9:  { row: 4, col: 4, segment: 'B' },
-  10: { row: 5, col: 4, segment: 'B' },
-  11: { row: 5, col: 3, segment: 'C' },
-  12: { row: 5, col: 2, segment: 'C' },
-  13: { row: 5, col: 1, segment: 'C' },
-  14: { row: 5, col: 0, segment: 'C' }, // esquina inferior izquierda
-  15: { row: 4, col: 0, segment: 'D' },
-  16: { row: 3, col: 0, segment: 'D' },
-  17: { row: 2, col: 0, segment: 'D' },
-  18: { row: 1, col: 0, segment: 'D' }, // debajo del inicio
-  19: { row: 1, col: 1, segment: 'E' },
-  20: { row: 1, col: 2, segment: 'E' },
-  21: { row: 1, col: 3, segment: 'E' }, // debajo del 4 y al lado del 6
-  22: { row: 2, col: 3, segment: 'F' }, // ajuste vertical (desde el 22 hacia abajo)
-  23: { row: 3, col: 3, segment: 'F' },
-  24: { row: 4, col: 3, segment: 'F' },
-  25: { row: 4, col: 2, segment: 'G' },
-  26: { row: 4, col: 1, segment: 'G' }, // encima del 11 y al costado del 9
-  27: { row: 3, col: 1, segment: 'H' },
-  28: { row: 2, col: 1, segment: 'H' },
-  29: { row: 2, col: 2, segment: 'I' }, // encima del 14 y al lado del 16
-  30: { row: 1, col: 2, segment: 'J' }, // fin (ajustado para que termine cerca del centro)
+type Cell = {
+  type: 'number' | 'special';
+  label: string;      // texto a mostrar (número como string, o 'INICIO', 'FIN', 'DADO')
+  num?: number;       // solo para type='number', guarda el número
+  segment?: string;   // opcional para colorear por tramos
 };
 
-// Segmentos con colores profesionales
+// Espiral exacta según descripción: 6x6, numeración 1-30 con inicio y fin, centro 2x2 para dado
+// Usamos una matriz de 6x6 (filas 0..5, columnas 0..5)
+const buildGrid = (): Cell[][] => {
+  // Inicializar todas las celdas como vacías (null)
+  const grid: (Cell | null)[][] = Array.from({ length: 6 }, () => Array(6).fill(null));
+
+  // ---- Primera vuelta (exterior) ----
+  // Fila superior (fila 0): INICIO + 1..5
+  grid[0][0] = { type: 'special', label: 'INICIO' };
+  grid[0][1] = { type: 'number', label: '1', num: 1, segment: 'A' };
+  grid[0][2] = { type: 'number', label: '2', num: 2, segment: 'A' };
+  grid[0][3] = { type: 'number', label: '3', num: 3, segment: 'A' };
+  grid[0][4] = { type: 'number', label: '4', num: 4, segment: 'A' };
+  grid[0][5] = { type: 'number', label: '5', num: 5, segment: 'A' };
+
+  // Columna derecha (columna 5): 6..10
+  grid[1][5] = { type: 'number', label: '6', num: 6, segment: 'B' };
+  grid[2][5] = { type: 'number', label: '7', num: 7, segment: 'B' };
+  grid[3][5] = { type: 'number', label: '8', num: 8, segment: 'B' };
+  grid[4][5] = { type: 'number', label: '9', num: 9, segment: 'B' };
+  grid[5][5] = { type: 'number', label: '10', num: 10, segment: 'B' };
+
+  // Fila inferior (fila 5): 11..15 (de derecha a izquierda)
+  grid[5][4] = { type: 'number', label: '11', num: 11, segment: 'C' };
+  grid[5][3] = { type: 'number', label: '12', num: 12, segment: 'C' };
+  grid[5][2] = { type: 'number', label: '13', num: 13, segment: 'C' };
+  grid[5][1] = { type: 'number', label: '14', num: 14, segment: 'C' };
+  grid[5][0] = { type: 'number', label: '15', num: 15, segment: 'C' };
+
+  // Columna izquierda (columna 0): 16..19 (de abajo hacia arriba)
+  grid[4][0] = { type: 'number', label: '16', num: 16, segment: 'D' };
+  grid[3][0] = { type: 'number', label: '17', num: 17, segment: 'D' };
+  grid[2][0] = { type: 'number', label: '18', num: 18, segment: 'D' };
+  grid[1][0] = { type: 'number', label: '19', num: 19, segment: 'D' };
+
+  // ---- Segunda vuelta (interior) ----
+  // Fila superior interior (fila 1, columnas 1..4)
+  grid[1][1] = { type: 'number', label: '20', num: 20, segment: 'E' };
+  grid[1][2] = { type: 'number', label: '21', num: 21, segment: 'E' };
+  grid[1][3] = { type: 'number', label: '22', num: 22, segment: 'E' };
+  grid[1][4] = { type: 'number', label: '23', num: 23, segment: 'E' };
+
+  // Columna derecha interior (columna 4, filas 2..4)
+  grid[2][4] = { type: 'number', label: '24', num: 24, segment: 'F' };
+  grid[3][4] = { type: 'number', label: '25', num: 25, segment: 'F' };
+  grid[4][4] = { type: 'number', label: '26', num: 26, segment: 'F' };
+
+  // Fila inferior interior (fila 4, columnas 3..1) (de derecha a izquierda)
+  grid[4][3] = { type: 'number', label: '27', num: 27, segment: 'G' };
+  grid[4][2] = { type: 'number', label: '28', num: 28, segment: 'G' };
+  grid[4][1] = { type: 'number', label: '29', num: 29, segment: 'G' };
+
+  // Columna izquierda interior (columna 1, fila 3) – la celda adyacente al centro
+  // Esta es la celda FIN (30)
+  grid[3][1] = { type: 'special', label: 'FIN', num: 30, segment: 'H' };
+
+  // ---- Centro: bloque 2x2 para el dado ----
+  // Dejamos estas celdas como null; en el renderizado se mostrará el dado flotante (children)
+  // Las posiciones centrales son: filas 2-3, columnas 2-3
+  // ya están vacías (null)
+
+  // Aseguramos que ninguna otra celda quede nula (rellenar con objeto vacío para render)
+  // Pero lo manejaremos en el render: si es null, pintamos espacio vacío.
+  return grid as Cell[][];
+};
+
+// Mapear segmentos a colores (profesionales)
 const segmentColors: Record<string, string> = {
   A: 'bg-slate-100 hover:bg-slate-200',
   B: 'bg-blue-50 hover:bg-blue-100',
@@ -52,27 +90,15 @@ const segmentColors: Record<string, string> = {
   E: 'bg-indigo-50 hover:bg-indigo-100',
   F: 'bg-rose-50 hover:bg-rose-100',
   G: 'bg-purple-50 hover:bg-purple-100',
-  H: 'bg-cyan-50 hover:bg-cyan-100',
-  I: 'bg-lime-50 hover:bg-lime-100',
-  J: 'bg-orange-50 hover:bg-orange-100',
+  H: 'bg-orange-50 hover:bg-orange-100',
 };
 
 export default function GameBoard({ position, totalSquares, children }: GameBoardProps) {
-  const rows = 6;   // usamos filas 0..5 (porque la última casilla está en fila 1, col 2)
-  const cols = 5;   // columnas 0..4
+  const grid = buildGrid();
 
-  // Crear una matriz vacía 6x5
-  const cells: (null | { num: number; segment: string })[][] = Array.from({ length: rows }, () =>
-    Array(cols).fill(null)
-  );
-
-  // Llenar la matriz con las posiciones definidas
-  for (let num = 1; num <= totalSquares; num++) {
-    const pos = squarePositions[num];
-    if (pos) {
-      cells[pos.row][pos.col] = { num, segment: pos.segment };
-    }
-  }
+  // Filas y columnas fijas 6x6
+  const rows = 6;
+  const cols = 6;
 
   return (
     <div className="relative w-full bg-white rounded-xl shadow-md border border-slate-200 p-4">
@@ -84,14 +110,18 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
           aspectRatio: `${cols} / ${rows}`,
         }}
       >
-        {cells.map((row, rowIdx) =>
+        {grid.map((row, rowIdx) =>
           row.map((cell, colIdx) => {
             if (!cell) {
+              // Celda vacía (parte del centro 2x2)
               return <div key={`${rowIdx}-${colIdx}`} className="p-1" />;
             }
-            const { num, segment } = cell;
-            const isCurrent = position === num;
-            const baseColor = segmentColors[segment] || 'bg-slate-50';
+
+            const isCurrent = cell.type === 'number' && cell.num === position;
+            const baseColor =
+              cell.type === 'number' && cell.segment
+                ? segmentColors[cell.segment] || 'bg-slate-50'
+                : 'bg-white';
 
             return (
               <div
@@ -103,8 +133,16 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
                 `}
                 style={{ aspectRatio: '1 / 1' }}
               >
-                <span className={isCurrent ? 'font-bold text-indigo-700' : 'text-slate-700'}>
-                  {num}
+                <span
+                  className={
+                    isCurrent
+                      ? 'font-bold text-indigo-700'
+                      : cell.type === 'special'
+                      ? 'text-xs font-semibold text-slate-600'
+                      : 'text-slate-700'
+                  }
+                >
+                  {cell.label}
                 </span>
               </div>
             );
@@ -112,7 +150,7 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
         )}
       </div>
 
-      {/* Área central para el dado */}
+      {/* Área central para el dado (sobre el bloque 2x2 vacío) */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="pointer-events-auto">{children}</div>
       </div>
