@@ -5,70 +5,68 @@ import { ReactNode } from 'react';
 interface GameBoardProps {
   position: number;
   totalSquares: number;
-  children?: ReactNode; // para colocar el dado en el centro
+  children?: ReactNode;
 }
 
-// Mapeo de número de casilla a coordenadas (fila, columna) en una grilla 9x7
+// Definimos las coordenadas (fila, columna) para cada casilla según la espiral descrita.
+// Grilla de 7x7 (filas 0-6, columnas 0-6)
 const squarePositions: Record<number, { row: number; col: number; segment: string }> = {
-  // Fila superior (horizontal) – segmento A
-  1: { row: 0, col: 0, segment: 'A' },
-  2: { row: 0, col: 1, segment: 'A' },
-  3: { row: 0, col: 2, segment: 'A' },
-  4: { row: 0, col: 3, segment: 'A' },
-  5: { row: 0, col: 4, segment: 'A' },
-
-  // Columna derecha (vertical) – segmento B
-  6: { row: 1, col: 4, segment: 'B' },
-  7: { row: 2, col: 4, segment: 'B' },
-  8: { row: 3, col: 4, segment: 'B' },
-  9: { row: 4, col: 4, segment: 'B' },
+  1:  { row: 0, col: 0, segment: 'A' }, // inicio
+  2:  { row: 0, col: 1, segment: 'A' },
+  3:  { row: 0, col: 2, segment: 'A' },
+  4:  { row: 0, col: 3, segment: 'A' },
+  5:  { row: 0, col: 4, segment: 'A' },
+  6:  { row: 1, col: 4, segment: 'B' },
+  7:  { row: 2, col: 4, segment: 'B' },
+  8:  { row: 3, col: 4, segment: 'B' },
+  9:  { row: 4, col: 4, segment: 'B' },
   10: { row: 5, col: 4, segment: 'B' },
-  11: { row: 6, col: 4, segment: 'B' },
-  12: { row: 7, col: 4, segment: 'B' },
-  13: { row: 8, col: 4, segment: 'B' },
-
-  // Fila inferior (horizontal izquierda) – segmento C
-  14: { row: 8, col: 3, segment: 'C' },
-  15: { row: 8, col: 2, segment: 'C' },
-  16: { row: 8, col: 1, segment: 'C' },
-  17: { row: 8, col: 0, segment: 'C' },
-  18: { row: 7, col: 0, segment: 'C' },
-
-  // Columna izquierda (vertical ascendente) – segmento D
-  19: { row: 6, col: 0, segment: 'D' },
-  20: { row: 5, col: 0, segment: 'D' },
-  21: { row: 4, col: 0, segment: 'D' },
-  22: { row: 3, col: 0, segment: 'D' },
-  23: { row: 2, col: 0, segment: 'D' },
-  24: { row: 1, col: 0, segment: 'D' },
-
-  // Fila interior derecha – segmento E
-  25: { row: 1, col: 1, segment: 'E' },
-  26: { row: 1, col: 2, segment: 'E' },
-  27: { row: 1, col: 3, segment: 'E' },
-  28: { row: 1, col: 4, segment: 'E' },
-  29: { row: 1, col: 5, segment: 'E' },
-  30: { row: 1, col: 6, segment: 'E' },
+  11: { row: 5, col: 3, segment: 'C' },
+  12: { row: 5, col: 2, segment: 'C' },
+  13: { row: 5, col: 1, segment: 'C' },
+  14: { row: 5, col: 0, segment: 'C' }, // esquina inferior izquierda
+  15: { row: 4, col: 0, segment: 'D' },
+  16: { row: 3, col: 0, segment: 'D' },
+  17: { row: 2, col: 0, segment: 'D' },
+  18: { row: 1, col: 0, segment: 'D' }, // debajo del inicio
+  19: { row: 1, col: 1, segment: 'E' },
+  20: { row: 1, col: 2, segment: 'E' },
+  21: { row: 1, col: 3, segment: 'E' }, // debajo del 4 y al lado del 6
+  22: { row: 2, col: 3, segment: 'F' }, // ajuste vertical (desde el 22 hacia abajo)
+  23: { row: 3, col: 3, segment: 'F' },
+  24: { row: 4, col: 3, segment: 'F' },
+  25: { row: 4, col: 2, segment: 'G' },
+  26: { row: 4, col: 1, segment: 'G' }, // encima del 11 y al costado del 9
+  27: { row: 3, col: 1, segment: 'H' },
+  28: { row: 2, col: 1, segment: 'H' },
+  29: { row: 2, col: 2, segment: 'I' }, // encima del 14 y al lado del 16
+  30: { row: 1, col: 2, segment: 'J' }, // fin (ajustado para que termine cerca del centro)
 };
 
-// Colores por segmento (profesionales, tonos sobrios)
+// Segmentos con colores profesionales
 const segmentColors: Record<string, string> = {
   A: 'bg-slate-100 hover:bg-slate-200',
   B: 'bg-blue-50 hover:bg-blue-100',
   C: 'bg-emerald-50 hover:bg-emerald-100',
   D: 'bg-amber-50 hover:bg-amber-100',
   E: 'bg-indigo-50 hover:bg-indigo-100',
+  F: 'bg-rose-50 hover:bg-rose-100',
+  G: 'bg-purple-50 hover:bg-purple-100',
+  H: 'bg-cyan-50 hover:bg-cyan-100',
+  I: 'bg-lime-50 hover:bg-lime-100',
+  J: 'bg-orange-50 hover:bg-orange-100',
 };
 
 export default function GameBoard({ position, totalSquares, children }: GameBoardProps) {
-  // Generar todas las celdas vacías para la grilla 9x7 (filas 0-8, columnas 0-6)
-  const rows = 9;
-  const cols = 7;
+  const rows = 6;   // usamos filas 0..5 (porque la última casilla está en fila 1, col 2)
+  const cols = 5;   // columnas 0..4
 
-  // Crear una matriz de celdas vacías
-  const cells = Array.from({ length: rows }, () => Array(cols).fill(null));
+  // Crear una matriz vacía 6x5
+  const cells: (null | { num: number; segment: string })[][] = Array.from({ length: rows }, () =>
+    Array(cols).fill(null)
+  );
 
-  // Colocar cada casilla en su celda
+  // Llenar la matriz con las posiciones definidas
   for (let num = 1; num <= totalSquares; num++) {
     const pos = squarePositions[num];
     if (pos) {
@@ -78,9 +76,8 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
 
   return (
     <div className="relative w-full bg-white rounded-xl shadow-md border border-slate-200 p-4">
-      {/* Grilla contenedora */}
       <div
-        className="grid"
+        className="grid gap-2"
         style={{
           gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
           gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
@@ -90,7 +87,6 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
         {cells.map((row, rowIdx) =>
           row.map((cell, colIdx) => {
             if (!cell) {
-              // Celda vacía
               return <div key={`${rowIdx}-${colIdx}`} className="p-1" />;
             }
             const { num, segment } = cell;
@@ -116,7 +112,7 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
         )}
       </div>
 
-      {/* Área central para el dado (posicionamiento absoluto) */}
+      {/* Área central para el dado */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="pointer-events-auto">{children}</div>
       </div>
