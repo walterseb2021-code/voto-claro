@@ -30,6 +30,7 @@ export default function NuevoProyectoPage() {
     objective: '',
     description: '',
     district: '',
+    department: '',
   });
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [cycle, setCycle] = useState<any>(null);
@@ -91,9 +92,15 @@ export default function NuevoProyectoPage() {
     setSubmitting(true);
     setError(null);
 
-    // Validaciones
+    // Validaciones básicas
     if (!form.name || !form.category || !form.objective || !form.description || !form.district) {
       setError('Todos los campos son obligatorios.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (!form.department) {
+      setError('Debes seleccionar un departamento.');
       setSubmitting(false);
       return;
     }
@@ -110,13 +117,32 @@ export default function NuevoProyectoPage() {
       return;
     }
 
-    if (pdfFile.size > 50 * 1024 * 1024) {
-      setError('El archivo no debe superar los 50 MB.');
+    if (pdfFile.size > 10 * 1024 * 1024) {
+      setError('El archivo no debe superar los 10 MB.');
       setSubmitting(false);
       return;
     }
 
     try {
+      // Verificar si ya existe proyecto en este departamento para el ciclo activo
+      const { data: existingProject, error: existingError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('cycle_id', cycle?.id)
+        .eq('department', form.department)
+        .in('status', ['pending', 'active'])
+        .maybeSingle();
+
+      if (existingError) {
+        console.error('Error verificando proyecto existente:', existingError);
+      }
+
+      if (existingProject) {
+        setError(`Ya existe un proyecto registrado para el departamento de ${form.department}. Solo se permite uno por departamento por ciclo.`);
+        setSubmitting(false);
+        return;
+      }
+
       // 1. Subir PDF a Supabase Storage
       const fileExt = pdfFile.name.split('.').pop();
       const fileName = `${participant.id}/${Date.now()}.${fileExt}`;
@@ -144,6 +170,7 @@ export default function NuevoProyectoPage() {
           objective: form.objective,
           description: form.description,
           district: form.district,
+          department: form.department,
           pdf_url: pdfUrl,
           status: 'pending',
         })
@@ -284,6 +311,44 @@ export default function NuevoProyectoPage() {
             </div>
 
             <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Departamento *</label>
+              <select
+                name="department"
+                value={form.department}
+                onChange={handleChange}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+                required
+              >
+                <option value="">Selecciona un departamento</option>
+                <option value="Amazonas">Amazonas</option>
+                <option value="Áncash">Áncash</option>
+                <option value="Apurímac">Apurímac</option>
+                <option value="Arequipa">Arequipa</option>
+                <option value="Ayacucho">Ayacucho</option>
+                <option value="Cajamarca">Cajamarca</option>
+                <option value="Callao">Callao</option>
+                <option value="Cusco">Cusco</option>
+                <option value="Huancavelica">Huancavelica</option>
+                <option value="Huánuco">Huánuco</option>
+                <option value="Ica">Ica</option>
+                <option value="Junín">Junín</option>
+                <option value="La Libertad">La Libertad</option>
+                <option value="Lambayeque">Lambayeque</option>
+                <option value="Lima">Lima</option>
+                <option value="Loreto">Loreto</option>
+                <option value="Madre de Dios">Madre de Dios</option>
+                <option value="Moquegua">Moquegua</option>
+                <option value="Pasco">Pasco</option>
+                <option value="Piura">Piura</option>
+                <option value="Puno">Puno</option>
+                <option value="San Martín">San Martín</option>
+                <option value="Tacna">Tacna</option>
+                <option value="Tumbes">Tumbes</option>
+                <option value="Ucayali">Ucayali</option>
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
               <input
                 type="file"
@@ -292,7 +357,7 @@ export default function NuevoProyectoPage() {
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                 required
               />
-              <p className="text-xs text-slate-500 mt-1">Máximo 50 MB. Solo PDF.</p>
+              <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF.</p>
             </div>
 
             <div className="pt-4">
