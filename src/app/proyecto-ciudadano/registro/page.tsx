@@ -1,12 +1,25 @@
 // src/app/proyecto-ciudadano/registro/page.tsx
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
+// Función para obtener o crear device_id
+function getOrCreateDeviceId(): string {
+  if (typeof window === "undefined") return "";
+  const KEY = "vc_device_id";
+  const existing = localStorage.getItem(KEY);
+  if (existing && existing.length > 10) return existing;
+
+  const newId = crypto.randomUUID();
+  localStorage.setItem(KEY, newId);
+  return newId;
+}
+
 export default function RegistroParticipantePage() {
   const router = useRouter();
+  const [deviceId, setDeviceId] = useState<string>("");
   const [form, setForm] = useState({
     full_name: '',
     dni: '',
@@ -20,6 +33,11 @@ export default function RegistroParticipantePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  useEffect(() => {
+    const id = getOrCreateDeviceId();
+    setDeviceId(id);
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -29,9 +47,9 @@ export default function RegistroParticipantePage() {
     setLoading(true);
     setError(null);
 
-    // Validaciones básicas
-    if (!form.full_name || !form.dni || !form.email || !form.phone || !form.alias) {
-      setError('Todos los campos obligatorios deben estar llenos.');
+    // Validaciones
+    if (!form.full_name || !form.dni || !form.email || !form.phone || !form.alias || !form.address || !form.district) {
+      setError('Todos los campos son obligatorios.');
       setLoading(false);
       return;
     }
@@ -48,8 +66,6 @@ export default function RegistroParticipantePage() {
       return;
     }
 
-    // Obtener device_id (para asociar al participante)
-    const deviceId = localStorage.getItem('vc_device_id');
     if (!deviceId) {
       setError('No se pudo identificar tu dispositivo. Recarga la página.');
       setLoading(false);
@@ -57,7 +73,6 @@ export default function RegistroParticipantePage() {
     }
 
     try {
-      // Insertar en la tabla project_participants
       const { data, error } = await supabase
         .from('project_participants')
         .insert({
@@ -65,8 +80,8 @@ export default function RegistroParticipantePage() {
           dni: form.dni,
           email: form.email,
           phone: form.phone,
-          address: form.address || null,
-          district: form.district || null,
+          address: form.address,
+          district: form.district,
           alias: form.alias,
           device_id: deviceId,
         })
@@ -197,24 +212,26 @@ export default function RegistroParticipantePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Dirección (opcional)</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Dirección *</label>
               <input
                 type="text"
                 name="address"
                 value={form.address}
                 onChange={handleChange}
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+                required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Distrito (opcional)</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Distrito *</label>
               <input
                 type="text"
                 name="district"
                 value={form.district}
                 onChange={handleChange}
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+                required
               />
             </div>
 
@@ -228,7 +245,7 @@ export default function RegistroParticipantePage() {
           </form>
 
           <p className="text-xs text-slate-500 mt-4 text-center">
-            Al registrarte aceptas que tus datos sean tratados conforme a nuestras políticas de privacidad. La verificación de identidad es opcional; en caso de detectarse fraude, el responsable será denunciado penalmente.
+            Al registrarte aceptas nuestras políticas de participación. La veracidad de los datos es responsabilidad del participante. En caso de detectarse información falsa, nos reservamos el derecho de tomar las acciones legales correspondientes.
           </p>
         </div>
       </div>
