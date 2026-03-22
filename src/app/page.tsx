@@ -610,6 +610,35 @@ export default function HomePage() {
       <footer className="mt-6 text-xs text-black">
         VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
         reemplaza el criterio personal.
+                <div className="vc-block md:col-span-2">
+          <Link
+            href="/proyecto-ciudadano"
+            onClick={(e) =>
+              handleSmartNavigate({
+                key: "proyecto-ciudadano",
+                href: "/proyecto-ciudadano",
+                speech:
+                  "Vas a entrar a Proyecto Ciudadano. Aquí puedes presentar proyectos para tu comunidad, formar un equipo y recibir apoyo vecinal. Los mejores proyectos serán premiados cada tres meses.",
+                preventDefault: true,
+                e,
+              })
+            }
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+          >
+            <div className="flex items-start gap-3">
+              <div className="text-2xl leading-none">🏘️</div>
+              <div className="min-w-0">
+                <div className="text-base font-extrabold text-black">PROYECTO CIUDADANO</div>
+                <p className="mt-1 text-sm text-black">
+                  Presenta tu proyecto comunitario, forma un equipo y recibe apoyo vecinal. Los mejores proyectos son premiados.
+                </p>
+                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
+                  Abrir página →
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
       </footer>
     </main>
   );
