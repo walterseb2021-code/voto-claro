@@ -14,6 +14,8 @@ type Project = {
   pdf_url: string;
   status: string;
   created_at: string;
+  beneficiary_count: number;
+  evaluation_exists: boolean;
   leader: {
     full_name: string;
     alias: string;
@@ -32,48 +34,53 @@ export default function AdminProyectosPage() {
     loadProjects();
   }, [filter]);
 
-    const loadProjects = async () => {
-  setLoading(true);
-  setError(null);
+  const loadProjects = async () => {
+    setLoading(true);
+    setError(null);
 
-  try {
-    const { data, error } = await supabase
-      .from('projects')
-      .select(`
-        id,
-        name,
-        category,
-        objective,
-        district,
-        department,
-        pdf_url,
-        status,
-        created_at,
-        leader:project_participants!leader_id (
-          full_name,
-          alias,
-          email
-        )
-      `)
-      .eq('status', filter)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          name,
+          category,
+          objective,
+          district,
+          department,
+          pdf_url,
+          status,
+          created_at,
+          beneficiary_count,
+          leader:project_participants!leader_id (
+            full_name,
+            alias,
+            email
+          ),
+          evaluation:project_evaluations (
+            id
+          )
+        `)
+        .eq('status', filter)
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const transformed = (data || []).map((item: any) => ({
-      ...item,
-      leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
-    }));
+      const transformed = (data || []).map((item: any) => ({
+        ...item,
+        leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
+        evaluation_exists: item.evaluation && item.evaluation.length > 0,
+      }));
 
-    setProjects(transformed);
-  } catch (err: any) {
-    console.error('Error cargando proyectos:', err);
-    setError(err.message || 'Error al cargar proyectos');
-    setProjects([]);
-  } finally {
-    setLoading(false);
-  }
-};
+      setProjects(transformed);
+    } catch (err: any) {
+      console.error('Error cargando proyectos:', err);
+      setError(err.message || 'Error al cargar proyectos');
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const updateStatus = async (projectId: string, newStatus: 'active' | 'disqualified') => {
     setMessage(null);
@@ -182,6 +189,9 @@ export default function AdminProyectosPage() {
                     <div className="text-xs text-slate-500">
                       📅 {new Date(project.created_at).toLocaleDateString()}
                     </div>
+                    <div className="text-xs text-slate-500">
+                      🤝 Apoyos: {project.beneficiary_count || 0}
+                    </div>
                     {project.pdf_url && (
                       <a
                         href={project.pdf_url}
@@ -194,51 +204,90 @@ export default function AdminProyectosPage() {
                     )}
                   </div>
                   <div className="flex gap-2">
-  <button
-    onClick={() => {
-      const viability = prompt('Puntaje de viabilidad (0-100):');
-      if (!viability) return;
-      const impact = prompt('Puntaje de impacto social (0-100):');
-      if (!impact) return;
-      const originality = prompt('Puntaje de originalidad (0-100):');
-      if (!originality) return;
-      const participation = prompt('Puntaje de participación ciudadana (0-100):');
-      if (!participation) return;
-      
-      fetch('/api/admin/proyectos/evaluar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: project.id,
-          viability: parseInt(viability),
-          impact: parseInt(impact),
-          originality: parseInt(originality),
-          participation: parseInt(participation),
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          alert('✅ Evaluación guardada correctamente');
-          loadProjects();
-        } else {
-          alert('❌ Error al guardar evaluación');
-        }
-      })
-      .catch(err => alert('Error de conexión: ' + err.message));
-    }}
-    className="bg-purple-600 text-white px-3 py-2 rounded-xl text-sm font-semibold hover:bg-purple-700"
-  >
-    📊 Evaluar
-  </button>
-  
-  <Link
-    href={`/proyecto-ciudadano/proyectos/${project.id}`}
-    className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
-  >
-    Ver detalles
-  </Link>
-</div>
+                    {filter === 'active' ? (
+                      <>
+                        {/* Mostrar si el proyecto ya fue evaluado */}
+                        {project.evaluation_exists ? (
+                          <span className="text-xs bg-green-100 text-green-800 px-3 py-2 rounded-xl font-semibold">
+                            ✅ Evaluado
+                          </span>
+                        ) : (
+                          // Mostrar el botón de evaluar solo si tiene 100+ apoyos
+                          (project.beneficiary_count || 0) >= 100 ? (
+                            <button
+                              onClick={async () => {
+                                const viability = prompt('Puntaje de viabilidad (0-100):');
+                                if (!viability) return;
+                                const impact = prompt('Puntaje de impacto social (0-100):');
+                                if (!impact) return;
+                                const originality = prompt('Puntaje de originalidad (0-100):');
+                                if (!originality) return;
+                                const participation = prompt('Puntaje de participación ciudadana (0-100):');
+                                if (!participation) return;
+                                
+                                const confirmSave = confirm('¿Confirmar evaluación? Una vez guardada no se puede modificar.');
+                                if (!confirmSave) return;
+                                
+                                const res = await fetch('/api/admin/proyectos/evaluar', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    projectId: project.id,
+                                    viability: parseInt(viability),
+                                    impact: parseInt(impact),
+                                    originality: parseInt(originality),
+                                    participation: parseInt(participation),
+                                    confirm: 'yes',
+                                  })
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                  alert('✅ Evaluación guardada correctamente');
+                                  loadProjects();
+                                } else {
+                                  alert('❌ ' + (data.error || 'Error al guardar evaluación'));
+                                }
+                              }}
+                              className="bg-purple-600 text-white px-3 py-2 rounded-xl text-sm font-semibold hover:bg-purple-700"
+                            >
+                              📊 Evaluar
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-500 bg-slate-100 px-3 py-2 rounded-xl">
+                              ⏳ Faltan {100 - (project.beneficiary_count || 0)} apoyos
+                            </span>
+                          )
+                        )}
+                        <Link
+                          href={`/proyecto-ciudadano/proyectos/${project.id}`}
+                          className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
+                        >
+                          Ver detalles
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => updateStatus(project.id, 'active')}
+                          className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-700"
+                        >
+                          ✅ Aprobar
+                        </button>
+                        <button
+                          onClick={() => updateStatus(project.id, 'disqualified')}
+                          className="bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-700"
+                        >
+                          ❌ Rechazar
+                        </button>
+                        <Link
+                          href={`/proyecto-ciudadano/proyectos/${project.id}`}
+                          className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
+                        >
+                          Ver detalles
+                        </Link>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
