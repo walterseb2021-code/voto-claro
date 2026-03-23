@@ -338,6 +338,16 @@ const loadDevices = async () => {
                 Abrir Admin Tokens
               </Link>
             </div>
+
+            <div className={card}>
+  <div className="text-sm font-extrabold text-slate-900">🏘️ Proyecto Ciudadano</div>
+  <div className="mt-1 text-xs text-slate-600">
+    Revisar y aprobar proyectos presentados por ciudadanos.
+  </div>
+  <Link href="/admin/proyectos" className={btn + " mt-3 w-full"}>
+    Abrir Admin Proyectos
+  </Link>
+</div>
           </div>
         </div>
       </section>
