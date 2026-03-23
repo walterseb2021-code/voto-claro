@@ -91,16 +91,12 @@ export default function RegistroParticipantePage() {
       if (error) throw error;
 
       setSuccess(true);
-      setTimeout(() => {
-        router.push('/proyecto-ciudadano');
-      }, 2000);
     } catch (err: any) {
       if (err.message?.includes('duplicate key') || err.code === '23505') {
         setError('Ya existe un participante con este DNI o correo. Si ya te registraste, intenta iniciar sesión.');
       } else {
         setError(err.message || 'Error al registrar. Intenta nuevamente.');
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -116,7 +112,7 @@ export default function RegistroParticipantePage() {
               Tu perfil ha sido creado correctamente. Serás redirigido a la página principal de Proyecto Ciudadano.
             </p>
             <Link
-              href="/proyecto-ciudadano"
+              href="/proyecto-ciudadano?registered=true"
               className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
             >
               Ir a Proyecto Ciudadano

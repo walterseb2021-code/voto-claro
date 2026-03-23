@@ -40,7 +40,16 @@ export default function ProyectoCiudadanoPage() {
   };
 
   useEffect(() => {
-    loadParticipant();
+    // Verificar si venimos del registro exitoso
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('registered') === 'true') {
+      // Recargar los datos del participante
+      loadParticipant();
+      // Limpiar el parámetro de la URL sin recargar la página
+      window.history.replaceState({}, '', '/proyecto-ciudadano');
+    } else {
+      loadParticipant();
+    }
   }, []);
 
   // Forzar recarga manual
