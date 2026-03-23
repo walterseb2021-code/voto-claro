@@ -1,5 +1,4 @@
-// src/app/proyecto-ciudadano/page.tsx
-'use client';
+﻿'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -23,12 +22,14 @@ export default function ProyectoCiudadanoPage() {
   const [participant, setParticipant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
-  const [deviceId, setDeviceId] = useState<string>('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   useEffect(() => {
     const id = getOrCreateDeviceId();
-    setDeviceId(id);
     console.log('📱 device_id actual:', id);
+    loadParticipant();
   }, []);
 
   // Función para cargar el participante por device_id
@@ -63,18 +64,55 @@ export default function ProyectoCiudadanoPage() {
     }
   };
 
-  useEffect(() => {
-    // Verificar si venimos del registro exitoso
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('registered') === 'true') {
-      // Recargar los datos del participante
-      loadParticipant();
-      // Limpiar el parámetro de la URL sin recargar la página
-      window.history.replaceState({}, '', '/proyecto-ciudadano');
-    } else {
-      loadParticipant();
+  // Función para iniciar sesión con DNI o correo
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+
+    const identifier = loginIdentifier.trim();
+    if (!identifier) {
+      setLoginError('Ingresa tu DNI o correo electrónico');
+      setLoginLoading(false);
+      return;
     }
-  }, []);
+
+    try {
+      // Buscar participante por DNI o correo
+      const { data, error } = await supabase
+        .from('project_participants')
+        .select('*')
+        .or(`dni.eq.${identifier},email.eq.${identifier}`)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      if (!data) {
+        setLoginError('No se encontró un participante con esos datos. ¿Ya te registraste?');
+        setLoginLoading(false);
+        return;
+      }
+
+      // Actualizar el device_id del participante con el actual
+      const currentDeviceId = getOrCreateDeviceId();
+      const { error: updateError } = await supabase
+        .from('project_participants')
+        .update({ device_id: currentDeviceId })
+        .eq('id', data.id);
+
+      if (updateError) throw updateError;
+
+      console.log('✅ Sesión iniciada, device_id actualizado');
+      // Recargar los datos del participante
+      await loadParticipant();
+      setLoginIdentifier('');
+    } catch (err: any) {
+      console.error('Error al iniciar sesión:', err);
+      setLoginError(err.message || 'Error al iniciar sesión');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   // Forzar recarga manual
   const handleRefresh = () => {
@@ -121,18 +159,52 @@ export default function ProyectoCiudadanoPage() {
 
         {/* Estado del usuario */}
         {!participant ? (
-          <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-900 mb-3">Regístrate para participar</h2>
-            <p className="text-slate-600 mb-4">
-              Completa tu perfil para poder presentar proyectos o apoyar iniciativas ciudadanas.
-            </p>
-            <Link
-              href="/proyecto-ciudadano/registro"
-              className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block"
-            >
-              Registrarme ahora
-            </Link>
-          </div>
+          <>
+            <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm mb-4">
+              <h2 className="text-xl font-bold text-slate-900 mb-3">Regístrate para participar</h2>
+              <p className="text-slate-600 mb-4">
+                Completa tu perfil para poder presentar proyectos o apoyar iniciativas ciudadanas.
+              </p>
+              <Link
+                href="/proyecto-ciudadano/registro"
+                className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block"
+              >
+                Registrarme ahora
+              </Link>
+            </div>
+
+            {/* Bloque de inicio de sesión para usuarios ya registrados */}
+            <div className="bg-white rounded-2xl border-2 border-slate-300 p-6 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-900 mb-3">¿Ya tienes cuenta?</h2>
+              <p className="text-slate-600 mb-4">
+                Si ya te registraste anteriormente, inicia sesión con tu DNI o correo electrónico para continuar.
+              </p>
+              
+              {loginError && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+                  {loginError}
+                </div>
+              )}
+              
+              <form onSubmit={handleLogin} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="DNI o correo electrónico"
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
+                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+                  disabled={loginLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={loginLoading}
+                  className="w-full bg-slate-200 text-slate-800 py-2 rounded-xl font-semibold hover:bg-slate-300 transition disabled:opacity-50"
+                >
+                  {loginLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+                </button>
+              </form>
+            </div>
+          </>
         ) : (
           <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
             <div className="flex justify-between items-start flex-wrap gap-4 mb-4">
@@ -170,7 +242,7 @@ export default function ProyectoCiudadanoPage() {
           </div>
         )}
 
-        {/* Lista de proyectos destacados (próximamente) */}
+        {/* Lista de proyectos destacados */}
         <div className="mt-6 bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-3">Proyectos destacados</h2>
           <p className="text-slate-500">Próximamente se mostrarán los proyectos con más apoyo ciudadano.</p>
