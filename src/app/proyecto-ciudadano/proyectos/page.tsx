@@ -19,7 +19,7 @@ type Project = {
   leader: {
     alias: string;
     full_name: string;
-  };
+  } | null;
 };
 
 export default function ProyectosActivosPage() {
@@ -71,7 +71,13 @@ export default function ProyectosActivosPage() {
 
       if (error) throw error;
 
-      setProjects(data || []);
+      // Transformar los datos: leader viene como array, lo convertimos a objeto
+      const transformedProjects: Project[] = (data || []).map((item: any) => ({
+        ...item,
+        leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
+      }));
+
+      setProjects(transformedProjects);
     } catch (err: any) {
       console.error('Error cargando proyectos:', err);
       setError(err.message || 'Error al cargar los proyectos');
