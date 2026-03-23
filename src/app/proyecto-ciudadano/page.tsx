@@ -5,16 +5,38 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
+// Función para obtener o crear device_id
+function getOrCreateDeviceId(): string {
+  if (typeof window === "undefined") return "";
+  const KEY = "vc_device_id";
+  const existing = localStorage.getItem(KEY);
+  if (existing && existing.length > 10) return existing;
+
+  const newId = crypto.randomUUID();
+  localStorage.setItem(KEY, newId);
+  console.log('🆕 Nuevo device_id creado:', newId);
+  return newId;
+}
+
 export default function ProyectoCiudadanoPage() {
   const router = useRouter();
   const [participant, setParticipant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
+  const [deviceId, setDeviceId] = useState<string>('');
+
+  useEffect(() => {
+    const id = getOrCreateDeviceId();
+    setDeviceId(id);
+    console.log('📱 device_id actual:', id);
+  }, []);
 
   // Función para cargar el participante por device_id
   const loadParticipant = async () => {
-    const deviceId = localStorage.getItem('vc_device_id');
-    if (!deviceId) {
+    const currentDeviceId = getOrCreateDeviceId();
+    console.log('🔍 [ProyectoCiudadano] deviceId:', currentDeviceId);
+    
+    if (!currentDeviceId) {
       setParticipant(null);
       setLoading(false);
       return;
@@ -22,16 +44,18 @@ export default function ProyectoCiudadanoPage() {
 
     setChecking(true);
     try {
+      console.log('📡 Buscando participante con deviceId:', currentDeviceId);
       const { data, error } = await supabase
         .from('project_participants')
         .select('*')
-        .eq('device_id', deviceId)
+        .eq('device_id', currentDeviceId)
         .maybeSingle();
 
       if (error) throw error;
+      console.log('✅ Participante encontrado:', data);
       setParticipant(data || null);
     } catch (err) {
-      console.error('Error cargando participante:', err);
+      console.error('❌ Error cargando participante:', err);
       setParticipant(null);
     } finally {
       setChecking(false);
