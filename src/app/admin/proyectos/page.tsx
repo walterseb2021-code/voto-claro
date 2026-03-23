@@ -32,47 +32,48 @@ export default function AdminProyectosPage() {
     loadProjects();
   }, [filter]);
 
-  const loadProjects = async () => {
-    setLoading(true);
-    setError(null);
+    const loadProjects = async () => {
+  setLoading(true);
+  setError(null);
 
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          name,
-          category,
-          objective,
-          district,
-          department,
-          pdf_url,
-          status,
-          created_at,
-          leader:project_participants!leader_id (
-            full_name,
-            alias,
-            email
-          )
-        `)
-        .eq('status', filter)
-        .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        id,
+        name,
+        category,
+        objective,
+        district,
+        department,
+        pdf_url,
+        status,
+        created_at,
+        leader:project_participants!leader_id (
+          full_name,
+          alias,
+          email
+        )
+      `)
+      .eq('status', filter)
+      .order('created_at', { ascending: false });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      const transformed = (data || []).map((item: any) => ({
-        ...item,
-        leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
-      }));
+    const transformed = (data || []).map((item: any) => ({
+      ...item,
+      leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
+    }));
 
-      setProjects(transformed);
-    } catch (err: any) {
-      console.error('Error cargando proyectos:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setProjects(transformed);
+  } catch (err: any) {
+    console.error('Error cargando proyectos:', err);
+    setError(err.message || 'Error al cargar proyectos');
+    setProjects([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const updateStatus = async (projectId: string, newStatus: 'active' | 'disqualified') => {
     setMessage(null);
