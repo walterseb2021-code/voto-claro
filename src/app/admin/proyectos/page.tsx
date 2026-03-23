@@ -194,29 +194,51 @@ export default function AdminProyectosPage() {
                     )}
                   </div>
                   <div className="flex gap-2">
-                    {filter === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => updateStatus(project.id, 'active')}
-                          className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-700"
-                        >
-                          ✅ Aprobar
-                        </button>
-                        <button
-                          onClick={() => updateStatus(project.id, 'disqualified')}
-                          className="bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-700"
-                        >
-                          ❌ Rechazar
-                        </button>
-                      </>
-                    )}
-                    <Link
-                      href={`/proyecto-ciudadano/proyectos/${project.id}`}
-                      className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
-                    >
-                      Ver detalles
-                    </Link>
-                  </div>
+  <button
+    onClick={() => {
+      const viability = prompt('Puntaje de viabilidad (0-100):');
+      if (!viability) return;
+      const impact = prompt('Puntaje de impacto social (0-100):');
+      if (!impact) return;
+      const originality = prompt('Puntaje de originalidad (0-100):');
+      if (!originality) return;
+      const participation = prompt('Puntaje de participación ciudadana (0-100):');
+      if (!participation) return;
+      
+      fetch('/api/admin/proyectos/evaluar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          viability: parseInt(viability),
+          impact: parseInt(impact),
+          originality: parseInt(originality),
+          participation: parseInt(participation),
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert('✅ Evaluación guardada correctamente');
+          loadProjects();
+        } else {
+          alert('❌ Error al guardar evaluación');
+        }
+      })
+      .catch(err => alert('Error de conexión: ' + err.message));
+    }}
+    className="bg-purple-600 text-white px-3 py-2 rounded-xl text-sm font-semibold hover:bg-purple-700"
+  >
+    📊 Evaluar
+  </button>
+  
+  <Link
+    href={`/proyecto-ciudadano/proyectos/${project.id}`}
+    className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
+  >
+    Ver detalles
+  </Link>
+</div>
                 </div>
               </div>
             ))}
