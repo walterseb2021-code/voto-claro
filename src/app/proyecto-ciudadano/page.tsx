@@ -25,13 +25,27 @@ export default function ProyectoCiudadanoPage() {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [winners, setWinners] = useState<any[]>([]);
+  const [winnersLoading, setWinnersLoading] = useState(true); 
 
   useEffect(() => {
     const id = getOrCreateDeviceId();
     console.log('📱 device_id actual:', id);
     loadParticipant();
   }, []);
-
+         useEffect(() => {
+  // Verificar si venimos del registro exitoso
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('registered') === 'true') {
+    loadParticipant();
+    window.history.replaceState({}, '', '/proyecto-ciudadano');
+  } else {
+    loadParticipant();
+  }
+  
+  // 👇 AGREGAR ESTA LÍNEA
+  loadWinners();
+}, []);
   // Función para cargar el participante por device_id
   const loadParticipant = async () => {
     const currentDeviceId = getOrCreateDeviceId();
@@ -63,7 +77,56 @@ export default function ProyectoCiudadanoPage() {
       setLoading(false);
     }
   };
+        // Cargar ganadores del ciclo anterior
+const loadWinners = async () => {
+  setWinnersLoading(true);
+  try {
+    // Obtener el ciclo anterior (el que no está activo)
+    const { data: previousCycle } = await supabase
+      .from('project_cycles')
+      .select('id')
+      .eq('is_active', false)
+      .order('ends_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
+    if (!previousCycle) {
+      setWinners([]);
+      return;
+    }
+
+    // Obtener proyectos ganadores (los 3 con mayor puntaje final)
+    const { data } = await supabase
+      .from('projects')
+      .select(`
+        id,
+        name,
+        category,
+        district,
+        department,
+        beneficiary_count,
+        leader:project_participants!leader_id (
+          alias
+        )
+      `)
+      .eq('cycle_id', previousCycle.id)
+      .eq('status', 'active')
+      .order('beneficiary_count', { ascending: false })
+      .limit(3);
+
+    const transformed = (data || []).map((item: any) => ({
+      ...item,
+      leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
+    }));
+
+    setWinners(transformed);
+  } catch (err) {
+    console.error('Error cargando ganadores:', err);
+    setWinners([]);
+  } finally {
+    setWinnersLoading(false);
+  }
+};
   // Función para iniciar sesión con DNI o correo
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,6 +220,74 @@ export default function ProyectoCiudadanoPage() {
           </p>
         </div>
 
+            {/* Bloque de ganadores del ciclo anterior */}
+<div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border-2 border-yellow-600 p-6 mb-6 shadow-sm">
+  <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+    🏆 Ganadores del ciclo anterior
+  </h2>
+  {winnersLoading ? (
+    <p className="text-slate-600">Cargando ganadores...</p>
+  ) : winners.length === 0 ? (
+    <p className="text-slate-500">Próximamente se mostrarán los proyectos ganadores.</p>
+  ) : (
+    <div className="space-y-3">
+      {winners.map((winner, index) => (
+        <div key={winner.id} className="bg-white rounded-xl p-4 shadow-sm border border-yellow-200">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold text-yellow-600">
+              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+            </span>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900">{winner.name}</h3>
+              <p className="text-sm text-slate-600">{winner.category} • {winner.department} - {winner.district}</p>
+              <p className="text-xs text-slate-500 mt-1">Líder: {winner.leader?.alias || 'Anónimo'}</p>
+            </div>
+            <Link
+              href={`/proyecto-ciudadano/proyectos/${winner.id}`}
+              className="text-sm text-green-700 hover:underline"
+            >
+              Ver proyecto →
+            </Link>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+              {/* Bloque de ganadores del ciclo anterior */}
+<div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border-2 border-yellow-600 p-6 mb-6 shadow-sm">
+  <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+    🏆 Ganadores del ciclo anterior
+  </h2>
+  {winnersLoading ? (
+    <p className="text-slate-600">Cargando ganadores...</p>
+  ) : winners.length === 0 ? (
+    <p className="text-slate-500">Próximamente se mostrarán los proyectos ganadores.</p>
+  ) : (
+    <div className="space-y-3">
+      {winners.map((winner, index) => (
+        <div key={winner.id} className="bg-white rounded-xl p-4 shadow-sm border border-yellow-200">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold text-yellow-600">
+              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+            </span>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900">{winner.name}</h3>
+              <p className="text-sm text-slate-600">{winner.category} • {winner.department} - {winner.district}</p>
+              <p className="text-xs text-slate-500 mt-1">Líder: {winner.leader?.alias || 'Anónimo'}</p>
+            </div>
+            <Link
+              href={`/proyecto-ciudadano/proyectos/${winner.id}`}
+              className="text-sm text-green-700 hover:underline"
+            >
+              Ver proyecto →
+            </Link>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
         {/* Estado del usuario */}
         {!participant ? (
           <>
