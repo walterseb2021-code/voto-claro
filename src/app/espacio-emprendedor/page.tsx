@@ -291,7 +291,8 @@ export default function EspacioEmprendedorPage() {
       Configurar mi perfil →
     </Link>
   </div>
-)}          </div>
+)}       
+   </div>
         )}
       </div>
     </main>

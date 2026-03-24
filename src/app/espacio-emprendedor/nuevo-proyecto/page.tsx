@@ -160,7 +160,25 @@ export default function NuevoProyectoEmprendedorPage() {
           status: 'active',
         });
 
-      if (insertError) throw insertError;
+                if (insertError) throw insertError;
+
+      // Enviar notificaciones a inversionistas
+      try {
+        await fetch('/api/espacio-emprendedor/notificar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectTitle: form.title,
+            category: form.category,
+            department: form.department,
+            investment_min: form.investment_min ? parseInt(form.investment_min) : null,
+            investment_max: form.investment_max ? parseInt(form.investment_max) : null,
+          }),
+        });
+      } catch (notifyErr) {
+        console.error('Error enviando notificaciones:', notifyErr);
+        // No bloqueamos el flujo principal
+      }
 
       setSuccess(true);
       setTimeout(() => {
