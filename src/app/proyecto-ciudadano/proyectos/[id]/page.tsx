@@ -330,7 +330,35 @@ export default function ProjectDetailPage() {
               </a>
             </div>
           )}
+              {project.pdf_url && (
+  <div className="mt-4">
+    <a
+      href={project.pdf_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 bg-slate-200 text-slate-800 px-4 py-2 rounded-xl font-semibold hover:bg-slate-300 transition"
+    >
+      📄 Descargar documento del proyecto (PDF)
+    </a>
+  </div>
+)}
 
+{/* Bases del premio */}
+{project.status === 'active' && (
+  <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
+    <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
+    El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
+    No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
+    La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+  </div>
+)}
+
+{/* Botón de apoyo */}
+{project.status === 'active' && (
+  <div className="mt-6 pt-4 border-t border-slate-200">
+    ...
+  </div>
+)}
           {/* Botón de apoyo */}
           {project.status === 'active' && (
             <div className="mt-6 pt-4 border-t border-slate-200">

@@ -2274,11 +2274,11 @@ async function voteForVideo(videoId: string) {
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
           Ganador trimestral de comentarios
         </h2>
-        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Cada 3 meses podrá seleccionarse una participación ciudadana destacada entre
-          los comentarios aprobados. La coordinación del evento, viaje, estadía y
-          acompañante se realiza con el contacto ya registrado.
-        </p>
+             <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+    Cada 3 meses se selecciona tres participaciones ciudadanas destacadas entre los comentarios aprobados.
+    Los ganadores recibirán pasajes y estadía para asistir al Congreso Político "Democracia y Participación Ciudadana"
+    (3 días, 2 noches), donde podrá participar en mesas de diálogo con representantes políticos y líderes de opinión.
+  </p>
 
         {commentAwardsPublicError ? (
           <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
@@ -2457,7 +2457,10 @@ async function voteForVideo(videoId: string) {
           <div className="mt-1 text-xs text-slate-600">
             Historial público de reconocimientos trimestrales.
           </div>
-
+                 <div className="mt-2 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
+    🎉 <strong>Premio:</strong> Los ganadores trimestrales reciben pasajes y estadía para el Congreso Político 
+    "Democracia y Participación Ciudadana" (3 días, 2 noches), con alimentación y participación en mesas de diálogo.
+  </div>
           {commentAwardsPublicError ? (
             <div className="mt-3 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
               Error al cargar historial trimestral: {commentAwardsPublicError}
@@ -2518,7 +2521,13 @@ async function voteForVideo(videoId: string) {
     Cada tema semanal que ya cerró pasa a formar parte del foro abierto de la comunidad.
     Entra al tema que quieras y participa en el debate ciudadano.
   </p>
-
+           {/* Descripción del premio para foros */}
+  <div className="mt-3 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
+    🎉 <strong>Reconocimiento trimestral:</strong> Al finalizar cada ciclo (3 meses), se seleccionarán 
+    los <strong>3 participantes con mayor aporte de conocimiento y dominio político</strong> en los foros. 
+    Los ganadores recibirán pasajes y estadía para asistir al Congreso Político "Democracia y Participación Ciudadana" 
+    (3 días, 2 noches), donde podrán compartir sus ideas con representantes políticos y líderes de opinión.
+  </div>
   {forumTopicsError ? (
     <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
       Error al cargar foros abiertos: {forumTopicsError}

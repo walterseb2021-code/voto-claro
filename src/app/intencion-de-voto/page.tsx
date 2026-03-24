@@ -597,7 +597,12 @@ function IntencionDeVotoContent() {
                   <div className="mt-4 text-xs text-slate-700">
                     Total registrado en esta ronda: <b>{total}</b>
                   </div>
-
+                        {/* Disclaimer legal */}
+<div className="mt-3 text-xs text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-300">
+  ⚠️ <strong>Importante:</strong> Este es un ejercicio ciudadano de opinión, no una encuesta electoral oficial. 
+  Los resultados no constituyen un pronóstico de resultados electorales ni reflejan la intención de voto real.
+  La información se recopila con fines de análisis de opinión pública.
+</div>
                   {notice ? (
                     <div className="mt-4 text-sm text-slate-900">
                       <div className="inline-block rounded-xl bg-green-50 border-2 border-red-500 px-4 py-2">

@@ -348,27 +348,35 @@ export default function NuevoProyectoPage() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={handleFileChange}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
-              />
-              <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF.</p>
-            </div>
+                    <div>
+  <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
+  <input
+    type="file"
+    accept=".pdf"
+    onChange={handleFileChange}
+    className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+    required
+  />
+  <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF.</p>
+</div>
 
-            <div className="pt-4">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
-              >
-                {submitting ? 'Enviando...' : 'Enviar proyecto'}
-              </button>
-            </div>
+{/* Bases del premio */}
+<div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
+  <strong>⚠️ Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
+  El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
+  No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
+  La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+</div>
+
+<div className="pt-4">
+  <button
+    type="submit"
+    disabled={submitting}
+    className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
+  >
+    {submitting ? 'Enviando...' : 'Enviar proyecto'}
+  </button>
+</div>
           </form>
 
           <p className="text-xs text-slate-500 mt-4 text-center">

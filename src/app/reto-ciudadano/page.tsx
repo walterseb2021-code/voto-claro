@@ -891,14 +891,20 @@ function Nivel3Ruleta(props: {
     ))}
   </div>
 </div>
-
-          {!result && (
+                 {!result && (
             <div className="mt-3 text-[11px] text-slate-600">
               {mode === "con_premio"
                 ? "Modo con premio: #2 y #6 entregan premio."
                 : "Modo sin premio: #2 y #6 no entregan premio."}
             </div>
           )}
+
+          {/* Descripción del premio */}
+          <div className="mt-3 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
+            🎉 <strong>Premio:</strong> Asistencia al Congreso Político "Democracia y Participación Ciudadana" 
+            con pasajes y estadía cubiertos (3 días, 2 noches). Incluye alimentación y participación en mesas de diálogo 
+            con representantes políticos y líderes de opinión.
+          </div>
         </div>
 
         {l3Locked && (
@@ -1752,6 +1758,14 @@ export default function RetoCiudadanoPage() {
           >
             Con premio (requiere registro)
           </button>
+          {/* Descripción del premio */}
+{mode === "con_premio" && (
+  <div className="mt-3 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
+    🎉 <strong>Premio:</strong> Asistencia al Congreso Político "Democracia y Participación Ciudadana" 
+    con pasajes y estadía cubiertos (3 días, 2 noches). Incluye alimentación y materiales del evento.
+    El ganador o ganadores podrán participar en mesas de diálogo con representantes políticos y líderes de opinión.
+  </div>
+)}
         </div>
 
         <p className="mt-3 text-xs text-slate-600">
