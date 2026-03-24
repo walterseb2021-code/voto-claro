@@ -281,15 +281,17 @@ export default function EspacioEmprendedorPage() {
   </div>
 )}
 
-            {activeTab === 'perfil' && (
-              <div>
-                <p className="text-slate-600 mb-4">Configura tus preferencias como inversionista.</p>
-                <div className="bg-slate-50 rounded-xl p-8 text-center">
-                  <p className="text-slate-500">Próximamente podrás configurar tu perfil de inversionista.</p>
-                </div>
-              </div>
-            )}
-          </div>
+                   {activeTab === 'perfil' && (
+  <div>
+    <p className="text-slate-600 mb-4">Configura tus preferencias como inversionista para recibir notificaciones de proyectos que te interesen.</p>
+    <Link
+      href="/espacio-emprendedor/perfil-inversionista"
+      className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
+    >
+      Configurar mi perfil →
+    </Link>
+  </div>
+)}          </div>
         )}
       </div>
     </main>
