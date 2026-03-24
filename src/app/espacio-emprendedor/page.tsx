@@ -105,70 +105,74 @@ export default function EspacioEmprendedorPage() {
     }
   };
 
-  const handleVerificarDNI = async () => {
-    if (!dni.trim() || dni.length !== 8) {
-      setError('Ingresa un DNI válido de 8 dígitos.');
-      return;
-    }
+       const handleVerificarDNI = async () => {
+  if (!dni.trim() || dni.length !== 8) {
+    setError('Ingresa un DNI válido de 8 dígitos.');
+    return;
+  }
 
-    if (!participant) {
-      setError('Primero debes registrarte como participante.');
-      return;
-    }
+  if (!participant) {
+    setError('Primero debes registrarte como participante.');
+    return;
+  }
 
-    setVerificando(true);
-    setError(null);
+  setVerificando(true);
+  setError(null);
 
-    try {
-      const { data: existing, error: existingError } = await supabase
-        .from('espacio_afiliados')
-        .select('*')
-        .eq('participant_id', participant.id)
-        .maybeSingle();
+  try {
+    const { data: existing, error: existingError } = await supabase
+      .from('espacio_afiliados')
+      .select('*')
+      .eq('participant_id', participant.id)
+      .maybeSingle();
 
-      if (existingError) throw existingError;
+    if (existingError) throw existingError;
 
-      if (existing) {
-        setAfiliado(existing);
-        setError(null);
-        alert('✅ Ya estás verificado como afiliado. ¡Bienvenido al Espacio Emprendedor!');
-        setVerificando(false);
-        return;
-      }
-
-      // Simulación de verificación con JNE (en producción con API real)
-      const esAfiliado = true;
-
-      if (esAfiliado) {
-        const { data, error } = await supabase
-          .from('espacio_afiliados')
-          .insert({
-            participant_id: participant.id,
-            dni: dni,
-            verified_at: new Date().toISOString(),
-            is_active: true,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        setAfiliado(data);
-        setError(null);
-        alert('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
-      } else {
-        setError('No estás afiliado a Alianza para el Progreso. Puedes afiliarte en el enlace oficial del JNE.');
-      }
-    } catch (err: any) {
-      console.error('Error verificando DNI:', err);
-      if (err.message?.includes('duplicate key')) {
-        setError('Ya existe una verificación para este DNI. Si el problema persiste, contacta al administrador.');
-      } else {
-        setError(err.message || 'Error al verificar');
-      }
-    } finally {
+    if (existing) {
+      setAfiliado(existing);
+      setError(null);
+      alert('✅ Ya estás verificado como afiliado. ¡Bienvenido al Espacio Emprendedor!');
+      // Recargar datos completos
+      await cargarParticipante();
       setVerificando(false);
+      return;
     }
-  };
+
+    // Simulación de verificación con JNE
+    const esAfiliado = true;
+
+    if (esAfiliado) {
+      const { data, error } = await supabase
+        .from('espacio_afiliados')
+        .insert({
+          participant_id: participant.id,
+          dni: dni,
+          verified_at: new Date().toISOString(),
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setAfiliado(data);
+      setError(null);
+      alert('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
+      // 🔄 RECARGAR DATOS COMPLETOS
+      await cargarParticipante();
+    } else {
+      setError('No estás afiliado a Alianza para el Progreso. Puedes afiliarte en el enlace oficial del JNE.');
+    }
+  } catch (err: any) {
+    console.error('Error verificando DNI:', err);
+    if (err.message?.includes('duplicate key')) {
+      setError('Ya existe una verificación para este DNI. Si el problema persiste, contacta al administrador.');
+    } else {
+      setError(err.message || 'Error al verificar');
+    }
+  } finally {
+    setVerificando(false);
+  }
+};
 
   if (loading) {
     return (
