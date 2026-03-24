@@ -1,8 +1,8 @@
 // src/app/proyecto-ciudadano/registro/page.tsx
 'use client';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 // Función para obtener o crear device_id
@@ -17,8 +17,11 @@ function getOrCreateDeviceId(): string {
   return newId;
 }
 
-export default function RegistroParticipantePage() {
+// Componente interno que usa useSearchParams
+function RegistroForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
   const [deviceId, setDeviceId] = useState<string>("");
   const [form, setForm] = useState({
     full_name: '',
@@ -47,7 +50,6 @@ export default function RegistroParticipantePage() {
     setLoading(true);
     setError(null);
 
-    // Validaciones
     if (!form.full_name || !form.dni || !form.email || !form.phone || !form.alias || !form.address || !form.district) {
       setError('Todos los campos son obligatorios.');
       setLoading(false);
@@ -109,13 +111,13 @@ export default function RegistroParticipantePage() {
             <div className="text-6xl mb-4">✅</div>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">¡Registro exitoso!</h1>
             <p className="text-slate-600 mb-4">
-              Tu perfil ha sido creado correctamente. Serás redirigido a la página principal de Proyecto Ciudadano.
+              Tu perfil ha sido creado correctamente.
             </p>
             <Link
-              href="/proyecto-ciudadano?registered=true"
+              href={returnTo === 'espacio-emprendedor' ? '/espacio-emprendedor?registered=true' : '/proyecto-ciudadano?registered=true'}
               className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
             >
-              Ir a Proyecto Ciudadano
+              Continuar
             </Link>
           </div>
         </div>
@@ -128,7 +130,10 @@ export default function RegistroParticipantePage() {
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Registro de participante</h1>
-          <Link href="/proyecto-ciudadano" className="text-sm text-slate-600 hover:underline">
+          <Link
+            href={returnTo === 'espacio-emprendedor' ? '/espacio-emprendedor' : '/proyecto-ciudadano'}
+            className="text-sm text-slate-600 hover:underline"
+          >
             ← Volver
           </Link>
         </div>
@@ -241,10 +246,21 @@ export default function RegistroParticipantePage() {
           </form>
 
           <p className="text-xs text-slate-500 mt-4 text-center">
-            Al registrarte aceptas nuestras políticas de participación. La veracidad de los datos es responsabilidad del participante. En caso de detectarse información falsa, nos reservamos el derecho de tomar las acciones legales correspondientes.
+            <strong>⚠️ Importante:</strong> La veracidad de los datos es de exclusiva responsabilidad del participante.
+            Voto Claro no verifica la identidad ni la información proporcionada. En caso de detectarse información falsa o fraudulenta,
+            el participante quedará automáticamente descalificado y se reserva el derecho de informar a las autoridades competentes.
           </p>
         </div>
       </div>
     </main>
+  );
+}
+
+// Componente principal con Suspense
+export default function RegistroParticipantePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Cargando...</div>}>
+      <RegistroForm />
+    </Suspense>
   );
 }
