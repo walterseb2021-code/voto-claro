@@ -576,7 +576,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="vc-block md:col-span-2">
+            <div className="vc-block md:col-span-2">
           <Link
             href="/comentarios"
             onClick={(e) =>
@@ -605,40 +605,8 @@ export default function HomePage() {
             </div>
           </Link>
         </div>
-      </section>
-         <div className="vc-block md:col-span-2">
-  <Link
-    href="/espacio-emprendedor"
-    onClick={(e) =>
-      handleSmartNavigate({
-        key: "espacio-emprendedor",
-        href: "/espacio-emprendedor",
-        speech:
-          "Vas a entrar a Espacio Emprendedor APP. Espacio exclusivo para afiliados a Alianza para el Progreso donde puedes publicar proyectos emprendedores y conectar con inversionistas.",
-        preventDefault: true,
-        e,
-      })
-    }
-    className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
-  >
-    <div className="flex items-start gap-3">
-      <div className="text-2xl leading-none">💼</div>
-      <div className="min-w-0">
-        <div className="text-base font-extrabold text-black">ESPACIO EMPRENDEDOR APP</div>
-        <p className="mt-1 text-sm text-black">
-          Espacio exclusivo para afiliados a Alianza para el Progreso. Publica tu proyecto emprendedor y conecta con inversionistas.
-        </p>
-        <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-          Abrir espacio →
-        </div>
-      </div>
-    </div>
-  </Link>
-</div>
-      <footer className="mt-6 text-xs text-black">
-        VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
-        reemplaza el criterio personal.
-                <div className="vc-block md:col-span-2">
+
+        <div className="vc-block md:col-span-2">
           <Link
             href="/proyecto-ciudadano"
             onClick={(e) =>
@@ -646,7 +614,7 @@ export default function HomePage() {
                 key: "proyecto-ciudadano",
                 href: "/proyecto-ciudadano",
                 speech:
-                  "Vas a entrar a Proyecto Ciudadano. Aquí puedes presentar proyectos para tu comunidad, formar un equipo y recibir apoyo vecinal. Los mejores proyectos serán premiados cada tres meses.",
+                  "Vas a entrar a Proyecto Ciudadano. Aquí puedes presentar proyectos para tu comunidad, formar un equipo y recibe apoyo vecinal. Los mejores proyectos serán premiados cada tres meses.",
                 preventDefault: true,
                 e,
               })
@@ -667,7 +635,42 @@ export default function HomePage() {
             </div>
           </Link>
         </div>
-      </footer>
-    </main>
+
+        <div className="vc-block md:col-span-2">
+          <Link
+            href="/espacio-emprendedor"
+            onClick={(e) =>
+              handleSmartNavigate({
+                key: "espacio-emprendedor",
+                href: "/espacio-emprendedor",
+                speech:
+                  "Vas a entrar a Espacio Emprendedor APP. Espacio exclusivo para afiliados a Alianza para el Progreso donde puedes publicar proyectos emprendedores y conectar con inversionistas.",
+                preventDefault: true,
+                e,
+              })
+            }
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+          >
+            <div className="flex items-start gap-3">
+              <div className="text-2xl leading-none">💼</div>
+              <div className="min-w-0">
+                <div className="text-base font-extrabold text-black">ESPACIO EMPRENDEDOR APP</div>
+                <p className="mt-1 text-sm text-black">
+                  Espacio exclusivo para afiliados a Alianza para el Progreso. Publica tu proyecto emprendedor y conecta con inversionistas.
+                </p>
+                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
+                  Abrir espacio →
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </section>
+
+      <footer className="mt-6 text-xs text-black">
+        VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
+        reemplaza el criterio personal.
+       </footer>
+           </main>
   );
 }
