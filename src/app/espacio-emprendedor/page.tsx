@@ -269,14 +269,17 @@ export default function EspacioEmprendedorPage() {
               </div>
             )}
 
-            {activeTab === 'explorar' && (
-              <div>
-                <p className="text-slate-600 mb-4">Explora proyectos emprendedores de otros afiliados.</p>
-                <div className="bg-slate-50 rounded-xl p-8 text-center">
-                  <p className="text-slate-500">Próximamente se mostrarán los proyectos disponibles.</p>
-                </div>
-              </div>
-            )}
+                    {activeTab === 'explorar' && (
+  <div>
+    <p className="text-slate-600 mb-4">Explora proyectos emprendedores de otros afiliados.</p>
+    <Link
+      href="/espacio-emprendedor/explorar"
+      className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
+    >
+      Ver todos los proyectos →
+    </Link>
+  </div>
+)}
 
             {activeTab === 'perfil' && (
               <div>
