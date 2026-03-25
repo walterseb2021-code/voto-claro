@@ -97,100 +97,133 @@ export default function NuevoProyectoEmprendedorPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
+    const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setSubmitting(true);
+  setError(null);
 
-    // Validaciones
-    if (!form.title || !form.category || !form.department || !form.district || !form.summary) {
-      setError('Todos los campos obligatorios deben estar llenos.');
-      setSubmitting(false);
-      return;
+  // Validaciones
+  if (!form.title || !form.category || !form.department || !form.district || !form.summary) {
+    setError('Todos los campos obligatorios deben estar llenos.');
+    setSubmitting(false);
+    return;
+  }
+
+  if (!pdfFile) {
+    setError('Debes subir el archivo PDF del proyecto.');
+    setSubmitting(false);
+    return;
+  }
+
+  if (pdfFile.type !== 'application/pdf') {
+    setError('Solo se permiten archivos PDF.');
+    setSubmitting(false);
+    return;
+  }
+
+  if (pdfFile.size > 10 * 1024 * 1024) {
+    setError('El archivo no debe superar los 10 MB.');
+    setSubmitting(false);
+    return;
+  }
+
+  try {
+    // LOG 1: Verificar afiliado antes de empezar
+    console.log('👤 afiliado:', afiliado);
+    console.log('👤 afiliado.id:', afiliado?.id);
+
+    // LOG 2: Datos que se van a enviar
+    console.log('📦 Datos a insertar:', {
+      owner_id: afiliado?.id,
+      title: form.title,
+      category: form.category,
+      department: form.department,
+      province: form.province || null,
+      district: form.district,
+      summary: form.summary,
+      investment_min: form.investment_min ? parseInt(form.investment_min) : null,
+      investment_max: form.investment_max ? parseInt(form.investment_max) : null,
+      status: 'active',
+    });
+
+    // 1. Subir PDF a Supabase Storage
+    const fileExt = pdfFile.name.split('.').pop();
+    const fileName = `espacio-emprendedor/${afiliado.id}/${Date.now()}.${fileExt}`;
+    console.log('📤 Subiendo PDF a:', fileName);
+    
+    const { error: uploadError } = await supabase.storage
+      .from('project_pdfs')
+      .upload(fileName, pdfFile);
+
+    if (uploadError) {
+      console.error('❌ Error subiendo PDF:', uploadError);
+      throw new Error(`Error al subir PDF: ${uploadError.message}`);
     }
 
-    if (!pdfFile) {
-      setError('Debes subir el archivo PDF del proyecto.');
-      setSubmitting(false);
-      return;
+    const { data: urlData } = supabase.storage
+      .from('project_pdfs')
+      .getPublicUrl(fileName);
+
+    const pdfUrl = urlData.publicUrl;
+    console.log('✅ PDF subido, URL:', pdfUrl);
+
+    // 2. Insertar proyecto
+    console.log('💾 Insertando proyecto en BD...');
+    
+    const { data: newProject, error: insertError } = await supabase
+      .from('espacio_proyectos')
+      .insert({
+        owner_id: afiliado.id,
+        title: form.title,
+        category: form.category,
+        department: form.department,
+        province: form.province || null,
+        district: form.district,
+        summary: form.summary,
+        investment_min: form.investment_min ? parseInt(form.investment_min) : null,
+        investment_max: form.investment_max ? parseInt(form.investment_max) : null,
+        pdf_url: pdfUrl,
+        status: 'active',
+      })
+      .select();
+
+    if (insertError) {
+      console.error('❌ Error insertando proyecto:', insertError);
+      console.error('❌ Código de error:', insertError.code);
+      console.error('❌ Mensaje detallado:', insertError.message);
+      throw new Error(`Error al guardar: ${insertError.message} (Código: ${insertError.code})`);
     }
 
-    if (pdfFile.type !== 'application/pdf') {
-      setError('Solo se permiten archivos PDF.');
-      setSubmitting(false);
-      return;
-    }
+    console.log('✅ Proyecto insertado correctamente:', newProject);
 
-    if (pdfFile.size > 10 * 1024 * 1024) {
-      setError('El archivo no debe superar los 10 MB.');
-      setSubmitting(false);
-      return;
-    }
-
+    // Enviar notificaciones a inversionistas (no bloquea)
     try {
-      // 1. Subir PDF a Supabase Storage
-      const fileExt = pdfFile.name.split('.').pop();
-      const fileName = `espacio-emprendedor/${afiliado.id}/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('project_pdfs')
-        .upload(fileName, pdfFile);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('project_pdfs')
-        .getPublicUrl(fileName);
-
-      const pdfUrl = urlData.publicUrl;
-
-      // 2. Insertar proyecto
-      const { error: insertError } = await supabase
-        .from('espacio_proyectos')
-        .insert({
-          owner_id: afiliado.id,
-          title: form.title,
+      await fetch('/api/espacio-emprendedor/notificar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectTitle: form.title,
           category: form.category,
           department: form.department,
-          province: form.province || null,
-          district: form.district,
-          summary: form.summary,
           investment_min: form.investment_min ? parseInt(form.investment_min) : null,
           investment_max: form.investment_max ? parseInt(form.investment_max) : null,
-          pdf_url: pdfUrl,
-          status: 'active',
-        });
-
-                if (insertError) throw insertError;
-
-      // Enviar notificaciones a inversionistas
-      try {
-        await fetch('/api/espacio-emprendedor/notificar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectTitle: form.title,
-            category: form.category,
-            department: form.department,
-            investment_min: form.investment_min ? parseInt(form.investment_min) : null,
-            investment_max: form.investment_max ? parseInt(form.investment_max) : null,
-          }),
-        });
-      } catch (notifyErr) {
-        console.error('Error enviando notificaciones:', notifyErr);
-        // No bloqueamos el flujo principal
-      }
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/espacio-emprendedor');
-      }, 3000);
-    } catch (err: any) {
-      console.error('Error al guardar proyecto:', err);
-      setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
-    } finally {
-      setSubmitting(false);
+        }),
+      });
+    } catch (notifyErr) {
+      console.error('Error enviando notificaciones:', notifyErr);
     }
-  };
+
+    setSuccess(true);
+    setTimeout(() => {
+      router.push('/espacio-emprendedor');
+    }, 3000);
+  } catch (err: any) {
+    console.error('❌ Error completo:', err);
+    setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   if (loading) {
     return (
@@ -239,7 +272,6 @@ export default function NuevoProyectoEmprendedorPage() {
             Completa la información de tu proyecto. Los inversionistas interesados podrán contactarte.
           </p>
 
-          {/* Disclaimer legal */}
           <div className="mb-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
             <strong>⚠️ Importante:</strong> La información proporcionada es de exclusiva responsabilidad del autor.
             Voto Claro no verifica la veracidad de los proyectos ni actúa como intermediario financiero.
@@ -253,6 +285,7 @@ export default function NuevoProyectoEmprendedorPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* ... resto del formulario igual ... */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Título del proyecto *</label>
               <input
