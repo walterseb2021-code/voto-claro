@@ -143,7 +143,7 @@ useEffect(() => {
     }
   };
 
-        const handleVerificarDNI = async () => {
+    const handleVerificarDNI = async () => {
   if (!dni.trim() || dni.length !== 8) {
     setError('Ingresa un DNI válido de 8 dígitos.');
     return;
@@ -158,7 +158,24 @@ useEffect(() => {
   setError(null);
 
   try {
-    // 1. Verificar si ya existe afiliación
+    // 🔍 PASO 1: Verificar si el DNI existe en espacio_afiliados y está activo
+    const { data: afiliadoExistente, error: afiliadoError } = await supabase
+      .from('espacio_afiliados')
+      .select('*')
+      .eq('dni', dni)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (afiliadoError) throw afiliadoError;
+
+    // ❌ PASO 2: Si NO existe o NO está activo → Mostrar error
+    if (!afiliadoExistente) {
+      setError('No estás afiliado a Alianza para el Progreso. Para presentar un proyecto, primero debes afiliarte en el enlace oficial del JNE.');
+      setVerificando(false);
+      return;
+    }
+
+    // ✅ PASO 3: Si existe, verificar si ya está vinculado a este participante
     const { data: existing, error: existingError } = await supabase
       .from('espacio_afiliados')
       .select('*')
@@ -167,52 +184,35 @@ useEffect(() => {
 
     if (existingError) throw existingError;
 
-    // 2. Si ya existe, actualizar estado y recargar
+    // ✅ PASO 4: Si ya está vinculado, actualizar estado
     if (existing) {
       setAfiliado(existing);
-      // 🔄 FORZAR RECARGA DE DATOS COMPLETOS
       await cargarParticipante();
-      setError(null);
       alert('✅ Ya estás verificado como afiliado. ¡Bienvenido al Espacio Emprendedor!');
       setVerificando(false);
       return;
     }
 
-    // 3. Simulación de verificación (siempre true)
-    const esAfiliado = true;
+    // ✅ PASO 5: Vincular al participante con esta afiliación
+    const { data: updatedAfiliado, error: updateError } = await supabase
+      .from('espacio_afiliados')
+      .update({ 
+        participant_id: participant.id,
+        verified_at: new Date().toISOString()
+      })
+      .eq('id', afiliadoExistente.id)
+      .select()
+      .single();
 
-    if (esAfiliado) {
-      // 4. Insertar nueva afiliación
-      const { data, error } = await supabase
-        .from('espacio_afiliados')
-        .insert({
-          participant_id: participant.id,
-          dni: dni,
-          verified_at: new Date().toISOString(),
-          is_active: true,
-        })
-        .select()
-        .single();
+    if (updateError) throw updateError;
 
-      if (error) throw error;
-      
-      setAfiliado(data);
-      // 🔄 FORZAR RECARGA DE DATOS COMPLETOS
-      await cargarParticipante();
-      setError(null);
-      alert('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
-    } else {
-      setError('No estás afiliado a Alianza para el Progreso. Puedes afiliarte en el enlace oficial del JNE.');
-    }
+    setAfiliado(updatedAfiliado);
+    await cargarParticipante();
+    alert('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
+
   } catch (err: any) {
     console.error('Error verificando DNI:', err);
-    if (err.message?.includes('duplicate key')) {
-      setError('Ya existe una verificación para este DNI. Recargando datos...');
-      // Intentar recargar datos
-      await cargarParticipante();
-    } else {
-      setError(err.message || 'Error al verificar');
-    }
+    setError(err.message || 'Error al verificar afiliación');
   } finally {
     setVerificando(false);
   }
