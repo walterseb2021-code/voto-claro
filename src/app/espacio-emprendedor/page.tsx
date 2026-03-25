@@ -21,11 +21,46 @@ export default function EspacioEmprendedorPage() {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [topProjects, setTopProjects] = useState<any[]>([]);
 
   useEffect(() => {
     cargarParticipante();
   }, []);
+       // Cargar proyectos destacados
+    // Cargar proyectos más contactados
+const loadTopProjects = async () => {
+  try {
+    // Contar contactos por proyecto
+    const { data: contactos } = await supabase
+      .from('espacio_contactos')
+      .select('project_id');
 
+    const contactCount: Record<string, number> = {};
+    contactos?.forEach(c => {
+      contactCount[c.project_id] = (contactCount[c.project_id] || 0) + 1;
+    });
+
+    // Obtener proyectos ordenados por contactos
+    const { data: proyectos } = await supabase
+      .from('espacio_proyectos')
+      .select('id, title, category, department')
+      .eq('status', 'active');
+
+    const proyectosConContactos = (proyectos || []).map(p => ({
+      ...p,
+      contactos: contactCount[p.id] || 0
+    }));
+
+    proyectosConContactos.sort((a, b) => b.contactos - a.contactos);
+    setTopProjects(proyectosConContactos.slice(0, 3));
+  } catch (err) {
+    console.error('Error cargando proyectos destacados:', err);
+  }
+};
+
+useEffect(() => {
+  loadTopProjects();
+}, []);
      const cargarParticipante = async () => {
   const deviceId = getDeviceId();
   if (!deviceId) {
@@ -214,7 +249,37 @@ export default function EspacioEmprendedorPage() {
             Voto Claro no garantiza ni avala financieramente ningún proyecto.
           </div>
         </div>
-
+                {/* Proyectos destacados */}
+<div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
+    <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+  <span className="text-2xl">📞</span> Proyectos más contactados
+</h2>
+  <div className="space-y-3">
+    {topProjects.length === 0 ? (
+      <p className="text-slate-500 text-sm">Aún no hay proyectos contactados.</p>
+    ) : (
+      topProjects.map((project, index) => (
+        <div key={project.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold text-green-600 w-8">
+              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+            </span>
+            <div>
+              <p className="font-semibold text-slate-800">{project.title}</p>
+              <p className="text-xs text-slate-500">{project.category} • {project.department}</p>
+            </div>
+          </div>
+          <div className="text-right">
+              <p className="font-bold text-green-600">{project.contactos || 0} contactos</p>
+            <Link href={`/espacio-emprendedor/proyectos/${project.id}`} className="text-xs text-green-700 hover:underline">
+              Ver proyecto →
+            </Link>
+          </div>
+        </div>
+      ))
+    )}
+  </div>
+</div>
         {/* Estado del participante */}
         {!participant ? (
           <>
