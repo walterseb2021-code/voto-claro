@@ -338,7 +338,15 @@ const loadDevices = async () => {
                 Abrir Admin Tokens
               </Link>
             </div>
-
+                            <div className={card}>
+              <div className="text-sm font-extrabold text-slate-900">👥 Afiliados APP</div>
+              <div className="mt-1 text-xs text-slate-600">
+                Gestionar afiliados manualmente para Espacio Emprendedor.
+              </div>
+              <Link href="/admin/afiliados" className={btn + " mt-3 w-full"}>
+                Abrir Admin Afiliados
+              </Link>
+            </div>
             <div className={card}>
   <div className="text-sm font-extrabold text-slate-900">🏘️ Proyecto Ciudadano</div>
   <div className="mt-1 text-xs text-slate-600">
