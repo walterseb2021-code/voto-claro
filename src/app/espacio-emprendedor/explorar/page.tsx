@@ -321,12 +321,12 @@ export default function ExplorarProyectosPage() {
                       >
                         {contactando === project.id ? 'Enviando...' : '📩 Contactar'}
                       </button>
-                      <Link
-                        href={`/espacio-emprendedor/chat/${project.id}`}
-                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
-                      >
-                        💬 Chat
-                      </Link>
+                       <Link
+  href={`/espacio-emprendedor/proyectos/${project.id}`}
+  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
+>
+  💬 Ver detalles
+</Link>
                     </div>
                   </div>
                 </div>
