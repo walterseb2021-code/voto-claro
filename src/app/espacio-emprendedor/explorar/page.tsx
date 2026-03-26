@@ -16,10 +16,6 @@ type Project = {
   pdf_url: string;
   views: number;
   created_at: string;
-  owner: {
-    alias: string;
-    full_name: string;  // ← AGREGADO: nombre real
-  };
 };
 
 const CATEGORIAS = [
@@ -106,13 +102,7 @@ export default function ExplorarProyectosPage() {
           investment_max,
           pdf_url,
           views,
-          created_at,
-          owner:espacio_afiliados!owner_id (
-            participant:project_participants (
-              alias,
-              full_name
-            )
-          )
+          created_at
         `)
         .eq('status', 'active')
         .order('created_at', { ascending: false });
@@ -121,12 +111,7 @@ export default function ExplorarProyectosPage() {
 
       if (error) throw error;
 
-      const transformed = (data || []).map((item: any) => ({
-        ...item,
-        owner: item.owner?.participant?.[0] || { alias: 'Anónimo', full_name: 'Anónimo' },
-      }));
-
-      setProjects(transformed);
+      setProjects(data || []);
     } catch (err: any) {
       console.error('Error cargando proyectos:', err);
       setError(err.message || 'Error al cargar proyectos');
@@ -286,38 +271,13 @@ export default function ExplorarProyectosPage() {
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center text-green-700 font-bold text-sm">
-                        {project.owner?.full_name?.charAt(0).toUpperCase() || project.owner?.alias?.charAt(0).toUpperCase() || 'U'}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-slate-800">
-                          {project.owner?.full_name !== 'Anónimo' ? project.owner?.full_name : project.owner?.alias || 'Anónimo'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      {project.pdf_url && (
-                        <a
-                          href={project.pdf_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-slate-500 hover:text-green-700 transition p-2"
-                          title="Ver documento"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                          </svg>
-                        </a>
-                      )}
-                      <Link
-                        href={`/espacio-emprendedor/proyectos/${project.id}`}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm whitespace-nowrap"
-                      >
-                        Ver detalles
-                      </Link>
-                    </div>
+                  <div className="flex justify-end mt-4 pt-3 border-t border-slate-100">
+                    <Link
+                      href={`/espacio-emprendedor/proyectos/${project.id}`}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm"
+                    >
+                      Ver detalles
+                    </Link>
                   </div>
                 </div>
               </div>

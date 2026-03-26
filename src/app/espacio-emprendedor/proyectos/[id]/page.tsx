@@ -82,7 +82,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           }
         }
 
-        // 2. Obtener proyecto desde espacio_proyectos (CORREGIDO)
+        // 2. Obtener proyecto desde espacio_proyectos (CONSULTA CORREGIDA)
         const { data: projectData, error: projectError } = await supabase
           .from('espacio_proyectos')
           .select(`
@@ -295,10 +295,10 @@ export default function EspacioEmprendedorProjectDetailPage() {
           <div className="mb-4">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">Emprendedor</h2>
             <p className="text-slate-800 font-medium">
-              {project.owner?.nombres_completos || (project.owner?.email ? project.owner.email.split('@')[0] : 'No especificado')}
+              {project.owner?.nombres_completos || 'No especificado'}
             </p>
             {project.owner?.email && (
-              <p className="text-sm text-slate-500">{project.owner.email}</p>
+              <p className="text-sm text-slate-500">📧 {project.owner.email}</p>
             )}
             {project.owner?.celular && (
               <p className="text-sm text-slate-500">📱 {project.owner.celular}</p>
