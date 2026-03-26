@@ -5,11 +5,16 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-// Función para obtener device_id
+// Función para obtener o crear device_id (corregida)
 function getDeviceId(): string {
   if (typeof window === "undefined") return "";
   const KEY = "vc_device_id";
-  return localStorage.getItem(KEY) || "";
+  const existing = localStorage.getItem(KEY);
+  if (existing && existing.length > 10) return existing;
+
+  const newId = crypto.randomUUID();
+  localStorage.setItem(KEY, newId);
+  return newId;
 }
 
 export default function EspacioEmprendedorPage() {
@@ -199,10 +204,13 @@ export default function EspacioEmprendedorPage() {
   // Función para iniciar sesión con código de acceso
   const handleLoginConCodigo = async (e: React.FormEvent) => {
     e.preventDefault();
+    alert('🚀 Función handleLoginConCodigo ejecutada'); // ← ALERT PARA VERIFICAR
     setLoginCodigoLoading(true);
     setLoginCodigoError('');
 
     const codigo = codigoAcceso.trim().toUpperCase();
+    console.log('🔍 Código ingresado:', codigo);
+    
     if (!codigo) {
       setLoginCodigoError('Ingresa tu código de acceso');
       setLoginCodigoLoading(false);
@@ -237,6 +245,7 @@ export default function EspacioEmprendedorPage() {
 
       await cargarParticipante();
       setCodigoAcceso('');
+      alert('✅ Sesión iniciada correctamente');
     } catch (err: any) {
       console.error('Error al iniciar sesión con código:', err);
       setLoginCodigoError(err.message || 'Error al iniciar sesión');
@@ -416,9 +425,9 @@ export default function EspacioEmprendedorPage() {
                   placeholder="Ej: EMP-2026-3A7F"
                   value={codigoAcceso}
                   onChange={(e) => {
-  console.log('✏️ Input cambiado:', e.target.value);
-  setCodigoAcceso(e.target.value.toUpperCase());
-}}
+                    console.log('✏️ Input cambiado:', e.target.value);
+                    setCodigoAcceso(e.target.value.toUpperCase());
+                  }}
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono"
                   disabled={loginCodigoLoading}
                 />
