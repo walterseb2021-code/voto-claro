@@ -56,6 +56,8 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [respuesta, setRespuesta] = useState('');
   const [enviandoRespuesta, setEnviandoRespuesta] = useState(false);
   const [esPropietario, setEsPropietario] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Cargar datos
   useEffect(() => {
@@ -128,29 +130,8 @@ export default function EspacioEmprendedorProjectDetailPage() {
           .eq('id', projectId);
 
         // 5. Cargar mensajes del chat
-        const { data: messagesData } = await supabase
-          .from('espacio_mensajes')
-          .select(`
-            id,
-            content,
-            created_at,
-            sender_type,
-            sender_id,
-            sender:project_participants!sender_id (
-              full_name,
-              email
-            )
-          `)
-          .eq('proyecto_id', projectId)
-          .order('created_at', { ascending: true });
+        await cargarMensajes();
 
-        const transformedMessages = (messagesData || []).map((msg: any) => ({
-          ...msg,
-          sender: msg.sender && msg.sender.length > 0 ? msg.sender[0] : null,
-          remitente_id: msg.sender_id,
-        }));
-        setMessages(transformedMessages);
-        
       } catch (err: any) {
         console.error('Error cargando proyecto:', err);
         setError(err.message || 'Error al cargar el proyecto');
@@ -159,16 +140,68 @@ export default function EspacioEmprendedorProjectDetailPage() {
       }
     }
 
+    async function cargarMensajes() {
+      const { data: messagesData } = await supabase
+        .from('espacio_mensajes')
+        .select(`
+          id,
+          content,
+          created_at,
+          sender_type,
+          sender_id,
+          sender:project_participants!sender_id (
+            full_name,
+            email
+          )
+        `)
+        .eq('proyecto_id', projectId)
+        .order('created_at', { ascending: true });
+
+      const transformedMessages = (messagesData || []).map((msg: any) => ({
+        ...msg,
+        sender: msg.sender && msg.sender.length > 0 ? msg.sender[0] : null,
+        remitente_id: msg.sender_id,
+      }));
+      setMessages(transformedMessages);
+    }
+
     if (projectId) {
       loadData();
     }
-  }, [projectId]);
+
+    // SUSCRIPCIÓN EN TIEMPO REAL
+    const subscription = supabase
+      .channel(`proyecto-mensajes-${projectId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'espacio_mensajes',
+          filter: `proyecto_id=eq.${projectId}`,
+        },
+        async (payload) => {
+          console.log('📨 Nuevo mensaje recibido:', payload.new);
+          // Recargar mensajes para obtener los datos completos del remitente
+          await cargarMensajes();
+          if (esPropietario) {
+            setSuccessMsg('📨 Nuevo mensaje recibido de un inversionista');
+            setTimeout(() => setSuccessMsg(null), 3000);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [projectId, esPropietario]);
 
   // Enviar mensaje (solo para inversionistas)
   const handleSendMessage = async () => {
     if (!participant) {
-      alert('Debes iniciar sesión para contactar al emprendedor.');
-      router.push('/espacio-emprendedor');
+      setErrorMsg('Debes iniciar sesión para contactar al emprendedor.');
+      setTimeout(() => setErrorMsg(null), 3000);
       return;
     }
 
@@ -187,26 +220,14 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
       if (error) throw error;
 
-      // Agregar mensaje localmente
-      const newMessageObj: Message = {
-        id: Date.now().toString(),
-        content: newMessage.trim(),
-        created_at: new Date().toISOString(),
-        sender_type: 'inversionista',
-        sender: {
-          full_name: participant.full_name || 'Usuario',
-          email: participant.email || '',
-        },
-        remitente_id: participant.id,
-      };
-      setMessages(prev => [...prev, newMessageObj]);
       setNewMessage('');
-      
-      alert('Mensaje enviado correctamente. El emprendedor recibirá una notificación.');
+      setSuccessMsg('✅ Mensaje enviado correctamente');
+      setTimeout(() => setSuccessMsg(null), 3000);
       
     } catch (err: any) {
       console.error('Error al enviar mensaje:', err);
-      alert(err.message || 'Error al enviar mensaje');
+      setErrorMsg(err.message || 'Error al enviar mensaje');
+      setTimeout(() => setErrorMsg(null), 3000);
     } finally {
       setSendingMessage(false);
     }
@@ -229,27 +250,15 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
       if (error) throw error;
 
-      // Agregar respuesta localmente
-      const newMessageObj: Message = {
-        id: Date.now().toString(),
-        content: respuesta.trim(),
-        created_at: new Date().toISOString(),
-        sender_type: 'emprendedor',
-        sender: {
-          full_name: participant.full_name || 'Emprendedor',
-          email: participant.email || '',
-        },
-        remitente_id: participant.id,
-      };
-      setMessages(prev => [...prev, newMessageObj]);
       setRespuesta('');
       setRespondiendoA(null);
-      
-      alert('Respuesta enviada correctamente.');
+      setSuccessMsg('✅ Respuesta enviada correctamente');
+      setTimeout(() => setSuccessMsg(null), 3000);
       
     } catch (err: any) {
       console.error('Error al enviar respuesta:', err);
-      alert(err.message || 'Error al enviar respuesta');
+      setErrorMsg(err.message || 'Error al enviar respuesta');
+      setTimeout(() => setErrorMsg(null), 3000);
     } finally {
       setEnviandoRespuesta(false);
     }
@@ -295,6 +304,18 @@ export default function EspacioEmprendedorProjectDetailPage() {
             ← Volver
           </button>
         </div>
+
+        {/* Mensajes de éxito/error */}
+        {successMsg && (
+          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-xl text-sm">
+            {successMsg}
+          </div>
+        )}
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+            {errorMsg}
+          </div>
+        )}
 
         {/* Información del proyecto */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm mb-6">
