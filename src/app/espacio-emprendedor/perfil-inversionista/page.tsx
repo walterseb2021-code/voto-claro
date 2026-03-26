@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 const CATEGORIAS = [
+  'Todas',  // ← NUEVA OPCIÓN
   'Tecnología',
   'Ventas / Comercio',
   'Inmobiliaria',
@@ -18,6 +19,7 @@ const CATEGORIAS = [
 ];
 
 const DEPARTAMENTOS = [
+  'Todos',  // ← NUEVA OPCIÓN
   'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho',
   'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica',
   'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios',
@@ -38,6 +40,7 @@ export default function PerfilInversionistaPage() {
     categories: [] as string[],
     departments: [] as string[],
     notify_email: false,
+    monto_mayor: false, // ← NUEVO: opción para montos mayores a 100,000
   });
 
   useEffect(() => {
@@ -52,7 +55,6 @@ export default function PerfilInversionistaPage() {
     }
 
     try {
-      // Obtener participante
       const { data: participantData, error: participantError } = await supabase
         .from('project_participants')
         .select('*')
@@ -66,7 +68,6 @@ export default function PerfilInversionistaPage() {
 
       setParticipant(participantData);
 
-      // Verificar si ya existe perfil de inversionista
       const { data: perfilData, error: perfilError } = await supabase
         .from('espacio_inversionistas')
         .select('*')
@@ -81,6 +82,7 @@ export default function PerfilInversionistaPage() {
           categories: perfilData.categories || [],
           departments: perfilData.departments || [],
           notify_email: perfilData.notify_email || false,
+          monto_mayor: (perfilData.investment_range_max || 0) > 100000,
         });
       }
     } catch (err) {
@@ -91,21 +93,38 @@ export default function PerfilInversionistaPage() {
   };
 
   const toggleCategory = (category: string) => {
-    setPerfil(prev => ({
-      ...prev,
-      categories: prev.categories.includes(category)
-        ? prev.categories.filter(c => c !== category)
-        : [...prev.categories, category]
-    }));
+    if (category === 'Todas') {
+      // Si selecciona "Todas", selecciona todas las categorías (excepto "Todas" misma)
+      const todas = CATEGORIAS.filter(c => c !== 'Todas');
+      setPerfil(prev => ({
+        ...prev,
+        categories: prev.categories.length === todas.length ? [] : todas
+      }));
+    } else {
+      setPerfil(prev => ({
+        ...prev,
+        categories: prev.categories.includes(category)
+          ? prev.categories.filter(c => c !== category)
+          : [...prev.categories, category]
+      }));
+    }
   };
 
   const toggleDepartment = (department: string) => {
-    setPerfil(prev => ({
-      ...prev,
-      departments: prev.departments.includes(department)
-        ? prev.departments.filter(d => d !== department)
-        : [...prev.departments, department]
-    }));
+    if (department === 'Todos') {
+      const todos = DEPARTAMENTOS.filter(d => d !== 'Todos');
+      setPerfil(prev => ({
+        ...prev,
+        departments: prev.departments.length === todos.length ? [] : todos
+      }));
+    } else {
+      setPerfil(prev => ({
+        ...prev,
+        departments: prev.departments.includes(department)
+          ? prev.departments.filter(d => d !== department)
+          : [...prev.departments, department]
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -114,6 +133,14 @@ export default function PerfilInversionistaPage() {
     setError(null);
     setMessage(null);
 
+    // Calcular investment_range_max según la opción "monto mayor"
+    let maxValue = null;
+    if (perfil.monto_mayor) {
+      maxValue = 999999; // Un valor grande para representar "mayor a 100,000"
+    } else if (perfil.investment_range_max) {
+      maxValue = parseInt(perfil.investment_range_max);
+    }
+
     try {
       const { error } = await supabase
         .from('espacio_inversionistas')
@@ -121,11 +148,11 @@ export default function PerfilInversionistaPage() {
           participant_id: participant.id,
           company: perfil.company || null,
           investment_range_min: perfil.investment_range_min ? parseInt(perfil.investment_range_min) : null,
-          investment_range_max: perfil.investment_range_max ? parseInt(perfil.investment_range_max) : null,
+          investment_range_max: maxValue,
           categories: perfil.categories,
           departments: perfil.departments,
           notify_email: perfil.notify_email,
-        }, { onConflict: 'participant_id' });
+        });
 
       if (error) throw error;
 
@@ -206,8 +233,21 @@ export default function PerfilInversionistaPage() {
                   value={perfil.investment_range_max}
                   onChange={(e) => setPerfil({ ...perfil, investment_range_max: e.target.value })}
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                  placeholder="Ej: 50000"
+                  placeholder="Ej: 100000"
+                  max={100000}
                 />
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="checkbox"
+                    id="monto_mayor"
+                    checked={perfil.monto_mayor}
+                    onChange={(e) => setPerfil({ ...perfil, monto_mayor: e.target.checked })}
+                    className="w-4 h-4 text-green-700 focus:ring-green-500"
+                  />
+                  <label htmlFor="monto_mayor" className="text-xs text-slate-600">
+                    Montos mayores a S/ 100,000
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -220,7 +260,8 @@ export default function PerfilInversionistaPage() {
                     type="button"
                     onClick={() => toggleCategory(cat)}
                     className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                      perfil.categories.includes(cat)
+                      (cat === 'Todas' && perfil.categories.length === CATEGORIAS.filter(c => c !== 'Todas').length) ||
+                      (cat !== 'Todas' && perfil.categories.includes(cat))
                         ? 'bg-green-700 text-white'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
@@ -240,7 +281,8 @@ export default function PerfilInversionistaPage() {
                     type="button"
                     onClick={() => toggleDepartment(dept)}
                     className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                      perfil.departments.includes(dept)
+                      (dept === 'Todos' && perfil.departments.length === DEPARTAMENTOS.filter(d => d !== 'Todos').length) ||
+                      (dept !== 'Todos' && perfil.departments.includes(dept))
                         ? 'bg-green-700 text-white'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}

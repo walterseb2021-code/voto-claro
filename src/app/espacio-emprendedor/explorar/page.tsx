@@ -18,6 +18,7 @@ type Project = {
   created_at: string;
   owner: {
     alias: string;
+    full_name: string;  // ← AGREGADO: nombre real
   };
 };
 
@@ -53,7 +54,6 @@ export default function ExplorarProyectosPage() {
   const [contactando, setContactando] = useState<string | null>(null);
   const [contactMsg, setContactMsg] = useState<string | null>(null);
   
-  // Función para solicitar permiso de notificaciones
   const requestNotificationPermission = () => {
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
@@ -64,7 +64,6 @@ export default function ExplorarProyectosPage() {
     }
   };
 
-  // Función para mostrar notificación
   const showNotification = (title: string, body: string) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, { body, icon: '/favicon.ico' });
@@ -82,7 +81,7 @@ export default function ExplorarProyectosPage() {
     if (deviceId) {
       const { data } = await supabase
         .from('project_participants')
-        .select('id, alias')
+        .select('id, alias, full_name')
         .eq('device_id', deviceId)
         .maybeSingle();
       setParticipant(data);
@@ -110,7 +109,8 @@ export default function ExplorarProyectosPage() {
           created_at,
           owner:espacio_afiliados!owner_id (
             participant:project_participants (
-              alias
+              alias,
+              full_name
             )
           )
         `)
@@ -123,7 +123,7 @@ export default function ExplorarProyectosPage() {
 
       const transformed = (data || []).map((item: any) => ({
         ...item,
-        owner: item.owner?.participant?.[0] || { alias: 'Anónimo' },
+        owner: item.owner?.participant?.[0] || { alias: 'Anónimo', full_name: 'Anónimo' },
       }));
 
       setProjects(transformed);
@@ -147,7 +147,6 @@ export default function ExplorarProyectosPage() {
 
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
-
       setContactMsg(`✅ Mensaje enviado a ${ownerAlias}. Te contactarán pronto.`);
       showNotification('📩 Mensaje enviado', `Te contactarás con ${ownerAlias} pronto.`);
       setTimeout(() => setContactMsg(null), 4000);
@@ -192,7 +191,6 @@ export default function ExplorarProyectosPage() {
           </div>
         )}
 
-        {/* Filtros */}
         <div className="bg-white rounded-2xl border-2 border-red-600 p-4 mb-6 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -232,13 +230,10 @@ export default function ExplorarProyectosPage() {
           </div>
         </div>
 
-        {/* Lista de proyectos */}
         {loading ? (
           <p className="text-slate-600 text-center py-12">Cargando proyectos...</p>
         ) : error ? (
-          <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4">
-            {error}
-          </div>
+          <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4">{error}</div>
         ) : filteredProjects.length === 0 ? (
           <div className="bg-white rounded-2xl border-2 border-slate-200 p-8 text-center">
             <p className="text-slate-600">No hay proyectos que coincidan con los filtros seleccionados.</p>
@@ -259,7 +254,6 @@ export default function ExplorarProyectosPage() {
               <div key={project.id} className="bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden">
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-3">
-                    {/* CORREGIDO: texto negro en la categoría */}
                     <span className="text-xs font-semibold bg-gradient-to-r from-green-600 to-green-700 text-black px-3 py-1 rounded-full shadow-sm">
                       {project.category}
                     </span>
@@ -295,13 +289,15 @@ export default function ExplorarProyectosPage() {
                   <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center text-green-700 font-bold text-sm">
-                        {project.owner?.alias?.charAt(0).toUpperCase() || 'U'}
+                        {project.owner?.full_name?.charAt(0).toUpperCase() || project.owner?.alias?.charAt(0).toUpperCase() || 'U'}
                       </div>
-                      <span className="text-sm font-medium text-slate-700">
-                        {project.owner?.alias || 'Anónimo'}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-slate-800">
+                          {project.owner?.full_name !== 'Anónimo' ? project.owner?.full_name : project.owner?.alias || 'Anónimo'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex gap-1 flex-wrap justify-end">
+                    <div className="flex gap-1">
                       {project.pdf_url && (
                         <a
                           href={project.pdf_url}
@@ -315,12 +311,11 @@ export default function ExplorarProyectosPage() {
                           </svg>
                         </a>
                       )}
-                      {/* CORREGIDO: solo un botón que lleva al detalle con chat integrado */}
                       <Link
                         href={`/espacio-emprendedor/proyectos/${project.id}`}
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm whitespace-nowrap"
                       >
-                        💬 Ver detalles
+                        Ver detalles
                       </Link>
                     </div>
                   </div>

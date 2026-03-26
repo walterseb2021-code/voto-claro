@@ -72,7 +72,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
           currentParticipant = pData;
           setParticipant(currentParticipant);
           
-          // Verificar si es inversionista (tiene perfil configurado)
           if (currentParticipant) {
             const { data: investorData } = await supabase
               .from('espacio_inversionistas')
@@ -83,7 +82,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           }
         }
 
-        // 2. Obtener proyecto desde espacio_proyectos
+        // 2. Obtener proyecto desde espacio_proyectos (CORREGIDO)
         const { data: projectData, error: projectError } = await supabase
           .from('espacio_proyectos')
           .select(`
@@ -103,9 +102,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
             created_at,
             owner:espacio_afiliados!owner_id (
               id,
-              nombres_completos,
-              email,
-              celular
+              participant_id,
+              participant:project_participants!participant_id (
+                full_name,
+                email,
+                phone
+              )
             )
           `)
           .eq('id', projectId)
@@ -113,10 +115,15 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
         if (projectError) throw projectError;
 
-        // Transformar owner (viene como array)
+        // Transformar owner correctamente
         const transformedProject = {
           ...projectData,
-          owner: projectData.owner && projectData.owner.length > 0 ? projectData.owner[0] : null,
+          owner: projectData.owner && projectData.owner.length > 0 ? {
+            id: projectData.owner[0].id,
+            nombres_completos: projectData.owner[0].participant?.[0]?.full_name || null,
+            email: projectData.owner[0].participant?.[0]?.email || null,
+            celular: projectData.owner[0].participant?.[0]?.phone || null,
+          } : null,
         };
         setProject(transformedProject);
 
@@ -174,7 +181,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
     setSendingMessage(true);
     try {
-      // Verificar si el participante tiene un registro en espacio_afiliados
       const { data: afiliadoData } = await supabase
         .from('espacio_afiliados')
         .select('id')
@@ -201,7 +207,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
       if (error) throw error;
 
-      // Agregar mensaje localmente
       const newMessageObj: Message = {
         id: Date.now().toString(),
         content: newMessage.trim(),
@@ -256,7 +261,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        {/* Header con botón volver */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">{project.title}</h1>
           <button
@@ -267,7 +271,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
           </button>
         </div>
 
-        {/* Información del proyecto */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm mb-6">
           <div className="flex flex-wrap gap-2 mb-4">
             <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -291,7 +294,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
           <div className="mb-4">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">Emprendedor</h2>
-            {/* CORREGIDO: ahora muestra el nombre correctamente */}
             <p className="text-slate-800 font-medium">
               {project.owner?.nombres_completos || (project.owner?.email ? project.owner.email.split('@')[0] : 'No especificado')}
             </p>
@@ -311,21 +313,18 @@ export default function EspacioEmprendedorProjectDetailPage() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-slate-200 text-slate-800 px-4 py-2 rounded-xl font-semibold hover:bg-slate-300 transition"
               >
-                {/* CORREGIDO: texto del botón */}
                 📄 Ver proyecto
               </a>
             </div>
           )}
         </div>
 
-        {/* Chat / Mensajería */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Contactar al emprendedor</h2>
           <p className="text-sm text-slate-600 mb-4">
             Envía un mensaje para consultar sobre el proyecto o expresar tu interés como inversionista.
           </p>
 
-          {/* Lista de mensajes */}
           <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
             {messages.length === 0 ? (
               <p className="text-slate-500 text-sm text-center">No hay mensajes aún. Sé el primero en contactar al emprendedor.</p>
@@ -347,7 +346,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
             )}
           </div>
 
-          {/* Formulario para nuevo mensaje */}
           {participant ? (
             <div className="flex gap-3 items-start">
               <textarea
