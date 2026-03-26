@@ -34,7 +34,7 @@ type Message = {
   created_at: string;
   sender_type: string;
   sender: {
-    nombres_completos: string;
+    full_name: string;
     email: string;
   } | null;
 };
@@ -126,7 +126,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           .update({ views: (transformedProject.views || 0) + 1 })
           .eq('id', projectId);
 
-        // 4. Cargar mensajes del chat
+        // 4. Cargar mensajes del chat (CORREGIDO)
         const { data: messagesData } = await supabase
           .from('espacio_mensajes')
           .select(`
@@ -134,12 +134,13 @@ export default function EspacioEmprendedorProjectDetailPage() {
             content,
             created_at,
             sender_type,
-            sender:espacio_afiliados!sender_id (
-              nombres_completos,
+            sender_id,
+            sender:project_participants!sender_id (
+              full_name,
               email
             )
           `)
-          .eq('project_id', projectId)
+          .eq('proyecto_id', projectId)
           .order('created_at', { ascending: true });
 
         const transformedMessages = (messagesData || []).map((msg: any) => ({
@@ -192,7 +193,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
       const { error } = await supabase
         .from('espacio_mensajes')
         .insert({
-          project_id: projectId,
+          proyecto_id: projectId,
           sender_id: senderId,
           sender_type: senderType,
           content: newMessage.trim(),
@@ -207,7 +208,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
         created_at: new Date().toISOString(),
         sender_type: senderType,
         sender: {
-          nombres_completos: participant.full_name || 'Usuario',
+          full_name: participant.full_name || 'Usuario',
           email: participant.email || '',
         },
       };
@@ -329,7 +330,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
                 <div key={msg.id} className={`p-3 rounded-xl ${msg.sender_type === 'inversionista' ? 'bg-green-100 ml-8' : 'bg-slate-200 mr-8'}`}>
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-xs font-semibold text-slate-700">
-                      {msg.sender?.nombres_completos || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor')}
+                      {msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor')}
                       {msg.sender_type === 'inversionista' && <span className="ml-1 text-green-600">💰</span>}
                     </span>
                     <span className="text-xs text-slate-400">
