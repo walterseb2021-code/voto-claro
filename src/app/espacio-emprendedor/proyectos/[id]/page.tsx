@@ -59,6 +59,39 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Función para cargar mensajes
+  async function cargarMensajes() {
+    console.log('🔄 Cargando mensajes para proyecto:', projectId);
+    const { data: messagesData, error } = await supabase
+      .from('espacio_mensajes')
+      .select(`
+        id,
+        content,
+        created_at,
+        sender_type,
+        sender_id,
+        sender:project_participants!sender_id (
+          full_name,
+          email
+        )
+      `)
+      .eq('proyecto_id', projectId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error cargando mensajes:', error);
+    } else {
+      console.log('📥 Mensajes cargados:', messagesData?.length);
+    }
+
+    const transformedMessages = (messagesData || []).map((msg: any) => ({
+      ...msg,
+      sender: msg.sender && msg.sender.length > 0 ? msg.sender[0] : null,
+      remitente_id: msg.sender_id,
+    }));
+    setMessages(transformedMessages);
+  }
+
   // Cargar datos
   useEffect(() => {
     async function loadData() {
@@ -68,6 +101,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
       try {
         // 1. Obtener participante actual
         const deviceId = localStorage.getItem('vc_device_id');
+        console.log('🔍 Device ID:', deviceId);
         let currentParticipant = null;
         if (deviceId) {
           const { data: pData } = await supabase
@@ -77,6 +111,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
             .maybeSingle();
           currentParticipant = pData;
           setParticipant(currentParticipant);
+          console.log('👤 Participante actual:', currentParticipant?.full_name);
         }
 
         // 2. Obtener proyecto desde espacio_proyectos
@@ -122,6 +157,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
         // Determinar si el usuario actual es el dueño del proyecto
         const esProp = currentParticipant?.id === ownerParticipantId;
         setEsPropietario(esProp);
+        console.log('🏷️ Es propietario:', esProp);
 
         // 4. Incrementar vistas
         await supabase
@@ -140,36 +176,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
       }
     }
 
-    async function cargarMensajes() {
-      const { data: messagesData } = await supabase
-        .from('espacio_mensajes')
-        .select(`
-          id,
-          content,
-          created_at,
-          sender_type,
-          sender_id,
-          sender:project_participants!sender_id (
-            full_name,
-            email
-          )
-        `)
-        .eq('proyecto_id', projectId)
-        .order('created_at', { ascending: true });
-
-      const transformedMessages = (messagesData || []).map((msg: any) => ({
-        ...msg,
-        sender: msg.sender && msg.sender.length > 0 ? msg.sender[0] : null,
-        remitente_id: msg.sender_id,
-      }));
-      setMessages(transformedMessages);
-    }
-
     if (projectId) {
       loadData();
     }
 
     // SUSCRIPCIÓN EN TIEMPO REAL
+    console.log('🔌 Iniciando suscripción para proyecto:', projectId);
     const subscription = supabase
       .channel(`proyecto-mensajes-${projectId}`)
       .on(
@@ -181,8 +193,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           filter: `proyecto_id=eq.${projectId}`,
         },
         async (payload) => {
-          console.log('📨 Nuevo mensaje recibido:', payload.new);
-          // Recargar mensajes para obtener los datos completos del remitente
+          console.log('📨 NUEVO MENSAJE RECIBIDO EN TIEMPO REAL:', payload.new);
           await cargarMensajes();
           if (esPropietario) {
             setSuccessMsg('📨 Nuevo mensaje recibido de un inversionista');
@@ -193,9 +204,10 @@ export default function EspacioEmprendedorProjectDetailPage() {
       .subscribe();
 
     return () => {
+      console.log('🔌 Cerrando suscripción para proyecto:', projectId);
       supabase.removeChannel(subscription);
     };
-  }, [projectId, esPropietario]);
+  }, [projectId]);
 
   // Enviar mensaje (solo para inversionistas)
   const handleSendMessage = async () => {
@@ -207,22 +219,33 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
     if (!newMessage.trim()) return;
 
+    const mensajeData = {
+      proyecto_id: projectId,
+      sender_id: participant.id,
+      sender_type: 'inversionista',
+      content: newMessage.trim(),
+    };
+    console.log('📤 Enviando mensaje:', mensajeData);
+
     setSendingMessage(true);
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('espacio_mensajes')
-        .insert({
-          proyecto_id: projectId,
-          sender_id: participant.id,
-          sender_type: 'inversionista',
-          content: newMessage.trim(),
-        });
+        .insert(mensajeData)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error al insertar mensaje:', error);
+        throw error;
+      }
+      console.log('✅ Mensaje insertado correctamente:', data);
 
       setNewMessage('');
       setSuccessMsg('✅ Mensaje enviado correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
+      
+      // Recargar mensajes inmediatamente
+      await cargarMensajes();
       
     } catch (err: any) {
       console.error('Error al enviar mensaje:', err);
@@ -237,23 +260,34 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const handleResponder = async (mensajeId: string, remitenteId: string) => {
     if (!respuesta.trim()) return;
 
+    const respuestaData = {
+      proyecto_id: projectId,
+      sender_id: participant.id,
+      sender_type: 'emprendedor',
+      content: respuesta.trim(),
+    };
+    console.log('📤 Enviando respuesta:', respuestaData);
+
     setEnviandoRespuesta(true);
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('espacio_mensajes')
-        .insert({
-          proyecto_id: projectId,
-          sender_id: participant.id,
-          sender_type: 'emprendedor',
-          content: respuesta.trim(),
-        });
+        .insert(respuestaData)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error al insertar respuesta:', error);
+        throw error;
+      }
+      console.log('✅ Respuesta insertada correctamente:', data);
 
       setRespuesta('');
       setRespondiendoA(null);
       setSuccessMsg('✅ Respuesta enviada correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
+      
+      // Recargar mensajes
+      await cargarMensajes();
       
     } catch (err: any) {
       console.error('Error al enviar respuesta:', err);
