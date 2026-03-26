@@ -21,7 +21,6 @@ type Project = {
   views: number;
   created_at: string;
   owner: {
-    id: string;
     nombres_completos: string;
     email: string;
     celular: string;
@@ -82,58 +81,50 @@ export default function EspacioEmprendedorProjectDetailPage() {
           }
         }
 
-        // 2. Obtener proyecto desde espacio_proyectos (CONSULTA CORREGIDA)
+        // 2. Obtener proyecto desde espacio_proyectos
         const { data: projectData, error: projectError } = await supabase
           .from('espacio_proyectos')
-          .select(`
-            id,
-            title,
-            category,
-            summary,
-            department,
-            province,
-            district,
-            investment_min,
-            investment_max,
-            pdf_url,
-            owner_id,
-            status,
-            views,
-            created_at,
-            owner:espacio_afiliados!owner_id (
-              id,
-              participant_id,
-              participant:project_participants!participant_id (
-                full_name,
-                email,
-                phone
-              )
-            )
-          `)
+          .select('*')
           .eq('id', projectId)
           .single();
 
         if (projectError) throw projectError;
 
-        // Transformar owner correctamente
-        const transformedProject = {
-          ...projectData,
-          owner: projectData.owner && projectData.owner.length > 0 ? {
-            id: projectData.owner[0].id,
-            nombres_completos: projectData.owner[0].participant?.[0]?.full_name || null,
-            email: projectData.owner[0].participant?.[0]?.email || null,
-            celular: projectData.owner[0].participant?.[0]?.phone || null,
-          } : null,
-        };
-        setProject(transformedProject);
+        // 3. Obtener el dueño (afiliado) del proyecto
+        let ownerInfo = null;
+        if (projectData.owner_id) {
+          const { data: afiliadoData } = await supabase
+            .from('espacio_afiliados')
+            .select('participant_id')
+            .eq('id', projectData.owner_id)
+            .maybeSingle();
 
-        // 3. Incrementar vistas
+          if (afiliadoData?.participant_id) {
+            const { data: participantData } = await supabase
+              .from('project_participants')
+              .select('full_name, email, phone')
+              .eq('id', afiliadoData.participant_id)
+              .maybeSingle();
+
+            if (participantData) {
+              ownerInfo = {
+                nombres_completos: participantData.full_name,
+                email: participantData.email,
+                celular: participantData.phone,
+              };
+            }
+          }
+        }
+
+        setProject({ ...projectData, owner: ownerInfo });
+
+        // 4. Incrementar vistas
         await supabase
           .from('espacio_proyectos')
-          .update({ views: (transformedProject.views || 0) + 1 })
+          .update({ views: (projectData.views || 0) + 1 })
           .eq('id', projectId);
 
-        // 4. Cargar mensajes del chat
+        // 5. Cargar mensajes del chat
         const { data: messagesData } = await supabase
           .from('espacio_mensajes')
           .select(`
@@ -207,6 +198,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
       if (error) throw error;
 
+      // Agregar mensaje localmente
       const newMessageObj: Message = {
         id: Date.now().toString(),
         content: newMessage.trim(),
