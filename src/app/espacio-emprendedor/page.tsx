@@ -2,6 +2,7 @@
 'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 // Función para obtener device_id
@@ -12,6 +13,7 @@ function getDeviceId(): string {
 }
 
 export default function EspacioEmprendedorPage() {
+  const router = useRouter();
   const [participant, setParticipant] = useState<any>(null);
   const [afiliado, setAfiliado] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -22,81 +24,180 @@ export default function EspacioEmprendedorPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [topProjects, setTopProjects] = useState<any[]>([]);
+  const [misProyectos, setMisProyectos] = useState<any[]>([]);
+  const [mensajesRecibidos, setMensajesRecibidos] = useState<any[]>([]);
+  const [cargandoMensajes, setCargandoMensajes] = useState(false);
 
   useEffect(() => {
     cargarParticipante();
   }, []);
-       // Cargar proyectos destacados
-    // Cargar proyectos más contactados
-const loadTopProjects = async () => {
-  try {
-    // Contar contactos por proyecto
-    const { data: contactos } = await supabase
-      .from('espacio_contactos')
-      .select('project_id');
 
-    const contactCount: Record<string, number> = {};
-    contactos?.forEach(c => {
-      contactCount[c.project_id] = (contactCount[c.project_id] || 0) + 1;
-    });
-
-    // Obtener proyectos ordenados por contactos
-    const { data: proyectos } = await supabase
-      .from('espacio_proyectos')
-      .select('id, title, category, department')
-      .eq('status', 'active');
-
-    const proyectosConContactos = (proyectos || []).map(p => ({
-      ...p,
-      contactos: contactCount[p.id] || 0
-    }));
-
-    proyectosConContactos.sort((a, b) => b.contactos - a.contactos);
-    setTopProjects(proyectosConContactos.slice(0, 3));
-  } catch (err) {
-    console.error('Error cargando proyectos destacados:', err);
-  }
-};
-
-useEffect(() => {
-  loadTopProjects();
-}, []);
-     const cargarParticipante = async () => {
-  const deviceId = getDeviceId();
-  if (!deviceId) {
-    setLoading(false);
-    return;
-  }
-
-  setLoading(true);
-  try {
-    // Cargar participante
-    const { data, error } = await supabase
-      .from('project_participants')
-      .select('*')
-      .eq('device_id', deviceId)
-      .maybeSingle();
-
-    if (error) throw error;
-    setParticipant(data || null);
-
-    // Cargar afiliación si existe
-    if (data) {
-      const { data: afiliadoData } = await supabase
-        .from('espacio_afiliados')
-        .select('*')
-        .eq('participant_id', data.id)
-        .maybeSingle();
-      setAfiliado(afiliadoData || null);
-    } else {
-      setAfiliado(null);
+  useEffect(() => {
+    if (afiliado) {
+      cargarMisProyectos();
+      cargarMensajesRecibidos();
     }
-  } catch (err) {
-    console.error('Error cargando participante:', err);
-  } finally {
-    setLoading(false);
-  }
-};
+  }, [afiliado]);
+
+  // Cargar proyectos destacados
+  const loadTopProjects = async () => {
+    try {
+      const { data: contactos } = await supabase
+        .from('espacio_contactos')
+        .select('project_id');
+
+      const contactCount: Record<string, number> = {};
+      contactos?.forEach(c => {
+        contactCount[c.project_id] = (contactCount[c.project_id] || 0) + 1;
+      });
+
+      const { data: proyectos } = await supabase
+        .from('espacio_proyectos')
+        .select('id, title, category, department')
+        .eq('status', 'active');
+
+      const proyectosConContactos = (proyectos || []).map(p => ({
+        ...p,
+        contactos: contactCount[p.id] || 0
+      }));
+
+      proyectosConContactos.sort((a, b) => b.contactos - a.contactos);
+      setTopProjects(proyectosConContactos.slice(0, 3));
+    } catch (err) {
+      console.error('Error cargando proyectos destacados:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadTopProjects();
+  }, []);
+
+  const cargarParticipante = async () => {
+    const deviceId = getDeviceId();
+    if (!deviceId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('project_participants')
+        .select('*')
+        .eq('device_id', deviceId)
+        .maybeSingle();
+
+      if (error) throw error;
+      setParticipant(data || null);
+
+      if (data) {
+        const { data: afiliadoData } = await supabase
+          .from('espacio_afiliados')
+          .select('*')
+          .eq('participant_id', data.id)
+          .maybeSingle();
+        setAfiliado(afiliadoData || null);
+      } else {
+        setAfiliado(null);
+      }
+    } catch (err) {
+      console.error('Error cargando participante:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cargar proyectos del emprendedor
+  const cargarMisProyectos = async () => {
+    if (!afiliado) return;
+    try {
+      const { data } = await supabase
+        .from('espacio_proyectos')
+        .select('id, title, category, department, district, views, status, created_at')
+        .eq('owner_id', afiliado.id)
+        .order('created_at', { ascending: false });
+      
+      // Calcular contactos por proyecto
+      const { data: contactos } = await supabase
+        .from('espacio_contactos')
+        .select('project_id');
+      
+      const contactCount: Record<string, number> = {};
+      contactos?.forEach(c => {
+        contactCount[c.project_id] = (contactCount[c.project_id] || 0) + 1;
+      });
+
+      const proyectosConContactos = (data || []).map(p => ({
+        ...p,
+        contactos: contactCount[p.id] || 0
+      }));
+      
+      setMisProyectos(proyectosConContactos);
+    } catch (err) {
+      console.error('Error cargando mis proyectos:', err);
+    }
+  };
+
+  // Cargar mensajes recibidos por el emprendedor
+  const cargarMensajesRecibidos = async () => {
+    if (!participant) return;
+    setCargandoMensajes(true);
+    try {
+      // Buscar mensajes donde el emprendedor es el receptor (a través de sus proyectos)
+      const { data: proyectosDelEmprendedor } = await supabase
+        .from('espacio_proyectos')
+        .select('id, title')
+        .eq('owner_id', afiliado?.id);
+      
+      if (!proyectosDelEmprendedor?.length) {
+        setMensajesRecibidos([]);
+        setCargandoMensajes(false);
+        return;
+      }
+
+      const projectIds = proyectosDelEmprendedor.map(p => p.id);
+      
+      const { data: mensajes } = await supabase
+        .from('espacio_mensajes')
+        .select(`
+          id,
+          content,
+          created_at,
+          sender_type,
+          sender_id,
+          proyecto_id,
+          sender:project_participants!sender_id (full_name, email)
+        `)
+        .in('proyecto_id', projectIds)
+        .order('created_at', { ascending: false });
+
+      const transformed = (mensajes || []).map((msg: any) => {
+        const proyecto = proyectosDelEmprendedor.find(p => p.id === msg.proyecto_id);
+        return {
+          id: msg.id,
+          mensaje: msg.content,
+          remitente: msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor'),
+          remitente_id: msg.sender_id,
+          proyecto_titulo: proyecto?.title || 'Proyecto',
+          proyecto_id: msg.proyecto_id,
+          created_at: msg.created_at,
+          sender_type: msg.sender_type,
+        };
+      });
+      
+      setMensajesRecibidos(transformed);
+    } catch (err) {
+      console.error('Error cargando mensajes recibidos:', err);
+    } finally {
+      setCargandoMensajes(false);
+    }
+  };
+
+  // Responder mensaje
+  const responderMensaje = (proyectoId: string, remitenteId: string) => {
+    router.push(`/espacio-emprendedor/proyectos/${proyectoId}?destinatario=${remitenteId}`);
+  };
+
   // Función para iniciar sesión con DNI o correo
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,80 +244,75 @@ useEffect(() => {
     }
   };
 
-    const handleVerificarDNI = async () => {
-  if (!dni.trim() || dni.length !== 8) {
-    setError('Ingresa un DNI válido de 8 dígitos.');
-    return;
-  }
-
-  if (!participant) {
-    setError('Primero debes registrarte como participante.');
-    return;
-  }
-
-  setVerificando(true);
-  setError(null);
-
-  try {
-    // 🔍 PASO 1: Verificar si el DNI existe en espacio_afiliados y está activo
-    const { data: afiliadoExistente, error: afiliadoError } = await supabase
-      .from('espacio_afiliados')
-      .select('*')
-      .eq('dni', dni)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (afiliadoError) throw afiliadoError;
-
-    // ❌ PASO 2: Si NO existe o NO está activo → Mostrar error
-    if (!afiliadoExistente) {
-      setError('No estás afiliado a Alianza para el Progreso. Para presentar un proyecto, primero debes afiliarte en el enlace oficial del JNE.');
-      setVerificando(false);
+  const handleVerificarDNI = async () => {
+    if (!dni.trim() || dni.length !== 8) {
+      setError('Ingresa un DNI válido de 8 dígitos.');
       return;
     }
 
-    // ✅ PASO 3: Si existe, verificar si ya está vinculado a este participante
-    const { data: existing, error: existingError } = await supabase
-      .from('espacio_afiliados')
-      .select('*')
-      .eq('participant_id', participant.id)
-      .maybeSingle();
+    if (!participant) {
+      setError('Primero debes registrarte como participante.');
+      return;
+    }
 
-    if (existingError) throw existingError;
+    setVerificando(true);
+    setError(null);
 
-    // ✅ PASO 4: Si ya está vinculado, actualizar estado
-    if (existing) {
-      setAfiliado(existing);
+    try {
+      const { data: afiliadoExistente, error: afiliadoError } = await supabase
+        .from('espacio_afiliados')
+        .select('*')
+        .eq('dni', dni)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (afiliadoError) throw afiliadoError;
+
+      if (!afiliadoExistente) {
+        setError('No estás afiliado a Alianza para el Progreso. Para presentar un proyecto, primero debes afiliarte en el enlace oficial del JNE.');
+        setVerificando(false);
+        return;
+      }
+
+      const { data: existing, error: existingError } = await supabase
+        .from('espacio_afiliados')
+        .select('*')
+        .eq('participant_id', participant.id)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+
+      if (existing) {
+        setAfiliado(existing);
+        await cargarParticipante();
+        alert('✅ Ya estás verificado como afiliado. ¡Bienvenido al Espacio Emprendedor!');
+        setVerificando(false);
+        return;
+      }
+
+      const { data: updatedAfiliado, error: updateError } = await supabase
+        .from('espacio_afiliados')
+        .update({ 
+          participant_id: participant.id,
+          verified_at: new Date().toISOString()
+        })
+        .eq('id', afiliadoExistente.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      setAfiliado(updatedAfiliado);
       await cargarParticipante();
-      alert('✅ Ya estás verificado como afiliado. ¡Bienvenido al Espacio Emprendedor!');
+      alert('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
+
+    } catch (err: any) {
+      console.error('Error verificando DNI:', err);
+      setError(err.message || 'Error al verificar afiliación');
+    } finally {
       setVerificando(false);
-      return;
     }
-
-    // ✅ PASO 5: Vincular al participante con esta afiliación
-    const { data: updatedAfiliado, error: updateError } = await supabase
-      .from('espacio_afiliados')
-      .update({ 
-        participant_id: participant.id,
-        verified_at: new Date().toISOString()
-      })
-      .eq('id', afiliadoExistente.id)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
-
-    setAfiliado(updatedAfiliado);
-    await cargarParticipante();
-    alert('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
-
-  } catch (err: any) {
-    console.error('Error verificando DNI:', err);
-    setError(err.message || 'Error al verificar afiliación');
-  } finally {
-    setVerificando(false);
-  }
-};
+  };
 
   if (loading) {
     return (
@@ -249,37 +345,39 @@ useEffect(() => {
             Voto Claro no garantiza ni avala financieramente ningún proyecto.
           </div>
         </div>
-                {/* Proyectos destacados */}
-<div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
-    <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-  <span className="text-2xl">📞</span> Proyectos más contactados
-</h2>
-  <div className="space-y-3">
-    {topProjects.length === 0 ? (
-      <p className="text-slate-500 text-sm">Aún no hay proyectos contactados.</p>
-    ) : (
-      topProjects.map((project, index) => (
-        <div key={project.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold text-green-600 w-8">
-              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-            </span>
-            <div>
-              <p className="font-semibold text-slate-800">{project.title}</p>
-              <p className="text-xs text-slate-500">{project.category} • {project.department}</p>
-            </div>
-          </div>
-          <div className="text-right">
-              <p className="font-bold text-green-600">{project.contactos || 0} contactos</p>
-            <Link href={`/espacio-emprendedor/proyectos/${project.id}`} className="text-xs text-green-700 hover:underline">
-              Ver proyecto →
-            </Link>
+
+        {/* Proyectos destacados */}
+        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+            <span className="text-2xl">📞</span> Proyectos más contactados
+          </h2>
+          <div className="space-y-3">
+            {topProjects.length === 0 ? (
+              <p className="text-slate-500 text-sm">Aún no hay proyectos contactados.</p>
+            ) : (
+              topProjects.map((project, index) => (
+                <div key={project.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl font-bold text-green-600 w-8">
+                      {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-slate-800">{project.title}</p>
+                      <p className="text-xs text-slate-500">{project.category} • {project.department}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-green-600">{project.contactos || 0} contactos</p>
+                    <Link href={`/espacio-emprendedor/proyectos/${project.id}`} className="text-xs text-green-700 hover:underline">
+                      Ver proyecto →
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
-      ))
-    )}
-  </div>
-</div>
+
         {/* Estado del participante */}
         {!participant ? (
           <>
@@ -332,9 +430,6 @@ useEffect(() => {
                 <span className="text-2xl">💼</span>
                 <h2 className="text-xl font-bold text-slate-900">Como Emprendedor</h2>
               </div>
-              <p className="text-slate-600 mb-4">
-                Publica tu proyecto y busca inversionistas. Este espacio es exclusivo para afiliados a Alianza para el Progreso.
-              </p>
               
               {!afiliado ? (
                 <div>
@@ -363,16 +458,89 @@ useEffect(() => {
                   </p>
                 </div>
               ) : (
-                <div>
-                  <p className="text-sm text-green-700 bg-green-50 p-2 rounded-lg mb-3">
-                    ✅ DNI verificado. ¡Bienvenido, emprendedor!
-                  </p>
-                  <Link
-                    href="/espacio-emprendedor/nuevo-proyecto"
-                    className="inline-block bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800"
-                  >
-                    + Publicar proyecto
-                  </Link>
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-sm text-green-700 bg-green-50 p-2 rounded-lg mb-3">
+                      ✅ DNI verificado. ¡Bienvenido, emprendedor!
+                    </p>
+                    <Link
+                      href="/espacio-emprendedor/nuevo-proyecto"
+                      className="inline-block bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800"
+                    >
+                      + Publicar nuevo proyecto
+                    </Link>
+                  </div>
+
+                  {/* Mis proyectos */}
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                      <span>📋</span> Mis proyectos
+                    </h3>
+                    {misProyectos.length === 0 ? (
+                      <p className="text-slate-500 text-sm">Aún no has publicado proyectos.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {misProyectos.map((proyecto) => (
+                          <div key={proyecto.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-semibold text-slate-800">{proyecto.title}</h4>
+                                <p className="text-xs text-slate-500">
+                                  {proyecto.category} • {proyecto.department} - {proyecto.district}
+                                </p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  👁️ {proyecto.views || 0} vistas • 📩 {proyecto.contactos || 0} contactos
+                                </p>
+                              </div>
+                              <Link
+                                href={`/espacio-emprendedor/proyectos/${proyecto.id}`}
+                                className="text-sm text-green-700 hover:underline"
+                              >
+                                Ver detalles →
+                              </Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mensajes recibidos */}
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                      <span>💬</span> Mensajes recibidos
+                    </h3>
+                    {cargandoMensajes ? (
+                      <p className="text-slate-500 text-sm">Cargando mensajes...</p>
+                    ) : mensajesRecibidos.length === 0 ? (
+                      <p className="text-slate-500 text-sm">No tienes mensajes nuevos.</p>
+                    ) : (
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {mensajesRecibidos.map((msg) => (
+                          <div key={msg.id} className="bg-slate-50 rounded-xl p-3 border-l-4 border-green-500">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-semibold text-slate-800">{msg.remitente}</p>
+                                  <span className="text-xs text-slate-400">
+                                    {new Date(msg.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5">Proyecto: {msg.proyecto_titulo}</p>
+                                <p className="text-sm text-slate-700 mt-2">{msg.mensaje}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => responderMensaje(msg.proyecto_id, msg.remitente_id)}
+                              className="mt-2 text-xs text-green-700 hover:underline"
+                            >
+                              Responder →
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -259,7 +259,8 @@ export default function ExplorarProyectosPage() {
               <div key={project.id} className="bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden">
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1 rounded-full shadow-sm">
+                    {/* CORREGIDO: texto negro en la categoría */}
+                    <span className="text-xs font-semibold bg-gradient-to-r from-green-600 to-green-700 text-black px-3 py-1 rounded-full shadow-sm">
                       {project.category}
                     </span>
                     <span className="text-xs text-slate-500 flex items-center gap-1">
@@ -300,13 +301,13 @@ export default function ExplorarProyectosPage() {
                         {project.owner?.alias || 'Anónimo'}
                       </span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1 flex-wrap justify-end">
                       {project.pdf_url && (
                         <a
                           href={project.pdf_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-slate-500 hover:text-green-700 transition"
+                          className="text-slate-500 hover:text-green-700 transition p-2"
                           title="Ver documento"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -314,19 +315,13 @@ export default function ExplorarProyectosPage() {
                           </svg>
                         </a>
                       )}
-                      <button
-                        onClick={() => handleContactar(project.id, project.owner?.alias || 'el emprendedor')}
-                        disabled={contactando === project.id}
-                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition disabled:opacity-50 shadow-sm"
+                      {/* CORREGIDO: solo un botón que lleva al detalle con chat integrado */}
+                      <Link
+                        href={`/espacio-emprendedor/proyectos/${project.id}`}
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm whitespace-nowrap"
                       >
-                        {contactando === project.id ? 'Enviando...' : '📩 Contactar'}
-                      </button>
-                       <Link
-  href={`/espacio-emprendedor/proyectos/${project.id}`}
-  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
->
-  💬 Ver detalles
-</Link>
+                        💬 Ver detalles
+                      </Link>
                     </div>
                   </div>
                 </div>
