@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-// Función para obtener o crear device_id (corregida)
+// Función para obtener o crear device_id
 function getDeviceId(): string {
   if (typeof window === "undefined") return "";
   const KEY = "vc_device_id";
@@ -25,6 +25,7 @@ export default function EspacioEmprendedorPage() {
   const [dni, setDni] = useState('');
   const [verificando, setVerificando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [codigoAcceso, setCodigoAcceso] = useState('');
   const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
   const [loginCodigoError, setLoginCodigoError] = useState('');
@@ -114,13 +115,19 @@ export default function EspacioEmprendedorPage() {
 
   // Cargar proyectos del emprendedor
   const cargarMisProyectos = async () => {
-    if (!afiliado) return;
+    if (!afiliado) {
+      console.log('⚠️ No hay afiliado, no se cargan proyectos');
+      return;
+    }
+    console.log('🔍 Cargando proyectos para owner_id:', afiliado.id);
     try {
       const { data } = await supabase
         .from('espacio_proyectos')
         .select('id, title, category, department, district, views, status, created_at')
         .eq('owner_id', afiliado.id)
         .order('created_at', { ascending: false });
+      
+      console.log('📦 Proyectos encontrados:', data?.length || 0);
       
       const { data: contactos } = await supabase
         .from('espacio_contactos')
@@ -204,7 +211,6 @@ export default function EspacioEmprendedorPage() {
   // Función para iniciar sesión con código de acceso
   const handleLoginConCodigo = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('🚀 Función handleLoginConCodigo ejecutada'); // ← ALERT PARA VERIFICAR
     setLoginCodigoLoading(true);
     setLoginCodigoError('');
 
@@ -245,7 +251,8 @@ export default function EspacioEmprendedorPage() {
 
       await cargarParticipante();
       setCodigoAcceso('');
-      alert('✅ Sesión iniciada correctamente');
+      setLoginCodigoError('✅ Sesión iniciada correctamente');
+      setTimeout(() => setLoginCodigoError(''), 3000);
     } catch (err: any) {
       console.error('Error al iniciar sesión con código:', err);
       setLoginCodigoError(err.message || 'Error al iniciar sesión');
@@ -295,7 +302,8 @@ export default function EspacioEmprendedorPage() {
       if (existing) {
         setAfiliado(existing);
         await cargarParticipante();
-        alert('✅ Ya estás verificado como afiliado. ¡Bienvenido al Espacio Emprendedor!');
+        setSuccessMsg('✅ Ya estás verificado como afiliado. ¡Bienvenido al Espacio Emprendedor!');
+        setTimeout(() => setSuccessMsg(null), 3000);
         setVerificando(false);
         return;
       }
@@ -314,7 +322,8 @@ export default function EspacioEmprendedorPage() {
 
       setAfiliado(updatedAfiliado);
       await cargarParticipante();
-      alert('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
+      setSuccessMsg('✅ DNI verificado correctamente. ¡Bienvenido al Espacio Emprendedor!');
+      setTimeout(() => setSuccessMsg(null), 3000);
 
     } catch (err: any) {
       console.error('Error verificando DNI:', err);
@@ -344,6 +353,19 @@ export default function EspacioEmprendedorPage() {
             ← Volver al inicio
           </Link>
         </div>
+
+        {/* Mensajes de éxito y error */}
+        {successMsg && (
+          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-xl text-sm">
+            {successMsg}
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+            {error}
+          </div>
+        )}
 
         {/* Mensaje de bienvenida */}
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
@@ -414,7 +436,11 @@ export default function EspacioEmprendedorPage() {
               </p>
               
               {loginCodigoError && (
-                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+                <div className="mb-4 p-3 rounded-xl text-sm" style={{
+                  backgroundColor: loginCodigoError.includes('✅') ? '#f0fdf4' : '#fee2e2',
+                  border: loginCodigoError.includes('✅') ? '1px solid #bbf7d0' : '1px solid #fecaca',
+                  color: loginCodigoError.includes('✅') ? '#166534' : '#dc2626'
+                }}>
                   {loginCodigoError}
                 </div>
               )}
