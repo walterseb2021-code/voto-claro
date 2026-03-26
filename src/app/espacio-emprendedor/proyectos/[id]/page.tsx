@@ -21,6 +21,7 @@ type Project = {
   views: number;
   created_at: string;
   owner: {
+    id: string;
     nombres_completos: string;
     email: string;
     celular: string;
@@ -36,6 +37,7 @@ type Message = {
     full_name: string;
     email: string;
   } | null;
+  remitente_id?: string;
 };
 
 export default function EspacioEmprendedorProjectDetailPage() {
@@ -50,7 +52,10 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [isInversionista, setIsInversionista] = useState(false);
+  const [respondiendoA, setRespondiendoA] = useState<string | null>(null);
+  const [respuesta, setRespuesta] = useState('');
+  const [enviandoRespuesta, setEnviandoRespuesta] = useState(false);
+  const [esPropietario, setEsPropietario] = useState(false);
 
   // Cargar datos
   useEffect(() => {
@@ -70,15 +75,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
             .maybeSingle();
           currentParticipant = pData;
           setParticipant(currentParticipant);
-          
-          if (currentParticipant) {
-            const { data: investorData } = await supabase
-              .from('espacio_inversionistas')
-              .select('id')
-              .eq('participant_id', currentParticipant.id)
-              .maybeSingle();
-            setIsInversionista(!!investorData);
-          }
         }
 
         // 2. Obtener proyecto desde espacio_proyectos
@@ -92,6 +88,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
         // 3. Obtener el dueño (afiliado) del proyecto
         let ownerInfo = null;
+        let ownerParticipantId = null;
         if (projectData.owner_id) {
           const { data: afiliadoData } = await supabase
             .from('espacio_afiliados')
@@ -100,14 +97,16 @@ export default function EspacioEmprendedorProjectDetailPage() {
             .maybeSingle();
 
           if (afiliadoData?.participant_id) {
+            ownerParticipantId = afiliadoData.participant_id;
             const { data: participantData } = await supabase
               .from('project_participants')
-              .select('full_name, email, phone')
+              .select('id, full_name, email, phone')
               .eq('id', afiliadoData.participant_id)
               .maybeSingle();
 
             if (participantData) {
               ownerInfo = {
+                id: participantData.id,
                 nombres_completos: participantData.full_name,
                 email: participantData.email,
                 celular: participantData.phone,
@@ -117,6 +116,10 @@ export default function EspacioEmprendedorProjectDetailPage() {
         }
 
         setProject({ ...projectData, owner: ownerInfo });
+
+        // Determinar si el usuario actual es el dueño del proyecto
+        const esProp = currentParticipant?.id === ownerParticipantId;
+        setEsPropietario(esProp);
 
         // 4. Incrementar vistas
         await supabase
@@ -144,6 +147,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
         const transformedMessages = (messagesData || []).map((msg: any) => ({
           ...msg,
           sender: msg.sender && msg.sender.length > 0 ? msg.sender[0] : null,
+          remitente_id: msg.sender_id,
         }));
         setMessages(transformedMessages);
         
@@ -160,7 +164,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
     }
   }, [projectId]);
 
-  // Enviar mensaje
+  // Enviar mensaje (solo para inversionistas)
   const handleSendMessage = async () => {
     if (!participant) {
       alert('Debes iniciar sesión para contactar al emprendedor.');
@@ -172,27 +176,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
     setSendingMessage(true);
     try {
-      const { data: afiliadoData } = await supabase
-        .from('espacio_afiliados')
-        .select('id')
-        .eq('participant_id', participant.id)
-        .maybeSingle();
-
-      if (!afiliadoData && !isInversionista) {
-        alert('Para contactar al emprendedor, primero debes configurar tu perfil de inversionista.');
-        router.push('/espacio-emprendedor/perfil-inversionista');
-        return;
-      }
-
-      const senderId = afiliadoData?.id || participant.id;
-      const senderType = isInversionista ? 'inversionista' : 'emprendedor';
-
       const { error } = await supabase
         .from('espacio_mensajes')
         .insert({
           proyecto_id: projectId,
-          sender_id: senderId,
-          sender_type: senderType,
+          sender_id: participant.id,
+          sender_type: 'inversionista',
           content: newMessage.trim(),
         });
 
@@ -203,11 +192,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
         id: Date.now().toString(),
         content: newMessage.trim(),
         created_at: new Date().toISOString(),
-        sender_type: senderType,
+        sender_type: 'inversionista',
         sender: {
           full_name: participant.full_name || 'Usuario',
           email: participant.email || '',
         },
+        remitente_id: participant.id,
       };
       setMessages(prev => [...prev, newMessageObj]);
       setNewMessage('');
@@ -219,6 +209,49 @@ export default function EspacioEmprendedorProjectDetailPage() {
       alert(err.message || 'Error al enviar mensaje');
     } finally {
       setSendingMessage(false);
+    }
+  };
+
+  // Responder mensaje (solo para emprendedores)
+  const handleResponder = async (mensajeId: string, remitenteId: string) => {
+    if (!respuesta.trim()) return;
+
+    setEnviandoRespuesta(true);
+    try {
+      const { error } = await supabase
+        .from('espacio_mensajes')
+        .insert({
+          proyecto_id: projectId,
+          sender_id: participant.id,
+          sender_type: 'emprendedor',
+          content: respuesta.trim(),
+        });
+
+      if (error) throw error;
+
+      // Agregar respuesta localmente
+      const newMessageObj: Message = {
+        id: Date.now().toString(),
+        content: respuesta.trim(),
+        created_at: new Date().toISOString(),
+        sender_type: 'emprendedor',
+        sender: {
+          full_name: participant.full_name || 'Emprendedor',
+          email: participant.email || '',
+        },
+        remitente_id: participant.id,
+      };
+      setMessages(prev => [...prev, newMessageObj]);
+      setRespuesta('');
+      setRespondiendoA(null);
+      
+      alert('Respuesta enviada correctamente.');
+      
+    } catch (err: any) {
+      console.error('Error al enviar respuesta:', err);
+      alert(err.message || 'Error al enviar respuesta');
+    } finally {
+      setEnviandoRespuesta(false);
     }
   };
 
@@ -263,6 +296,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           </button>
         </div>
 
+        {/* Información del proyecto */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm mb-6">
           <div className="flex flex-wrap gap-2 mb-4">
             <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -311,54 +345,130 @@ export default function EspacioEmprendedorProjectDetailPage() {
           )}
         </div>
 
+        {/* Sección de mensajes (diferente según el rol) */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Contactar al emprendedor</h2>
-          <p className="text-sm text-slate-600 mb-4">
-            Envía un mensaje para consultar sobre el proyecto o expresar tu interés como inversionista.
-          </p>
+          {esPropietario ? (
+            // Vista para el EMPRENDEDOR (dueño del proyecto)
+            <>
+              <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Mensajes recibidos</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                Los inversionistas interesados en tu proyecto te enviarán mensajes aquí.
+              </p>
 
-          <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
-            {messages.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center">No hay mensajes aún. Sé el primero en contactar al emprendedor.</p>
-            ) : (
-              messages.map((msg) => (
-                <div key={msg.id} className={`p-3 rounded-xl ${msg.sender_type === 'inversionista' ? 'bg-green-100 ml-8' : 'bg-slate-200 mr-8'}`}>
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-semibold text-slate-700">
-                      {msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor')}
-                      {msg.sender_type === 'inversionista' && <span className="ml-1 text-green-600">💰</span>}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      {new Date(msg.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-800">{msg.content}</p>
-                </div>
-              ))
-            )}
-          </div>
-
-          {participant ? (
-            <div className="flex gap-3 items-start">
-              <textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Escribe tu mensaje para el emprendedor..."
-                rows={2}
-                className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={sendingMessage || !newMessage.trim()}
-                className="bg-green-700 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50 whitespace-nowrap text-sm"
-              >
-                {sendingMessage ? 'Enviando...' : 'Enviar mensaje'}
-              </button>
-            </div>
+              <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
+                {messages.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center">No hay mensajes aún.</p>
+                ) : (
+                  messages.map((msg) => (
+                    <div key={msg.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="text-sm font-semibold text-slate-800">
+                            {msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor')}
+                          </span>
+                          {msg.sender_type === 'inversionista' && (
+                            <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Inversionista</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-400">
+                          {new Date(msg.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700">{msg.content}</p>
+                      
+                      {respondiendoA === msg.id ? (
+                        <div className="mt-3 pt-3 border-t border-slate-200">
+                          <textarea
+                            value={respuesta}
+                            onChange={(e) => setRespuesta(e.target.value)}
+                            placeholder="Escribe tu respuesta..."
+                            rows={2}
+                            className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none resize-none text-sm mb-2"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleResponder(msg.id, msg.remitente_id!)}
+                              disabled={enviandoRespuesta || !respuesta.trim()}
+                              className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-50"
+                            >
+                              {enviandoRespuesta ? 'Enviando...' : 'Enviar respuesta'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRespondiendoA(null);
+                                setRespuesta('');
+                              }}
+                              className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setRespondiendoA(msg.id)}
+                          className="mt-3 text-xs text-green-700 hover:underline"
+                        >
+                          Responder →
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           ) : (
-            <p className="text-sm text-slate-500 text-center">
-              Para contactar al emprendedor, primero debes <Link href="/espacio-emprendedor" className="text-green-700 underline">iniciar sesión</Link>.
-            </p>
+            // Vista para el INVERSIONISTA
+            <>
+              <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Contactar al emprendedor</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                Envía un mensaje para consultar sobre el proyecto o expresar tu interés como inversionista.
+              </p>
+
+              <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
+                {messages.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center">No hay mensajes aún. Sé el primero en contactar al emprendedor.</p>
+                ) : (
+                  messages.map((msg) => (
+                    <div key={msg.id} className={`p-3 rounded-xl ${msg.sender_type === 'inversionista' ? 'bg-green-100 ml-8' : 'bg-slate-200 mr-8'}`}>
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-xs font-semibold text-slate-700">
+                          {msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor')}
+                          {msg.sender_type === 'inversionista' && <span className="ml-1 text-green-600">💰</span>}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {new Date(msg.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-800">{msg.content}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {participant ? (
+                <div className="flex gap-3 items-start">
+                  <textarea
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Escribe tu mensaje para el emprendedor..."
+                    rows={2}
+                    className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={sendingMessage || !newMessage.trim()}
+                    className="bg-green-700 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50 whitespace-nowrap text-sm"
+                  >
+                    {sendingMessage ? 'Enviando...' : 'Enviar mensaje'}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 text-center">
+                  Para contactar al emprendedor, primero debes <Link href="/espacio-emprendedor" className="text-green-700 underline">iniciar sesión</Link>.
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
