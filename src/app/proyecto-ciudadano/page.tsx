@@ -22,9 +22,6 @@ export default function ProyectoCiudadanoPage() {
   const [participant, setParticipant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
-  const [loginIdentifier, setLoginIdentifier] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState('');
   const [codigoAcceso, setCodigoAcceso] = useState('');
   const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
   const [loginCodigoError, setLoginCodigoError] = useState('');
@@ -115,52 +112,6 @@ export default function ProyectoCiudadanoPage() {
     }
   };
 
-  // Función para iniciar sesión con DNI o correo
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError('');
-
-    const identifier = loginIdentifier.trim();
-    if (!identifier) {
-      setLoginError('Ingresa tu DNI o correo electrónico');
-      setLoginLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('project_participants')
-        .select('*')
-        .or(`dni.eq.${identifier},email.eq.${identifier}`)
-        .maybeSingle();
-
-      if (error) throw error;
-      
-      if (!data) {
-        setLoginError('No se encontró un participante con esos datos. ¿Ya te registraste?');
-        setLoginLoading(false);
-        return;
-      }
-
-      const currentDeviceId = getOrCreateDeviceId();
-      const { error: updateError } = await supabase
-        .from('project_participants')
-        .update({ device_id: currentDeviceId })
-        .eq('id', data.id);
-
-      if (updateError) throw updateError;
-
-      await loadParticipant();
-      setLoginIdentifier('');
-    } catch (err: any) {
-      console.error('Error al iniciar sesión:', err);
-      setLoginError(err.message || 'Error al iniciar sesión');
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
   // Función para iniciar sesión con código de acceso
   const handleLoginConCodigo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,6 +131,9 @@ export default function ProyectoCiudadanoPage() {
         .select('*')
         .eq('codigo_acceso', codigo)
         .maybeSingle();
+
+      console.log('🔍 Buscando código:', codigo);
+      console.log('📦 Resultado:', data);
 
       if (error) throw error;
       
@@ -310,7 +264,7 @@ export default function ProyectoCiudadanoPage() {
             </div>
 
             {/* Inicio de sesión con código */}
-            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm mb-4">
+            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
                 <span className="text-2xl">🔑</span> Iniciar sesión con código
               </h2>
@@ -339,37 +293,6 @@ export default function ProyectoCiudadanoPage() {
                   className="w-full bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50"
                 >
                   {loginCodigoLoading ? 'Verificando...' : 'Iniciar sesión con código'}
-                </button>
-              </form>
-            </div>
-
-            <div className="bg-white rounded-2xl border-2 border-slate-300 p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-900 mb-3">¿Ya tienes cuenta?</h2>
-              <p className="text-slate-600 mb-4">
-                Si ya te registraste anteriormente, inicia sesión con tu DNI o correo electrónico.
-              </p>
-              
-              {loginError && (
-                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
-                  {loginError}
-                </div>
-              )}
-              
-              <form onSubmit={handleLogin} className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="DNI o correo electrónico"
-                  value={loginIdentifier}
-                  onChange={(e) => setLoginIdentifier(e.target.value)}
-                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                  disabled={loginLoading}
-                />
-                <button
-                  type="submit"
-                  disabled={loginLoading}
-                  className="w-full bg-slate-200 text-slate-800 py-2 rounded-xl font-semibold hover:bg-slate-300 transition disabled:opacity-50"
-                >
-                  {loginLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
                 </button>
               </form>
             </div>
