@@ -415,7 +415,10 @@ export default function EspacioEmprendedorPage() {
                   type="text"
                   placeholder="Ej: EMP-2026-3A7F"
                   value={codigoAcceso}
-                  onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+  console.log('✏️ Input cambiado:', e.target.value);
+  setCodigoAcceso(e.target.value.toUpperCase());
+}}
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono"
                   disabled={loginCodigoLoading}
                 />
