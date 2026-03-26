@@ -33,11 +33,9 @@ type Message = {
   content: string;
   created_at: string;
   sender_type: string;
-  sender: {
-    full_name: string;
-    email: string;
-  } | null;
-  remitente_id?: string;
+  sender_afiliado_id: string | null;
+  sender_participant_id: string | null;
+  remitente_nombre: string;
 };
 
 export default function EspacioEmprendedorProjectDetailPage() {
@@ -59,37 +57,66 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Función para obtener el nombre del remitente según el tipo
+  async function obtenerNombreRemitente(senderType: string, afiliadoId: string | null, participanteId: string | null): Promise<string> {
+    if (senderType === 'emprendedor' && afiliadoId) {
+      // Buscar en espacio_afiliados -> project_participants
+      const { data: afiliado } = await supabase
+        .from('espacio_afiliados')
+        .select('participant_id')
+        .eq('id', afiliadoId)
+        .maybeSingle();
+      if (afiliado?.participant_id) {
+        const { data: participante } = await supabase
+          .from('project_participants')
+          .select('full_name')
+          .eq('id', afiliado.participant_id)
+          .maybeSingle();
+        return participante?.full_name || 'Emprendedor';
+      }
+      return 'Emprendedor';
+    } else if (senderType === 'inversionista' && participanteId) {
+      const { data: participante } = await supabase
+        .from('project_participants')
+        .select('full_name')
+        .eq('id', participanteId)
+        .maybeSingle();
+      return participante?.full_name || 'Inversionista';
+    }
+    return 'Usuario';
+  }
+
   // Función para cargar mensajes
   async function cargarMensajes() {
     console.log('🔄 Cargando mensajes para proyecto:', projectId);
     const { data: messagesData, error } = await supabase
       .from('espacio_mensajes')
-      .select(`
-        id,
-        content,
-        created_at,
-        sender_type,
-        sender_id,
-        sender:project_participants!sender_id (
-          full_name,
-          email
-        )
-      `)
+      .select('*')
       .eq('proyecto_id', projectId)
       .order('created_at', { ascending: true });
 
     if (error) {
       console.error('❌ Error cargando mensajes:', error);
-    } else {
-      console.log('📥 Mensajes cargados:', messagesData?.length);
+      return;
     }
 
-    const transformedMessages = (messagesData || []).map((msg: any) => ({
-      ...msg,
-      sender: msg.sender && msg.sender.length > 0 ? msg.sender[0] : null,
-      remitente_id: msg.sender_id,
-    }));
-    setMessages(transformedMessages);
+    // Obtener nombres de los remitentes
+    const mensajesConNombres = await Promise.all(
+      (messagesData || []).map(async (msg: any) => {
+        const nombre = await obtenerNombreRemitente(
+          msg.sender_type,
+          msg.sender_afiliado_id,
+          msg.sender_participant_id
+        );
+        return {
+          ...msg,
+          remitente_nombre: nombre,
+        };
+      })
+    );
+
+    console.log('📥 Mensajes cargados:', mensajesConNombres.length);
+    setMessages(mensajesConNombres);
   }
 
   // Cargar datos
@@ -221,7 +248,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
     const mensajeData = {
       proyecto_id: projectId,
-      sender_id: participant.id,
+      sender_participant_id: participant.id,
       sender_type: 'inversionista',
       content: newMessage.trim(),
     };
@@ -229,16 +256,15 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
     setSendingMessage(true);
     try {
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from('espacio_mensajes')
-        .insert(mensajeData)
-        .select();
+        .insert(mensajeData);
 
       if (error) {
         console.error('❌ Error al insertar mensaje:', error);
         throw error;
       }
-      console.log('✅ Mensaje insertado correctamente:', data);
+      console.log('✅ Mensaje insertado correctamente');
 
       setNewMessage('');
       setSuccessMsg('✅ Mensaje enviado correctamente');
@@ -257,12 +283,23 @@ export default function EspacioEmprendedorProjectDetailPage() {
   };
 
   // Responder mensaje (solo para emprendedores)
-  const handleResponder = async (mensajeId: string, remitenteId: string) => {
+  const handleResponder = async (mensajeId: string, remitenteParticipanteId: string) => {
     if (!respuesta.trim()) return;
+
+    // Para responder, necesitamos el afiliado_id del emprendedor
+    let afiliadoId = null;
+    if (participant) {
+      const { data: afiliadoData } = await supabase
+        .from('espacio_afiliados')
+        .select('id')
+        .eq('participant_id', participant.id)
+        .maybeSingle();
+      afiliadoId = afiliadoData?.id;
+    }
 
     const respuestaData = {
       proyecto_id: projectId,
-      sender_id: participant.id,
+      sender_afiliado_id: afiliadoId,
       sender_type: 'emprendedor',
       content: respuesta.trim(),
     };
@@ -270,23 +307,21 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
     setEnviandoRespuesta(true);
     try {
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from('espacio_mensajes')
-        .insert(respuestaData)
-        .select();
+        .insert(respuestaData);
 
       if (error) {
         console.error('❌ Error al insertar respuesta:', error);
         throw error;
       }
-      console.log('✅ Respuesta insertada correctamente:', data);
+      console.log('✅ Respuesta insertada correctamente');
 
       setRespuesta('');
       setRespondiendoA(null);
       setSuccessMsg('✅ Respuesta enviada correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
       
-      // Recargar mensajes
       await cargarMensajes();
       
     } catch (err: any) {
@@ -339,7 +374,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
           </button>
         </div>
 
-        {/* Mensajes de éxito/error */}
         {successMsg && (
           <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-xl text-sm">
             {successMsg}
@@ -400,7 +434,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           )}
         </div>
 
-        {/* Sección de mensajes (diferente según el rol) */}
+        {/* Sección de mensajes */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
           {esPropietario ? (
             // Vista para el EMPRENDEDOR (dueño del proyecto)
@@ -419,7 +453,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <span className="text-sm font-semibold text-slate-800">
-                            {msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor')}
+                            {msg.remitente_nombre}
                           </span>
                           {msg.sender_type === 'inversionista' && (
                             <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Inversionista</span>
@@ -442,7 +476,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
                           />
                           <div className="flex gap-2">
                             <button
-                              onClick={() => handleResponder(msg.id, msg.remitente_id!)}
+                              onClick={() => handleResponder(msg.id, msg.sender_participant_id!)}
                               disabled={enviandoRespuesta || !respuesta.trim()}
                               className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-50"
                             >
@@ -488,7 +522,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
                     <div key={msg.id} className={`p-3 rounded-xl ${msg.sender_type === 'inversionista' ? 'bg-green-100 ml-8' : 'bg-slate-200 mr-8'}`}>
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-xs font-semibold text-slate-700">
-                          {msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor')}
+                          {msg.remitente_nombre}
                           {msg.sender_type === 'inversionista' && <span className="ml-1 text-green-600">💰</span>}
                         </span>
                         <span className="text-xs text-slate-400">
