@@ -23,6 +23,9 @@ export default function EspacioEmprendedorPage() {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [codigoAcceso, setCodigoAcceso] = useState('');
+  const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
+  const [loginCodigoError, setLoginCodigoError] = useState('');
   const [topProjects, setTopProjects] = useState<any[]>([]);
   const [misProyectos, setMisProyectos] = useState<any[]>([]);
   const [mensajesRecibidos, setMensajesRecibidos] = useState<any[]>([]);
@@ -117,7 +120,6 @@ export default function EspacioEmprendedorPage() {
         .eq('owner_id', afiliado.id)
         .order('created_at', { ascending: false });
       
-      // Calcular contactos por proyecto
       const { data: contactos } = await supabase
         .from('espacio_contactos')
         .select('project_id');
@@ -143,7 +145,6 @@ export default function EspacioEmprendedorPage() {
     if (!participant) return;
     setCargandoMensajes(true);
     try {
-      // Buscar mensajes donde el emprendedor es el receptor (a través de sus proyectos)
       const { data: proyectosDelEmprendedor } = await supabase
         .from('espacio_proyectos')
         .select('id, title')
@@ -241,6 +242,52 @@ export default function EspacioEmprendedorPage() {
       setLoginError(err.message || 'Error al iniciar sesión');
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  // Función para iniciar sesión con código de acceso
+  const handleLoginConCodigo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginCodigoLoading(true);
+    setLoginCodigoError('');
+
+    const codigo = codigoAcceso.trim().toUpperCase();
+    if (!codigo) {
+      setLoginCodigoError('Ingresa tu código de acceso');
+      setLoginCodigoLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('project_participants')
+        .select('*')
+        .eq('codigo_acceso', codigo)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      if (!data) {
+        setLoginCodigoError('Código de acceso no válido');
+        setLoginCodigoLoading(false);
+        return;
+      }
+
+      const currentDeviceId = getDeviceId();
+      const { error: updateError } = await supabase
+        .from('project_participants')
+        .update({ device_id: currentDeviceId })
+        .eq('id', data.id);
+
+      if (updateError) throw updateError;
+
+      await cargarParticipante();
+      setCodigoAcceso('');
+    } catch (err: any) {
+      console.error('Error al iniciar sesión con código:', err);
+      setLoginCodigoError(err.message || 'Error al iniciar sesión');
+    } finally {
+      setLoginCodigoLoading(false);
     }
   };
 
@@ -392,6 +439,40 @@ export default function EspacioEmprendedorPage() {
               >
                 Registrarme ahora
               </Link>
+            </div>
+
+            {/* Inicio de sesión con código */}
+            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm mb-4">
+              <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <span className="text-2xl">🔑</span> Iniciar sesión con código
+              </h2>
+              <p className="text-slate-600 mb-4 text-sm">
+                Si ya tienes un código de acceso (el que te dieron al registrarte), ingrésalo aquí.
+              </p>
+              
+              {loginCodigoError && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+                  {loginCodigoError}
+                </div>
+              )}
+              
+              <form onSubmit={handleLoginConCodigo} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Ej: EMP-2026-3A7F"
+                  value={codigoAcceso}
+                  onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
+                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono"
+                  disabled={loginCodigoLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={loginCodigoLoading}
+                  className="w-full bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50"
+                >
+                  {loginCodigoLoading ? 'Verificando...' : 'Iniciar sesión con código'}
+                </button>
+              </form>
             </div>
 
             <div className="bg-white rounded-2xl border-2 border-slate-300 p-6 shadow-sm">

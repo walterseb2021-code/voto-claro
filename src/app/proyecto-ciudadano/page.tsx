@@ -25,6 +25,9 @@ export default function ProyectoCiudadanoPage() {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [codigoAcceso, setCodigoAcceso] = useState('');
+  const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
+  const [loginCodigoError, setLoginCodigoError] = useState('');
   const [winners, setWinners] = useState<any[]>([]);
   const [winnersLoading, setWinnersLoading] = useState(true);
 
@@ -158,6 +161,52 @@ export default function ProyectoCiudadanoPage() {
     }
   };
 
+  // Función para iniciar sesión con código de acceso
+  const handleLoginConCodigo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginCodigoLoading(true);
+    setLoginCodigoError('');
+
+    const codigo = codigoAcceso.trim().toUpperCase();
+    if (!codigo) {
+      setLoginCodigoError('Ingresa tu código de acceso');
+      setLoginCodigoLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('project_participants')
+        .select('*')
+        .eq('codigo_acceso', codigo)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      if (!data) {
+        setLoginCodigoError('Código de acceso no válido');
+        setLoginCodigoLoading(false);
+        return;
+      }
+
+      const currentDeviceId = getOrCreateDeviceId();
+      const { error: updateError } = await supabase
+        .from('project_participants')
+        .update({ device_id: currentDeviceId })
+        .eq('id', data.id);
+
+      if (updateError) throw updateError;
+
+      await loadParticipant();
+      setCodigoAcceso('');
+    } catch (err: any) {
+      console.error('Error al iniciar sesión con código:', err);
+      setLoginCodigoError(err.message || 'Error al iniciar sesión');
+    } finally {
+      setLoginCodigoLoading(false);
+    }
+  };
+
   // Forzar recarga manual
   const handleRefresh = () => {
     setLoading(true);
@@ -193,22 +242,21 @@ export default function ProyectoCiudadanoPage() {
           </div>
         </div>
 
-         
-              {/* Mensaje de bienvenida */}
-<div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
-  <p className="text-slate-700 text-lg font-semibold">
-    💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
-    Los mejores proyectos serán reconocidos en un evento oficial cada 3 meses.
-  </p>
-  
-  {/* Bases del premio */}
-  <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-    <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
-    El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-    No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
-    La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
-  </div>
-</div>
+        {/* Mensaje de bienvenida */}
+        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
+          <p className="text-slate-700 text-lg font-semibold">
+            💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
+            Los mejores proyectos serán reconocidos en un evento oficial cada 3 meses.
+          </p>
+          
+          {/* Bases del premio */}
+          <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
+            <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
+            El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
+            No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
+            La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+          </div>
+        </div>
 
         {/* Bloque de ganadores del ciclo anterior */}
         <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border-2 border-yellow-600 p-6 mb-6 shadow-sm">
@@ -261,10 +309,44 @@ export default function ProyectoCiudadanoPage() {
               </Link>
             </div>
 
+            {/* Inicio de sesión con código */}
+            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm mb-4">
+              <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <span className="text-2xl">🔑</span> Iniciar sesión con código
+              </h2>
+              <p className="text-slate-600 mb-4 text-sm">
+                Si ya tienes un código de acceso (el que te dieron al registrarte), ingrésalo aquí.
+              </p>
+              
+              {loginCodigoError && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+                  {loginCodigoError}
+                </div>
+              )}
+              
+              <form onSubmit={handleLoginConCodigo} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Ej: EMP-2026-3A7F"
+                  value={codigoAcceso}
+                  onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
+                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono"
+                  disabled={loginCodigoLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={loginCodigoLoading}
+                  className="w-full bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50"
+                >
+                  {loginCodigoLoading ? 'Verificando...' : 'Iniciar sesión con código'}
+                </button>
+              </form>
+            </div>
+
             <div className="bg-white rounded-2xl border-2 border-slate-300 p-6 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900 mb-3">¿Ya tienes cuenta?</h2>
               <p className="text-slate-600 mb-4">
-                Si ya te registraste anteriormente, inicia sesión con tu DNI o correo electrónico para continuar.
+                Si ya te registraste anteriormente, inicia sesión con tu DNI o correo electrónico.
               </p>
               
               {loginError && (
@@ -299,6 +381,9 @@ export default function ProyectoCiudadanoPage() {
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Bienvenido, {participant.full_name}</h2>
                 <p className="text-sm text-slate-600">Alias: {participant.alias}</p>
                 <p className="text-xs text-slate-500 mt-1">Registrado el {new Date(participant.created_at).toLocaleDateString()}</p>
+                {participant.codigo_acceso && (
+                  <p className="text-xs text-blue-600 mt-1 font-mono">Código: {participant.codigo_acceso}</p>
+                )}
               </div>
               <button
                 onClick={handleRefresh}

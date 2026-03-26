@@ -17,6 +17,13 @@ function getOrCreateDeviceId(): string {
   return newId;
 }
 
+// Función para generar código de acceso
+async function generarCodigoAcceso(): Promise<string> {
+  const { data, error } = await supabase.rpc('generar_codigo_acceso');
+  if (error) throw error;
+  return data;
+}
+
 // Componente interno que usa useSearchParams
 function RegistroForm() {
   const router = useRouter();
@@ -35,6 +42,7 @@ function RegistroForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [codigoAcceso, setCodigoAcceso] = useState<string | null>(null);
 
   useEffect(() => {
     const id = getOrCreateDeviceId();
@@ -75,6 +83,9 @@ function RegistroForm() {
     }
 
     try {
+      // Generar código de acceso
+      const codigo = await generarCodigoAcceso();
+      
       const { data, error } = await supabase
         .from('project_participants')
         .insert({
@@ -86,16 +97,18 @@ function RegistroForm() {
           district: form.district,
           alias: form.alias,
           device_id: deviceId,
+          codigo_acceso: codigo,
         })
         .select()
         .single();
 
       if (error) throw error;
 
+      setCodigoAcceso(codigo);
       setSuccess(true);
     } catch (err: any) {
       if (err.message?.includes('duplicate key') || err.code === '23505') {
-        setError('Ya existe un participante con este DNI o correo. Si ya te registraste, intenta iniciar sesión.');
+        setError('Ya existe un participante con este DNI o correo. Si ya te registraste, intenta iniciar sesión con tu código de acceso.');
       } else {
         setError(err.message || 'Error al registrar. Intenta nuevamente.');
       }
@@ -111,8 +124,18 @@ function RegistroForm() {
             <div className="text-6xl mb-4">✅</div>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">¡Registro exitoso!</h1>
             <p className="text-slate-600 mb-4">
-              Tu perfil ha sido creado correctamente.
+              Tu perfil ha sido creado correctamente. Guarda tu código de acceso para iniciar sesión más rápido.
             </p>
+            
+            {/* Mostrar código de acceso */}
+            <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 mb-6">
+              <p className="text-sm font-semibold text-amber-800 mb-1">Tu código de acceso único:</p>
+              <p className="text-2xl font-mono font-bold text-amber-900 tracking-wider">{codigoAcceso}</p>
+              <p className="text-xs text-amber-700 mt-2">
+                Guarda este código. Lo usarás para iniciar sesión rápidamente.
+              </p>
+            </div>
+            
             <Link
               href={returnTo === 'espacio-emprendedor' ? '/espacio-emprendedor?registered=true' : '/proyecto-ciudadano?registered=true'}
               className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
@@ -141,6 +164,7 @@ function RegistroForm() {
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
           <p className="text-slate-600 mb-4 text-sm">
             Completa tus datos para participar en Proyecto Ciudadano. Puedes presentar proyectos y apoyar iniciativas de tu comunidad.
+            Al finalizar, recibirás un código único para iniciar sesión rápidamente.
           </p>
 
           {error && (
