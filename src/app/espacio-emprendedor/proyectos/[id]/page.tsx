@@ -1,7 +1,6 @@
-// src/app/espacio-emprendedor/proyectos/[id]/page.tsx
 'use client';
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -51,9 +50,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [respondiendoA, setRespondiendoA] = useState<string | null>(null);
-  const [respuesta, setRespuesta] = useState('');
-  const [enviandoRespuesta, setEnviandoRespuesta] = useState(false);
   const [esPropietario, setEsPropietario] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -221,9 +217,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
         },
         async (payload) => {
           console.log('📨 NUEVO MENSAJE RECIBIDO:', payload.new);
-          // Recargar todos los mensajes
           await cargarMensajes();
-          // Mostrar notificación
           setSuccessMsg('📨 Nuevo mensaje recibido');
           setTimeout(() => setSuccessMsg(null), 3000);
         }
@@ -238,23 +232,27 @@ export default function EspacioEmprendedorProjectDetailPage() {
     };
   }, [projectId]);
 
-  // Enviar mensaje (inversionista)
+  // Enviar mensaje (unificado para emprendedor e inversionista)
   const handleSendMessage = async () => {
-    if (!participant) {
-      setErrorMsg('Debes iniciar sesión para contactar al emprendedor.');
+    if (!newMessage.trim()) return;
+
+    // Determinar el tipo de remitente
+    let mensajeData: any = {
+      proyecto_id: projectId,
+      content: newMessage.trim(),
+    };
+
+    if (esPropietario && afiliadoId) {
+      mensajeData.sender_afiliado_id = afiliadoId;
+      mensajeData.sender_type = 'emprendedor';
+    } else if (participant) {
+      mensajeData.sender_participant_id = participant.id;
+      mensajeData.sender_type = 'inversionista';
+    } else {
+      setErrorMsg('Debes iniciar sesión para enviar mensajes.');
       setTimeout(() => setErrorMsg(null), 3000);
       return;
     }
-
-    if (!newMessage.trim()) return;
-
-    const mensajeData = {
-      proyecto_id: projectId,
-      sender_participant_id: participant.id,
-      sender_type: 'inversionista',
-      content: newMessage.trim(),
-    };
-    console.log('📤 Enviando mensaje:', mensajeData);
 
     setSendingMessage(true);
     try {
@@ -267,53 +265,13 @@ export default function EspacioEmprendedorProjectDetailPage() {
       setNewMessage('');
       setSuccessMsg('✅ Mensaje enviado correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
-      
-      // Recargar mensajes inmediatamente
-      await cargarMensajes();
-      
+      await cargarMensajes(); // Recarga inmediata (el realtime también lo hará)
     } catch (err: any) {
       console.error('Error al enviar mensaje:', err);
       setErrorMsg(err.message || 'Error al enviar mensaje');
       setTimeout(() => setErrorMsg(null), 3000);
     } finally {
       setSendingMessage(false);
-    }
-  };
-
-  // Responder mensaje (emprendedor)
-  const handleResponder = async () => {
-    if (!respuesta.trim()) return;
-
-    const respuestaData = {
-      proyecto_id: projectId,
-      sender_afiliado_id: afiliadoId,
-      sender_type: 'emprendedor',
-      content: respuesta.trim(),
-    };
-    console.log('📤 Enviando respuesta:', respuestaData);
-
-    setEnviandoRespuesta(true);
-    try {
-      const { error } = await supabase
-        .from('espacio_mensajes')
-        .insert(respuestaData);
-
-      if (error) throw error;
-
-      setRespuesta('');
-      setRespondiendoA(null);
-      setSuccessMsg('✅ Respuesta enviada correctamente');
-      setTimeout(() => setSuccessMsg(null), 3000);
-      
-      // Recargar mensajes inmediatamente
-      await cargarMensajes();
-      
-    } catch (err: any) {
-      console.error('Error al enviar respuesta:', err);
-      setErrorMsg(err.message || 'Error al enviar respuesta');
-      setTimeout(() => setErrorMsg(null), 3000);
-    } finally {
-      setEnviandoRespuesta(false);
     }
   };
 
@@ -418,128 +376,71 @@ export default function EspacioEmprendedorProjectDetailPage() {
           )}
         </div>
 
-        {/* Sección de mensajes */}
+        {/* Sección de mensajes UNIFICADA */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
-          {esPropietario ? (
-            // Vista para EMPRENDEDOR (Marizol)
-            <>
-              <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Mensajes recibidos</h2>
-              <p className="text-sm text-slate-600 mb-4">
-                Los inversionistas interesados en tu proyecto te enviarán mensajes aquí.
-              </p>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Conversación</h2>
+          <p className="text-sm text-slate-600 mb-4">
+            {esPropietario 
+              ? "Los inversionistas interesados en tu proyecto te enviarán mensajes aquí. Puedes responder desde esta misma caja."
+              : "Envía un mensaje para consultar sobre el proyecto o expresar tu interés como inversionista."}
+          </p>
 
-              <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
-                {messages.filter(msg => msg.sender_type === 'inversionista').length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center">No hay mensajes aún.</p>
-                ) : (
-                  messages.filter(msg => msg.sender_type === 'inversionista').map((msg) => (
-                    <div key={msg.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <span className="text-sm font-semibold text-slate-800">
-                            {msg.remitente_nombre}
-                          </span>
-                          <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Inversionista</span>
-                        </div>
-                        <span className="text-xs text-slate-400">
-                          {new Date(msg.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-700">{msg.content}</p>
-                      
-                      {respondiendoA === msg.id ? (
-                        <div className="mt-3 pt-3 border-t border-slate-200">
-                          <textarea
-                            value={respuesta}
-                            onChange={(e) => setRespuesta(e.target.value)}
-                            placeholder="Escribe tu respuesta..."
-                            rows={2}
-                            className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none resize-none text-sm mb-2"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={handleResponder}
-                              disabled={enviandoRespuesta || !respuesta.trim()}
-                              className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-50"
-                            >
-                              {enviandoRespuesta ? 'Enviando...' : 'Enviar respuesta'}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setRespondiendoA(null);
-                                setRespuesta('');
-                              }}
-                              className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setRespondiendoA(msg.id)}
-                          className="mt-3 text-xs text-green-700 hover:underline"
-                        >
-                          Responder →
-                        </button>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          ) : (
-            // Vista para INVERSIONISTA (Mario)
-            <>
-              <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Contactar al emprendedor</h2>
-              <p className="text-sm text-slate-600 mb-4">
-                Envía un mensaje para consultar sobre el proyecto o expresar tu interés como inversionista.
-              </p>
-
-              <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
-                {messages.length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center">No hay mensajes aún. Sé el primero en contactar al emprendedor.</p>
-                ) : (
-                  messages.map((msg) => (
-                    <div key={msg.id} className={`p-3 rounded-xl ${msg.sender_type === 'inversionista' ? 'bg-green-100 ml-8' : 'bg-slate-200 mr-8'}`}>
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-xs font-semibold text-slate-700">
-                          {msg.remitente_nombre}
-                          {msg.sender_type === 'inversionista' && <span className="ml-1 text-green-600">💰</span>}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {new Date(msg.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-800">{msg.content}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {participant ? (
-                <div className="flex gap-3 items-start">
-                  <textarea
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Escribe tu mensaje para el emprendedor..."
-                    rows={2}
-                    className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={sendingMessage || !newMessage.trim()}
-                    className="bg-green-700 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50 whitespace-nowrap text-sm"
-                  >
-                    {sendingMessage ? 'Enviando...' : 'Enviar mensaje'}
-                  </button>
+          {/* Lista de mensajes */}
+          <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
+            {messages.length === 0 ? (
+              <p className="text-slate-500 text-sm text-center">No hay mensajes aún. Sé el primero en escribir.</p>
+            ) : (
+              messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`p-3 rounded-xl ${
+                    (msg.sender_type === 'inversionista' && !esPropietario) ||
+                    (msg.sender_type === 'emprendedor' && esPropietario)
+                      ? 'bg-green-100 ml-8'   // Mensaje propio (según rol)
+                      : 'bg-slate-200 mr-8'    // Mensaje del otro
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-xs font-semibold text-slate-700">
+                      {msg.remitente_nombre}
+                      {msg.sender_type === 'inversionista' && <span className="ml-1 text-green-600">💰</span>}
+                      {msg.sender_type === 'emprendedor' && <span className="ml-1 text-blue-600">🚀</span>}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {new Date(msg.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-800">{msg.content}</p>
                 </div>
-              ) : (
-                <p className="text-sm text-slate-500 text-center">
-                  Para contactar al emprendedor, primero debes <Link href="/espacio-emprendedor" className="text-green-700 underline">iniciar sesión</Link>.
-                </p>
-              )}
-            </>
+              ))
+            )}
+          </div>
+
+          {/* Caja de texto única para escribir (tanto emprendedor como inversionista) */}
+          {(participant || (esPropietario && afiliadoId)) ? (
+            <div className="flex gap-3 items-start">
+              <textarea
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder={esPropietario ? "Escribe tu respuesta como emprendedor..." : "Escribe tu mensaje para el emprendedor..."}
+                rows={2}
+                className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={sendingMessage || !newMessage.trim()}
+                className="bg-green-700 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50 whitespace-nowrap text-sm"
+              >
+                {sendingMessage ? 'Enviando...' : 'Enviar mensaje'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 text-center">
+              Para participar en la conversación, primero debes{' '}
+              <Link href="/espacio-emprendedor" className="text-green-700 underline">
+                iniciar sesión
+              </Link>.
+            </p>
           )}
         </div>
       </div>

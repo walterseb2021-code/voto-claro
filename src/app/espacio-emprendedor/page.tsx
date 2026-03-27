@@ -1,4 +1,3 @@
-// src/app/espacio-emprendedor/page.tsx
 'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
@@ -149,7 +148,7 @@ export default function EspacioEmprendedorPage() {
     }
   };
 
-  // Cargar mensajes recibidos por el emprendedor
+  // Cargar mensajes recibidos por el emprendedor (CORREGIDO)
   const cargarMensajesRecibidos = async () => {
     if (!participant) return;
     setCargandoMensajes(true);
@@ -158,7 +157,7 @@ export default function EspacioEmprendedorPage() {
         .from('espacio_proyectos')
         .select('id, title')
         .eq('owner_id', afiliado?.id);
-      
+
       if (!proyectosDelEmprendedor?.length) {
         setMensajesRecibidos([]);
         setCargandoMensajes(false);
@@ -167,35 +166,63 @@ export default function EspacioEmprendedorPage() {
 
       const projectIds = proyectosDelEmprendedor.map(p => p.id);
       
+      // Obtener todos los mensajes de los proyectos
       const { data: mensajes } = await supabase
         .from('espacio_mensajes')
-        .select(`
-          id,
-          content,
-          created_at,
-          sender_type,
-          sender_id,
-          proyecto_id,
-          sender:project_participants!sender_id (full_name, email)
-        `)
+        .select('*')
         .in('proyecto_id', projectIds)
         .order('created_at', { ascending: false });
 
-      const transformed = (mensajes || []).map((msg: any) => {
-        const proyecto = proyectosDelEmprendedor.find(p => p.id === msg.proyecto_id);
-        return {
-          id: msg.id,
-          mensaje: msg.content,
-          remitente: msg.sender?.full_name || (msg.sender_type === 'inversionista' ? 'Inversionista' : 'Emprendedor'),
-          remitente_id: msg.sender_id,
-          proyecto_titulo: proyecto?.title || 'Proyecto',
-          proyecto_id: msg.proyecto_id,
-          created_at: msg.created_at,
-          sender_type: msg.sender_type,
-        };
-      });
-      
-      setMensajesRecibidos(transformed);
+      if (!mensajes) {
+        setMensajesRecibidos([]);
+        return;
+      }
+
+      // Para cada mensaje, obtener el nombre del remitente
+      const mensajesConNombres = await Promise.all(
+        mensajes.map(async (msg) => {
+          let remitente = 'Usuario';
+          const proyecto = proyectosDelEmprendedor.find(p => p.id === msg.proyecto_id);
+
+          if (msg.sender_type === 'inversionista' && msg.sender_participant_id) {
+            const { data: participante } = await supabase
+              .from('project_participants')
+              .select('full_name')
+              .eq('id', msg.sender_participant_id)
+              .maybeSingle();
+            remitente = participante?.full_name || 'Inversionista';
+          } else if (msg.sender_type === 'emprendedor' && msg.sender_afiliado_id) {
+            const { data: afiliadoData } = await supabase
+              .from('espacio_afiliados')
+              .select('participant_id')
+              .eq('id', msg.sender_afiliado_id)
+              .maybeSingle();
+            if (afiliadoData?.participant_id) {
+              const { data: participante } = await supabase
+                .from('project_participants')
+                .select('full_name')
+                .eq('id', afiliadoData.participant_id)
+                .maybeSingle();
+              remitente = participante?.full_name || 'Emprendedor';
+            } else {
+              remitente = 'Emprendedor';
+            }
+          }
+
+          return {
+            id: msg.id,
+            mensaje: msg.content,
+            remitente: remitente,
+            remitente_id: msg.sender_type === 'inversionista' ? msg.sender_participant_id : msg.sender_afiliado_id,
+            proyecto_titulo: proyecto?.title || 'Proyecto',
+            proyecto_id: msg.proyecto_id,
+            created_at: msg.created_at,
+            sender_type: msg.sender_type,
+          };
+        })
+      );
+
+      setMensajesRecibidos(mensajesConNombres);
     } catch (err) {
       console.error('Error cargando mensajes recibidos:', err);
     } finally {
@@ -203,7 +230,36 @@ export default function EspacioEmprendedorPage() {
     }
   };
 
-  // Responder mensaje
+  // Suscripción en tiempo real para nuevos mensajes en los proyectos del emprendedor
+  useEffect(() => {
+    if (!afiliado || misProyectos.length === 0) return;
+
+    const projectIds = misProyectos.map(p => p.id);
+    if (projectIds.length === 0) return;
+
+    const channel = supabase
+      .channel('mensajes-emprendedor')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'espacio_mensajes',
+          filter: `proyecto_id=in.(${projectIds.join(',')})`,
+        },
+        () => {
+          console.log('📨 Nuevo mensaje recibido en algún proyecto. Recargando...');
+          cargarMensajesRecibidos();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [afiliado, misProyectos]);
+
+  // Responder mensaje (navega al proyecto)
   const responderMensaje = (proyectoId: string, remitenteId: string) => {
     router.push(`/espacio-emprendedor/proyectos/${proyectoId}?destinatario=${remitenteId}`);
   };
