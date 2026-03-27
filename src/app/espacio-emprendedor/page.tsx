@@ -33,6 +33,11 @@ export default function EspacioEmprendedorPage() {
   const [mensajesRecibidos, setMensajesRecibidos] = useState<any[]>([]);
   const [cargandoMensajes, setCargandoMensajes] = useState(false);
 
+  // Formatear fecha en hora de Perú
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('es-PE', { timeZone: 'America/Lima' });
+  };
+
   useEffect(() => {
     cargarParticipante();
   }, []);
@@ -237,6 +242,8 @@ export default function EspacioEmprendedorPage() {
     const projectIds = misProyectos.map(p => p.id);
     if (projectIds.length === 0) return;
 
+    console.log('🔌 Configurando suscripción para proyectos:', projectIds);
+
     const channel = supabase
       .channel('mensajes-emprendedor')
       .on(
@@ -252,9 +259,15 @@ export default function EspacioEmprendedorPage() {
           cargarMensajesRecibidos();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('🔌 Estado suscripción (mensajes-emprendedor):', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Suscripción activa para proyectos del emprendedor');
+        }
+      });
 
     return () => {
+      console.log('🔌 Limpiando suscripción');
       supabase.removeChannel(channel);
     };
   }, [afiliado, misProyectos]);
@@ -624,7 +637,7 @@ export default function EspacioEmprendedorPage() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <p className="text-sm font-semibold text-slate-800">{msg.remitente}</p>
                                   <span className="text-xs text-slate-400">
-                                    {new Date(msg.created_at).toLocaleDateString()}
+                                    {formatDate(msg.created_at)}
                                   </span>
                                 </div>
                                 <p className="text-xs text-slate-500 mt-0.5">Proyecto: {msg.proyecto_titulo}</p>

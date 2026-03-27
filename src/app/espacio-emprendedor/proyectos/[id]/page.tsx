@@ -54,6 +54,11 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Formatear fecha en hora de Perú
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('es-PE', { timeZone: 'America/Lima' });
+  };
+
   // Función para obtener el nombre del remitente
   async function obtenerNombreRemitente(senderType: string, afiliadoId: string | null, participanteId: string | null): Promise<string> {
     if (senderType === 'emprendedor' && afiliadoId) {
@@ -216,7 +221,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           filter: `proyecto_id=eq.${projectId}`,
         },
         async (payload) => {
-          console.log('📨 NUEVO MENSAJE RECIBIDO:', payload.new);
+          console.log('📨 NUEVO MENSAJE RECIBIDO (realtime):', payload.new);
           await cargarMensajes();
           setSuccessMsg('📨 Nuevo mensaje recibido');
           setTimeout(() => setSuccessMsg(null), 3000);
@@ -224,6 +229,9 @@ export default function EspacioEmprendedorProjectDetailPage() {
       )
       .subscribe((status) => {
         console.log('🔌 Estado suscripción:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Suscripción activa para proyecto:', projectId);
+        }
       });
 
     return () => {
@@ -265,7 +273,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
       setNewMessage('');
       setSuccessMsg('✅ Mensaje enviado correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
-      await cargarMensajes(); // Recarga inmediata (el realtime también lo hará)
+      // No es necesario recargar aquí porque el realtime lo hará
     } catch (err: any) {
       console.error('Error al enviar mensaje:', err);
       setErrorMsg(err.message || 'Error al enviar mensaje');
@@ -407,7 +415,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
                       {msg.sender_type === 'emprendedor' && <span className="ml-1 text-blue-600">🚀</span>}
                     </span>
                     <span className="text-xs text-slate-400">
-                      {new Date(msg.created_at).toLocaleString()}
+                      {formatDate(msg.created_at)}
                     </span>
                   </div>
                   <p className="text-sm text-slate-800">{msg.content}</p>
