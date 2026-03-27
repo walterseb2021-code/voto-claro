@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation"; // ✅ importamos useRouter
 
 function sendGuide(text: string, action: "SAY" | "SAY_AND_OPEN" = "SAY") {
   if (typeof window === "undefined") return;
@@ -14,6 +14,8 @@ function sendGuide(text: string, action: "SAY" | "SAY_AND_OPEN" = "SAY") {
 }
 
 export default function ComoFuncionaPage() {
+  const router = useRouter(); // ✅ para navegación programática
+
   useEffect(() => {
     // ✅ Al entrar a esta ventana: NO abrir el panel (evita que tape la pantalla)
     window.dispatchEvent(
@@ -46,12 +48,12 @@ export default function ComoFuncionaPage() {
       <header className="mb-6 relative">
         {/* ⬅ Volver a Inicio (arriba derecha) */}
         <div className="absolute right-0 top-0">
-          <Link
-            href="/"
+          <button
+            onClick={() => router.push('/')}
             className="rounded-xl px-4 py-2 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition shadow-md border-2 border-red-500 vc-btn-wave vc-btn-pulse"
           >
             ⬅ Volver a Inicio
-          </Link>
+          </button>
         </div>
 
         <h1 className="text-3xl font-semibold text-slate-900 vc-fade-up">¿Cómo funciona VOTO CLARO?</h1>

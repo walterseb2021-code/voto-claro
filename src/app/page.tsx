@@ -1,9 +1,9 @@
 // src/app/page.tsx
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import SafeLink from "@/components/SafeLink";
 
 type Candidate = {
   id: string;
@@ -47,6 +47,7 @@ export default function HomePage() {
 
   const canSearch = useMemo(() => q.trim().length >= 2, [q]);
   const searchRef = useRef<HTMLElement | null>(null);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
 
   const clickTimersRef = useRef<Record<string, number | null>>({});
   const navTimersRef = useRef<Record<string, number | null>>({});
@@ -103,6 +104,16 @@ export default function HomePage() {
       }, estimateNavDelayMs(speech));
     }, DOUBLE_CLICK_WINDOW_MS);
   }
+
+  const scrollCarousel = (direction: 'left' | 'right') => {
+    if (!carouselRef.current) return;
+    const scrollAmount = carouselRef.current.clientWidth * 0.8;
+    const newScrollLeft = carouselRef.current.scrollLeft + (direction === 'left' ? -scrollAmount : scrollAmount);
+    carouselRef.current.scrollTo({
+      left: newScrollLeft,
+      behavior: 'smooth'
+    });
+  };
 
   useEffect(() => {
     try {
@@ -200,9 +211,20 @@ export default function HomePage() {
 
   if (!allowHome) return null;
 
+  const carouselBlocks = [
+    { href: "/ciudadano/servicios", icon: "🗳️", title: "Servicios al ciudadano", description: "Consulta tu local de votación, verifica si eres miembro de mesa, revisa planes de gobierno, trámites oficiales y más.", key: "servicios", speech: "Vas a entrar a Servicios al ciudadano. Allí verás enlaces oficiales para consultar local de votación, miembro de mesa, multas y trámites electorales." },
+    { href: "/reflexion", icon: "🧠", title: "Reflexionar antes de votar", description: "Preguntas y reflexiones para pensar cuál es la realidad actual del país, qué esperas del Estado, qué puedes aportar como ciudadano, qué atributos debería tener quien gobierne y más.", key: "reflexion", speech: "Vas a entrar a Reflexionar antes de votar. Allí encontrarás ejes como economía, salud, educación y seguridad, con preguntas y reflexiones para decidir mejor." },
+    { href: activeParty === "app" ? "/cambio-app" : "/cambio-con-valentia", icon: activeParty === "app" ? "🔵" : "🔥", title: activeParty === "app" ? "ALIANZA PARA EL PROGRESO" : "UN CAMBIO CON VALENTÍA", description: activeParty === "app" ? "Explora la propuesta correspondiente al grupo APP." : "Propuesta del Partido Democrático Perú Federal.", key: activeParty === "app" ? "cambio-app" : "cambio", speech: activeParty === "app" ? "Vas a entrar a Alianza para el Progreso. Aquí encontrarás la propuesta correspondiente al grupo activo." : "Vas a entrar a Un cambio con valentía. Esta ventana muestra la propuesta del Partido Democrático Perú Federal." },
+    { href: "/intencion-de-voto", icon: "📊", title: "INTENCIÓN DE VOTO", description: "Vista piloto (11 partidos + Nulo/Blanco) para explorar tendencias. Próximamente se incluirán todos los partidos.", key: "intencion", speech: "Vas a entrar a Intención de voto. Es una pantalla piloto con once partidos y nulo o blanco, para visualizar tendencias de forma simple. Recuerda: decide con información verificable." },
+    { href: "/reto-ciudadano", icon: "🎯", title: "RETO CIUDADANO", description: "Juego por niveles: Conocimiento general → Partido → Ruleta. Practica y vuelve a intentar con información verificable.", key: "reto-ciudadano", speech: "Vas a entrar a Reto Ciudadano. Es un juego por niveles: conocimiento general, partido y ruleta. Puedes jugar en modo sin premio o con premio." },
+    { href: "/comentarios", icon: "💬", title: "COMENTARIO CIUDADANO", description: "Deja tu opinión o sugerencia para mejorar Voto Claro. (Se publica solo si es aprobado).", key: "comentarios", speech: "Vas a entrar a Comentarios ciudadanos. Ahí puedes dejar tu opinión o sugerencia. Es anónimo y ayuda a mejorar la app." },
+    { href: "/proyecto-ciudadano", icon: "🏘️", title: "PROYECTO CIUDADANO", description: "Presenta tu proyecto comunitario, forma un equipo y recibe apoyo vecinal. Los mejores proyectos son premiados.", key: "proyecto-ciudadano", speech: "Vas a entrar a Proyecto Ciudadano. Aquí puedes presentar proyectos para tu comunidad, formar un equipo y recibe apoyo vecinal. Los mejores proyectos serán premiados cada tres meses." },
+    { href: "/espacio-emprendedor", icon: "💼", title: "ESPACIO EMPRENDEDOR APP", description: "Espacio exclusivo para afiliados a Alianza para el Progreso. Publica tu proyecto emprendedor y conecta con inversionistas.", key: "espacio-emprendedor", speech: "Vas a entrar a Espacio Emprendedor APP. Espacio exclusivo para afiliados a Alianza para el Progreso donde puedes publicar proyectos emprendedores y conectar con inversionistas." },
+  ];
+
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
-      {/* HERO (Marco azul + Interior cian) - con animación fade-up */}
+      {/* HERO */}
       <div className="vc-block vc-fade-up">
         <section className="vc-block-inner overflow-hidden shadow-sm">
           <div className="p-6 md:p-8">
@@ -319,7 +341,7 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* BUSCADOR - con animación fade-up */}
+      {/* BUSCADOR */}
       <div className="vc-block mt-6 vc-fade-up">
         <section id="buscar" className="vc-block-inner p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -327,13 +349,11 @@ export default function HomePage() {
               <h2 className="inline-block rounded-lg bg-white px-3 py-1 text-lg font-extrabold text-black border-2 border-borderparty">
                 Buscar candidato
               </h2>
-
               <p className="text-sm text-black mt-1">
                 Escribe al menos 2 letras del candidato que buscas. Abre la ficha para consultar Hoja de Vida (HV),
                 Plan de Gobierno y Actuar Político.
               </p>
             </div>
-
             <div className="text-xs text-black border-2 border-borderparty rounded-full px-3 py-1 bg-white">
               Reglas: sin vida privada • con fuentes • sin inventar
             </div>
@@ -341,37 +361,23 @@ export default function HomePage() {
 
           <div className="mt-4">
             <input
-              className="
-                w-full
-                border-2 border-borderparty
-                rounded-xl
-                px-4 py-3
-                bg-white
-                text-black
-                font-semibold
-                placeholder:text-black
-                focus:outline-none
-                focus:ring-2
-                focus:ring-accent
-              "
+              className="w-full border-2 border-borderparty rounded-xl px-4 py-3 bg-white text-black font-semibold placeholder:text-black focus:outline-none focus:ring-2 focus:ring-accent"
               placeholder="Escribe: 'Armando Massé', 'César Acuña', 'López Aliaga', 'Keiko Fujimori'..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-
             {loading && <div className="text-sm mt-2 text-black">Buscando...</div>}
           </div>
 
           <div className="mt-5 grid gap-3">
             {items.map((c) => (
-              <Link
+              <SafeLink
                 key={c.id}
                 href={`/candidate/${c.id}`}
                 className="border-2 border-borderparty rounded-xl p-4 flex gap-4 bg-white hover:brightness-95 hover:shadow-sm transition vc-card-hover"
               >
                 <div className="w-14 h-14 rounded-lg overflow-hidden bg-primary-soft shrink-0 border border-borderparty">
                   {c.photo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={c.photo_url} alt={c.full_name} className="w-full h-full object-cover" />
                   ) : null}
                 </div>
@@ -379,7 +385,7 @@ export default function HomePage() {
                   <div className="font-extrabold truncate text-black">{c.full_name}</div>
                   <div className="text-sm font-semibold truncate text-black">{c.party_name}</div>
                 </div>
-              </Link>
+              </SafeLink>
             ))}
           </div>
 
@@ -392,280 +398,79 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* ACCESOS RÁPIDOS - con animación fade-up y efecto cascada */}
-      <section className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="vc-block vc-fade-up vc-delay-1">
-          <Link
-            href="/ciudadano/servicios"
-            onClick={(e) =>
-              handleSmartNavigate({
-                key: "servicios",
-                href: "/ciudadano/servicios",
-                speech:
-                  "Vas a entrar a Servicios al ciudadano. Allí verás enlaces oficiales para consultar local de votación, miembro de mesa, multas y trámites electorales.",
-                preventDefault: true,
-                e,
-              })
-            }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+      {/* CARRUSEL HORIZONTAL */}
+      <div className="mt-6 relative">
+        {/* Botones de navegación */}
+        <div className="absolute -left-3 top-1/2 -translate-y-1/2 z-10 hidden md:block">
+          <button
+            onClick={() => scrollCarousel('left')}
+            className="w-10 h-10 rounded-full bg-white shadow-md border-2 border-red-500 flex items-center justify-center hover:bg-gray-100 transition vc-btn-wave"
+            aria-label="Anterior"
           >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none vc-icon-hover">🗳️</div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold text-black">Servicios al ciudadano</div>
-                <p className="mt-1 text-sm text-black">
-                  Consulta tu local de votación, verifica si eres miembro de mesa, revisa planes de gobierno, trámites
-                  oficiales y más.
-                </p>
-                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                  Abrir servicios →
-                </div>
-              </div>
-            </div>
-          </Link>
+            ◀
+          </button>
+        </div>
+        <div className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 hidden md:block">
+          <button
+            onClick={() => scrollCarousel('right')}
+            className="w-10 h-10 rounded-full bg-white shadow-md border-2 border-red-500 flex items-center justify-center hover:bg-gray-100 transition vc-btn-wave"
+            aria-label="Siguiente"
+          >
+            ▶
+          </button>
         </div>
 
-        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-2">
-          <Link
-            href="/reflexion"
-            onClick={(e) =>
-              handleSmartNavigate({
-                key: "reflexion",
-                href: "/reflexion",
-                speech:
-                  "Vas a entrar a Reflexionar antes de votar. Allí encontrarás ejes como economía, salud, educación y seguridad, con preguntas y reflexiones para decidir mejor.",
-                preventDefault: true,
-                e,
-              })
-            }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-          >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none vc-icon-hover">🧠</div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold text-black">Reflexionar antes de votar</div>
-                <p className="mt-1 text-sm text-black">
-                  Preguntas y reflexiones para pensar cuál es la realidad actual del país, qué esperas del Estado, qué
-                  puedes aportar como ciudadano, qué atributos debería tener quien gobierne y más.
-                </p>
-                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                  Abrir reflexiones →
-                </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        {activeParty === "app" ? (
-          <div className="vc-block md:col-span-2 vc-fade-up vc-delay-3">
-            <Link
-              href="/cambio-app"
-              onClick={(e) =>
-                handleSmartNavigate({
-                  key: "cambio-app",
-                  href: "/cambio-app",
-                  speech:
-                    "Vas a entrar a Alianza para el Progreso. Aquí encontrarás la propuesta correspondiente al grupo activo.",
-                  preventDefault: true,
-                  e,
-                })
-              }
-              className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+        {/* Contenedor del carrusel */}
+        <div
+          ref={carouselRef}
+          className="flex overflow-x-auto scroll-smooth snap-x snap-mandatory gap-4 pb-4"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {carouselBlocks.map((block, index) => (
+            <div
+              key={block.key}
+              className="flex-shrink-0 w-[280px] md:w-[320px] snap-start vc-fade-up"
+              style={{ animationDelay: `${index * 0.05}s` }}
             >
-              <div className="flex items-start gap-3">
-                <div className="text-2xl leading-none vc-icon-hover">🔵</div>
-                <div className="min-w-0">
-                  <div className="text-base font-extrabold text-black">ALIANZA PARA EL PROGRESO</div>
-                  <p className="mt-1 text-sm text-black">Explora la propuesta correspondiente al grupo APP.</p>
-                  <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                    Abrir página →
+              <SafeLink
+                href={block.href}
+                onClick={(e) =>
+                  handleSmartNavigate({
+                    key: block.key,
+                    href: block.href,
+                    speech: block.speech,
+                    preventDefault: true,
+                    e,
+                  })
+                }
+                className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover h-full"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-3xl leading-none vc-icon-hover">{block.icon}</div>
+                  <div className="min-w-0">
+                    <div className="text-base font-extrabold text-black">{block.title}</div>
+                    <p className="mt-1 text-sm text-black line-clamp-3">{block.description}</p>
+                    <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
+                      Abrir →
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Link>
-          </div>
-        ) : (
-          <div className="vc-block md:col-span-2 vc-fade-up vc-delay-3">
-            <Link
-              href="/cambio-con-valentia"
-              onClick={(e) =>
-                handleSmartNavigate({
-                  key: "cambio",
-                  href: "/cambio-con-valentia",
-                  speech:
-                    "Vas a entrar a Un cambio con valentía. Esta ventana muestra la propuesta del Partido Democrático Perú Federal.",
-                  preventDefault: true,
-                  e,
-                })
-              }
-              className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-            >
-              <div className="flex items-start gap-3">
-                <div className="text-2xl leading-none vc-icon-hover">🔥</div>
-                <div className="min-w-0">
-                  <div className="text-base font-extrabold text-black">UN CAMBIO CON VALENTÍA</div>
-                  <p className="mt-1 text-sm text-black">Propuesta del Partido Democrático Perú Federal.</p>
-                  <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                    Abrir página →
-                  </div>
-                </div>
-              </div>
-            </Link>
-          </div>
-        )}
-
-        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-4">
-          <Link
-            href="/intencion-de-voto"
-            onClick={(e) =>
-              handleSmartNavigate({
-                key: "intencion",
-                href: "/intencion-de-voto",
-                speech:
-                  "Vas a entrar a Intención de voto. Es una pantalla piloto con once partidos y nulo o blanco, para visualizar tendencias de forma simple. Recuerda: decide con información verificable.",
-                preventDefault: true,
-                e,
-              })
-            }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-          >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none vc-icon-hover">📊</div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold text-black">INTENCIÓN DE VOTO</div>
-                <p className="mt-1 text-sm text-black">
-                  Vista piloto (11 partidos + Nulo/Blanco) para explorar tendencias. Próximamente se incluirán todos los
-                  partidos.
-                </p>
-                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                  Abrir página →
-                </div>
-              </div>
+              </SafeLink>
             </div>
-          </Link>
+          ))}
         </div>
 
-        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-5">
-          <Link
-            href="/reto-ciudadano"
-            onClick={(e) =>
-              handleSmartNavigate({
-                key: "reto-ciudadano",
-                href: "/reto-ciudadano",
-                speech:
-                  "Vas a entrar a Reto Ciudadano. Es un juego por niveles: conocimiento general, partido y ruleta. Puedes jugar en modo sin premio o con premio.",
-                preventDefault: true,
-                e,
-              })
-            }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-          >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none vc-icon-hover">🎯</div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold text-black">RETO CIUDADANO</div>
-                <p className="mt-1 text-sm text-black">
-                  Juego por niveles: Conocimiento general → Partido → Ruleta. Practica y vuelve a intentar con
-                  información verificable.
-                </p>
-                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                  Abrir página →
-                </div>
-              </div>
-            </div>
-          </Link>
+        {/* Indicador de scroll */}
+        <div className="flex justify-center gap-2 mt-4 md:hidden">
+          {carouselBlocks.map((_, idx) => (
+            <div key={idx} className="w-2 h-2 rounded-full bg-gray-300" />
+          ))}
         </div>
-
-        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-1">
-          <Link
-            href="/comentarios"
-            onClick={(e) =>
-              handleSmartNavigate({
-                key: "comentarios",
-                href: "/comentarios",
-                speech:
-                  "Vas a entrar a Comentarios ciudadanos. Ahí puedes dejar tu opinión o sugerencia. Es anónimo y ayuda a mejorar la app.",
-                preventDefault: true,
-                e,
-              })
-            }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-          >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none vc-icon-hover">💬</div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold text-black">COMENTARIO CIUDADANO</div>
-                <p className="mt-1 text-sm text-black">
-                  Deja tu opinión o sugerencia para mejorar Voto Claro. (Se publica solo si es aprobado).
-                </p>
-                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                  Abrir página →
-                </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-2">
-          <Link
-            href="/proyecto-ciudadano"
-            onClick={(e) =>
-              handleSmartNavigate({
-                key: "proyecto-ciudadano",
-                href: "/proyecto-ciudadano",
-                speech:
-                  "Vas a entrar a Proyecto Ciudadano. Aquí puedes presentar proyectos para tu comunidad, formar un equipo y recibe apoyo vecinal. Los mejores proyectos serán premiados cada tres meses.",
-                preventDefault: true,
-                e,
-              })
-            }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-          >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none vc-icon-hover">🏘️</div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold text-black">PROYECTO CIUDADANO</div>
-                <p className="mt-1 text-sm text-black">
-                  Presenta tu proyecto comunitario, forma un equipo y recibe apoyo vecinal. Los mejores proyectos son premiados.
-                </p>
-                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                  Abrir página →
-                </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-3">
-          <Link
-            href="/espacio-emprendedor"
-            onClick={(e) =>
-              handleSmartNavigate({
-                key: "espacio-emprendedor",
-                href: "/espacio-emprendedor",
-                speech:
-                  "Vas a entrar a Espacio Emprendedor APP. Espacio exclusivo para afiliados a Alianza para el Progreso donde puedes publicar proyectos emprendedores y conectar con inversionistas.",
-                preventDefault: true,
-                e,
-              })
-            }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-          >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none vc-icon-hover">💼</div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold text-black">ESPACIO EMPRENDEDOR APP</div>
-                <p className="mt-1 text-sm text-black">
-                  Espacio exclusivo para afiliados a Alianza para el Progreso. Publica tu proyecto emprendedor y conecta con inversionistas.
-                </p>
-                <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-                  Abrir espacio →
-                </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-      </section>
+      </div>
 
       <footer className="mt-6 text-xs text-black">
         VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
