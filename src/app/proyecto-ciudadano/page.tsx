@@ -167,6 +167,13 @@ export default function ProyectoCiudadanoPage() {
     loadParticipant();
   };
 
+  // Estilos con animaciones
+  const card = "rounded-2xl border-2 border-red-600 p-6 shadow-sm vc-fade-up vc-card-hover";
+  const btnPrimary = "bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse";
+  const btnSecondary = "bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse";
+  const btnBlue = "bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50 vc-btn-wave vc-btn-pulse";
+  const inputStyle = "w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono";
+
   if (loading || checking) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -181,23 +188,23 @@ export default function ProyectoCiudadanoPage() {
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-5xl mx-auto">
         {/* Cabecera */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 vc-fade-up">
           <h1 className="text-3xl font-bold text-slate-900">Proyecto Ciudadano</h1>
           <div className="flex gap-2">
             <button
               onClick={handleRefresh}
-              className="bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition"
+              className={btnSecondary}
             >
               🔄 Recargar
             </button>
-            <Link href="/" className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800">
+            <Link href="/" className={btnPrimary}>
               ← Volver al inicio
             </Link>
           </div>
         </div>
 
         {/* Mensaje de bienvenida */}
-        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
+        <div className={`bg-white ${card}`}>
           <p className="text-slate-700 text-lg font-semibold">
             💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
             Los mejores proyectos serán reconocidos en un evento oficial cada 3 meses.
@@ -213,7 +220,7 @@ export default function ProyectoCiudadanoPage() {
         </div>
 
         {/* Bloque de ganadores del ciclo anterior */}
-        <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border-2 border-yellow-600 p-6 mb-6 shadow-sm">
+        <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border-2 border-yellow-600 p-6 mb-6 shadow-sm vc-fade-up vc-delay-1">
           <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
             🏆 Ganadores del ciclo anterior
           </h2>
@@ -224,7 +231,7 @@ export default function ProyectoCiudadanoPage() {
           ) : (
             <div className="space-y-3">
               {winners.map((winner, index) => (
-                <div key={winner.id} className="bg-white rounded-xl p-4 shadow-sm border border-yellow-200">
+                <div key={winner.id} className="bg-white rounded-xl p-4 shadow-sm border border-yellow-200 vc-card-hover">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl font-bold text-yellow-600">
                       {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
@@ -250,21 +257,21 @@ export default function ProyectoCiudadanoPage() {
         {/* Estado del usuario */}
         {!participant ? (
           <>
-            <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm mb-4">
+            <div className={`bg-white ${card} mb-4`}>
               <h2 className="text-xl font-bold text-slate-900 mb-3">Regístrate para participar</h2>
               <p className="text-slate-600 mb-4">
                 Completa tu perfil para poder presentar proyectos o apoyar iniciativas ciudadanas.
               </p>
               <Link
                 href="/proyecto-ciudadano/registro"
-                className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block"
+                className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 vc-btn-wave vc-btn-pulse"
               >
                 Registrarme ahora
               </Link>
             </div>
 
             {/* Inicio de sesión con código */}
-            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm">
+            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm vc-fade-up vc-delay-2">
               <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
                 <span className="text-2xl">🔑</span> Iniciar sesión con código
               </h2>
@@ -273,7 +280,7 @@ export default function ProyectoCiudadanoPage() {
               </p>
               
               {loginCodigoError && (
-                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm vc-slide-in">
                   {loginCodigoError}
                 </div>
               )}
@@ -284,13 +291,13 @@ export default function ProyectoCiudadanoPage() {
                   placeholder="Ej: EMP-2026-3A7F"
                   value={codigoAcceso}
                   onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
-                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono"
+                  className={inputStyle}
                   disabled={loginCodigoLoading}
                 />
                 <button
                   type="submit"
                   disabled={loginCodigoLoading}
-                  className="w-full bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50"
+                  className={"w-full " + btnBlue}
                 >
                   {loginCodigoLoading ? 'Verificando...' : 'Iniciar sesión con código'}
                 </button>
@@ -298,7 +305,7 @@ export default function ProyectoCiudadanoPage() {
             </div>
           </>
         ) : (
-          <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
+          <div className={`bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm vc-fade-up`}>
             <div className="flex justify-between items-start flex-wrap gap-4 mb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Bienvenido, {participant.full_name}</h2>
@@ -310,7 +317,7 @@ export default function ProyectoCiudadanoPage() {
               </div>
               <button
                 onClick={handleRefresh}
-                className="text-sm text-green-700 hover:text-green-800 font-semibold"
+                className="text-sm text-green-700 hover:text-green-800 font-semibold vc-btn-wave"
               >
                 ↻ Actualizar datos
               </button>
@@ -323,13 +330,13 @@ export default function ProyectoCiudadanoPage() {
             <div className="flex flex-wrap gap-4">
               <Link
                 href="/proyecto-ciudadano/nuevo-proyecto"
-                className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block"
+                className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block vc-btn-wave vc-btn-pulse"
               >
                 📝 Presentar proyecto
               </Link>
               <Link
                 href="/proyecto-ciudadano/proyectos"
-                className="bg-slate-200 text-slate-800 px-6 py-2 rounded-xl font-semibold hover:bg-slate-300 inline-block"
+                className="bg-slate-200 text-slate-800 px-6 py-2 rounded-xl font-semibold hover:bg-slate-300 inline-block vc-btn-wave vc-btn-pulse"
               >
                 🔍 Ver proyectos activos
               </Link>
@@ -338,12 +345,12 @@ export default function ProyectoCiudadanoPage() {
         )}
 
         {/* Lista de proyectos destacados */}
-        <div className="mt-6 bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
+        <div className={`bg-white ${card} mt-6`}>
           <h2 className="text-xl font-bold text-slate-900 mb-3">Proyectos destacados</h2>
           <p className="text-slate-500">Próximamente se mostrarán los proyectos con más apoyo ciudadano.</p>
           <Link
             href="/proyecto-ciudadano/proyectos"
-            className="inline-block mt-3 text-green-700 hover:text-green-800 font-semibold"
+            className="inline-block mt-3 text-green-700 hover:text-green-800 font-semibold vc-btn-wave"
           >
             Ver todos los proyectos →
           </Link>

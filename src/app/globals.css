@@ -126,7 +126,7 @@ html[data-party="app"] .vc-app-surface {
   width: 100%;
   max-width: 980px; /* ⬅️ reduce el cian y deja más azul visible */
 
-  padding: clamp(12px, 1.2vw, 16px); /* ⬅️ un poco menos “aire” cian */
+  padding: clamp(12px, 1.2vw, 16px); /* ⬅️ un poco menos "aire" cian */
   min-height: calc(100vh - (clamp(24px, 4.2vw, 56px) * 2)); /* ⬅️ debe coincidir con frame */
 }
 /* =========================================================
@@ -174,7 +174,7 @@ html[data-party="app"] .vc-app-surface main.vc-cambio-app {
   border-radius: 22px; /* opcional: para que calce con la surface */
 }
 
-/* El gran “rompedor” del marco: min-h-screen dentro de la surface */
+/* El gran "rompedor" del marco: min-h-screen dentro de la surface */
 html[data-party="app"] .vc-app-surface .min-h-screen {
   min-height: auto !important;
 }
@@ -777,3 +777,126 @@ html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="hover:bg-gre
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+
+/* =========================================================
+   🎬 NUEVAS ANIMACIONES PARA DAR VIDA A LA APP
+   ========================================================= */
+
+/* 1. Fade-in al hacer scroll (para secciones) */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.vc-fade-up {
+  animation: fadeInUp 0.5s cubic-bezier(0.2, 0.9, 0.4, 1.1) forwards;
+}
+
+/* 2. Efecto hover en tarjetas (sutil elevación) */
+.vc-card-hover {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.vc-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* 3. Botón con efecto "pulse" al hacer clic */
+.vc-btn-pulse:active {
+  transform: scale(0.97);
+  transition: transform 0.08s ease;
+}
+
+/* 4. Efecto de "ola" al pasar sobre botones */
+.vc-btn-wave {
+  position: relative;
+  overflow: hidden;
+}
+
+.vc-btn-wave::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+.vc-btn-wave:hover::after {
+  width: 200%;
+  height: 200%;
+}
+
+/* 5. Animación de entrada para elementos nuevos (ej. mensajes del asistente) */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.vc-slide-in {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
+/* 6. Animación sutil para iconos al hacer hover */
+.vc-icon-hover {
+  transition: transform 0.2s ease;
+}
+
+.vc-icon-hover:hover {
+  transform: scale(1.08);
+}
+
+/* 7. Efecto de brillo sutil en bordes rojos al pasar (para bloques importantes) */
+@keyframes borderGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+
+.vc-border-glow:hover {
+  animation: borderGlow 0.8s ease-out;
+}
+
+/* 8. Animación de "rebote" suave para notificaciones o mensajes importantes */
+@keyframes gentleBounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.vc-gentle-bounce {
+  animation: gentleBounce 0.4s ease-out;
+}
+
+/* 9. Clases de retraso para animaciones en cascada */
+.vc-delay-1 { animation-delay: 0.05s; }
+.vc-delay-2 { animation-delay: 0.1s; }
+.vc-delay-3 { animation-delay: 0.15s; }
+.vc-delay-4 { animation-delay: 0.2s; }
+.vc-delay-5 { animation-delay: 0.25s; }

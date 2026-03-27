@@ -1415,9 +1415,10 @@ async function voteForVideo(videoId: string) {
     }
   }
 
+  // Estilos con animaciones
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-3xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const card = "mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-5 shadow-sm";
+  const card = "mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover";
   const label = "text-xs font-extrabold text-slate-700";
   const input =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
@@ -1426,14 +1427,14 @@ async function voteForVideo(videoId: string) {
   const btn =
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
+    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed vc-btn-wave vc-btn-pulse";
 
   const select =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
 
   return (
     <main className={wrap}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center justify-between gap-3 flex-wrap vc-fade-up">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
             Comentarios ciudadanos
@@ -1674,7 +1675,7 @@ async function voteForVideo(videoId: string) {
                   href={latestOfficialWinner.video.video_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
                 >
                   ▶ Ver video ganador oficial
                 </a>
@@ -1959,7 +1960,7 @@ async function voteForVideo(videoId: string) {
                     href={weeklyWinner.video_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                    className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
                   >
                     ▶ Ver video ganador
                   </a>
@@ -1999,7 +2000,7 @@ async function voteForVideo(videoId: string) {
                         href={v.video_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
                       >
                         ▶ Ver video
                       </a>
@@ -2008,7 +2009,7 @@ async function voteForVideo(videoId: string) {
                         type="button"
                         onClick={() => voteForVideo(v.id)}
                         disabled={!!myVotedVideoId || votingVideoId === v.id}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed vc-btn-wave vc-btn-pulse"
                       >
                         {votingVideoId === v.id
                           ? "Votando..."
@@ -2072,7 +2073,7 @@ async function voteForVideo(videoId: string) {
         href={v.video_url}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
       >
         ▶ Ver video
       </a>
@@ -2081,7 +2082,7 @@ async function voteForVideo(videoId: string) {
         type="button"
         onClick={() => voteForVideo(v.id)}
         disabled={!!myVotedVideoId || votingVideoId === v.id}
-        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed vc-btn-wave vc-btn-pulse"
       >
         {votingVideoId === v.id
           ? "Votando..."
@@ -2253,7 +2254,7 @@ async function voteForVideo(videoId: string) {
                   href={item.founder_answer_video_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
                 >
                   ▶ Ver video de respuesta
                 </a>
@@ -2435,7 +2436,7 @@ async function voteForVideo(videoId: string) {
                       href={item.video.video_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
                     >
                       ▶ Ver video ganador
                     </a>
@@ -2574,7 +2575,7 @@ async function voteForVideo(videoId: string) {
 
         <Link
           href={`/comentarios/foro/${item.id}`}
-          className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm"
+          className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
         >
           💬 Entrar al foro
         </Link>
@@ -2586,7 +2587,7 @@ async function voteForVideo(videoId: string) {
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="fixed bottom-5 right-5 rounded-full border-2 border-red-600 bg-green-800 text-white font-extrabold px-4 py-3 shadow-sm hover:bg-green-900"
+          className="fixed bottom-5 right-5 rounded-full border-2 border-red-600 bg-green-800 text-white font-extrabold px-4 py-3 shadow-sm hover:bg-green-900 transition vc-btn-wave vc-btn-pulse"
           aria-label="Subir"
           title="Subir"
         >

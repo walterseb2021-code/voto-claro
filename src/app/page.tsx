@@ -202,8 +202,8 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
-      {/* HERO (Marco azul + Interior cian) */}
-      <div className="vc-block">
+      {/* HERO (Marco azul + Interior cian) - con animación fade-up */}
+      <div className="vc-block vc-fade-up">
         <section className="vc-block-inner overflow-hidden shadow-sm">
           <div className="p-6 md:p-8">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-black">
@@ -231,7 +231,7 @@ export default function HomePage() {
                     "Paso 1: Busca. Escribe al menos 2 letras del nombre del candidato que buscas y abre su ficha para ver Hoja de Vida, Plan de gobierno y actuar político."
                   )
                 }
-                className="text-left rounded-2xl border-[6px] border-borderparty bg-white p-4 shadow-sm hover:shadow-md hover:brightness-95 transition"
+                className="text-left rounded-2xl border-[6px] border-borderparty bg-white p-4 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover vc-btn-pulse"
               >
                 <div className="text-sm font-extrabold text-black">1) Busca</div>
                 <div className="mt-1 text-xs text-black">
@@ -246,7 +246,7 @@ export default function HomePage() {
                     "Paso 2: Verifica. En la ficha revisa Hoja de Vida y Plan de Gobierno. Si no hay páginas o fuentes, lo marcaremos como sin evidencia."
                   )
                 }
-                className="text-left rounded-2xl border-[6px] border-borderparty bg-white p-4 shadow-sm hover:shadow-md hover:brightness-95 transition"
+                className="text-left rounded-2xl border-[6px] border-borderparty bg-white p-4 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover vc-btn-pulse"
               >
                 <div className="text-sm font-extrabold text-black">2) Verifica</div>
                 <div className="mt-1 text-xs text-black">
@@ -261,7 +261,7 @@ export default function HomePage() {
                     "Paso 3: Decide. Antes de votar, revisa la evidencia: Hoja de vida, Plan y Actuar político. Luego decide con criterio: coherencia, viabilidad y conducta pública."
                   )
                 }
-                className="text-left rounded-2xl border-[6px] border-borderparty bg-white p-4 shadow-sm hover:shadow-md hover:brightness-95 transition"
+                className="text-left rounded-2xl border-[6px] border-borderparty bg-white p-4 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover vc-btn-pulse"
               >
                 <div className="text-sm font-extrabold text-black">3) Decide</div>
                 <div className="mt-1 text-xs text-black">
@@ -271,17 +271,17 @@ export default function HomePage() {
             </div>
 
             <div className="mt-5 flex flex-wrap gap-3">
-                <button
-  type="button"
-  onClick={() =>
-    goToSearchAndGuide(
-      "Vamos a empezar. Escribe el nombre del candidato y entra a su ficha. Luego cambia entre HV, Plan y Actuar político."
-    )
-  }
-  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-borderparty bg-primary-soft text-black font-extrabold text-sm hover:brightness-95 shadow-md hover:shadow-lg transition"
->
-  🔎 Empezar búsqueda
-</button>
+              <button
+                type="button"
+                onClick={() =>
+                  goToSearchAndGuide(
+                    "Vamos a empezar. Escribe el nombre del candidato y entra a su ficha. Luego cambia entre HV, Plan y Actuar político."
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-borderparty bg-primary-soft text-black font-extrabold text-sm hover:brightness-95 shadow-md hover:shadow-lg transition vc-btn-wave vc-btn-pulse"
+              >
+                🔎 Empezar búsqueda
+              </button>
 
               <button
                 type="button"
@@ -294,7 +294,7 @@ export default function HomePage() {
                     e,
                   })
                 }
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-borderparty bg-primary text-white font-extrabold text-sm hover:brightness-95 shadow-sm transition"
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-borderparty bg-primary text-white font-extrabold text-sm hover:brightness-95 shadow-sm transition vc-btn-wave vc-btn-pulse"
               >
                 🧭 Cómo funciona
               </button>
@@ -306,7 +306,7 @@ export default function HomePage() {
                     "Recuerda: un voto responsable empieza con información verificable. Primero busca, luego verifica, y recién al final decide."
                   )
                 }
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-borderparty bg-white text-black font-semibold hover:brightness-95 transition"
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-borderparty bg-white text-black font-semibold hover:brightness-95 transition vc-btn-wave vc-btn-pulse"
               >
                 “Un voto responsable empieza con información verificable.”
               </button>
@@ -319,8 +319,8 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* BUSCADOR */}
-      <div className="vc-block mt-6">
+      {/* BUSCADOR - con animación fade-up */}
+      <div className="vc-block mt-6 vc-fade-up">
         <section id="buscar" className="vc-block-inner p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
@@ -367,7 +367,7 @@ export default function HomePage() {
               <Link
                 key={c.id}
                 href={`/candidate/${c.id}`}
-                className="border-2 border-borderparty rounded-xl p-4 flex gap-4 bg-white hover:brightness-95 hover:shadow-sm transition"
+                className="border-2 border-borderparty rounded-xl p-4 flex gap-4 bg-white hover:brightness-95 hover:shadow-sm transition vc-card-hover"
               >
                 <div className="w-14 h-14 rounded-lg overflow-hidden bg-primary-soft shrink-0 border border-borderparty">
                   {c.photo_url ? (
@@ -392,9 +392,9 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* ACCESOS RÁPIDOS */}
+      {/* ACCESOS RÁPIDOS - con animación fade-up y efecto cascada */}
       <section className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="vc-block">
+        <div className="vc-block vc-fade-up vc-delay-1">
           <Link
             href="/ciudadano/servicios"
             onClick={(e) =>
@@ -407,10 +407,10 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">🗳️</div>
+              <div className="text-2xl leading-none vc-icon-hover">🗳️</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">Servicios al ciudadano</div>
                 <p className="mt-1 text-sm text-black">
@@ -425,7 +425,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="vc-block md:col-span-2">
+        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-2">
           <Link
             href="/reflexion"
             onClick={(e) =>
@@ -438,10 +438,10 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">🧠</div>
+              <div className="text-2xl leading-none vc-icon-hover">🧠</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">Reflexionar antes de votar</div>
                 <p className="mt-1 text-sm text-black">
@@ -457,7 +457,7 @@ export default function HomePage() {
         </div>
 
         {activeParty === "app" ? (
-          <div className="vc-block md:col-span-2">
+          <div className="vc-block md:col-span-2 vc-fade-up vc-delay-3">
             <Link
               href="/cambio-app"
               onClick={(e) =>
@@ -470,10 +470,10 @@ export default function HomePage() {
                   e,
                 })
               }
-              className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+              className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
             >
               <div className="flex items-start gap-3">
-                <div className="text-2xl leading-none">🔵</div>
+                <div className="text-2xl leading-none vc-icon-hover">🔵</div>
                 <div className="min-w-0">
                   <div className="text-base font-extrabold text-black">ALIANZA PARA EL PROGRESO</div>
                   <p className="mt-1 text-sm text-black">Explora la propuesta correspondiente al grupo APP.</p>
@@ -485,7 +485,7 @@ export default function HomePage() {
             </Link>
           </div>
         ) : (
-          <div className="vc-block md:col-span-2">
+          <div className="vc-block md:col-span-2 vc-fade-up vc-delay-3">
             <Link
               href="/cambio-con-valentia"
               onClick={(e) =>
@@ -498,10 +498,10 @@ export default function HomePage() {
                   e,
                 })
               }
-              className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+              className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
             >
               <div className="flex items-start gap-3">
-                <div className="text-2xl leading-none">🔥</div>
+                <div className="text-2xl leading-none vc-icon-hover">🔥</div>
                 <div className="min-w-0">
                   <div className="text-base font-extrabold text-black">UN CAMBIO CON VALENTÍA</div>
                   <p className="mt-1 text-sm text-black">Propuesta del Partido Democrático Perú Federal.</p>
@@ -514,7 +514,7 @@ export default function HomePage() {
           </div>
         )}
 
-        <div className="vc-block md:col-span-2">
+        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-4">
           <Link
             href="/intencion-de-voto"
             onClick={(e) =>
@@ -527,10 +527,10 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">📊</div>
+              <div className="text-2xl leading-none vc-icon-hover">📊</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">INTENCIÓN DE VOTO</div>
                 <p className="mt-1 text-sm text-black">
@@ -545,7 +545,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="vc-block md:col-span-2">
+        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-5">
           <Link
             href="/reto-ciudadano"
             onClick={(e) =>
@@ -558,10 +558,10 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">🎯</div>
+              <div className="text-2xl leading-none vc-icon-hover">🎯</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">RETO CIUDADANO</div>
                 <p className="mt-1 text-sm text-black">
@@ -576,7 +576,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-            <div className="vc-block md:col-span-2">
+        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-1">
           <Link
             href="/comentarios"
             onClick={(e) =>
@@ -589,10 +589,10 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">💬</div>
+              <div className="text-2xl leading-none vc-icon-hover">💬</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">COMENTARIO CIUDADANO</div>
                 <p className="mt-1 text-sm text-black">
@@ -606,7 +606,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="vc-block md:col-span-2">
+        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-2">
           <Link
             href="/proyecto-ciudadano"
             onClick={(e) =>
@@ -619,10 +619,10 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">🏘️</div>
+              <div className="text-2xl leading-none vc-icon-hover">🏘️</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">PROYECTO CIUDADANO</div>
                 <p className="mt-1 text-sm text-black">
@@ -636,7 +636,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="vc-block md:col-span-2">
+        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-3">
           <Link
             href="/espacio-emprendedor"
             onClick={(e) =>
@@ -649,10 +649,10 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition"
+            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">💼</div>
+              <div className="text-2xl leading-none vc-icon-hover">💼</div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">ESPACIO EMPRENDEDOR APP</div>
                 <p className="mt-1 text-sm text-black">
@@ -670,7 +670,7 @@ export default function HomePage() {
       <footer className="mt-6 text-xs text-black">
         VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
         reemplaza el criterio personal.
-       </footer>
-           </main>
+      </footer>
+    </main>
   );
 }

@@ -343,7 +343,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   }, [onStatus, started, finished, good, passed]);
 
   return (
-    <div className="rounded-2xl border bg-green-50 p-4 shadow-sm">
+    <div className="rounded-2xl border bg-green-50 p-4 shadow-sm vc-fade-up vc-card-hover">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-base font-extrabold text-slate-900">Nivel 1 — Conocimiento general</div>
@@ -378,7 +378,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
             resetRun();
           }}
           disabled={!started}
-          className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${
+          className={`rounded-xl border px-3 py-2 text-xs font-extrabold vc-btn-wave vc-btn-pulse ${
             started
               ? "text-slate-800 bg-white hover:bg-slate-50"
               : "text-slate-400 bg-slate-100 cursor-not-allowed"
@@ -400,7 +400,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
               type="button"
               onClick={startLevel1}
               disabled={locked || attemptsLeft <= 0}
-              className={`w-full rounded-xl border px-5 py-3 text-sm font-extrabold ${
+              className={`w-full rounded-xl border px-5 py-3 text-sm font-extrabold vc-btn-wave vc-btn-pulse ${
                 locked || attemptsLeft <= 0
                   ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                   : "bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
@@ -463,21 +463,21 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
                 <button
                   type="button"
                   onClick={() => answer(true)}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
                 >
                   Sí
                 </button>
                 <button
                   type="button"
                   onClick={() => answer(false)}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-900 hover:bg-slate-50"
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-900 hover:bg-slate-50 vc-btn-wave vc-btn-pulse"
                 >
                   No
                 </button>
                 <button
                   type="button"
                   onClick={doSkip}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-slate-50 text-slate-800 hover:bg-slate-100"
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-slate-50 text-slate-800 hover:bg-slate-100 vc-btn-wave vc-btn-pulse"
                 >
                   Saltar
                 </button>
@@ -704,7 +704,7 @@ function Nivel3Ruleta(props: {
 
   if (!enabled) {
     return (
-      <div className="rounded-2xl border bg-white p-4 shadow-sm opacity-80">
+      <div className="rounded-2xl border bg-white p-4 shadow-sm opacity-80 vc-fade-up vc-card-hover">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">
@@ -732,7 +732,7 @@ function Nivel3Ruleta(props: {
   )`;
 
   return (
-    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-card-hover">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-base font-extrabold text-slate-900">Nivel 3 — Ruleta (8 segmentos)</div>
@@ -754,7 +754,7 @@ function Nivel3Ruleta(props: {
             type="button"
             onClick={resetLevel3}
             disabled={!started && !result && rotation === 0}
-            className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${
+            className={`rounded-xl border px-3 py-2 text-xs font-extrabold vc-btn-wave vc-btn-pulse ${
               started || result || rotation !== 0
                 ? "text-slate-800 bg-white hover:bg-slate-50"
                 : "text-slate-400 bg-slate-100 cursor-not-allowed"
@@ -767,7 +767,7 @@ function Nivel3Ruleta(props: {
             type="button"
             onClick={startLevel3}
             disabled={spinning || l3Locked}
-            className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${
+            className={`rounded-xl border px-3 py-2 text-xs font-extrabold vc-btn-wave vc-btn-pulse ${
               spinning || l3Locked
                 ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                 : "bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
@@ -870,28 +870,26 @@ function Nivel3Ruleta(props: {
         )}
 
         <div className="mt-4 w-full rounded-2xl border bg-white p-4">
-         <div className="mt-4 w-full rounded-2xl border bg-white p-4">
-  <div className="text-sm font-extrabold text-slate-900 mb-3">Premios por número</div>
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-    {segments.map((s) => (
-      <div 
-        key={s.n} 
-        className="flex items-center justify-between rounded-xl border bg-white p-2 min-h-[48px]"
-        style={{ borderLeft: `6px solid ${s.color}` }}
-      >
-        <div className="flex items-center gap-2 min-w-[40px]">
-          <span className="text-xs font-extrabold text-slate-900 bg-slate-100 rounded-full w-6 h-6 flex items-center justify-center">
-            {s.n}
-          </span>
-        </div>
-        <div className="text-[11px] font-semibold text-slate-700 text-right flex-1 ml-2 break-words">
-          {s.label}
-        </div>
-      </div>
-    ))}
-  </div>
-</div>
-                 {!result && (
+          <div className="text-sm font-extrabold text-slate-900 mb-3">Premios por número</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {segments.map((s) => (
+              <div 
+                key={s.n} 
+                className="flex items-center justify-between rounded-xl border bg-white p-2 min-h-[48px]"
+                style={{ borderLeft: `6px solid ${s.color}` }}
+              >
+                <div className="flex items-center gap-2 min-w-[40px]">
+                  <span className="text-xs font-extrabold text-slate-900 bg-slate-100 rounded-full w-6 h-6 flex items-center justify-center">
+                    {s.n}
+                  </span>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-700 text-right flex-1 ml-2 break-words">
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+          {!result && (
             <div className="mt-3 text-[11px] text-slate-600">
               {mode === "con_premio"
                 ? "Modo con premio: #2 y #6 entregan premio."
@@ -915,7 +913,7 @@ function Nivel3Ruleta(props: {
                 clearLevel3SpinLock();
                 onRestartToLevel1?.();
               }}
-              className="w-full rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-800 hover:bg-slate-50"
+              className="w-full rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-800 hover:bg-slate-50 vc-btn-wave vc-btn-pulse"
             >
               ↺ Volver a empezar (Nivel 1)
             </button>
@@ -1235,7 +1233,7 @@ function Nivel2Partido(props: {
 
   if (!enabled) {
     return (
-      <div className="rounded-2xl border bg-white p-4 shadow-sm opacity-80">
+      <div className="rounded-2xl border bg-white p-4 shadow-sm opacity-80 vc-fade-up vc-card-hover">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">
@@ -1253,7 +1251,7 @@ function Nivel2Partido(props: {
 
   if (locked) {
     return (
-      <div className="rounded-2xl border bg-white p-4 shadow-sm opacity-90">
+      <div className="rounded-2xl border bg-white p-4 shadow-sm opacity-90 vc-fade-up vc-card-hover">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">
@@ -1276,7 +1274,7 @@ function Nivel2Partido(props: {
           <button
             type="button"
             onClick={() => props.onHardResetToLevel1?.()}
-            className="w-full rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-800 hover:bg-slate-50"
+            className="w-full rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-800 hover:bg-slate-50 vc-btn-wave vc-btn-pulse"
           >
             ↺ Volver a empezar (Nivel 1)
           </button>
@@ -1286,7 +1284,7 @@ function Nivel2Partido(props: {
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-card-hover">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-extrabold text-slate-900">
@@ -1329,7 +1327,7 @@ function Nivel2Partido(props: {
             resetRun(runPartyId || partyId);
           }}
           disabled={!started}
-          className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${
+          className={`rounded-xl border px-3 py-2 text-xs font-extrabold vc-btn-wave vc-btn-pulse ${
             started
               ? "text-slate-800 bg-white hover:bg-slate-50"
               : "text-slate-400 bg-slate-100 cursor-not-allowed"
@@ -1351,7 +1349,7 @@ function Nivel2Partido(props: {
               type="button"
               disabled={!partyId || locked}
               onClick={startLevel2}
-              className={`w-full rounded-xl border px-5 py-3 text-sm font-extrabold ${
+              className={`w-full rounded-xl border px-5 py-3 text-sm font-extrabold vc-btn-wave vc-btn-pulse ${
                 !partyId || locked
                   ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                   : "bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
@@ -1435,21 +1433,21 @@ function Nivel2Partido(props: {
                 <button
                   type="button"
                   onClick={() => answer(true)}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
                 >
                   Sí
                 </button>
                 <button
                   type="button"
                   onClick={() => answer(false)}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-900 hover:bg-slate-50"
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-900 hover:bg-slate-50 vc-btn-wave vc-btn-pulse"
                 >
                   No
                 </button>
                 <button
                   type="button"
                   onClick={doSkip}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-slate-50 text-slate-800 hover:bg-slate-100"
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-slate-50 text-slate-800 hover:bg-slate-100 vc-btn-wave vc-btn-pulse"
                 >
                   Saltar
                 </button>
@@ -1519,7 +1517,7 @@ function ListaGanadores() {
   ];
 
   return (
-    <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
+    <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-card-hover">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-extrabold text-slate-900">🏆 Ganadores del Reto</h2>
@@ -1531,7 +1529,7 @@ function ListaGanadores() {
             <button
               key={f.value}
               onClick={() => setFiltro(f.value)}
-              className={`rounded-xl border px-3 py-1 text-xs font-semibold transition ${
+              className={`rounded-xl border px-3 py-1 text-xs font-semibold transition vc-btn-wave vc-btn-pulse ${
                 filtro === f.value
                   ? "bg-green-100 text-green-900 border-green-300"
                   : "bg-white text-slate-700 hover:bg-slate-50"
@@ -1711,7 +1709,7 @@ export default function RetoCiudadanoPage() {
   const winnerData = premioAutorizado ? { alias, dni, celular, email } : null;
 
   return (
-    <main className="vc-reto mx-auto max-w-4xl px-4 py-6">
+    <main className="vc-reto mx-auto max-w-4xl px-4 py-6 vc-fade-up">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-extrabold text-slate-900">RETO CIUDADANO</h1>
@@ -1724,21 +1722,21 @@ export default function RetoCiudadanoPage() {
         <div className="shrink-0 flex flex-col gap-2">
           <Link
             href="/"
-            className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 text-center"
+            className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 text-center vc-btn-wave vc-btn-pulse"
           >
             ← Volver al inicio
           </Link>
         </div>
       </div>
 
-      <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
+      <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-1">
         <div className="text-sm font-extrabold text-slate-900">Elegir modalidad</div>
 
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setMode("sin_premio")}
-            className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition ${
+            className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
               mode === "sin_premio"
                 ? "bg-green-100 text-green-900 border-green-300"
                 : "bg-white text-slate-800 hover:bg-slate-50"
@@ -1750,7 +1748,7 @@ export default function RetoCiudadanoPage() {
           <button
             type="button"
             onClick={() => setMode("con_premio")}
-            className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition ${
+            className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
               mode === "con_premio"
                 ? "bg-green-100 text-green-900 border-green-300"
                 : "bg-white text-slate-800 hover:bg-slate-50"
@@ -1759,13 +1757,13 @@ export default function RetoCiudadanoPage() {
             Con premio (requiere registro)
           </button>
           {/* Descripción del premio */}
-{mode === "con_premio" && (
-  <div className="mt-3 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
-    🎉 <strong>Premio:</strong> Asistencia al Congreso Político "Democracia y Participación Ciudadana" 
-    con pasajes y estadía cubiertos (3 días, 2 noches). Incluye alimentación y materiales del evento.
-    El ganador o ganadores podrán participar en mesas de diálogo con representantes políticos y líderes de opinión.
-  </div>
-)}
+          {mode === "con_premio" && (
+            <div className="mt-3 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
+              🎉 <strong>Premio:</strong> Asistencia al Congreso Político "Democracia y Participación Ciudadana" 
+              con pasajes y estadía cubiertos (3 días, 2 noches). Incluye alimentación y materiales del evento.
+              El ganador o ganadores podrán participar en mesas de diálogo con representantes políticos y líderes de opinión.
+            </div>
+          )}
         </div>
 
         <p className="mt-3 text-xs text-slate-600">
@@ -1774,7 +1772,7 @@ export default function RetoCiudadanoPage() {
       </section>
 
       {mode === "con_premio" && (
-        <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
+        <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-2">
           <div className="text-sm font-extrabold text-slate-900">
             Registro obligatorio para participar con premio
           </div>
@@ -1823,7 +1821,7 @@ export default function RetoCiudadanoPage() {
               <button
                 type="button"
                 onClick={registrarPremio}
-                className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200"
+                className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
               >
                 Registrarme y continuar
               </button>

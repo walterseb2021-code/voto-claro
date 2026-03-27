@@ -116,18 +116,18 @@ export default function ReflexionPage() {
   const CARD = "rounded-2xl border-4 border-red-700 bg-primary-soft shadow-sm";
   const CARD_HOVER = "hover:bg-green-100 transition";
   const RED_OUTLINE_BTN =
-    "inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-red-700 bg-white text-red-700 text-sm font-semibold hover:bg-red-50 transition";
+    "inline-flex items-center gap-2 rounded-xl px-4 py-2 border border-red-700 bg-white text-red-700 text-sm font-semibold hover:bg-red-50 transition vc-btn-wave vc-btn-pulse";
   const BLUE_PRIMARY_BTN =
-    "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-white text-sm font-extrabold shadow-sm transition";
+    "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-white text-sm font-extrabold shadow-sm transition vc-btn-wave vc-btn-pulse";
 
   // ✅ Overrides SOLO cuando el html está en APP (no afecta Perú Federal)
   const APP_ON_BLUE = "[html[data-party='app']_&]:text-black";
-const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
+  const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
 
   return (
     <main className="vc-reflexion min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-100 via-green-50 to-green-100">
       {/* Header */}
-      <div className={`${CARD} p-5`}>
+      <div className={`${CARD} p-5 vc-fade-up`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
@@ -153,7 +153,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
       {/* NIVEL 1: Ejes */}
       {!activeAxis ? (
         <section className="mt-6">
-          <div className={`${CARD} p-5`}>
+          <div className={`${CARD} p-5 vc-fade-up vc-delay-1`}>
             <div className="flex items-end justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-lg md:text-xl font-semibold text-slate-900">
@@ -166,7 +166,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
             </div>
 
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {axes.map((axis) => (
+              {axes.map((axis, idx) => (
                 <button
                   key={axis.id}
                   type="button"
@@ -174,7 +174,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
                     setActiveAxisId(axis.id);
                     setOpenQuestionId(null);
                   }}
-                  className={`${CARD} ${CARD_HOVER} px-5 py-5 text-left`}
+                  className={`${CARD} ${CARD_HOVER} px-5 py-5 text-left vc-card-hover vc-fade-up vc-delay-${Math.min(idx + 2, 5)}`}
                 >
                   {/* ✅ FIX contraste en APP: título blanco */}
                   <div
@@ -193,7 +193,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
                   ) : null}
 
                   <div className="mt-4">
-                    <span className="inline-flex items-center gap-2 rounded-xl px-3 py-2 border border-red-700 bg-white text-red-700 text-sm font-semibold hover:bg-red-50 transition">
+                    <span className="inline-flex items-center gap-2 rounded-xl px-3 py-2 border border-red-700 bg-white text-red-700 text-sm font-semibold hover:bg-red-50 transition vc-btn-wave vc-btn-pulse">
                       Ver preguntas →
                     </span>
                   </div>
@@ -202,7 +202,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
             </div>
           </div>
 
-          <section className={`${CARD} mt-6 p-5`}>
+          <section className={`${CARD} mt-6 p-5 vc-fade-up vc-delay-2`}>
             <div className="text-sm font-semibold text-slate-900">
               Cierre filosófico
             </div>
@@ -224,7 +224,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
       ) : (
         /* NIVEL 2 + 3: Preguntas y reflexiones */
         <section className="mt-6">
-          <div className={`${CARD} p-5`}>
+          <div className={`${CARD} p-5 vc-fade-up`}>
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
                 {/* ✅ FIX contraste en APP (solo este bloque de eje activo) */}
@@ -270,7 +270,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
               {activeAxis.questions.map((q, idx) => {
                 const isOpen = openQuestionId === q.id;
                 return (
-                  <div key={q.id} className={`${CARD} overflow-hidden`}>
+                  <div key={q.id} className={`${CARD} overflow-hidden vc-card-hover`}>
                     <button
                       type="button"
                       onClick={() => {
@@ -348,7 +348,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
             </div>
           </div>
 
-          <section className={`${CARD} mt-6 p-5`}>
+          <section className={`${CARD} mt-6 p-5 vc-fade-up vc-delay-1`}>
             <div className="text-sm font-semibold text-slate-900">
               Cierre filosófico
             </div>
@@ -373,7 +373,7 @@ const APP_ON_BLUE_MUTED = "[html[data-party='app']_&]:text-slate-700";
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="vc-btn vc-btn-blue fixed bottom-5 left-1/2 -translate-x-[120%] z-[9999] rounded-full px-4 py-3 text-sm font-extrabold shadow-lg transition"
+          className="vc-btn vc-btn-blue fixed bottom-5 left-1/2 -translate-x-[120%] z-[9999] rounded-full px-4 py-3 text-sm font-extrabold shadow-lg transition vc-btn-wave vc-btn-pulse"
           aria-label="Subir"
         >
           ↑ Subir

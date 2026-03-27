@@ -153,7 +153,7 @@ export default function EspacioEmprendedorPage() {
     }
   };
 
-  // Cargar mensajes recibidos por el emprendedor (CORREGIDO)
+  // Cargar mensajes recibidos por el emprendedor
   const cargarMensajesRecibidos = async () => {
     if (!participant) return;
     setCargandoMensajes(true);
@@ -235,7 +235,7 @@ export default function EspacioEmprendedorPage() {
     }
   };
 
-  // Suscripción en tiempo real para nuevos mensajes en los proyectos del emprendedor
+  // Suscripción en tiempo real para nuevos mensajes
   useEffect(() => {
     if (!afiliado || misProyectos.length === 0) return;
 
@@ -402,6 +402,13 @@ export default function EspacioEmprendedorPage() {
     }
   };
 
+  // Estilos con animaciones
+  const card = "rounded-2xl border-2 border-red-600 p-6 shadow-sm vc-fade-up vc-card-hover";
+  const btnPrimary = "bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse";
+  const btnSecondary = "bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse";
+  const btnOutline = "bg-slate-200 text-slate-800 px-4 py-2 rounded-xl font-semibold hover:bg-slate-300 transition text-center vc-btn-wave vc-btn-pulse";
+  const inputStyle = "w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none";
+
   if (loading) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -416,28 +423,28 @@ export default function EspacioEmprendedorPage() {
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-5xl mx-auto">
         {/* Cabecera */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 vc-fade-up">
           <h1 className="text-3xl font-bold text-slate-900">Espacio Emprendedor APP</h1>
-          <Link href="/" className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800">
+          <Link href="/" className={btnPrimary}>
             ← Volver al inicio
           </Link>
         </div>
 
         {/* Mensajes de éxito y error */}
         {successMsg && (
-          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-xl text-sm">
+          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-xl text-sm vc-slide-in">
             {successMsg}
           </div>
         )}
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm vc-slide-in">
             {error}
           </div>
         )}
 
         {/* Mensaje de bienvenida */}
-        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
+        <div className={`bg-white ${card}`}>
           <p className="text-slate-700 text-lg font-semibold">
             💼 Conecta tu proyecto emprendedor con inversionistas.
           </p>
@@ -448,7 +455,7 @@ export default function EspacioEmprendedorPage() {
         </div>
 
         {/* Proyectos destacados */}
-        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
+        <div className={`bg-white ${card} mt-6`}>
           <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
             <span className="text-2xl">📞</span> Proyectos más contactados
           </h2>
@@ -457,7 +464,7 @@ export default function EspacioEmprendedorPage() {
               <p className="text-slate-500 text-sm">Aún no hay proyectos contactados.</p>
             ) : (
               topProjects.map((project, index) => (
-                <div key={project.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                <div key={project.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl vc-card-hover">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl font-bold text-green-600 w-8">
                       {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
@@ -482,21 +489,21 @@ export default function EspacioEmprendedorPage() {
         {/* Estado del participante */}
         {!participant ? (
           <>
-            <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm mb-4">
+            <div className={`bg-white ${card} mt-6`}>
               <h2 className="text-xl font-bold text-slate-900 mb-3">Regístrate para participar</h2>
               <p className="text-slate-600 mb-4">
                 Para acceder al Espacio Emprendedor, primero debes registrarte como participante.
               </p>
               <Link
                 href="/proyecto-ciudadano/registro?returnTo=espacio-emprendedor"
-                className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block"
+                className={btnPrimary}
               >
                 Registrarme ahora
               </Link>
             </div>
 
             {/* Inicio de sesión con código */}
-            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm">
+            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm mt-6 vc-fade-up vc-delay-1">
               <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
                 <span className="text-2xl">🔑</span> Iniciar sesión con código
               </h2>
@@ -523,13 +530,13 @@ export default function EspacioEmprendedorPage() {
                     console.log('✏️ Input cambiado:', e.target.value);
                     setCodigoAcceso(e.target.value.toUpperCase());
                   }}
-                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono"
+                  className={inputStyle}
                   disabled={loginCodigoLoading}
                 />
                 <button
                   type="submit"
                   disabled={loginCodigoLoading}
-                  className="w-full bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50"
+                  className="w-full bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50 vc-btn-wave vc-btn-pulse"
                 >
                   {loginCodigoLoading ? 'Verificando...' : 'Iniciar sesión con código'}
                 </button>
@@ -537,9 +544,9 @@ export default function EspacioEmprendedorPage() {
             </div>
           </>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             {/* Bloque para Emprendedores (requiere afiliación) */}
-            <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
+            <div className={`bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm vc-fade-up`}>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-2xl">💼</span>
                 <h2 className="text-xl font-bold text-slate-900">Como Emprendedor</h2>
@@ -562,7 +569,7 @@ export default function EspacioEmprendedorPage() {
                     <button
                       onClick={handleVerificarDNI}
                       disabled={verificando}
-                      className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-50"
+                      className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-50 vc-btn-wave vc-btn-pulse"
                     >
                       {verificando ? 'Verificando...' : 'Verificar DNI'}
                     </button>
@@ -579,7 +586,7 @@ export default function EspacioEmprendedorPage() {
                     </p>
                     <Link
                       href="/espacio-emprendedor/nuevo-proyecto"
-                      className="inline-block bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800"
+                      className="inline-block bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800 vc-btn-wave vc-btn-pulse"
                     >
                       + Publicar nuevo proyecto
                     </Link>
@@ -595,7 +602,7 @@ export default function EspacioEmprendedorPage() {
                     ) : (
                       <div className="space-y-3">
                         {misProyectos.map((proyecto) => (
-                          <div key={proyecto.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                          <div key={proyecto.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 vc-card-hover">
                             <div className="flex justify-between items-start">
                               <div>
                                 <h4 className="font-semibold text-slate-800">{proyecto.title}</h4>
@@ -631,7 +638,7 @@ export default function EspacioEmprendedorPage() {
                     ) : (
                       <div className="space-y-3 max-h-64 overflow-y-auto">
                         {mensajesRecibidos.map((msg) => (
-                          <div key={msg.id} className="bg-slate-50 rounded-xl p-3 border-l-4 border-green-500">
+                          <div key={msg.id} className="bg-slate-50 rounded-xl p-3 border-l-4 border-green-500 vc-card-hover">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -646,7 +653,7 @@ export default function EspacioEmprendedorPage() {
                             </div>
                             <button
                               onClick={() => responderMensaje(msg.proyecto_id, msg.remitente_id)}
-                              className="mt-2 text-xs text-green-700 hover:underline"
+                              className="mt-2 text-xs text-green-700 hover:underline vc-btn-wave"
                             >
                               Responder →
                             </button>
@@ -660,7 +667,7 @@ export default function EspacioEmprendedorPage() {
             </div>
 
             {/* Bloque para Inversionistas (sin restricción de afiliación) */}
-            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm">
+            <div className={`bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm vc-fade-up vc-delay-1`}>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-2xl">💰</span>
                 <h2 className="text-xl font-bold text-slate-900">Como Inversionista</h2>
@@ -671,13 +678,13 @@ export default function EspacioEmprendedorPage() {
               <div className="flex flex-col gap-3">
                 <Link
                   href="/espacio-emprendedor/explorar"
-                  className="bg-blue-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-800 text-center"
+                  className={btnSecondary + " text-center"}
                 >
                   🔍 Explorar proyectos
                 </Link>
                 <Link
                   href="/espacio-emprendedor/perfil-inversionista"
-                  className="bg-slate-200 text-slate-800 px-4 py-2 rounded-xl font-semibold hover:bg-slate-300 text-center"
+                  className={btnOutline}
                 >
                   ⚙️ Configurar mi perfil
                 </Link>

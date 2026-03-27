@@ -275,120 +275,105 @@ useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ===== Estilos cálidos (verde + rojo) =====
+  // ===== Estilos cálidos (verde + rojo) con animaciones =====
   const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
+    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm vc-fade-up vc-card-hover";
 
   const innerCard = "rounded-2xl border-2 border-red-600 bg-white/80 p-4";
 
   const btnGreen =
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm";
+    "hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse";
 
   const btnGreenSm =
     "inline-flex items-center gap-2 rounded-xl px-3 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition";
+    "hover:bg-green-900 transition vc-btn-wave vc-btn-pulse";
 
   const selectWarm =
     "rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold text-slate-900 " +
     "shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-600";
+  
   // ===============================
-  // ✅ EN VIVO: estado UI (lee localStorage)
+  // ✅ EN VIVO: estado UI (Supabase real + Realtime FORZADO)
   // ===============================
-  // ===============================
-// ===============================
-// ✅ EN VIVO: estado UI (Supabase real + Realtime FORZADO)
-// ===============================
-useEffect(() => {
-  let alive = true;
+  useEffect(() => {
+    let alive = true;
 
-  async function loadLives() {
-    const { data, error } = await supabase
-      .from("votoclaro_live_entries")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
+    async function loadLives() {
+      const { data, error } = await supabase
+        .from("votoclaro_live_entries")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(300);
 
-    if (error) {
-      console.error("[CambioConValentia] loadLives error", error);
-      return;
+      if (error) {
+        console.error("[CambioConValentia] loadLives error", error);
+        return;
+      }
+
+      if (!alive) return;
+
+      const mapped: LiveEntry[] = (data ?? []).map((x: any) => ({
+        id: x.id,
+        candidateId: x.candidate_id,
+        candidateName: x.candidate_name,
+        platform: x.platform,
+        url: x.url,
+        createdAt: new Date(x.created_at).getTime(),
+        status: x.status,
+      }));
+
+      setLiveEntries(mapped);
     }
 
-    if (!alive) return;
+    // 1) Cargar al entrar
+    loadLives();
 
-    const mapped: LiveEntry[] = (data ?? []).map((x: any) => ({
-      id: x.id,
-      candidateId: x.candidate_id,
-      candidateName: x.candidate_name,
-      platform: x.platform,
-      url: x.url,
-      createdAt: new Date(x.created_at).getTime(),
-      status: x.status,
-    }));
+    // 2) Realtime: FORZAR websocket con broadcast + escuchar cambios Postgres
+    const channel = supabase
+      .channel("votoclaro_live_entries:cambio", {
+        config: { broadcast: { self: true } },
+      })
+      // ✅ Esto fuerza la conexión websocket aunque no haya cambios de BD
+      .on("broadcast", { event: "ping" }, (payload) => {
+        console.log("[CambioConValentia] broadcast ping recibido:", payload);
+      })
+      // ✅ Cambios reales en BD
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "votoclaro_live_entries" },
+        (payload) => {
+          console.log("[CambioConValentia] postgres_changes:", payload);
+          loadLives();
+        }
+      )
+      .subscribe((status) => {
+        console.log("[CambioConValentia] realtime status:", status);
 
-    setLiveEntries(mapped);
-  }
+        // Cuando ya está suscrito, mandamos un ping para confirmar que hay websocket
+        if (status === "SUBSCRIBED") {
+          channel
+            .send({
+              type: "broadcast",
+              event: "ping",
+              payload: { t: Date.now(), from: "cambio" },
+            })
+            .catch((e) => console.error("[CambioConValentia] ping send error", e));
+        }
+      });
 
-  // 1) Cargar al entrar
-  loadLives();
-
-  // 2) Realtime: FORZAR websocket con broadcast + escuchar cambios Postgres
-  const channel = supabase
-    .channel("votoclaro_live_entries:cambio", {
-      config: { broadcast: { self: true } },
-    })
-    // ✅ Esto fuerza la conexión websocket aunque no haya cambios de BD
-    .on("broadcast", { event: "ping" }, (payload) => {
-      console.log("[CambioConValentia] broadcast ping recibido:", payload);
-    })
-    // ✅ Cambios reales en BD
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "votoclaro_live_entries" },
-      (payload) => {
-        console.log("[CambioConValentia] postgres_changes:", payload);
-        loadLives();
-      }
-    )
-    .subscribe((status) => {
-      console.log("[CambioConValentia] realtime status:", status);
-
-      // Cuando ya está suscrito, mandamos un ping para confirmar que hay websocket
-      if (status === "SUBSCRIBED") {
-        channel
-          .send({
-            type: "broadcast",
-            event: "ping",
-            payload: { t: Date.now(), from: "cambio" },
-          })
-          .catch((e) => console.error("[CambioConValentia] ping send error", e));
-      }
-    });
-
-  return () => {
-    alive = false;
-    supabase.removeChannel(channel);
-  };
-}, []);
+    return () => {
+      alive = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const [liveEntries, setLiveEntries] = useState<LiveEntry[]>([]);
   const [liveSearch, setLiveSearch] = useState("");
   const [selectedCandidateForHistory, setSelectedCandidateForHistory] =
     useState<string>("");
-
-  /*useEffect(() => {
-    if (typeof window === "undefined") return;
-    setLiveEntries(readLiveEntries());
-
-    // sincroniza cambios si se modifican en otra pestaña
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === LS_LIVE_KEY) setLiveEntries(readLiveEntries());
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);*/
 
   const liveNow = useMemo(() => {
     return liveEntries
@@ -422,7 +407,7 @@ useEffect(() => {
   }, [liveEntries, selectedCandidateForHistory]);
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100">
+    <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100 vc-fade-up">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
@@ -436,7 +421,7 @@ useEffect(() => {
 
         <Link
           href="/"
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold hover:bg-green-900 shadow-sm transition"
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold hover:bg-green-900 shadow-sm transition vc-btn-wave vc-btn-pulse"
         >
           ← Volver al inicio
         </Link>
@@ -451,7 +436,7 @@ useEffect(() => {
             rel="noreferrer"
             onMouseEnter={onHoverSpeak}
             onTouchStart={onHoverSpeak}
-            className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-green-900 border-2 border-red-600 hover:shadow-lg transition"
+            className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-green-900 border-2 border-red-600 hover:shadow-lg transition vc-card-hover"
             title="Abrir sitio oficial del Partido Democrático Perú Federal"
           >
             <Image
@@ -483,7 +468,7 @@ useEffect(() => {
             className={
               "w-full sm:w-auto text-center rounded-2xl px-5 py-3 " +
               "font-extrabold text-white bg-green-800 border-2 border-red-600 " +
-              "shadow-md hover:shadow-lg hover:bg-green-900 transition"
+              "shadow-md hover:shadow-lg hover:bg-green-900 transition vc-btn-wave vc-btn-pulse"
             }
           >
             🔗 {CAMBIO_PAGE_LINK_LABEL}
@@ -497,7 +482,7 @@ useEffect(() => {
           rel="noreferrer"
           onMouseEnter={onHoverSpeak}
           onTouchStart={onHoverSpeak}
-          className="mt-4 block rounded-2xl border-2 border-red-600 bg-green-50/80 px-5 py-4 shadow-sm hover:bg-green-100 hover:shadow-md transition"
+          className="mt-4 block rounded-2xl border-2 border-red-600 bg-green-50/80 px-5 py-4 shadow-sm hover:bg-green-100 hover:shadow-md transition vc-card-hover"
           title="Abrir sitio oficial del Partido Democrático Perú Federal"
         >
           <p className="text-sm md:text-base font-extrabold text-slate-900 text-center uppercase leading-relaxed whitespace-normal break-words">
@@ -635,7 +620,7 @@ useEffect(() => {
     ].map((item) => (
       <div
         key={item.label}
-        className="flex items-center justify-between gap-3 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3"
+        className="flex items-center justify-between gap-3 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3 vc-card-hover"
       >
         <span className="text-sm font-semibold text-slate-900 break-words">
           {item.label}
@@ -644,7 +629,7 @@ useEffect(() => {
         <button
           type="button"
           onClick={() => window.open(item.url, "_blank", "noopener,noreferrer")}
-          className="rounded-lg px-3 py-1 bg-green-800 text-white text-xs font-extrabold border border-red-500 hover:bg-green-900 transition shrink-0"
+          className="rounded-lg px-3 py-1 bg-green-800 text-white text-xs font-extrabold border border-red-500 hover:bg-green-900 transition shrink-0 vc-btn-wave vc-btn-pulse"
         >
           Ver
         </button>
@@ -693,7 +678,7 @@ useEffect(() => {
               {liveNow.map((x) => (
                 <div
                   key={x.id}
-                  className="rounded-2xl border-4 border-red-700 bg-red-50/60 p-4"
+                  className="rounded-2xl border-4 border-red-700 bg-red-50/60 p-4 vc-card-hover"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -713,7 +698,7 @@ useEffect(() => {
                       onClick={() => window.open(x.url, "_blank")}
                       className={
                         "shrink-0 rounded-xl px-4 py-2 border-2 border-red-700 " +
-                        "bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition"
+                        "bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition vc-btn-wave vc-btn-pulse"
                       }
                       title="Ver en vivo"
                     >
@@ -769,7 +754,7 @@ useEffect(() => {
                         setSelectedCandidateForHistory(c.id);
                         setLiveSearch(c.name);
                       }}
-                      className="w-full text-left rounded-xl px-3 py-2 hover:bg-green-100 transition text-sm font-extrabold text-slate-900"
+                      className="w-full text-left rounded-xl px-3 py-2 hover:bg-green-100 transition text-sm font-extrabold text-slate-900 vc-btn-wave vc-btn-pulse"
                       title="Ver historial"
                     >
                       {c.name}
@@ -813,7 +798,7 @@ useEffect(() => {
                   {historyForSelected.map((x) => (
                     <div
                       key={x.id}
-                      className="rounded-2xl border-2 border-red-600 bg-white/85 p-3 flex items-center justify-between gap-3 flex-wrap"
+                      className="rounded-2xl border-2 border-red-600 bg-white/85 p-3 flex items-center justify-between gap-3 flex-wrap vc-card-hover"
                     >
                       <div className="min-w-0">
                         <div className="text-xs font-extrabold text-slate-700">
@@ -833,7 +818,7 @@ useEffect(() => {
                         onClick={() => window.open(x.url, "_blank")}
                         className={
                           "rounded-xl px-4 py-2 border-2 border-red-600 " +
-                          "bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition"
+                          "bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition vc-btn-wave vc-btn-pulse"
                         }
                         title="Ver"
                       >
@@ -934,7 +919,7 @@ useEffect(() => {
         key={c.id}
         type="button"
         onClick={() => router.push(`/candidate/${c.id}?tab=HV&from=cambio`)}
-        className="text-left rounded-2xl border-2 border-red-600 bg-white/85 shadow-sm hover:shadow-md transition overflow-hidden"
+        className="text-left rounded-2xl border-2 border-red-600 bg-white/85 shadow-sm hover:shadow-md transition overflow-hidden vc-card-hover"
       >
         <div className="relative w-full aspect-[4/3] bg-green-50 border-b-2 border-red-600">
           <Image src={c.photo} alt={c.name} fill className="object-contain" />
@@ -959,7 +944,7 @@ useEffect(() => {
             Región: {c.region}
           </div>
 
-          {/* Botón VER (en vez de azul) */}
+          {/* Botón VER */}
           <a
             href={c.profileLink}
             target="_blank"
@@ -968,7 +953,7 @@ useEffect(() => {
             className={
               "mt-3 inline-flex items-center justify-center " +
               "rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 " +
-              "text-white text-xs font-extrabold hover:bg-green-900 transition"
+              "text-white text-xs font-extrabold hover:bg-green-900 transition vc-btn-wave vc-btn-pulse"
             }
             title="Ver"
           >

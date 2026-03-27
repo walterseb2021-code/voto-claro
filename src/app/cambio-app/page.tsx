@@ -259,18 +259,18 @@ export default function CambioAppPage() {
   }
 
   // ===== Estilos APP (azul) =====
-  const sectionWrap = "mt-4 rounded-2xl border-4 border-red-700 p-4 shadow-sm";
+  const sectionWrap = "mt-4 rounded-2xl border-4 border-red-700 p-4 shadow-sm vc-fade-up vc-card-hover";
 
   const innerCard = "rounded-2xl border-2 border-red-600 bg-[#BFFCFf] p-4";
 
   // ✅ Botón institucional (NO usar bg-[#2F61A6] en el markup)
   const btnGreen =
     "vc-btn vc-btn-blue inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 text-sm font-extrabold shadow-sm transition";
+    "border-2 border-red-600 text-sm font-extrabold shadow-sm transition vc-btn-wave vc-btn-pulse";
 
   const btnGreenSm =
     "vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 text-xs font-extrabold transition";
+    "border-2 border-red-600 text-xs font-extrabold transition vc-btn-wave vc-btn-pulse";
 
   const selectWarm =
     "vc-select-blue rounded-xl border-2 border-red-600 font-extrabold px-3 py-2 text-sm " +
@@ -379,7 +379,7 @@ export default function CambioAppPage() {
   }, [liveEntries, selectedCandidateForHistory]);
 
   return (
-    <main className="vc-cambio-app min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-sky-50 via-white to-sky-100">
+    <main className="vc-cambio-app min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-sky-50 via-white to-sky-100 vc-fade-up">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
@@ -403,7 +403,7 @@ export default function CambioAppPage() {
               setActiveParty("app");
             } catch {}
           }}
-          className="vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-sm font-extrabold shadow-sm transition"
+          className="vc-btn vc-btn-blue inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 text-sm font-extrabold shadow-sm transition vc-btn-wave vc-btn-pulse"
         >
           ← Volver al inicio
         </Link>
@@ -419,7 +419,7 @@ export default function CambioAppPage() {
               rel="noreferrer"
               onMouseEnter={onHoverSpeak}
               onTouchStart={onHoverSpeak}
-              className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-[#2F61A6] border-2 border-red-600 hover:shadow-lg transition"
+              className="relative w-[min(520px,100%)] aspect-[16/9] rounded-xl overflow-hidden bg-[#2F61A6] border-2 border-red-600 hover:shadow-lg transition vc-card-hover"
               title="Abrir sitio oficial del Partido Alianza para el Progreso (APP)"
             >
               <Image
@@ -450,7 +450,7 @@ export default function CambioAppPage() {
               rel="noreferrer"
               className={
                 "vc-btn vc-btn-blue w-full sm:w-auto text-center rounded-2xl px-5 py-3 " +
-                "font-extrabold border-2 border-red-600 shadow-md hover:shadow-lg transition"
+                "font-extrabold border-2 border-red-600 shadow-md hover:shadow-lg transition vc-btn-wave vc-btn-pulse"
               }
             >
               🔗 {CAMBIO_APP_PAGE_LINK_LABEL}
@@ -464,7 +464,7 @@ export default function CambioAppPage() {
             rel="noreferrer"
             onMouseEnter={onHoverSpeak}
             onTouchStart={onHoverSpeak}
-            className="mt-4 block rounded-2xl border-2 border-red-600 bg-sky-50 px-5 py-4 shadow-sm hover:bg-sky-100 hover:shadow-md transition"
+            className="mt-4 block rounded-2xl border-2 border-red-600 bg-sky-50 px-5 py-4 shadow-sm hover:bg-sky-100 hover:shadow-md transition vc-card-hover"
             title="Abrir sitio oficial del Partido Alianza para el Progreso (APP)"
           >
             <p className="text-sm md:text-base font-extrabold text-slate-900 text-center uppercase leading-relaxed whitespace-normal break-words">
@@ -597,7 +597,7 @@ export default function CambioAppPage() {
                   ].map((item) => (
                    <div
   key={item.label}
-  className="flex items-center justify-between gap-3 min-w-0 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3"
+  className="flex items-center justify-between gap-3 min-w-0 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3 vc-card-hover"
 >
   <span className="text-sm font-semibold text-slate-900 break-words flex-1 min-w-0">
     {item.label}
@@ -606,7 +606,7 @@ export default function CambioAppPage() {
   <button
     type="button"
     onClick={() => window.open(item.url, "_blank", "noopener,noreferrer")}
-    className="vc-btn-blue rounded-lg px-3 py-1 text-xs font-extrabold border border-red-500 transition shrink-0 max-w-full"
+    className="vc-btn-blue rounded-lg px-3 py-1 text-xs font-extrabold border border-red-500 transition shrink-0 max-w-full vc-btn-wave vc-btn-pulse"
   >
     Ver
   </button>
@@ -656,7 +656,7 @@ export default function CambioAppPage() {
               {liveNow.map((x) => (
                 <div
                   key={x.id}
-                  className="rounded-2xl border-4 border-red-700 bg-red-50/60 p-4"
+                  className="rounded-2xl border-4 border-red-700 bg-red-50/60 p-4 vc-card-hover"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -676,7 +676,7 @@ export default function CambioAppPage() {
                       onClick={() => window.open(x.url, "_blank")}
                       className={
                         "vc-btn-blue shrink-0 rounded-xl px-4 py-2 border-2 border-red-700 " +
-                        "text-xs font-extrabold transition"
+                        "text-xs font-extrabold transition vc-btn-wave vc-btn-pulse"
                       }
                       title="Ver en vivo"
                     >
@@ -731,7 +731,7 @@ export default function CambioAppPage() {
                         setSelectedCandidateForHistory(c.id);
                         setLiveSearch(c.name);
                       }}
-                      className="w-full text-left rounded-xl px-3 py-2 hover:bg-sky-100 transition text-sm font-extrabold text-slate-900"
+                      className="w-full text-left rounded-xl px-3 py-2 hover:bg-sky-100 transition text-sm font-extrabold text-slate-900 vc-btn-wave vc-btn-pulse"
                       title="Ver historial"
                     >
                       {c.name}
@@ -775,7 +775,7 @@ export default function CambioAppPage() {
                   {historyForSelected.map((x) => (
                     <div
                       key={x.id}
-                      className="rounded-2xl border-2 border-red-600 bg-white/85 p-3 flex items-center justify-between gap-3 flex-wrap"
+                      className="rounded-2xl border-2 border-red-600 bg-white/85 p-3 flex items-center justify-between gap-3 flex-wrap vc-card-hover"
                     >
                       <div className="min-w-0">
                         <div className="text-xs font-extrabold text-slate-700">
@@ -793,7 +793,7 @@ export default function CambioAppPage() {
                       <button
                         type="button"
                         onClick={() => window.open(x.url, "_blank")}
-                        className="vc-btn-blue rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition"
+                        className="vc-btn-blue rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition vc-btn-wave vc-btn-pulse"
                         title="Ver"
                       >
                         Ver
@@ -888,7 +888,7 @@ export default function CambioAppPage() {
               key={c.id}
               type="button"
               onClick={() => router.push(`/candidate/${c.id}?tab=HV&from=cambio`)}
-              className="text-left rounded-2xl border-2 border-red-600 bg-white/85 shadow-sm hover:shadow-md transition overflow-hidden"
+              className="text-left rounded-2xl border-2 border-red-600 bg-white/85 shadow-sm hover:shadow-md transition overflow-hidden vc-card-hover"
             >
               <div className="relative w-full aspect-[4/3] bg-sky-50 border-b-2 border-red-600">
                 <Image
@@ -925,7 +925,7 @@ export default function CambioAppPage() {
                   onClick={(e) => e.stopPropagation()}
                    className={
                     "vc-btn vc-btn-blue mt-3 inline-flex items-center justify-center w-full sm:w-auto " +
-                    "rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition max-w-full"
+                    "rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition max-w-full vc-btn-wave vc-btn-pulse"
                   }
                   title="Ver"
                 >
