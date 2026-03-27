@@ -47,6 +47,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [participant, setParticipant] = useState<any>(null);
+  const [afiliadoId, setAfiliadoId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -60,7 +61,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
   // Función para obtener el nombre del remitente según el tipo
   async function obtenerNombreRemitente(senderType: string, afiliadoId: string | null, participanteId: string | null): Promise<string> {
     if (senderType === 'emprendedor' && afiliadoId) {
-      // Buscar en espacio_afiliados -> project_participants
       const { data: afiliado } = await supabase
         .from('espacio_afiliados')
         .select('participant_id')
@@ -100,6 +100,8 @@ export default function EspacioEmprendedorProjectDetailPage() {
       return;
     }
 
+    console.log('📦 Mensajes en BD:', messagesData?.length);
+
     // Obtener nombres de los remitentes
     const mensajesConNombres = await Promise.all(
       (messagesData || []).map(async (msg: any) => {
@@ -115,8 +117,8 @@ export default function EspacioEmprendedorProjectDetailPage() {
       })
     );
 
-    console.log('📥 Mensajes cargados:', mensajesConNombres.length);
     setMessages(mensajesConNombres);
+    console.log('✅ Mensajes cargados en estado:', mensajesConNombres.length);
   }
 
   // Cargar datos
@@ -141,7 +143,18 @@ export default function EspacioEmprendedorProjectDetailPage() {
           console.log('👤 Participante actual:', currentParticipant?.full_name);
         }
 
-        // 2. Obtener proyecto desde espacio_proyectos
+        // 2. Obtener afiliado_id si es emprendedor
+        if (currentParticipant) {
+          const { data: afiliadoData } = await supabase
+            .from('espacio_afiliados')
+            .select('id')
+            .eq('participant_id', currentParticipant.id)
+            .maybeSingle();
+          setAfiliadoId(afiliadoData?.id || null);
+          console.log('🏷️ Afiliado ID:', afiliadoData?.id);
+        }
+
+        // 3. Obtener proyecto desde espacio_proyectos
         const { data: projectData, error: projectError } = await supabase
           .from('espacio_proyectos')
           .select('*')
@@ -150,7 +163,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
         if (projectError) throw projectError;
 
-        // 3. Obtener el dueño (afiliado) del proyecto
+        // 4. Obtener el dueño (afiliado) del proyecto
         let ownerInfo = null;
         let ownerParticipantId = null;
         if (projectData.owner_id) {
@@ -185,14 +198,16 @@ export default function EspacioEmprendedorProjectDetailPage() {
         const esProp = currentParticipant?.id === ownerParticipantId;
         setEsPropietario(esProp);
         console.log('🏷️ Es propietario:', esProp);
+        console.log('👤 Current participant ID:', currentParticipant?.id);
+        console.log('👤 Owner participant ID:', ownerParticipantId);
 
-        // 4. Incrementar vistas
+        // 5. Incrementar vistas
         await supabase
           .from('espacio_proyectos')
           .update({ views: (projectData.views || 0) + 1 })
           .eq('id', projectId);
 
-        // 5. Cargar mensajes del chat
+        // 6. Cargar mensajes del chat
         await cargarMensajes();
 
       } catch (err: any) {
@@ -286,16 +301,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const handleResponder = async (mensajeId: string, remitenteParticipanteId: string) => {
     if (!respuesta.trim()) return;
 
-    // Para responder, necesitamos el afiliado_id del emprendedor
-    let afiliadoId = null;
-    if (participant) {
-      const { data: afiliadoData } = await supabase
-        .from('espacio_afiliados')
-        .select('id')
-        .eq('participant_id', participant.id)
-        .maybeSingle();
-      afiliadoId = afiliadoData?.id;
-    }
+    console.log('📤 Enviando respuesta, afiliadoId:', afiliadoId);
 
     const respuestaData = {
       proyecto_id: projectId,
@@ -303,7 +309,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
       sender_type: 'emprendedor',
       content: respuesta.trim(),
     };
-    console.log('📤 Enviando respuesta:', respuestaData);
 
     setEnviandoRespuesta(true);
     try {
