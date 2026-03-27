@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -53,6 +53,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [esPropietario, setEsPropietario] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<string>('Conectando...');
 
   // Formatear fecha en hora de Perú
   const formatDate = (dateStr: string) => {
@@ -204,12 +205,14 @@ export default function EspacioEmprendedorProjectDetailPage() {
     loadData();
   }, [projectId]);
 
-  // SUSCRIPCIÓN EN TIEMPO REAL
+  // SUSCRIPCIÓN EN TIEMPO REAL CON LOGS EXTENDIDOS
   useEffect(() => {
     if (!projectId) return;
 
     console.log('🔌 Configurando suscripción para proyecto:', projectId);
+    setRealtimeStatus('Conectando...');
 
+    // Suscripción sin filtro para probar si llegan eventos de cualquier mensaje
     const channel = supabase
       .channel(`proyecto-mensajes-${projectId}`)
       .on(
@@ -218,19 +221,30 @@ export default function EspacioEmprendedorProjectDetailPage() {
           event: 'INSERT',
           schema: 'public',
           table: 'espacio_mensajes',
-          filter: `proyecto_id=eq.${projectId}`,
+          // SIN FILTRO INICIALMENTE PARA DEPURAR
         },
         async (payload) => {
-          console.log('📨 NUEVO MENSAJE RECIBIDO (realtime):', payload.new);
-          await cargarMensajes();
-          setSuccessMsg('📨 Nuevo mensaje recibido');
-          setTimeout(() => setSuccessMsg(null), 3000);
+          console.log('📨 EVENTO REALTIME RECIBIDO (sin filtro):', payload);
+          if (payload.new.proyecto_id === projectId) {
+            console.log('✅ Este mensaje es para este proyecto. Recargando...');
+            await cargarMensajes();
+            setSuccessMsg('📨 Nuevo mensaje recibido');
+            setTimeout(() => setSuccessMsg(null), 3000);
+          } else {
+            console.log('⏭️ Mensaje ignorado porque es de otro proyecto:', payload.new.proyecto_id);
+          }
         }
       )
       .subscribe((status) => {
         console.log('🔌 Estado suscripción:', status);
         if (status === 'SUBSCRIBED') {
+          setRealtimeStatus('✅ Conectado');
           console.log('✅ Suscripción activa para proyecto:', projectId);
+        } else if (status === 'CHANNEL_ERROR') {
+          setRealtimeStatus('❌ Error de conexión');
+          console.error('❌ Error en la suscripción. Realtime no está habilitado para la tabla espacio_mensajes.');
+        } else {
+          setRealtimeStatus(status);
         }
       });
 
@@ -244,7 +258,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
 
-    // Determinar el tipo de remitente
     let mensajeData: any = {
       proyecto_id: projectId,
       content: newMessage.trim(),
@@ -273,7 +286,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
       setNewMessage('');
       setSuccessMsg('✅ Mensaje enviado correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
-      // No es necesario recargar aquí porque el realtime lo hará
+      // No recargamos manualmente porque el realtime lo hará
     } catch (err: any) {
       console.error('Error al enviar mensaje:', err);
       setErrorMsg(err.message || 'Error al enviar mensaje');
@@ -322,6 +335,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
           >
             ← Volver
           </button>
+        </div>
+
+        {/* Indicador de estado de realtime */}
+        <div className="mb-4 text-right text-xs">
+          <span className={`inline-block w-2 h-2 rounded-full mr-1 ${realtimeStatus.includes('Conectado') ? 'bg-green-500' : 'bg-red-500'}`}></span>
+          <span className="text-slate-500">Realtime: {realtimeStatus}</span>
         </div>
 
         {successMsg && (
@@ -424,7 +443,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
             )}
           </div>
 
-          {/* Caja de texto única para escribir (tanto emprendedor como inversionista) */}
+          {/* Caja de texto única para escribir */}
           {(participant || (esPropietario && afiliadoId)) ? (
             <div className="flex gap-3 items-start">
               <textarea
