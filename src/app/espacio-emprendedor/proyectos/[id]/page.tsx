@@ -1,7 +1,7 @@
 // src/app/espacio-emprendedor/proyectos/[id]/page.tsx
 'use client';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -57,8 +57,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [esPropietario, setEsPropietario] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
-  // Función para obtener el nombre del remitente según el tipo
+  // Referencia para el canal
+  const channelRef = useRef<any>(null);
+
+  // Función para obtener el nombre del remitente
   async function obtenerNombreRemitente(senderType: string, afiliadoId: string | null, participanteId: string | null): Promise<string> {
     if (senderType === 'emprendedor' && afiliadoId) {
       const { data: afiliado } = await supabase
@@ -102,7 +106,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
     console.log('📦 Mensajes en BD:', messagesData?.length);
 
-    // Obtener nombres de los remitentes
     const mensajesConNombres = await Promise.all(
       (messagesData || []).map(async (msg: any) => {
         const nombre = await obtenerNombreRemitente(
@@ -121,7 +124,41 @@ export default function EspacioEmprendedorProjectDetailPage() {
     console.log('✅ Mensajes cargados en estado:', mensajesConNombres.length);
   }
 
-  // Cargar datos
+  // Configurar suscripción en tiempo real
+  function setupRealtimeSubscription() {
+    if (channelRef.current) {
+      console.log('🔌 Eliminando suscripción anterior');
+      supabase.removeChannel(channelRef.current);
+    }
+
+    console.log('🔌 Creando nueva suscripción para proyecto:', projectId);
+    const channel = supabase
+      .channel(`proyecto-mensajes-${projectId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'espacio_mensajes',
+          filter: `proyecto_id=eq.${projectId}`,
+        },
+        async (payload) => {
+          console.log('📨 NUEVO MENSAJE RECIBIDO EN TIEMPO REAL:', payload.new);
+          // Recargar mensajes inmediatamente
+          await cargarMensajes();
+          setSuccessMsg('📨 Nuevo mensaje recibido');
+          setTimeout(() => setSuccessMsg(null), 3000);
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔌 Estado de suscripción:', status);
+        setIsSubscribed(status === 'SUBSCRIBED');
+      });
+
+    channelRef.current = channel;
+  }
+
+  // Cargar datos iniciales
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -163,7 +200,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
         if (projectError) throw projectError;
 
-        // 4. Obtener el dueño (afiliado) del proyecto
+        // 4. Obtener el dueño del proyecto
         let ownerInfo = null;
         let ownerParticipantId = null;
         if (projectData.owner_id) {
@@ -194,12 +231,10 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
         setProject({ ...projectData, owner: ownerInfo });
 
-        // Determinar si el usuario actual es el dueño del proyecto
+        // Determinar si el usuario actual es el dueño
         const esProp = currentParticipant?.id === ownerParticipantId;
         setEsPropietario(esProp);
         console.log('🏷️ Es propietario:', esProp);
-        console.log('👤 Current participant ID:', currentParticipant?.id);
-        console.log('👤 Owner participant ID:', ownerParticipantId);
 
         // 5. Incrementar vistas
         await supabase
@@ -207,7 +242,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           .update({ views: (projectData.views || 0) + 1 })
           .eq('id', projectId);
 
-        // 6. Cargar mensajes del chat
+        // 6. Cargar mensajes
         await cargarMensajes();
 
       } catch (err: any) {
@@ -218,40 +253,24 @@ export default function EspacioEmprendedorProjectDetailPage() {
       }
     }
 
-    if (projectId) {
-      loadData();
-    }
+    loadData();
+  }, [projectId]);
 
-    // SUSCRIPCIÓN EN TIEMPO REAL
-    console.log('🔌 Iniciando suscripción para proyecto:', projectId);
-    const subscription = supabase
-      .channel(`proyecto-mensajes-${projectId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'espacio_mensajes',
-          filter: `proyecto_id=eq.${projectId}`,
-        },
-        async (payload) => {
-          console.log('📨 NUEVO MENSAJE RECIBIDO EN TIEMPO REAL:', payload.new);
-          await cargarMensajes();
-          if (esPropietario) {
-            setSuccessMsg('📨 Nuevo mensaje recibido de un inversionista');
-            setTimeout(() => setSuccessMsg(null), 3000);
-          }
-        }
-      )
-      .subscribe();
+  // Configurar suscripción después de cargar los datos
+  useEffect(() => {
+    if (!projectId) return;
+
+    setupRealtimeSubscription();
 
     return () => {
-      console.log('🔌 Cerrando suscripción para proyecto:', projectId);
-      supabase.removeChannel(subscription);
+      if (channelRef.current) {
+        console.log('🔌 Limpiando suscripción al desmontar');
+        supabase.removeChannel(channelRef.current);
+      }
     };
   }, [projectId]);
 
-  // Enviar mensaje (solo para inversionistas)
+  // Enviar mensaje (inversionista)
   const handleSendMessage = async () => {
     if (!participant) {
       setErrorMsg('Debes iniciar sesión para contactar al emprendedor.');
@@ -275,17 +294,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
         .from('espacio_mensajes')
         .insert(mensajeData);
 
-      if (error) {
-        console.error('❌ Error al insertar mensaje:', error);
-        throw error;
-      }
-      console.log('✅ Mensaje insertado correctamente');
+      if (error) throw error;
 
       setNewMessage('');
       setSuccessMsg('✅ Mensaje enviado correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
       
-      // Recargar mensajes inmediatamente
       await cargarMensajes();
       
     } catch (err: any) {
@@ -297,11 +311,9 @@ export default function EspacioEmprendedorProjectDetailPage() {
     }
   };
 
-  // Responder mensaje (solo para emprendedores)
-  const handleResponder = async (mensajeId: string, remitenteParticipanteId: string) => {
+  // Responder mensaje (emprendedor)
+  const handleResponder = async (mensajeId: string) => {
     if (!respuesta.trim()) return;
-
-    console.log('📤 Enviando respuesta, afiliadoId:', afiliadoId);
 
     const respuestaData = {
       proyecto_id: projectId,
@@ -309,6 +321,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
       sender_type: 'emprendedor',
       content: respuesta.trim(),
     };
+    console.log('📤 Enviando respuesta:', respuestaData);
 
     setEnviandoRespuesta(true);
     try {
@@ -316,11 +329,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
         .from('espacio_mensajes')
         .insert(respuestaData);
 
-      if (error) {
-        console.error('❌ Error al insertar respuesta:', error);
-        throw error;
-      }
-      console.log('✅ Respuesta insertada correctamente');
+      if (error) throw error;
 
       setRespuesta('');
       setRespondiendoA(null);
@@ -442,7 +451,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
         {/* Sección de mensajes */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
           {esPropietario ? (
-            // Vista para el EMPRENDEDOR (dueño del proyecto)
+            // Vista para EMPRENDEDOR
             <>
               <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Mensajes recibidos</h2>
               <p className="text-sm text-slate-600 mb-4">
@@ -453,16 +462,14 @@ export default function EspacioEmprendedorProjectDetailPage() {
                 {messages.length === 0 ? (
                   <p className="text-slate-500 text-sm text-center">No hay mensajes aún.</p>
                 ) : (
-                  messages.map((msg) => (
+                  messages.filter(msg => msg.sender_type === 'inversionista').map((msg) => (
                     <div key={msg.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <span className="text-sm font-semibold text-slate-800">
                             {msg.remitente_nombre}
                           </span>
-                          {msg.sender_type === 'inversionista' && (
-                            <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Inversionista</span>
-                          )}
+                          <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Inversionista</span>
                         </div>
                         <span className="text-xs text-slate-400">
                           {new Date(msg.created_at).toLocaleString()}
@@ -481,7 +488,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
                           />
                           <div className="flex gap-2">
                             <button
-                              onClick={() => handleResponder(msg.id, msg.sender_participant_id!)}
+                              onClick={() => handleResponder(msg.id)}
                               disabled={enviandoRespuesta || !respuesta.trim()}
                               className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-50"
                             >
@@ -512,7 +519,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
               </div>
             </>
           ) : (
-            // Vista para el INVERSIONISTA
+            // Vista para INVERSIONISTA
             <>
               <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Contactar al emprendedor</h2>
               <p className="text-sm text-slate-600 mb-4">
