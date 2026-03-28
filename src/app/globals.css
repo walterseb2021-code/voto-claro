@@ -445,7 +445,10 @@ html[data-party="app"] .vc-block-inner {
   border: 6px solid #dc2626; /* 🔴 fuerte */
   background: #ffffff; /* panel claro sobre cian */
 }
-
+  html[data-party="app"] .vc-app-surface section.vc-hero-white {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
 /* =========================================================
    Federalito (se mantiene)
    ========================= */

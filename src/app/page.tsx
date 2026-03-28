@@ -204,7 +204,7 @@ export default function HomePage() {
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
       {/* HERO - con margen inferior agregado */}
         <div className="vc-block vc-fade-up mb-0">
-  <section className="vc-block-inner overflow-hidden shadow-sm">
+  <section className="vc-block-inner vc-hero-white overflow-hidden shadow-sm">
     <div className="p-6 md:p-8">
       <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-black">
         VOTO CLARO
