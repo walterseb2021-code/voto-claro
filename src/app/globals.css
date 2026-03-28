@@ -440,10 +440,59 @@ html[data-party="app"] .vc-block {
   margin-left: 0;
   margin-right: 0;
 }
-html[data-party="app"] .vc-block-inner {
+   html[data-party="app"] .vc-block-inner {
   border-radius: 24px;
   border: 6px solid #dc2626; /* 🔴 fuerte */
   background: #ffffff; /* panel claro sobre cian */
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease,
+    filter 0.22s ease,
+    background-color 0.22s ease;
+  will-change: transform, box-shadow, filter;
+}
+
+/* Hover real en escritorio */
+@media (hover: hover) {
+  html[data-party="app"] .vc-block-inner:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 0 0 3px rgba(220, 38, 38, 0.18),
+      0 14px 28px rgba(0, 0, 0, 0.14);
+    filter: brightness(1.01);
+  }
+}
+
+/* Si dentro del bloque hay botones/links/input activos, el bloque también responde */
+html[data-party="app"] .vc-block-inner:focus-within {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.16),
+    0 10px 22px rgba(0, 0, 0, 0.12);
+}
+
+/* Toque en móvil */
+html[data-party="app"] .vc-block-inner:active {
+  transform: scale(0.995);
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.14),
+    0 8px 18px rgba(0, 0, 0, 0.10);
+}
+
+/* Respeto a usuarios con menos animación */
+@media (prefers-reduced-motion: reduce) {
+  html[data-party="app"] .vc-block-inner {
+    transition: none !important;
+  }
+
+  html[data-party="app"] .vc-block-inner:hover,
+  html[data-party="app"] .vc-block-inner:focus-within,
+  html[data-party="app"] .vc-block-inner:active {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
 }
   html[data-party="app"] .vc-app-surface section.vc-hero-white {
   background-color: #ffffff !important;
