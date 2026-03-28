@@ -202,8 +202,8 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
-      {/* HERO (Marco azul + Interior cian) - con animación fade-up */}
-      <div className="vc-block vc-fade-up">
+      {/* HERO - con margen inferior agregado */}
+      <div className="vc-block vc-fade-up mb-8">
         <section className="vc-block-inner overflow-hidden shadow-sm">
           <div className="p-6 md:p-8">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-black">
@@ -319,8 +319,8 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* BUSCADOR - con animación fade-up */}
-      <div className="vc-block mt-6 vc-fade-up">
+      {/* BUSCADOR - con margen superior aumentado */}
+      <div className="vc-block mt-8 vc-fade-up">
         <section id="buscar" className="vc-block-inner p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
@@ -362,22 +362,23 @@ export default function HomePage() {
             {loading && <div className="text-sm mt-2 text-black">Buscando...</div>}
           </div>
 
-          <div className="mt-5 grid gap-3">
+          {/* Tarjetas de candidatos - REDUCIDAS */}
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {items.map((c) => (
               <SafeLink
                 key={c.id}
                 href={`/candidate/${c.id}`}
-                className="border-2 border-borderparty rounded-xl p-4 flex gap-4 bg-white hover:brightness-95 hover:shadow-sm transition vc-card-hover"
+                className="border-2 border-borderparty rounded-xl p-3 flex gap-3 bg-white hover:brightness-95 hover:shadow-sm transition vc-card-hover"
               >
-                <div className="w-14 h-14 rounded-lg overflow-hidden bg-primary-soft shrink-0 border border-borderparty">
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-primary-soft shrink-0 border border-borderparty">
                   {c.photo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={c.photo_url} alt={c.full_name} className="w-full h-full object-cover" />
                   ) : null}
                 </div>
-                <div className="min-w-0">
-                  <div className="font-extrabold truncate text-black">{c.full_name}</div>
-                  <div className="text-sm font-semibold truncate text-black">{c.party_name}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-extrabold text-black text-sm truncate">{c.full_name}</div>
+                  <div className="text-xs font-semibold text-black truncate">{c.party_name}</div>
                 </div>
               </SafeLink>
             ))}
@@ -392,7 +393,7 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* ACCESOS RÁPIDOS - con animación fade-up y efecto cascada */}
+      {/* ACCESOS RÁPIDOS - SIN CAMBIOS */}
       <section className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="vc-block vc-fade-up vc-delay-1">
           <SafeLink
