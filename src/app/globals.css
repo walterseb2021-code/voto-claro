@@ -300,7 +300,101 @@ html[data-party="app"] .vc-app-surface select:not(.vc-select-blue) {
   background-color: #ffffff !important;
   color: #000000 !important;
 }
+  /* =========================================================
+   ✅ APP: Acciones principales más vivas
+   - buscadores, inputs, botones y links tipo botón
+   ========================================================= */
 
+html[data-party="app"] .vc-app-surface input,
+html[data-party="app"] .vc-app-surface textarea,
+html[data-party="app"] .vc-app-surface select:not(.vc-select-blue) {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+/* foco más notorio para buscadores e inputs */
+html[data-party="app"] .vc-app-surface input:focus,
+html[data-party="app"] .vc-app-surface textarea:focus,
+html[data-party="app"] .vc-app-surface select:not(.vc-select-blue):focus {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.12),
+    0 10px 22px rgba(0, 0, 0, 0.10);
+  border-color: #dc2626 !important;
+}
+
+/* botones y links tipo botón */
+html[data-party="app"] .vc-app-surface button,
+html[data-party="app"] .vc-app-surface a.vc-btn-blue,
+html[data-party="app"] .vc-app-surface input[type="submit"],
+html[data-party="app"] .vc-app-surface input[type="button"] {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    background-color 0.18s ease;
+}
+
+/* hover real en escritorio */
+@media (hover: hover) {
+  html[data-party="app"] .vc-app-surface button:hover,
+  html[data-party="app"] .vc-app-surface a.vc-btn-blue:hover,
+  html[data-party="app"] .vc-app-surface input[type="submit"]:hover,
+  html[data-party="app"] .vc-app-surface input[type="button"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+    filter: brightness(1.02);
+  }
+}
+
+/* toque en móvil / clic */
+html[data-party="app"] .vc-app-surface button:active,
+html[data-party="app"] .vc-app-surface a.vc-btn-blue:active,
+html[data-party="app"] .vc-app-surface input[type="submit"]:active,
+html[data-party="app"] .vc-app-surface input[type="button"]:active {
+  transform: scale(0.98);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.10);
+}
+
+/* foco accesible */
+html[data-party="app"] .vc-app-surface button:focus-visible,
+html[data-party="app"] .vc-app-surface a.vc-btn-blue:focus-visible,
+html[data-party="app"] .vc-app-surface input[type="submit"]:focus-visible,
+html[data-party="app"] .vc-app-surface input[type="button"]:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.14),
+    0 10px 22px rgba(0, 0, 0, 0.10);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-party="app"] .vc-app-surface input,
+  html[data-party="app"] .vc-app-surface textarea,
+  html[data-party="app"] .vc-app-surface select:not(.vc-select-blue),
+  html[data-party="app"] .vc-app-surface button,
+  html[data-party="app"] .vc-app-surface a.vc-btn-blue,
+  html[data-party="app"] .vc-app-surface input[type="submit"],
+  html[data-party="app"] .vc-app-surface input[type="button"] {
+    transition: none !important;
+  }
+
+  html[data-party="app"] .vc-app-surface input:focus,
+  html[data-party="app"] .vc-app-surface textarea:focus,
+  html[data-party="app"] .vc-app-surface select:not(.vc-select-blue):focus,
+  html[data-party="app"] .vc-app-surface button:hover,
+  html[data-party="app"] .vc-app-surface button:active,
+  html[data-party="app"] .vc-app-surface a.vc-btn-blue:hover,
+  html[data-party="app"] .vc-app-surface a.vc-btn-blue:active,
+  html[data-party="app"] .vc-app-surface input[type="submit"]:hover,
+  html[data-party="app"] .vc-app-surface input[type="submit"]:active,
+  html[data-party="app"] .vc-app-surface input[type="button"]:hover,
+  html[data-party="app"] .vc-app-surface input[type="button"]:active {
+    transform: none !important;
+  }
+}
 /* =========================================================
    ✅ /cambio-app (APP): Botones azules SIEMPRE texto blanco
    - cubre vc-btn-blue y también bg-[#2F61A6]
@@ -926,12 +1020,60 @@ html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="hover:bg-gre
 }
 
 /* 6. Animación sutil para iconos al hacer hover */
+/* 6. Animación más viva para iconos dentro de bloques */
 .vc-icon-hover {
-  transition: transform 0.2s ease;
+  display: inline-flex;
+  transform-origin: center;
+  transition: transform 0.22s ease, filter 0.22s ease;
 }
 
-.vc-icon-hover:hover {
+@media (hover: hover) {
+  html[data-party="app"] .vc-block-inner:hover .vc-icon-hover {
+    transform: translateY(-2px) scale(1.12) rotate(-4deg);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.12));
+  }
+}
+
+html[data-party="app"] .vc-block-inner:focus-within .vc-icon-hover,
+html[data-party="app"] .vc-block-inner:active .vc-icon-hover {
   transform: scale(1.08);
+}
+  /* CTA tipo "Abrir página →" dentro de bloques */
+html[data-party="app"] .vc-block-inner .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary {
+  transition:
+    transform 0.22s ease,
+    letter-spacing 0.22s ease,
+    opacity 0.22s ease;
+}
+
+@media (hover: hover) {
+  html[data-party="app"] .vc-block-inner:hover .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary {
+    transform: translateX(6px);
+    letter-spacing: 0.01em;
+    opacity: 0.96;
+  }
+}
+
+html[data-party="app"] .vc-block-inner:focus-within .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary,
+html[data-party="app"] .vc-block-inner:active .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary {
+  transform: translateX(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-icon-hover,
+  html[data-party="app"] .vc-block-inner .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary {
+    transition: none !important;
+  }
+
+  html[data-party="app"] .vc-block-inner:hover .vc-icon-hover,
+  html[data-party="app"] .vc-block-inner:focus-within .vc-icon-hover,
+  html[data-party="app"] .vc-block-inner:active .vc-icon-hover,
+  html[data-party="app"] .vc-block-inner:hover .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary,
+  html[data-party="app"] .vc-block-inner:focus-within .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary,
+  html[data-party="app"] .vc-block-inner:active .mt-3.inline-flex.items-center.text-sm.font-extrabold.text-primary {
+    transform: none !important;
+    filter: none !important;
+  }
 }
 
 /* 7. Efecto de brillo sutil en bordes rojos al pasar (para bloques importantes) */
