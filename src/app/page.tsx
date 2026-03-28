@@ -321,7 +321,7 @@ export default function HomePage() {
 
       {/* BUSCADOR - con margen superior aumentado */}
       <div className="vc-block mt-8 vc-fade-up">
-        <section id="buscar" className="vc-block-inner p-6 shadow-sm">
+         <section id="buscar" className="vc-block-inner bg-primary-soft p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 className="inline-block rounded-lg bg-white px-3 py-1 text-lg font-extrabold text-black border-2 border-borderparty">
@@ -439,7 +439,7 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+            className="vc-block-inner bg-primary-soft block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
               <div className="text-2xl leading-none vc-icon-hover">🧠</div>
@@ -528,7 +528,7 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+            className="vc-block-inner bg-primary-soft block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
               <div className="text-2xl leading-none vc-icon-hover">📊</div>
@@ -590,7 +590,7 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+            className="vc-block-inner bg-primary-soft block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
               <div className="text-2xl leading-none vc-icon-hover">💬</div>
@@ -650,7 +650,7 @@ export default function HomePage() {
                 e,
               })
             }
-            className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+            className="vc-block-inner bg-primary-soft block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
           >
             <div className="flex items-start gap-3">
               <div className="text-2xl leading-none vc-icon-hover">💼</div>
