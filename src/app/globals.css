@@ -454,13 +454,32 @@ html[data-party="app"] .vc-block {
 }
 
 /* Hover real en escritorio */
+    @keyframes vcBorderPulse {
+  0% {
+    box-shadow:
+      0 0 0 0 rgba(220, 38, 38, 0),
+      0 10px 22px rgba(0, 0, 0, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(220, 38, 38, 0.22),
+      0 16px 30px rgba(0, 0, 0, 0.15);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(220, 38, 38, 0.12),
+      0 14px 28px rgba(0, 0, 0, 0.14);
+  }
+}
+
 @media (hover: hover) {
   html[data-party="app"] .vc-block-inner:hover {
     transform: translateY(-3px);
-    box-shadow:
-      0 0 0 3px rgba(220, 38, 38, 0.18),
-      0 14px 28px rgba(0, 0, 0, 0.14);
     filter: brightness(1.01);
+    animation: vcBorderPulse 0.75s ease-out 1;
+    box-shadow:
+      0 0 0 2px rgba(220, 38, 38, 0.12),
+      0 14px 28px rgba(0, 0, 0, 0.14);
   }
 }
 
@@ -473,13 +492,13 @@ html[data-party="app"] .vc-block-inner:focus-within {
 }
 
 /* Toque en móvil */
-html[data-party="app"] .vc-block-inner:active {
+       html[data-party="app"] .vc-block-inner:active {
   transform: scale(0.995);
+  animation: vcBorderPulse 0.45s ease-out 1;
   box-shadow:
-    0 0 0 3px rgba(220, 38, 38, 0.14),
+    0 0 0 3px rgba(220, 38, 38, 0.18),
     0 8px 18px rgba(0, 0, 0, 0.10);
 }
-
 /* Respeto a usuarios con menos animación */
 @media (prefers-reduced-motion: reduce) {
   html[data-party="app"] .vc-block-inner {
