@@ -203,7 +203,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
       {/* HERO - con margen inferior agregado */}
-      <div className="vc-block vc-fade-up mb-8">
+      <div className="vc-block vc-fade-up mb-16">
         <section className="vc-block-inner overflow-hidden shadow-sm">
           <div className="p-6 md:p-8">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-black">
@@ -312,15 +312,15 @@ export default function HomePage() {
               </button>
             </div>
 
-            <div className="mt-4 text-[11px] text-black">
-              Tip: <b>1 clic</b> explica, <b>2 clics</b> entra directo.
-            </div>
+                  <div className="mt-4 text-[11px] text-black mb-6">
+                   Tip: <b>1 clic</b> explica, <b>2 clics</b> entra directo.
+               </div>
           </div>
         </section>
       </div>
 
       {/* BUSCADOR - con margen superior aumentado */}
-      <div className="vc-block mt-8 vc-fade-up">
+      <div className="vc-block mt-16 vc-fade-up">
         <section id="buscar" className="vc-block-inner p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
