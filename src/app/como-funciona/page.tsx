@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation"; // ✅ importamos useRouter
+import { useRouter } from "next/navigation";
 
 function sendGuide(text: string, action: "SAY" | "SAY_AND_OPEN" = "SAY") {
   if (typeof window === "undefined") return;
@@ -14,10 +14,10 @@ function sendGuide(text: string, action: "SAY" | "SAY_AND_OPEN" = "SAY") {
 }
 
 export default function ComoFuncionaPage() {
-  const router = useRouter(); // ✅ para navegación programática
+  const router = useRouter();
 
   useEffect(() => {
-    // ✅ Al entrar a esta ventana: NO abrir el panel (evita que tape la pantalla)
+    // ✅ Al entrar a esta ventana: NO abrir el panel
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
         detail: { action: "CLOSE" },
@@ -45,9 +45,9 @@ export default function ComoFuncionaPage() {
 
   return (
     <main className="vc-how min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto">
-      <header className="mb-6 relative">
-        {/* ⬅ Volver a Inicio (arriba derecha) */}
-        <div className="absolute right-0 top-0">
+      <header className="mb-6">
+        {/* ⬅ Volver a Inicio - AHORA CORRECTO */}
+        <div className="flex justify-end mb-4">
           <button
             onClick={() => router.push('/')}
             className="rounded-xl px-4 py-2 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition shadow-md border-2 border-red-500 vc-btn-wave vc-btn-pulse"
@@ -56,7 +56,9 @@ export default function ComoFuncionaPage() {
           </button>
         </div>
 
-        <h1 className="text-3xl font-semibold text-slate-900 vc-fade-up">¿Cómo funciona VOTO CLARO?</h1>
+        <h1 className="text-3xl font-semibold text-slate-900 vc-fade-up">
+          ¿Cómo funciona VOTO CLARO?
+        </h1>
         <p className="mt-2 text-slate-800 max-w-3xl vc-fade-up vc-delay-1">
           Esta ventana es la guía de uso. Si el Asistente no habla automáticamente, haz un clic/toque en la pantalla y
           vuelve a intentar (es un bloqueo normal del navegador).
@@ -241,7 +243,7 @@ export default function ComoFuncionaPage() {
         </div>
       </section>
 
-      {/* 6) Qué hay en las secciones (resumen claro y completo) */}
+      {/* 6) Qué hay en las secciones */}
       <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover vc-delay-5">
         <h2 className="text-lg font-bold text-slate-900">6) ¿Qué encontrarás en cada sección?</h2>
 
