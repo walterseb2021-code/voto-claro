@@ -1,8 +1,9 @@
 'use client';
-import Link from 'next/link';
+  import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Función para obtener o crear device_id
 function getDeviceId(): string {
@@ -16,8 +17,9 @@ function getDeviceId(): string {
   return newId;
 }
 
-export default function EspacioEmprendedorPage() {
+  export default function EspacioEmprendedorPage() {
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
   const [participant, setParticipant] = useState<any>(null);
   const [afiliado, setAfiliado] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -401,7 +403,122 @@ export default function EspacioEmprendedorPage() {
       setVerificando(false);
     }
   };
+        useEffect(() => {
+    const topTitles = topProjects
+      .slice(0, 3)
+      .map((p) => p?.title)
+      .filter(Boolean);
 
+    const lastMessageProject =
+      mensajesRecibidos.length > 0 ? mensajesRecibidos[0]?.proyecto_titulo || '' : '';
+
+    const visibleParts: string[] = [];
+
+    if (loading) {
+      visibleParts.push('La pantalla está cargando datos del Espacio Emprendedor.');
+    }
+
+    if (!participant && !loading) {
+      visibleParts.push('Se muestra registro para participar e inicio de sesión con código.');
+    }
+
+    if (participant && !afiliado) {
+      visibleParts.push('El usuario ya es participante, pero todavía no está verificado como afiliado.');
+      visibleParts.push('Se muestra el formulario para verificar DNI.');
+    }
+
+    if (participant && afiliado) {
+      visibleParts.push('El usuario ya está verificado como emprendedor.');
+      visibleParts.push('Se muestran sus proyectos y mensajes recibidos.');
+    }
+
+    if (topTitles.length) {
+      visibleParts.push(`Proyectos destacados visibles: ${topTitles.join(', ')}.`);
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible: ${error}`);
+    }
+
+    if (successMsg) {
+      visibleParts.push(`Mensaje de éxito visible: ${successMsg}`);
+    }
+
+    if (loginCodigoError) {
+      visibleParts.push(`Mensaje visible de acceso: ${loginCodigoError}`);
+    }
+
+    if (cargandoMensajes) {
+      visibleParts.push('La bandeja de mensajes está cargando.');
+    }
+
+    if (lastMessageProject) {
+      visibleParts.push(`Último proyecto con mensaje visible: ${lastMessageProject}.`);
+    }
+
+    const activeSection = !participant
+      ? 'registro-o-login'
+      : !afiliado
+      ? 'verificacion-dni'
+      : 'panel-emprendedor';
+
+    const availableActions = !participant
+      ? ['Registrarme ahora', 'Iniciar sesión con código']
+      : !afiliado
+      ? ['Verificar DNI', 'Afiliarme en JNE']
+      : ['Publicar nuevo proyecto', 'Ver detalles de proyecto', 'Responder mensajes'];
+
+    const summary = !participant
+      ? 'Pantalla de acceso al Espacio Emprendedor para registro o ingreso con código.'
+      : !afiliado
+      ? 'Pantalla de verificación de afiliación para habilitar publicación de proyectos.'
+      : 'Panel del emprendedor con proyectos propios y mensajes recibidos.';
+
+    const status =
+      loading ? 'loading' : error ? 'error' : 'ready';
+
+    setPageContext({
+      pageId: 'espacio-emprendedor',
+      pageTitle: 'Espacio Emprendedor',
+      route: '/espacio-emprendedor',
+      summary,
+      activeSection,
+      visibleText: visibleParts.join('\n'),
+      availableActions,
+      selectedItemTitle: lastMessageProject || undefined,
+      status,
+      dynamicData: {
+        participantLogueado: !!participant,
+        afiliadoVerificado: !!afiliado,
+        proyectosDestacadosCount: topProjects.length,
+        misProyectosCount: misProyectos.length,
+        mensajesRecibidosCount: mensajesRecibidos.length,
+        cargandoMensajes,
+        loginCodigoLoading,
+        verificandoDni: verificando,
+      },
+    });
+  }, [
+    setPageContext,
+    loading,
+    participant,
+    afiliado,
+    topProjects,
+    misProyectos,
+    mensajesRecibidos,
+    cargandoMensajes,
+    loginCodigoLoading,
+    verificando,
+    error,
+    successMsg,
+    loginCodigoError,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
   // Estilos con animaciones
   const card = "rounded-2xl border-2 border-red-600 p-6 shadow-sm vc-fade-up vc-card-hover";
   const btnPrimary = "bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse";

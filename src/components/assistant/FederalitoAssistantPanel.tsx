@@ -17,11 +17,12 @@ import {
   CAMBIO_PAGE_PHRASE,
   CAMBIO_PAGE_GUIDE,
 } from "@/lib/cambioConValentiaContent";
-import {
+  import {
   COMO_FUNCIONA_ROUTE,
   COMO_FUNCIONA_GUIDE,
   COMO_FUNCIONA_FAQ,
 } from "@/lib/comoFuncionaContent";
+import { useAssistantRuntime } from "./AssistantRuntimeContext";
 
 type GuideEventDetail = {
   action?: "SAY" | "OPEN" | "CLOSE" | "SAY_AND_OPEN";
@@ -59,7 +60,793 @@ type MemoryState = {
   lastAnswerHasLinks?: boolean;
   lastUpdatedAt?: number;
 };
+ function stringifyContextValue(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
 
+  if (Array.isArray(v)) {
+    const arr = v
+      .map((x) => stringifyContextValue(x))
+      .filter(Boolean);
+    return arr.join(", ");
+  }
+
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+function buildDynamicPageContextText(pageContext: {
+  pageTitle?: string;
+  summary?: string;
+  activeSection?: string;
+  visibleText?: string;
+  availableActions?: string[];
+  selectedItemTitle?: string;
+  status?: string;
+  dynamicData?: Record<string, unknown>;
+} | null) {
+  if (!pageContext) return "";
+
+  const lines: string[] = [];
+
+  if (pageContext.pageTitle) lines.push(`Pantalla: ${pageContext.pageTitle}`);
+  if (pageContext.summary) lines.push(`Resumen: ${pageContext.summary}`);
+  if (pageContext.activeSection) lines.push(`Sección activa: ${pageContext.activeSection}`);
+  if (pageContext.selectedItemTitle) lines.push(`Elemento seleccionado: ${pageContext.selectedItemTitle}`);
+  if (pageContext.status) lines.push(`Estado: ${pageContext.status}`);
+
+  if (pageContext.visibleText) {
+    lines.push(`Contenido visible:\n${String(pageContext.visibleText).trim()}`);
+  }
+
+  if (pageContext.availableActions?.length) {
+    lines.push(`Acciones disponibles: ${pageContext.availableActions.join(", ")}`);
+  }
+
+  if (pageContext.dynamicData && typeof pageContext.dynamicData === "object") {
+    const entries = Object.entries(pageContext.dynamicData)
+      .map(([k, v]) => {
+        const text = stringifyContextValue(v);
+        return text ? `- ${k}: ${text}` : "";
+      })
+      .filter(Boolean);
+
+    if (entries.length) {
+      lines.push(`Datos actuales:\n${entries.join("\n")}`);
+    }
+  }
+
+  return lines.join("\n\n").trim();
+}
+
+    function answerFromDynamicPageContext(
+  rawQ: string,
+  pageContext: {
+    pageId?: string;
+    pageTitle?: string;
+    summary?: string;
+    activeSection?: string;
+    visibleText?: string;
+    availableActions?: string[];
+    selectedItemTitle?: string;
+    status?: string;
+    dynamicData?: Record<string, unknown>;
+  } | null
+) {
+  if (!pageContext) return "";
+
+  const q = normalizeLite(rawQ);
+  const contextText = buildDynamicPageContextText(pageContext);
+  const actions = pageContext.availableActions || [];
+  const data = pageContext.dynamicData || {};
+  const pageId = String(pageContext.pageId || "");
+    const retoMode = String(data.mode || "").trim();
+  const premioAutorizado = Boolean(data.premioAutorizado);
+  const retoAlias = String(data.alias || "").trim();
+  const retoNivel1Passed = Boolean(data.nivel1Passed);
+  const retoNivel1Good = Number(data.nivel1Good || 0);
+  const retoNivel2Passed = Boolean(data.nivel2Passed);
+  const retoNivel2Good = Number(data.nivel2Good || 0);
+  const retoPartyId = String(data.partyId || "").trim();
+  const retoPartyIdsCount = Number(data.partyIdsCount || 0);
+  const listaGanadoresVisible = Boolean(data.listaGanadoresVisible);
+
+    const rondaActiva = Boolean(data.rondaActiva);
+  const nombreRonda = String(data.nombreRonda || "").trim();
+  const grupoUsuario = String(data.grupoUsuario || "").trim();
+  const votoBloqueado = Boolean(data.votoBloqueado);
+  const opcionPendienteSlug = String(data.opcionPendienteSlug || "").trim();
+  const votoConfirmadoNombre = String(data.votoConfirmadoNombre || "").trim();
+  const totalVotosRonda = Number(data.totalVotosRonda || 0);
+  const opcionesHabilitadasCount = Number(data.opcionesHabilitadasCount || 0);
+  const hayPreguntas = Boolean(data.hayPreguntas);
+  const showQuestions = Boolean(data.showQuestions);
+  const answersSubmitted = Boolean(data.answersSubmitted);
+  const showReflection = Boolean(data.showReflection);
+
+  const participantLogueado = Boolean(data.participantLogueado);
+  const afiliadoVerificado = Boolean(data.afiliadoVerificado);
+  const misProyectosCount = Number(data.misProyectosCount || 0);
+  const mensajesRecibidosCount = Number(data.mensajesRecibidosCount || 0);
+  const proyectosDestacadosCount = Number(data.proyectosDestacadosCount || 0);
+  const cargandoMensajes = Boolean(data.cargandoMensajes);
+  const loginCodigoLoading = Boolean(data.loginCodigoLoading);
+  const verificandoDni = Boolean(data.verificandoDni);
+
+  const accesoVerificado = Boolean(data.accesoVerificado);
+  const checkingData = Boolean(data.checkingData);
+  const comentariosPublicadosCount = Number(data.comentariosPublicadosCount || 0);
+  const videosAprobadosCount = Number(data.videosAprobadosCount || 0);
+  const videosEnVotacionCount = Number(data.videosEnVotacionCount || 0);
+  const preguntasFundadorCount = Number(data.preguntasFundadorCount || 0);
+  const premiosTrimestralesCount = Number(data.premiosTrimestralesCount || 0);
+  const forosAbiertosCount = Number(data.forosAbiertosCount || 0);
+  const showPublic = Boolean(data.showPublic);
+  const showPublicVideos = Boolean(data.showPublicVideos);
+  const yaVotoVideo = Boolean(data.yaVotoVideo);
+  const ganadorOficialVisible = Boolean(data.ganadorOficialVisible);
+  const puedePreguntarFundador = Boolean(data.puedePreguntarFundador);
+  const weeklyTopic = String(data.weeklyTopic || "").trim();
+  const weeklyQuestion = String(data.weeklyQuestion || "").trim();
+
+  const asksHelp =
+    !q ||
+    q.length < 2 ||
+    q.includes("ayuda") ||
+    q.includes("que hago") ||
+    q.includes("qué hago") ||
+    q.includes("como funciona") ||
+    q.includes("cómo funciona") ||
+    q.includes("que puedo hacer") ||
+    q.includes("qué puedo hacer");
+
+  const asksActions =
+    q.includes("acciones") ||
+    q.includes("puedo hacer") ||
+    q.includes("opciones") ||
+    q.includes("botones") ||
+    q.includes("sigue") ||
+    q.includes("siguiente paso");
+
+  const asksScreen =
+    q.includes("que hay") ||
+    q.includes("qué hay") ||
+    q.includes("que veo") ||
+    q.includes("qué veo") ||
+    q.includes("pantalla") ||
+    q.includes("ventana") ||
+    q.includes("contenido");
+
+  const asksStatus =
+    q.includes("estado") ||
+    q.includes("como voy") ||
+    q.includes("cómo voy") ||
+    q.includes("en que estoy") ||
+    q.includes("en qué estoy") ||
+    q.includes("que me falta") ||
+    q.includes("qué me falta");
+
+  const asksVerification =
+    q.includes("verificado") ||
+    q.includes("verificacion") ||
+    q.includes("verificación") ||
+    q.includes("afiliado") ||
+    q.includes("dni");
+
+  const asksMessages =
+    q.includes("mensaje") ||
+    q.includes("mensajes") ||
+    q.includes("bandeja") ||
+    q.includes("recibidos");
+
+  const asksProjects =
+    q.includes("proyecto") ||
+    q.includes("proyectos") ||
+    q.includes("publicar") ||
+    q.includes("destacados");
+
+  const asksCommentAccess =
+    q.includes("puedo comentar") ||
+    q.includes("ya puedo comentar") ||
+    q.includes("comentario") ||
+    q.includes("comentar") ||
+    q.includes("acceso") ||
+    q.includes("registrar mis datos") ||
+    q.includes("correo") ||
+    q.includes("celular");
+
+  const asksWeeklyTopic =
+    q.includes("tema") ||
+    q.includes("pregunta guia") ||
+    q.includes("pregunta guía") ||
+    q.includes("tema activo") ||
+    q.includes("tema semanal");
+
+  const asksVideosVoting =
+    q.includes("video") ||
+    q.includes("videos") ||
+    q.includes("votar") ||
+    q.includes("votacion") ||
+    q.includes("votación") ||
+    q.includes("yo politico") ||
+    q.includes("yo político");
+
+  const asksWinner =
+    q.includes("ganador") ||
+    q.includes("ganador oficial") ||
+    q.includes("politico de la semana") ||
+    q.includes("político de la semana");
+
+  const asksFounder =
+    q.includes("fundador") ||
+    q.includes("pregunta al fundador") ||
+    q.includes("preguntas al fundador");
+
+  const asksForum =
+    q.includes("foro") ||
+    q.includes("foros") ||
+    q.includes("debate") ||
+    q.includes("foro abierto");
+         if (pageId === "intencion-de-voto") {
+    const asksVote =
+      q.includes("votar") ||
+      q.includes("voto") ||
+      q.includes("puedo votar") ||
+      q.includes("ya vote") ||
+      q.includes("ya voté") ||
+      q.includes("confirmar");
+
+    const asksRound =
+      q.includes("ronda") ||
+      q.includes("mes") ||
+      q.includes("activa");
+
+    const asksSelected =
+      q.includes("seleccione") ||
+      q.includes("seleccioné") ||
+      q.includes("elegi") ||
+      q.includes("elegí") ||
+      q.includes("opcion") ||
+      q.includes("opción") ||
+      q.includes("partido");
+
+    const asksQuestions =
+      q.includes("pregunta") ||
+      q.includes("preguntas") ||
+      q.includes("responder") ||
+      q.includes("respuesta") ||
+      q.includes("respuestas");
+
+    const asksReflection =
+      q.includes("nulo") ||
+      q.includes("blanco") ||
+      q.includes("reflexion") ||
+      q.includes("reflexión");
+
+    if (asksHelp) {
+      return (
+        `${pageContext.summary || "Estoy leyendo esta pantalla en tiempo real."}\n\n` +
+        (actions.length ? `Ahora mismo puedes hacer:\n- ${actions.join("\n- ")}\n\n` : "") +
+        "También puedes preguntarme, por ejemplo:\n" +
+        "- “¿ya voté?”\n" +
+        "- “¿qué ronda está activa?”\n" +
+        "- “¿qué opción elegí?”\n" +
+        "- “¿hay preguntas después del voto?”"
+      );
+    }
+
+    if (asksRound) {
+      if (!rondaActiva) {
+        return "No detecto una ronda activa visible en esta pantalla.";
+      }
+
+      return (
+        `La ronda activa visible es: ${nombreRonda || "ronda actual"}.` +
+        (grupoUsuario ? `\n\nGrupo visible: ${grupoUsuario}.` : "")
+      );
+    }
+
+    if (asksVote) {
+      if (!rondaActiva) {
+        return "No detecto una ronda activa disponible para votar en este momento.";
+      }
+
+      if (votoBloqueado) {
+        return (
+          "Sí. Esta pantalla indica que tu voto ya quedó confirmado y bloqueado para la ronda actual." +
+          (votoConfirmadoNombre ? `\n\nOpción confirmada: ${votoConfirmadoNombre}.` : "")
+        );
+      }
+
+      if (opcionPendienteSlug) {
+        return (
+          `Todavía no aparece un voto confirmado, pero sí una selección pendiente: ${opcionPendienteSlug}.\n\n` +
+          "Aún puedes cambiarla antes de confirmar."
+        );
+      }
+
+      return (
+        `Sí, puedes votar en esta pantalla.` +
+        `\n\nOpciones habilitadas visibles: ${opcionesHabilitadasCount}.`
+      );
+    }
+
+    if (asksSelected) {
+      if (votoConfirmadoNombre) {
+        return `La opción confirmada visible en esta pantalla es: ${votoConfirmadoNombre}.`;
+      }
+
+      if (opcionPendienteSlug) {
+        return `La opción actualmente seleccionada, pero todavía no confirmada, es: ${opcionPendienteSlug}.`;
+      }
+
+      return "Todavía no detecto una opción seleccionada en esta pantalla.";
+    }
+
+    if (asksQuestions) {
+      if (!hayPreguntas && !showQuestions) {
+        return "Ahora mismo no detecto preguntas visibles posteriores al voto.";
+      }
+
+      if (answersSubmitted) {
+        return "Las respuestas posteriores al voto ya aparecen como enviadas.";
+      }
+
+      if (showQuestions) {
+        return "Sí. Esta pantalla está mostrando preguntas posteriores al voto para responder.";
+      }
+
+      return "Sí, esta ronda tiene preguntas disponibles después del voto.";
+    }
+
+    if (asksReflection) {
+      if (showReflection) {
+        return "Sí. En esta pantalla está visible la reflexión asociada al voto nulo o blanco.";
+      }
+
+      return "Ahora mismo no detecto una reflexión visible sobre voto nulo o blanco.";
+    }
+
+    if (asksStatus) {
+      if (!rondaActiva) {
+        return "Tu estado actual en esta pantalla es sin ronda activa visible.";
+      }
+
+      if (votoBloqueado) {
+        return (
+          `Tu estado actual en esta pantalla es de voto confirmado en la ronda ${nombreRonda || "actual"}.` +
+          (votoConfirmadoNombre ? `\n\nOpción confirmada: ${votoConfirmadoNombre}.` : "")
+        );
+      }
+
+      if (showQuestions) {
+        return (
+          `Tu estado actual en esta pantalla es posterior al voto, con preguntas visibles para responder.` +
+          `\n\nRonda: ${nombreRonda || "actual"}.`
+        );
+      }
+
+      return (
+        `Tu estado actual en esta pantalla es de selección de voto aún editable.` +
+        `\n\nRonda: ${nombreRonda || "actual"}.\n` +
+        `Opciones habilitadas visibles: ${opcionesHabilitadasCount}.\n` +
+        `Total registrado visible en la ronda: ${totalVotosRonda}.`
+      );
+    }
+
+    if (asksScreen) {
+      return contextText || "No detecté contenido visible suficiente en esta pantalla.";
+    }
+
+    return (
+      `${contextText}\n\n` +
+      `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
+    );
+  }
+       if (pageId === "reto-ciudadano") {
+    const asksMode =
+      q.includes("modo") ||
+      q.includes("con premio") ||
+      q.includes("sin premio") ||
+      q.includes("premio");
+
+    const asksRegister =
+      q.includes("registr") ||
+      q.includes("dni") ||
+      q.includes("correo") ||
+      q.includes("celular") ||
+      q.includes("alias");
+
+    const asksLevel1 =
+      q.includes("nivel 1") ||
+      q.includes("primer nivel") ||
+      q.includes("conocimiento general");
+
+    const asksLevel2 =
+      q.includes("nivel 2") ||
+      q.includes("segundo nivel") ||
+      q.includes("partido");
+
+    const asksLevel3 =
+      q.includes("nivel 3") ||
+      q.includes("tercer nivel") ||
+      q.includes("ruleta");
+
+    const asksProgress =
+      q.includes("avance") ||
+      q.includes("progreso") ||
+      q.includes("como voy") ||
+      q.includes("cómo voy") ||
+      q.includes("que me falta") ||
+      q.includes("qué me falta");
+
+    const asksWinners =
+      q.includes("ganador") ||
+      q.includes("ganadores") ||
+      q.includes("lista de ganadores");
+
+    if (asksHelp) {
+      return (
+        `${pageContext.summary || "Estoy leyendo esta pantalla en tiempo real."}\n\n` +
+        (actions.length ? `Ahora mismo puedes hacer:\n- ${actions.join("\n- ")}\n\n` : "") +
+        "También puedes preguntarme, por ejemplo:\n" +
+        "- “¿qué modo está activo?”\n" +
+        "- “¿me falta registrarme?”\n" +
+        "- “¿en qué nivel voy?”\n" +
+        "- “¿qué partido está seleccionado?”\n" +
+        "- “¿ya llegué a la ruleta?”"
+      );
+    }
+
+    if (asksMode) {
+      if (!retoMode) {
+        return "No detecto claramente el modo actual del reto en esta pantalla.";
+      }
+
+      if (retoMode === "con_premio") {
+        return (
+          "El modo actual visible es: con premio.\n\n" +
+          (premioAutorizado
+            ? "El registro para premio ya aparece validado."
+            : "Todavía se requiere completar el registro para jugar por premio.")
+        );
+      }
+
+      return "El modo actual visible es: sin premio.";
+    }
+
+    if (asksRegister) {
+      if (retoMode !== "con_premio") {
+        return "En modo sin premio no detecto que necesites registro obligatorio para jugar.";
+      }
+
+      if (premioAutorizado) {
+        return (
+          `Sí. El registro para premio ya aparece validado.` +
+          (retoAlias ? `\n\nAlias visible: ${retoAlias}.` : "")
+        );
+      }
+
+      return "Todavía falta completar el registro obligatorio para participar con premio.";
+    }
+
+    if (asksLevel1) {
+      return retoNivel1Passed
+        ? `Sí. El Nivel 1 ya aparece aprobado con ${retoNivel1Good} respuestas buenas.`
+        : `El Nivel 1 todavía no aparece aprobado. Buenas visibles hasta ahora: ${retoNivel1Good}.`;
+    }
+
+    if (asksLevel2) {
+      if (!retoNivel1Passed) {
+        return "Todavía no estás en Nivel 2 porque el Nivel 1 aún no aparece aprobado.";
+      }
+
+      if (retoNivel2Passed) {
+        return `Sí. El Nivel 2 ya aparece aprobado con ${retoNivel2Good} respuestas buenas.`;
+      }
+
+      return (
+        `El Nivel 2 está activo pero todavía no aparece aprobado.` +
+        (retoPartyId ? `\n\nPartido seleccionado visible: ${retoPartyId}.` : "")
+      );
+    }
+
+    if (asksLevel3) {
+      if (!retoNivel2Passed) {
+        return "Todavía no detecto la ruleta desbloqueada, porque el Nivel 2 aún no aparece aprobado.";
+      }
+
+      return "Sí. El Nivel 3 aparece desbloqueado y la ruleta ya debería estar disponible.";
+    }
+
+    if (asksProgress) {
+      if (!retoNivel1Passed) {
+        return `Tu avance actual está en Nivel 1.\n\nBuenas visibles: ${retoNivel1Good}.`;
+      }
+
+      if (!retoNivel2Passed) {
+        return (
+          `Tu avance actual está en Nivel 2.` +
+          `\n\nNivel 1 ya aprobado con ${retoNivel1Good} buenas.` +
+          `\nNivel 2 buenas visibles: ${retoNivel2Good}.` +
+          (retoPartyId ? `\nPartido seleccionado: ${retoPartyId}.` : "")
+        );
+      }
+
+      return (
+        `Tu avance actual ya llegó al Nivel 3.` +
+        `\n\nNivel 1 buenas: ${retoNivel1Good}.` +
+        `\nNivel 2 buenas: ${retoNivel2Good}.`
+      );
+    }
+
+    if (asksWinners) {
+      return listaGanadoresVisible
+        ? "Sí. En esta pantalla está visible la lista pública de ganadores del reto."
+        : "No detecto la lista de ganadores visible en este momento.";
+    }
+
+    if (asksActions) {
+      if (!actions.length) {
+        return "En este momento no detecté acciones claras en esta pantalla.";
+      }
+
+      return "Según esta pantalla, ahora mismo puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
+    }
+
+    if (asksScreen || asksStatus) {
+      return contextText || "No detecté contenido visible suficiente en esta pantalla.";
+    }
+
+    return (
+      `${contextText}\n\n` +
+      `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
+    );
+  }
+  if (pageId === "comentario-ciudadano") {
+    if (asksHelp) {
+      return (
+        `${pageContext.summary || "Estoy leyendo esta pantalla en tiempo real."}\n\n` +
+        (actions.length ? `Ahora mismo puedes hacer:\n- ${actions.join("\n- ")}\n\n` : "") +
+        "También puedes preguntarme, por ejemplo:\n" +
+        "- “¿ya puedo comentar?”\n" +
+        "- “¿qué tema está activo?”\n" +
+        "- “¿hay videos para votar?”\n" +
+        "- “¿hay ganador oficial?”\n" +
+        "- “¿puedo entrar al foro?”"
+      );
+    }
+
+    if (asksActions) {
+      if (!actions.length) {
+        return "En este momento no detecté acciones claras en esta pantalla.";
+      }
+
+      return "Según esta pantalla, ahora mismo puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
+    }
+
+    if (asksCommentAccess) {
+      if (checkingData) {
+        return "Todavía se está verificando si tu acceso ya está habilitado.";
+      }
+
+      if (!accesoVerificado) {
+        return (
+          "Todavía no aparece acceso verificado para comentar.\n\n" +
+          "Primero debes guardar por lo menos un correo o un celular para habilitar tu participación."
+        );
+      }
+
+      return "Sí. En esta pantalla tu acceso ya aparece habilitado para comentar.";
+    }
+
+    if (asksWeeklyTopic) {
+      if (!weeklyTopic && !weeklyQuestion) {
+        return "No detecté todavía un tema semanal activo en esta pantalla.";
+      }
+
+      return (
+        `Tema activo: ${weeklyTopic || "Tema en preparación"}\n\n` +
+        (weeklyQuestion ? `Pregunta guía: ${weeklyQuestion}` : "")
+      ).trim();
+    }
+
+    if (asksVideosVoting) {
+      if (videosEnVotacionCount > 0) {
+        return (
+          `Ahora mismo detecto ${videosEnVotacionCount} video(s) en votación.\n\n` +
+          (yaVotoVideo
+            ? "Además, esta pantalla indica que ya registraste tu voto."
+            : "Todavía puedes revisar los videos y votar si no lo has hecho.")
+        );
+      }
+
+      if (videosAprobadosCount > 0 || showPublicVideos) {
+        return (
+          `Ahora mismo detecto ${videosAprobadosCount} video(s) aprobado(s)` +
+          (showPublicVideos ? " visibles en pantalla." : ".")
+        );
+      }
+
+      return "Ahora mismo no detecto videos visibles para votar en esta pantalla.";
+    }
+
+    if (asksWinner) {
+      if (!ganadorOficialVisible) {
+        return "No detecto un ganador oficial visible en este momento.";
+      }
+
+      return (
+        `Sí, hay un ganador oficial visible.` +
+        (pageContext.selectedItemTitle ? `\n\nTema relacionado: ${pageContext.selectedItemTitle}.` : "")
+      );
+    }
+
+    if (asksFounder) {
+      if (puedePreguntarFundador) {
+        return (
+          "Sí. Esta pantalla indica que puedes usar el formulario de pregunta al fundador.\n\n" +
+          "Recuerda que solo permite una pregunta y luego no se puede editar."
+        );
+      }
+
+      if (preguntasFundadorCount > 0) {
+        return `Ahora mismo detecto ${preguntasFundadorCount} pregunta(s) pública(s) al fundador.`;
+      }
+
+      return "No detecto preguntas públicas al fundador visibles en este momento.";
+    }
+
+    if (asksForum) {
+      if (forosAbiertosCount > 0) {
+        return `Sí. Ahora mismo detecto ${forosAbiertosCount} foro(s) abierto(s) de debate ciudadano.`;
+      }
+
+      return "No detecto foros abiertos visibles en este momento.";
+    }
+
+    if (asksStatus) {
+      if (checkingData) {
+        return "La pantalla está verificando tu acceso antes de habilitar la participación.";
+      }
+
+      if (!accesoVerificado) {
+        return (
+          "Tu estado actual en esta pantalla es de acceso pendiente.\n\n" +
+          "Antes de comentar, necesitas registrar tus datos de acceso."
+        );
+      }
+
+      return (
+        "Tu estado actual en esta pantalla es de acceso habilitado.\n\n" +
+        `Tema activo: ${weeklyTopic || "No visible"}.\n` +
+        `Comentarios publicados detectados: ${comentariosPublicadosCount}.\n` +
+        `Videos aprobados detectados: ${videosAprobadosCount}.\n` +
+        `Videos en votación detectados: ${videosEnVotacionCount}.`
+      );
+    }
+
+    if (asksScreen) {
+      return contextText || "No detecté contenido visible suficiente en esta pantalla.";
+    }
+
+    return (
+      `${contextText}\n\n` +
+      `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
+    );
+  }
+
+  if (asksHelp) {
+    return (
+      `${pageContext.summary || "Estoy leyendo esta pantalla en tiempo real."}\n\n` +
+      (actions.length ? `Ahora mismo puedes hacer:\n- ${actions.join("\n- ")}\n\n` : "") +
+      "También puedes preguntarme, por ejemplo:\n" +
+      "- “¿qué puedo hacer aquí?”\n" +
+      "- “¿ya estoy verificado?”\n" +
+      "- “¿tengo mensajes?”\n" +
+      "- “¿cuántos proyectos tengo?”"
+    );
+  }
+
+  if (asksActions) {
+    if (!actions.length) {
+      return "En este momento no detecté acciones claras en esta pantalla.";
+    }
+
+    return (
+      "Según esta pantalla, ahora mismo puedes hacer esto:\n" +
+      `- ${actions.join("\n- ")}`
+    );
+  }
+
+  if (asksScreen) {
+    return contextText || "No detecté contenido visible suficiente en esta pantalla.";
+  }
+
+  if (asksStatus) {
+    if (!participantLogueado) {
+      return (
+        "Ahora mismo todavía no detecto un participante con sesión activa.\n\n" +
+        "La pantalla está en modo de acceso: registro o inicio con código."
+      );
+    }
+
+    if (participantLogueado && !afiliadoVerificado) {
+      return (
+        "Sí detecto un participante activo, pero todavía no aparece como afiliado verificado.\n\n" +
+        "El siguiente paso visible es verificar el DNI para habilitar el panel emprendedor."
+      );
+    }
+
+    return (
+      "Tu estado actual en esta pantalla es de emprendedor verificado.\n\n" +
+      `Tienes ${misProyectosCount} proyecto(s) propio(s) y ${mensajesRecibidosCount} mensaje(s) recibido(s).`
+    );
+  }
+
+  if (asksVerification) {
+    if (!participantLogueado) {
+      return "Todavía no detecto sesión iniciada. Primero necesitas registrarte o ingresar con tu código.";
+    }
+
+    if (!afiliadoVerificado) {
+      return (
+        "Aún no apareces como afiliado verificado en esta pantalla.\n\n" +
+        "Lo que falta es completar o confirmar la verificación de DNI."
+      );
+    }
+
+    return "Sí. En esta pantalla apareces como afiliado verificado.";
+  }
+
+  if (asksMessages) {
+    if (cargandoMensajes) {
+      return "La bandeja de mensajes todavía está cargando.";
+    }
+
+    return `Ahora mismo detecto ${mensajesRecibidosCount} mensaje(s) recibido(s) en esta pantalla.`;
+  }
+
+  if (asksProjects) {
+    if (!participantLogueado) {
+      return "Primero necesitas registrarte o iniciar sesión para poder gestionar proyectos.";
+    }
+
+    if (participantLogueado && !afiliadoVerificado) {
+      return (
+        "Todavía no estás en el panel completo para publicar proyectos.\n\n" +
+        "Antes debes aparecer como afiliado verificado."
+      );
+    }
+
+    return (
+      `Ahora mismo detecto ${misProyectosCount} proyecto(s) propio(s)` +
+      ` y ${proyectosDestacadosCount} proyecto(s) destacado(s) visibles.\n\n` +
+      (actions.length ? `Acciones disponibles:\n- ${actions.join("\n- ")}` : "")
+    );
+  }
+
+  if (loginCodigoLoading) {
+    return "Estoy detectando que el acceso con código está en proceso.";
+  }
+
+  if (verificandoDni) {
+    return "Estoy detectando que la verificación de DNI está en proceso.";
+  }
+
+  return (
+    `${contextText}\n\n` +
+    `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
+  );
+}
 function normalize(s: string) {
   return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -1584,6 +2371,7 @@ function buildActuarAnswer(file: ActuarFile, rawQ: string) {
 
 export default function FederalitoAssistantPanel() {
   const pathname = usePathname();
+  const { pageContext } = useAssistantRuntime();
   const isPitchPage = String(pathname || "").startsWith("/pitch");
 
   // ✅ Evita mismatch SSR/cliente (hydration)
@@ -2746,36 +3534,61 @@ if (String(pathname || "").startsWith("/como-funciona")) {
     }
    
 
-// ✅ Páginas que NO requieren candidato: guía local por ruta
+       // ✅ Páginas que NO requieren candidato: primero usar contexto dinámico real
 const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
-if (ctxNow === "INTENCION") {
-  const msg =
-    "Estás en Intención de voto.\n\n" +
-    "Aquí puedes registrar o revisar intención de voto según las opciones de la pantalla.\n" +
-    "Dime qué ves (botones/opciones) y te digo exactamente qué hace cada una.";
-  pushAssistant(msg);
-  await maybeSpeak(msg);
-  return;
-}
 
-if (ctxNow === "RETO") {
-  const msg =
-    "Estás en Reto ciudadano.\n\n" +
-    "Aquí puedes participar y registrar acciones según la dinámica de la pantalla.\n" +
-    "Dime qué acción quieres hacer (por ejemplo: participar, enviar, votar) y te guío.";
-  pushAssistant(msg);
-  await maybeSpeak(msg);
-  return;
-}
+if (ctxNow === "INTENCION" || ctxNow === "RETO" || ctxNow === "COMENTARIO" || String(pathname || "").startsWith("/espacio-emprendedor")) {
+  const dynamicMsg = answerFromDynamicPageContext(rawQ, pageContext);
 
-if (ctxNow === "COMENTARIO") {
-  const msg =
-    "Estás en Comentario ciudadano.\n\n" +
-    "Aquí puedes leer y publicar comentarios.\n" +
-    "Dime si quieres: 1) escribir un comentario, 2) ver comentarios, o 3) filtrar/ordenar, y te guío.";
-  pushAssistant(msg);
-  await maybeSpeak(msg);
-  return;
+  if (dynamicMsg) {
+    pushAssistant(dynamicMsg);
+    await maybeSpeak(dynamicMsg);
+    return;
+  }
+
+  if (ctxNow === "INTENCION") {
+    const msg =
+      "Estás en Intención de voto.\n\n" +
+      "Aquí puedes registrar o revisar intención de voto según las opciones de la pantalla.\n" +
+      "Dime qué ves (botones/opciones) y te digo exactamente qué hace cada una.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (ctxNow === "RETO") {
+    const msg =
+      "Estás en Reto ciudadano.\n\n" +
+      "Aquí puedes participar y registrar acciones según la dinámica de la pantalla.\n" +
+      "Dime qué acción quieres hacer (por ejemplo: participar, enviar, votar) y te guío.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (ctxNow === "COMENTARIO") {
+    const msg =
+      "Estás en Comentario ciudadano.\n\n" +
+      "Aquí puedes leer y publicar comentarios.\n" +
+      "Dime si quieres: 1) escribir un comentario, 2) ver comentarios, o 3) filtrar/ordenar, y te guío.";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+        if (String(pathname || "").startsWith("/espacio-emprendedor")) {
+    const msg =
+      "Estás en Espacio emprendedor.\n\n" +
+      "Puedo ayudarte según el estado real de esta pantalla: registro, acceso con código, verificación de DNI, proyectos y mensajes.\n\n" +
+      "Puedes preguntarme, por ejemplo:\n" +
+      "- “¿qué puedo hacer aquí?”\n" +
+      "- “¿ya estoy verificado?”\n" +
+      "- “¿tengo mensajes?”\n" +
+      "- “¿cuántos proyectos tengo?”";
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
 }
     if (!candidateId) {
       const msg =

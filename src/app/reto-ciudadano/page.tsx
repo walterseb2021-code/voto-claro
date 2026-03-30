@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import CaminoCiudadano from './components/CaminoCiudadano';
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type PlayMode = "sin_premio" | "con_premio";
 
@@ -1585,6 +1586,7 @@ function ListaGanadores() {
 }
 
 export default function RetoCiudadanoPage() {
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
   const [mode, setMode] = useState<PlayMode>("sin_premio");
   const [dni, setDni] = useState("");
   const [celular, setCelular] = useState("");
@@ -1705,8 +1707,140 @@ export default function RetoCiudadanoPage() {
     return mode === "sin_premio" ? "Sin premio" : "Con premio";
   }, [mode]);
 
-  // ✅ Datos del ganador para pasar a la ruleta
+      // ✅ Datos del ganador para pasar a la ruleta
   const winnerData = premioAutorizado ? { alias, dni, celular, email } : null;
+
+  useEffect(() => {
+    const visibleParts: string[] = [];
+
+    visibleParts.push(`Modo actual visible: ${mode === "con_premio" ? "con premio" : "sin premio"}.`);
+
+    if (mode === "con_premio" && !premioAutorizado) {
+      visibleParts.push("Se muestra el formulario de registro obligatorio para participar con premio.");
+    }
+
+    if (mode === "con_premio" && premioAutorizado) {
+      visibleParts.push(`Registro validado para premio con alias visible: ${alias || "(sin alias)"}.`);
+    }
+
+    if (premioError) {
+      visibleParts.push(`Error visible de premio: ${premioError}`);
+    }
+
+    if (nivel1Passed) {
+      visibleParts.push(`Nivel 1 aprobado con ${nivel1Good} respuestas buenas.`);
+    } else {
+      visibleParts.push(`Nivel 1 aún no aprobado. Buenas actuales visibles: ${nivel1Good}.`);
+    }
+
+    if (nivel2Passed) {
+      visibleParts.push(`Nivel 2 aprobado con ${nivel2Good} respuestas buenas.`);
+    } else {
+      visibleParts.push(`Nivel 2 aún no aprobado. Buenas actuales visibles: ${nivel2Good}.`);
+    }
+
+    if (partyLoading) {
+      visibleParts.push("Se están cargando partidos para el Nivel 2.");
+    }
+
+    if (partyError) {
+      visibleParts.push(`Error visible en partidos del Nivel 2: ${partyError}`);
+    }
+
+    if (partyId) {
+      visibleParts.push(`Partido actualmente seleccionado para Nivel 2: ${partyId}.`);
+    }
+
+    if (partyIds.length > 0) {
+      visibleParts.push(`Partidos disponibles visibles para Nivel 2: ${partyIds.length}.`);
+    }
+
+    visibleParts.push("Está visible la lista pública de ganadores del reto.");
+
+    const activeSection =
+      mode === "con_premio" && !premioAutorizado
+        ? "registro-premio"
+        : !nivel1Passed
+        ? "nivel-1"
+        : !nivel2Passed
+        ? "nivel-2"
+        : "nivel-3";
+
+    const availableActions =
+      mode === "con_premio" && !premioAutorizado
+        ? ["Completar registro para premio", "Elegir modalidad"]
+        : !nivel1Passed
+        ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
+        : !nivel2Passed
+        ? ["Seleccionar partido", "Comenzar Nivel 2", "Responder preguntas del partido"]
+        : ["Comenzar Nivel 3", "Girar la ruleta", "Revisar lista de ganadores"];
+
+    const summary =
+      mode === "con_premio" && !premioAutorizado
+        ? "Pantalla del reto ciudadano con registro obligatorio antes de jugar por premio."
+        : !nivel1Passed
+        ? "Pantalla del reto ciudadano en Nivel 1 de conocimiento general."
+        : !nivel2Passed
+        ? "Pantalla del reto ciudadano en Nivel 2 por partido político."
+        : "Pantalla del reto ciudadano con Nivel 3 desbloqueado y ruleta activa.";
+
+    const status =
+      partyError || premioError
+        ? "error"
+        : partyLoading
+        ? "loading"
+        : "ready";
+
+    setPageContext({
+      pageId: "reto-ciudadano",
+      pageTitle: "Reto ciudadano",
+      route: "/reto-ciudadano",
+      summary,
+      activeSection,
+      visibleText: visibleParts.join("\n"),
+      availableActions,
+      selectedItemTitle:
+        alias ||
+        partyId ||
+        (mode === "con_premio" ? "Modo con premio" : "Modo sin premio"),
+      status,
+      dynamicData: {
+        mode,
+        premioAutorizado,
+        alias,
+        nivel1Passed,
+        nivel1Good,
+        nivel2Passed,
+        nivel2Good,
+        partyId,
+        partyIdsCount: partyIds.length,
+        partyLoading,
+        tieneErrorPremio: !!premioError,
+        tieneErrorPartido: !!partyError,
+        listaGanadoresVisible: true,
+      },
+    });
+  }, [
+    setPageContext,
+    mode,
+    premioAutorizado,
+    alias,
+    premioError,
+    nivel1Passed,
+    nivel1Good,
+    nivel2Passed,
+    nivel2Good,
+    partyId,
+    partyIds.length,
+    partyLoading,
+    partyError,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
 
   return (
     <main className="vc-reto mx-auto max-w-4xl px-4 py-6 vc-fade-up">

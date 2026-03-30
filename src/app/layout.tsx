@@ -1,4 +1,3 @@
-// src/app/layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -21,7 +20,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Voto Claro",
   description: "Información verificable de candidatos: HV, plan y actuar político.",
-  manifest: "/manifest.json", // ← ÚNICA LÍNEA AGREGADA
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -33,7 +32,6 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        {/* ✅ METADATOS PARA PWA (agregados sin romper nada) */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0537A8" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -50,17 +48,14 @@ export default function RootLayout({
           "min-h-screen",
         ].join(" ")}
       >
-        {/* ✅ Activa theme global leyendo localStorage y seteando data-party en <html> */}
         <BodyPathSetter />
         <PartyThemeInitializer />
 
-        {/* ✅ Federalito (pero NO en /pitch) */}
         <HideOnPitch>
-          <FederalitoClientGate />
+          <FederalitoClientGate>
+            <AppSurfaceWrapper>{children}</AppSurfaceWrapper>
+          </FederalitoClientGate>
         </HideOnPitch>
-
-        {/* ✅ Frame/surface global SOLO para APP, excluye /pitch y /admin */}
-        <AppSurfaceWrapper>{children}</AppSurfaceWrapper>
       </body>
     </html>
   );

@@ -1,10 +1,11 @@
 // src/app/intencion-de-voto/page.tsx
 "use client";
 
-import Link from "next/link";
+ import Link from "next/link";
 import { useEffect, useMemo, useState, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 // ============================================
 // TIPOS
@@ -146,7 +147,7 @@ function IntencionDeVotoContent() {
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     return createClient(url, key);
   }, []);
-
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
@@ -549,7 +550,141 @@ function IntencionDeVotoContent() {
       window.scrollTo(0, 0);
     }
   }
+       useEffect(() => {
+    const visibleParts: string[] = [];
 
+    if (globalRound?.name) {
+      visibleParts.push(`Ronda activa visible: ${globalRound.name}.`);
+    } else {
+      visibleParts.push("No se detecta una ronda activa visible.");
+    }
+
+    if (userGroup) {
+      visibleParts.push(`Grupo visible: ${userGroup}.`);
+    }
+
+    if (pendingSlug) {
+      visibleParts.push(`Opción de voto actualmente seleccionada antes de confirmar: ${pendingSlug}.`);
+    }
+
+    if (confirmedPartyName) {
+      visibleParts.push(`Voto confirmado visible para: ${confirmedPartyName}.`);
+    }
+
+    if (notice) {
+      visibleParts.push(`Mensaje visible: ${notice}`);
+    }
+
+    if (questionsError) {
+      visibleParts.push(`Error visible en preguntas: ${questionsError}`);
+    }
+
+    if (showQuestions) {
+      visibleParts.push("Se muestran preguntas posteriores al voto.");
+    }
+
+    if (answersSubmitted) {
+      visibleParts.push("Las respuestas posteriores al voto ya fueron enviadas.");
+    }
+
+    if (showReflection) {
+      visibleParts.push("Está visible la reflexión relacionada con voto nulo o blanco.");
+    }
+
+    if (locked) {
+      visibleParts.push("La pantalla indica que el voto ya quedó bloqueado para esta ronda.");
+    } else {
+      visibleParts.push("La pantalla permite elegir y confirmar una opción de voto.");
+    }
+
+    if (total > 0) {
+      visibleParts.push(`Total registrado visible en esta ronda: ${total}.`);
+    }
+
+    const enabledParties = parties.filter((p) => p.enabled).length;
+
+    if (enabledParties > 0) {
+      visibleParts.push(`Opciones de voto habilitadas visibles: ${enabledParties}.`);
+    }
+
+    const activeSection = showQuestions
+      ? "preguntas-posteriores"
+      : locked
+      ? "voto-confirmado"
+      : pendingSlug
+      ? "seleccion-pendiente"
+      : "seleccion-de-voto";
+
+    const availableActions = showQuestions
+      ? ["Responder preguntas", "Enviar respuestas"]
+      : locked
+      ? ["Revisar voto confirmado"]
+      : ["Seleccionar opción de voto", "Confirmar voto"];
+
+    const summary = showQuestions
+      ? "Pantalla de intención de voto con preguntas posteriores al voto."
+      : locked
+      ? "Pantalla de intención de voto con voto ya confirmado en la ronda actual."
+      : "Pantalla de intención de voto con selección editable hasta confirmar.";
+
+    const status = questionsError
+      ? "error"
+      : globalRound
+      ? "ready"
+      : "loading";
+
+    setPageContext({
+      pageId: "intencion-de-voto",
+      pageTitle: "Intención de voto",
+      route: "/intencion-de-voto",
+      summary,
+      activeSection,
+      visibleText: visibleParts.join("\n"),
+      availableActions,
+      selectedItemTitle: confirmedPartyName || pendingSlug || globalRound?.name || undefined,
+      status,
+      dynamicData: {
+        rondaActiva: !!globalRound,
+        nombreRonda: globalRound?.name || "",
+        grupoUsuario: userGroup || "",
+        votoBloqueado: locked,
+        opcionPendienteSlug: pendingSlug || "",
+        votoConfirmadoId: confirmedPartyId || "",
+        votoConfirmadoNombre: confirmedPartyName || "",
+        totalVotosRonda: total,
+        opcionesHabilitadasCount: enabledParties,
+        showQuestions,
+        answersSubmitted,
+        showReflection,
+        hayPreguntas: !!questions,
+        pregunta1: questions?.question_1 || "",
+        pregunta2: questions?.question_2 || "",
+        pregunta3: questions?.question_3 || "",
+      },
+    });
+  }, [
+    setPageContext,
+    globalRound,
+    userGroup,
+    pendingSlug,
+    confirmedPartyId,
+    confirmedPartyName,
+    notice,
+    questionsError,
+    showQuestions,
+    answersSubmitted,
+    showReflection,
+    locked,
+    total,
+    parties,
+    questions,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
   // ============================================
   // RENDER
   // ============================================

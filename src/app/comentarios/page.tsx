@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
  type CommentRow = {
   id: string;
@@ -208,6 +209,7 @@ function getSinceDate(filter: TimeFilter): Date | null {
 
 export default function ComentariosPage() {
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
@@ -1414,7 +1416,205 @@ async function voteForVideo(videoId: string) {
       setWinnerQuestionSending(false);
     }
   }
+      useEffect(() => {
+    const visibleParts: string[] = [];
 
+    if (checkingData) {
+      visibleParts.push("Se está verificando si el usuario ya tiene acceso registrado.");
+    }
+
+    if (!checkingData && !hasData) {
+      visibleParts.push("Se muestra el formulario para guardar correo o celular y habilitar comentarios.");
+    }
+
+    if (!checkingData && hasData) {
+      visibleParts.push("El acceso verificado ya está habilitado para comentar.");
+    }
+
+    if (weeklyTopic) {
+      visibleParts.push(`Tema semanal visible: ${weeklyTopic}.`);
+    }
+
+    if (weeklyQuestion) {
+      visibleParts.push(`Pregunta guía visible: ${weeklyQuestion}.`);
+    }
+
+    if (latestOfficialWinner?.topic) {
+      visibleParts.push(`Último ganador oficial visible del tema: ${latestOfficialWinner.topic}.`);
+    }
+
+    if (showPublic) {
+      visibleParts.push(`Comentarios publicados visibles: ${publicItems.length}.`);
+    }
+
+    if (showPublicVideos) {
+      visibleParts.push(`Videos aprobados visibles: ${publicVideos.length}.`);
+    }
+
+    if (votingVideos.length > 0) {
+      visibleParts.push(`Videos en votación visibles: ${votingVideos.length}.`);
+    }
+
+    if (founderQuestionsPublic.length > 0) {
+      visibleParts.push(`Preguntas públicas al fundador visibles: ${founderQuestionsPublic.length}.`);
+    }
+
+    if (commentAwardsPublic.length > 0) {
+      visibleParts.push(`Ganadores trimestrales visibles: ${commentAwardsPublic.length}.`);
+    }
+
+    if (forumTopics.length > 0) {
+      visibleParts.push(`Foros abiertos visibles: ${forumTopics.length}.`);
+    }
+
+    if (okMsg) {
+      visibleParts.push(`Mensaje de éxito visible: ${okMsg}`);
+    }
+
+    if (errMsg) {
+      visibleParts.push(`Mensaje de error visible: ${errMsg}`);
+    }
+
+    if (dataError) {
+      visibleParts.push(`Error de verificación visible: ${dataError}`);
+    }
+
+    if (publicError) {
+      visibleParts.push(`Error visible en comentarios publicados: ${publicError}`);
+    }
+
+    if (publicVideosError) {
+      visibleParts.push(`Error visible en videos aprobados: ${publicVideosError}`);
+    }
+
+    if (latestOfficialWinnerError) {
+      visibleParts.push(`Error visible en ganador oficial: ${latestOfficialWinnerError}`);
+    }
+
+    if (founderQuestionsPublicError) {
+      visibleParts.push(`Error visible en preguntas al fundador: ${founderQuestionsPublicError}`);
+    }
+
+    if (commentAwardsPublicError) {
+      visibleParts.push(`Error visible en premios trimestrales: ${commentAwardsPublicError}`);
+    }
+
+    if (forumTopicsError) {
+      visibleParts.push(`Error visible en foros abiertos: ${forumTopicsError}`);
+    }
+
+    const activeSection = checkingData
+      ? "verificando-acceso"
+      : !hasData
+      ? "registro-acceso"
+      : showPublicVideos
+      ? "videos-aprobados"
+      : showPublic
+      ? "comentarios-publicados"
+      : "comentario-semanal";
+
+    const availableActions = !checkingData && !hasData
+      ? ["Guardar mis datos", "Verificar acceso"]
+      : [
+          "Enviar comentario",
+          "Enviar video",
+          "Ver comentarios publicados",
+          "Ver videos aprobados",
+          "Votar por un video",
+          "Entrar al foro",
+        ];
+
+    const summary = !checkingData && !hasData
+      ? "Pantalla de acceso verificado para habilitar comentarios y participación."
+      : "Pantalla de comentarios ciudadanos con tema semanal, videos, votación, fundador e historial público.";
+
+    const status =
+      checkingData ||
+      publicLoading ||
+      publicVideosLoading ||
+      latestOfficialWinnerLoading ||
+      founderQuestionsPublicLoading ||
+      commentAwardsPublicLoading ||
+      forumTopicsLoading
+        ? "loading"
+        : errMsg ||
+          dataError ||
+          publicError ||
+          publicVideosError ||
+          latestOfficialWinnerError ||
+          founderQuestionsPublicError ||
+          commentAwardsPublicError ||
+          forumTopicsError
+        ? "error"
+        : "ready";
+
+    setPageContext({
+      pageId: "comentario-ciudadano",
+      pageTitle: "Comentario ciudadano",
+      route: "/comentario-ciudadano",
+      summary,
+      activeSection,
+      visibleText: visibleParts.join("\n"),
+      availableActions,
+      selectedItemTitle: latestOfficialWinner?.topic || weeklyTopic || undefined,
+      status,
+      dynamicData: {
+        accesoVerificado: hasData,
+        checkingData,
+        weeklyTopic,
+        weeklyQuestion,
+        comentariosPublicadosCount: publicItems.length,
+        videosAprobadosCount: publicVideos.length,
+        videosEnVotacionCount: votingVideos.length,
+        preguntasFundadorCount: founderQuestionsPublic.length,
+        premiosTrimestralesCount: commentAwardsPublic.length,
+        forosAbiertosCount: forumTopics.length,
+        showPublic,
+        showPublicVideos,
+        yaVotoVideo: !!myVotedVideoId,
+        ganadorOficialVisible: !!latestOfficialWinner,
+        puedePreguntarFundador: isOfficialWinnerUser,
+      },
+    });
+  }, [
+    setPageContext,
+    checkingData,
+    hasData,
+    weeklyTopic,
+    weeklyQuestion,
+    latestOfficialWinner,
+    showPublic,
+    showPublicVideos,
+    publicItems.length,
+    publicVideos.length,
+    votingVideos.length,
+    founderQuestionsPublic.length,
+    commentAwardsPublic.length,
+    forumTopics.length,
+    myVotedVideoId,
+    isOfficialWinnerUser,
+    okMsg,
+    errMsg,
+    dataError,
+    publicError,
+    publicVideosError,
+    latestOfficialWinnerError,
+    founderQuestionsPublicError,
+    commentAwardsPublicError,
+    forumTopicsError,
+    publicLoading,
+    publicVideosLoading,
+    latestOfficialWinnerLoading,
+    founderQuestionsPublicLoading,
+    commentAwardsPublicLoading,
+    forumTopicsLoading,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
   // Estilos con animaciones
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-3xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
