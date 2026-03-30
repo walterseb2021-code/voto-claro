@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import FederalitoClientGate from "@/components/assistant/FederalitoClientGate";
-import HideOnPitch from "@/components/HideOnPitch";
 import PartyThemeInitializer from "@/components/PartyThemeInitializer";
 import AppSurfaceWrapper from "@/components/AppSurfaceWrapper";
 import BodyPathSetter from "@/components/BodyPathSetter";
@@ -51,11 +50,9 @@ export default function RootLayout({
         <BodyPathSetter />
         <PartyThemeInitializer />
 
-        <HideOnPitch>
-          <FederalitoClientGate>
-            <AppSurfaceWrapper>{children}</AppSurfaceWrapper>
-          </FederalitoClientGate>
-        </HideOnPitch>
+        <FederalitoClientGate>
+          <AppSurfaceWrapper>{children}</AppSurfaceWrapper>
+        </FederalitoClientGate>
       </body>
     </html>
   );

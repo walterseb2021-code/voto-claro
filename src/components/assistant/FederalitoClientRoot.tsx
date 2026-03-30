@@ -1,5 +1,6 @@
 "use client";
 
+import HideOnPitch from "@/components/HideOnPitch";
 import FederalitoAssistantPanel from "./FederalitoAssistantPanel";
 import { AssistantRuntimeProvider } from "./AssistantRuntimeContext";
 
@@ -11,7 +12,9 @@ export default function FederalitoClientRoot({
   return (
     <AssistantRuntimeProvider>
       {children}
-      <FederalitoAssistantPanel />
+      <HideOnPitch>
+        <FederalitoAssistantPanel />
+      </HideOnPitch>
     </AssistantRuntimeProvider>
   );
 }
