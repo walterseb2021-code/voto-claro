@@ -1879,3 +1879,45 @@ html[data-party="app"] .vc-app-surface input[placeholder*="buscar"]:focus {
     filter: none !important;
   }
 }
+/* =========================================================
+   ✅ ASISTENTE: header cian + botones azules
+   ========================================================= */
+
+/* Header del asistente: de verde a cian */
+.vc-assistant-header {
+  background: #00e5ef !important;
+  background-image: none !important;
+  color: #000000 !important;
+}
+
+.vc-assistant-header * {
+  color: #000000 !important;
+}
+
+/* Botones del header: Reset / Cerrar en azul */
+.vc-assistant-chip {
+  background: #1e4fa3 !important;
+  color: #ffffff !important;
+  border: 1px solid #163f85 !important;
+}
+
+@media (hover: hover) {
+  .vc-assistant-chip:hover {
+    background: #244d86 !important;
+    color: #ffffff !important;
+  }
+}
+
+/* Botón Voz: ON en azul */
+.vc-assistant-control.bg-green-600,
+.vc-assistant-control.border-green-700 {
+  background: #1e4fa3 !important;
+  border-color: #163f85 !important;
+  color: #ffffff !important;
+}
+
+/* Blindaje para el texto dentro de Voz: ON */
+.vc-assistant-control.bg-green-600 *,
+.vc-assistant-control.border-green-700 * {
+  color: #ffffff !important;
+}
