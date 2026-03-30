@@ -1067,13 +1067,86 @@ html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="hover:bg-gre
 }
 
 /* 2. Efecto hover en tarjetas (sutil elevación) */
-.vc-card-hover {
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  .vc-card-hover {
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    filter 0.22s ease,
+    background-color 0.22s ease,
+    border-color 0.22s ease;
+  will-change: transform, box-shadow, filter;
 }
 
-.vc-card-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+@media (hover: hover) {
+  .vc-card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.14);
+    filter: brightness(1.015);
+  }
+}
+
+.vc-card-hover:active {
+  transform: scale(0.992);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.10);
+}
+
+.vc-card-hover:focus-within {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-card-hover {
+    transition: none !important;
+  }
+
+  .vc-card-hover:hover,
+  .vc-card-hover:active,
+  .vc-card-hover:focus-within {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+}
+/* =========================================================
+   ✅ APP: listas y tarjetas internas más vivas
+   ========================================================= */
+
+html[data-party="app"] .vc-app-surface ul > li,
+html[data-party="app"] .vc-app-surface ol > li {
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease;
+}
+
+@media (hover: hover) {
+  html[data-party="app"] .vc-app-surface ul > li:hover,
+  html[data-party="app"] .vc-app-surface ol > li:hover {
+    transform: translateX(2px);
+  }
+}
+
+/* tarjetas internas comunes */
+html[data-party="app"] .vc-app-surface .rounded-xl,
+html[data-party="app"] .vc-app-surface .rounded-2xl {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+@media (hover: hover) {
+  html[data-party="app"] .vc-app-surface .rounded-xl:hover,
+  html[data-party="app"] .vc-app-surface .rounded-2xl:hover {
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.10);
+  }
+}
+
+/* filas clicables o resultados */
+html[data-party="app"] .vc-app-surface [role="button"],
+html[data-party="app"] .vc-app-surface button,
+html[data-party="app"] .vc-app-surface a {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* 3. Botón con efecto "pulse" al hacer clic */
@@ -1225,3 +1298,584 @@ html[data-party="app"] .vc-block-inner:active .mt-3.inline-flex.items-center.tex
 .vc-delay-3 { animation-delay: 0.15s; }
 .vc-delay-4 { animation-delay: 0.2s; }
 .vc-delay-5 { animation-delay: 0.25s; }
+/* =========================================================
+   ✅ APP: buscador y resultados más vivos
+   ========================================================= */
+
+/* contenedores de resultados / dropdowns / listas abiertas */
+html[data-party="app"] .vc-app-surface [role="listbox"],
+html[data-party="app"] .vc-app-surface .absolute.rounded-xl,
+html[data-party="app"] .vc-app-surface .absolute.rounded-2xl {
+  animation: vcResultsPop 0.18s ease-out;
+  transform-origin: top center;
+}
+
+@keyframes vcResultsPop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* opciones o filas de resultados */
+html[data-party="app"] .vc-app-surface [role="option"],
+html[data-party="app"] .vc-app-surface li[role="option"],
+html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-xl,
+html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-2xl {
+  transition:
+    transform 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+@media (hover: hover) {
+  html[data-party="app"] .vc-app-surface [role="option"]:hover,
+  html[data-party="app"] .vc-app-surface li[role="option"]:hover,
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-xl:hover,
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-2xl:hover {
+    transform: translateX(4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  }
+}
+
+html[data-party="app"] .vc-app-surface [role="option"]:active,
+html[data-party="app"] .vc-app-surface li[role="option"]:active,
+html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-xl:active,
+html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-2xl:active {
+  transform: scale(0.992);
+}
+
+/* buscador más claro al estar activo */
+html[data-party="app"] .vc-app-surface input[type="search"],
+html[data-party="app"] .vc-app-surface input[placeholder*="Buscar"],
+html[data-party="app"] .vc-app-surface input[placeholder*="buscar"] {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+html[data-party="app"] .vc-app-surface input[type="search"]:focus,
+html[data-party="app"] .vc-app-surface input[placeholder*="Buscar"]:focus,
+html[data-party="app"] .vc-app-surface input[placeholder*="buscar"]:focus {
+  box-shadow:
+    0 0 0 3px rgba(30, 79, 163, 0.12),
+    0 0 0 6px rgba(220, 38, 38, 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-party="app"] .vc-app-surface [role="listbox"],
+  html[data-party="app"] .vc-app-surface .absolute.rounded-xl,
+  html[data-party="app"] .vc-app-surface .absolute.rounded-2xl {
+    animation: none !important;
+  }
+
+  html[data-party="app"] .vc-app-surface [role="option"],
+  html[data-party="app"] .vc-app-surface li[role="option"],
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-xl,
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-2xl,
+  html[data-party="app"] .vc-app-surface input[type="search"],
+  html[data-party="app"] .vc-app-surface input[placeholder*="Buscar"],
+  html[data-party="app"] .vc-app-surface input[placeholder*="buscar"] {
+    transition: none !important;
+  }
+
+  html[data-party="app"] .vc-app-surface [role="option"]:hover,
+  html[data-party="app"] .vc-app-surface li[role="option"]:hover,
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-xl:hover,
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-2xl:hover,
+  html[data-party="app"] .vc-app-surface [role="option"]:active,
+  html[data-party="app"] .vc-app-surface li[role="option"]:active,
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-xl:active,
+  html[data-party="app"] .vc-app-surface .cursor-pointer.rounded-2xl:active {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
+/* =========================================================
+   ✅ MICROANIMACIÓN DEL ASISTENTE
+   - FAB más vivo
+   - panel con entrada suave
+   - header con brillo institucional
+   ========================================================= */
+
+@keyframes vcAssistantFabFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes vcAssistantFabGlow {
+  0%, 100% {
+    box-shadow:
+      0 10px 24px rgba(0, 0, 0, 0.14),
+      0 0 0 0 rgba(22, 163, 74, 0);
+  }
+  50% {
+    box-shadow:
+      0 14px 28px rgba(0, 0, 0, 0.16),
+      0 0 0 4px rgba(22, 163, 74, 0.16);
+  }
+}
+
+.vc-assistant-fab {
+  position: relative;
+  overflow: hidden;
+  will-change: transform, box-shadow;
+  animation:
+    vcAssistantFabFloat 2.8s ease-in-out infinite,
+    vcAssistantFabGlow 2.8s ease-in-out infinite;
+}
+
+.vc-assistant-fab::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -32%;
+  width: 28%;
+  height: 185%;
+  transform: translateY(-50%) rotate(18deg);
+  background: rgba(255, 255, 255, 0.26);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .vc-assistant-fab:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .vc-assistant-fab:hover::after {
+    left: 118%;
+    opacity: 1;
+    transition:
+      left 0.48s ease,
+      opacity 0.18s ease;
+  }
+}
+
+@keyframes vcAssistantPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.vc-assistant-panel {
+  animation: vcAssistantPanelIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+.vc-assistant-shell {
+  transition:
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+
+.vc-assistant-shell:hover {
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes vcAssistantHeaderGlow {
+  0%, 100% {
+    box-shadow: inset 0 0 0 0 rgba(255, 255, 255, 0);
+  }
+  50% {
+    box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.08);
+  }
+}
+
+.vc-assistant-header {
+  position: relative;
+  overflow: hidden;
+  animation: vcAssistantHeaderGlow 3s ease-in-out infinite;
+}
+
+.vc-assistant-header::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 22%;
+  height: 100%;
+  transform: skewX(-18deg);
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+  opacity: 0.65;
+  animation: vcAssistantHeaderShine 4.4s ease-in-out infinite;
+}
+
+@keyframes vcAssistantHeaderShine {
+  0% {
+    left: -30%;
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.45;
+  }
+  55% {
+    opacity: 0.14;
+  }
+  100% {
+    left: 118%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-assistant-fab,
+  .vc-assistant-fab::after,
+  .vc-assistant-panel,
+  .vc-assistant-header,
+  .vc-assistant-header::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .vc-assistant-fab:hover,
+  .vc-assistant-shell:hover {
+    transform: none !important;
+  }
+}
+/* =========================================================
+   ✅ CONTROLES DEL ASISTENTE
+   - chips del header
+   - selects y toggles
+   - CTA oscuro (Leer)
+   ========================================================= */
+
+.vc-assistant-chip,
+.vc-assistant-control,
+.vc-assistant-cta-dark {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+  will-change: transform, box-shadow;
+}
+
+@media (hover: hover) {
+  .vc-assistant-chip:hover,
+  .vc-assistant-control:hover,
+  .vc-assistant-cta-dark:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.10);
+    filter: brightness(1.02);
+  }
+}
+
+.vc-assistant-chip:active,
+.vc-assistant-control:active,
+.vc-assistant-cta-dark:active {
+  transform: scale(0.98);
+}
+
+.vc-assistant-chip:focus-visible,
+.vc-assistant-control:focus-visible,
+.vc-assistant-cta-dark:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.14),
+    0 8px 16px rgba(0, 0, 0, 0.10);
+}
+
+/* brillo leve para el botón Leer */
+.vc-assistant-cta-dark {
+  position: relative;
+  overflow: hidden;
+}
+
+.vc-assistant-cta-dark::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -30%;
+  width: 30%;
+  height: 180%;
+  transform: translateY(-50%) rotate(18deg);
+  background: rgba(255, 255, 255, 0.18);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .vc-assistant-cta-dark:hover::after {
+    left: 118%;
+    opacity: 1;
+    transition:
+      left 0.42s ease,
+      opacity 0.18s ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-assistant-chip,
+  .vc-assistant-control,
+  .vc-assistant-cta-dark,
+  .vc-assistant-cta-dark::after {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .vc-assistant-chip:hover,
+  .vc-assistant-control:hover,
+  .vc-assistant-cta-dark:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+}
+/* =========================================================
+   ✅ MENSAJES Y CONTROLES DEL ASISTENTE
+   ========================================================= */
+
+.vc-assistant-body {
+  scroll-behavior: smooth;
+}
+
+@keyframes vcAssistantMsgIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.vc-assistant-msg {
+  animation: vcAssistantMsgIn 0.2s ease-out;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+@media (hover: hover) {
+  .vc-assistant-msg:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.vc-assistant-msg-user {
+  box-shadow: 0 8px 16px rgba(22, 163, 74, 0.10);
+}
+
+.vc-assistant-msg-bot {
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+.vc-assistant-controls {
+  transition:
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.vc-assistant-controls:focus-within {
+  box-shadow: inset 0 -1px 0 rgba(220, 38, 38, 0.10);
+  background-color: #fcfcfc;
+}
+
+.vc-assistant-controls button.rounded-full,
+.vc-assistant-controls select.rounded-full {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    filter 0.16s ease;
+}
+
+@media (hover: hover) {
+  .vc-assistant-controls button.rounded-full:hover,
+  .vc-assistant-controls select.rounded-full:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 14px rgba(0, 0, 0, 0.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-assistant-msg,
+  .vc-assistant-controls,
+  .vc-assistant-controls button.rounded-full,
+  .vc-assistant-controls select.rounded-full {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .vc-assistant-msg:hover,
+  .vc-assistant-controls button.rounded-full:hover,
+  .vc-assistant-controls select.rounded-full:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+}
+/* =========================================================
+   ✅ MENSAJES Y COMPOSER DEL ASISTENTE
+   ========================================================= */
+
+.vc-assistant-body {
+  scroll-behavior: smooth;
+}
+
+@keyframes vcAssistantMsgIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.vc-assistant-msg {
+  animation: vcAssistantMsgIn 0.2s ease-out;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+@media (hover: hover) {
+  .vc-assistant-msg:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.vc-assistant-msg-user {
+  box-shadow: 0 8px 16px rgba(22, 163, 74, 0.10);
+}
+
+.vc-assistant-msg-bot {
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+.vc-assistant-composer {
+  transition:
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.vc-assistant-composer:focus-within {
+  box-shadow: inset 0 1px 0 rgba(220, 38, 38, 0.10);
+  background-color: #fcfcfc;
+}
+
+.vc-assistant-composer input[type="text"],
+.vc-assistant-composer input:not([type]),
+.vc-assistant-composer textarea {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.vc-assistant-composer input[type="text"]:focus,
+.vc-assistant-composer input:not([type]):focus,
+.vc-assistant-composer textarea:focus {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 3px rgba(34, 197, 94, 0.10),
+    0 0 0 6px rgba(220, 38, 38, 0.08);
+}
+
+.vc-assistant-composer button {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    filter 0.16s ease;
+}
+
+@media (hover: hover) {
+  .vc-assistant-composer button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 14px rgba(0, 0, 0, 0.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-assistant-msg,
+  .vc-assistant-composer,
+  .vc-assistant-composer input,
+  .vc-assistant-composer textarea,
+  .vc-assistant-composer button {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .vc-assistant-msg:hover,
+  .vc-assistant-composer input:focus,
+  .vc-assistant-composer textarea:focus,
+  .vc-assistant-composer button:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+}
+/* =========================================================
+   ✅ ESTADO ACTIVO DEL ASISTENTE
+   ========================================================= */
+
+@keyframes vcAssistantActiveRing {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(22, 163, 74, 0),
+      0 0 0 0 rgba(220, 38, 38, 0);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(22, 163, 74, 0.10),
+      0 0 0 10px rgba(220, 38, 38, 0.06);
+  }
+}
+
+.vc-assistant-fab-wrap.vc-assistant-open .vc-assistant-fab {
+  animation:
+    vcAssistantFabFloat 2.8s ease-in-out infinite,
+    vcAssistantFabGlow 2.8s ease-in-out infinite,
+    vcAssistantActiveRing 2.4s ease-in-out infinite;
+}
+
+.vc-assistant-panel-open .vc-assistant-shell {
+  box-shadow:
+    0 22px 42px rgba(0, 0, 0, 0.18),
+    0 0 0 2px rgba(22, 163, 74, 0.06);
+}
+
+.vc-assistant-panel-open .vc-assistant-header {
+  filter: saturate(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-assistant-fab-wrap.vc-assistant-open .vc-assistant-fab {
+    animation: none !important;
+  }
+
+  .vc-assistant-panel-open .vc-assistant-shell {
+    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.18) !important;
+  }
+
+  .vc-assistant-panel-open .vc-assistant-header {
+    filter: none !important;
+  }
+}

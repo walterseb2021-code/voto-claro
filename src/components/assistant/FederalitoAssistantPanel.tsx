@@ -3090,9 +3090,12 @@ async function speakLastAssistant() {
     <>
       {/* ✅ FAB MOVIBLE */}
       {!isPitchPage && (
-        <div
-          ref={fabRef}
-          className="fixed z-[60] touch-none"
+          <div
+  ref={fabRef}
+  className={[
+    "fixed z-[60] touch-none vc-assistant-fab-wrap",
+    open ? "vc-assistant-open" : "",
+  ].join(" ")}
           style={
             mounted
               ? { left: fabPos.x, top: fabPos.y }
@@ -3104,15 +3107,16 @@ async function speakLastAssistant() {
         >
           <button
             type="button"
-            className={[
-              "flex items-center gap-2 rounded-full border bg-white",
-              "shadow-lg px-3 py-2",
-              "hover:shadow-xl active:scale-[0.98] transition",
-              "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-200",
-              "hover:-translate-y-[2px]",
-              "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-              "select-none",
-            ].join(" ")}
+               className={[
+  "flex items-center gap-2 rounded-full border bg-white",
+  "shadow-lg px-3 py-2",
+  "hover:shadow-xl active:scale-[0.98] transition",
+  "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-200",
+  "hover:-translate-y-[2px]",
+  "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+  "select-none",
+  "vc-assistant-fab",
+].join(" ")}
             aria-label={fabLabel}
             title={fabLabel}
           >
@@ -3155,11 +3159,18 @@ async function speakLastAssistant() {
 
       {/* Panel */}
       {open ? (
-        <div ref={panelRef} className="fixed z-[70] w-[min(92vw,420px)]" style={{ left: pos.x, top: pos.y }}>
-          <div className="rounded-2xl border bg-white shadow-2xl overflow-hidden flex flex-col max-h-[75vh]">
+         <div
+  ref={panelRef}
+  className={[
+    "fixed z-[70] w-[min(92vw,420px)] vc-assistant-panel",
+    open ? "vc-assistant-panel-open" : "",
+  ].join(" ")}
+  style={{ left: pos.x, top: pos.y }}
+>
+            <div className="rounded-2xl border bg-white shadow-2xl overflow-hidden flex flex-col max-h-[75vh] vc-assistant-shell">
             {/* Header */}
             <div
-              className="px-4 py-3 flex items-center justify-between gap-3 bg-gradient-to-r from-green-700 to-green-600 text-white cursor-move select-none"
+                className="px-4 py-3 flex items-center justify-between gap-3 bg-gradient-to-r from-green-700 to-green-600 text-white cursor-move select-none vc-assistant-header"
               onPointerDown={onHeaderPointerDown}
               onPointerMove={onHeaderPointerMove}
               onPointerUp={onHeaderPointerUp}
@@ -3185,7 +3196,7 @@ async function speakLastAssistant() {
                     resetPanelPos();
                     resetAssistantChat();
                   }}
-                  className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold"
+                  className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold vc-assistant-chip"
                   title="Reiniciar posición"
                 >
                   Reset
@@ -3197,7 +3208,7 @@ async function speakLastAssistant() {
                     e.stopPropagation();
                     setOpen(false);
                   }}
-                  className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold"
+                   className="rounded-xl bg-white/15 hover:bg-white/20 px-3 py-1 text-[12px] font-bold vc-assistant-chip"
                 >
                   Cerrar
                 </button>
@@ -3205,18 +3216,18 @@ async function speakLastAssistant() {
             </div>
 
             {/* Controls */}
-            <div className="px-4 py-3 border-b bg-white">
+             <div className="px-4 py-3 border-b bg-white vc-assistant-controls">
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setVoiceMode((v) => (v === "ON" ? "OFF" : "ON"))}
                   className={[
-                    "rounded-full px-3 py-1 text-[12px] font-bold border transition active:scale-[0.98]",
-                    "motion-reduce:transition-none motion-reduce:active:scale-100",
-                    voiceMode === "ON"
-                      ? "bg-green-600 text-white border-green-700"
-                      : "bg-white text-slate-800 border-slate-300",
-                  ].join(" ")}
+  "rounded-full px-3 py-1 text-[12px] font-bold border transition active:scale-[0.98] vc-assistant-control",
+  "motion-reduce:transition-none motion-reduce:active:scale-100",
+  voiceMode === "ON"
+    ? "bg-green-600 text-white border-green-700"
+    : "bg-white text-slate-800 border-slate-300",
+].join(" ")}
                 >
                   {voiceMode === "ON" ? "Voz: ON" : "Voz: OFF"}
                 </button>
@@ -3224,7 +3235,7 @@ async function speakLastAssistant() {
                 <select
                   value={voiceLang}
                   onChange={(e) => setVoiceLang(e.target.value as VoiceLang)}
-                  className="rounded-full border px-3 py-1 text-[12px] font-bold bg-white"
+                  className="rounded-full border px-3 py-1 text-[12px] font-bold bg-white vc-assistant-control"
                   title="Idioma de voz"
                 >
                   <option value="es-PE">Español (Perú)</option>
@@ -3234,7 +3245,7 @@ async function speakLastAssistant() {
                 <select
                   value={askMode}
                   onChange={(e) => setAskMode(e.target.value as AskMode)}
-                  className="rounded-full border px-3 py-1 text-[12px] font-bold bg-white"
+                   className="rounded-full border px-3 py-1 text-[12px] font-bold bg-white vc-assistant-control"
                   title="Qué fuente consultar"
                 >
                   <option value="HV">HV (PDF)</option>
@@ -3245,7 +3256,7 @@ async function speakLastAssistant() {
                 <button
                   type="button"
                   onClick={speakLastAssistant}
-                  className="ml-auto rounded-full px-3 py-1 text-[12px] font-extrabold border bg-black text-white hover:opacity-90 active:scale-[0.98] transition motion-reduce:transition-none motion-reduce:active:scale-100"
+                  className="ml-auto rounded-full px-3 py-1 text-[12px] font-extrabold border bg-black text-white hover:opacity-90 active:scale-[0.98] transition motion-reduce:transition-none motion-reduce:active:scale-100 vc-assistant-cta-dark"
                   title="Leer último mensaje"
                 >
                   🔊 Leer
@@ -3257,11 +3268,11 @@ async function speakLastAssistant() {
                     if (listening) stopListening();
                     else startListening();
                   }}
-                  className={[
-                    "rounded-full px-3 py-1 text-[12px] font-extrabold border transition",
-                    listening ? "bg-red-600 text-white border-red-700" : "bg-white text-slate-800 border-slate-300",
-                    "hover:shadow-sm active:scale-[0.98]",
-                  ].join(" ")}
+                       className={[
+  "rounded-full px-3 py-1 text-[12px] font-extrabold border transition vc-assistant-control",
+  listening ? "bg-red-600 text-white border-red-700" : "bg-white text-slate-800 border-slate-300",
+  "hover:shadow-sm active:scale-[0.98]",
+].join(" ")}
                   title={canUseSpeechRec() ? (listening ? "Detener micrófono" : "Hablar (micrófono)") : "No soportado"}
                   disabled={!canUseSpeechRec()}
                 >
@@ -3319,15 +3330,16 @@ async function speakLastAssistant() {
             </div>
 
             {/* Body */}
-            <div ref={listRef} className="flex-1 overflow-auto p-4 space-y-3 bg-gradient-to-b from-green-50 via-white to-white">
+            <div ref={listRef} className="flex-1 overflow-auto p-4 space-y-3 bg-gradient-to-b from-green-50 via-white to-white vc-assistant-body">
               {msgs.map((m, i) => (
-                <div
-                  key={i}
-                  className={[
-                    "text-[14px] leading-[20px] whitespace-pre-wrap rounded-2xl px-4 py-3 border shadow-sm",
-                    m.role === "user" ? "ml-10 bg-green-700 text-white border-green-800" : "mr-10 bg-white text-slate-900 border-slate-200",
-                  ].join(" ")}
-                >
+                 <div
+  key={i}
+  className={[
+    "text-[14px] leading-[20px] whitespace-pre-wrap rounded-2xl px-4 py-3 border shadow-sm vc-assistant-msg",
+    m.role === "user" ? "ml-10 bg-green-700 text-white border-green-800 vc-assistant-msg-user" : "mr-10 bg-white text-slate-900 border-slate-200 vc-assistant-msg-bot",
+  ].join(" ")}
+>
+                
                   {m.content}
                 </div>
               ))}
@@ -3340,7 +3352,7 @@ async function speakLastAssistant() {
             </div>
 
             {/* Composer */}
-            <div className="p-3 border-t bg-white sticky bottom-0">
+             <div className="p-3 border-t bg-white sticky bottom-0 vc-assistant-composer">
               <div className="flex gap-2">
                 <input
                   ref={inputRef}
