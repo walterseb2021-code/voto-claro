@@ -260,13 +260,114 @@ html[data-party="app"] .vc-app-surface a:not(.vc-btn):not([class*="bg-"]):hover 
 /* =========================================================
    ✅ APP: Botón institucional azul (sirve para <a> y <button>)
    ========================================================= */
-html[data-party="app"] .vc-app-surface .vc-btn-blue {
+   html[data-party="app"] .vc-app-surface .vc-btn-blue {
+  position: relative;
+  overflow: hidden;
   background-color: #2f61a6 !important;
   color: #ffffff !important;
   font-weight: 800 !important;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    background-color 0.18s ease;
 }
-html[data-party="app"] .vc-app-surface .vc-btn-blue:hover {
-  background-color: #244d86 !important;
+
+html[data-party="app"] .vc-app-surface .vc-btn-blue::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -30%;
+  width: 32%;
+  height: 180%;
+  transform: translateY(-50%) rotate(18deg);
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  opacity: 0;
+}
+
+@media (hover: hover) {
+  html[data-party="app"] .vc-app-surface .vc-btn-blue:hover {
+    background-color: #244d86 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+    filter: brightness(1.02);
+  }
+
+  html[data-party="app"] .vc-app-surface .vc-btn-blue:hover::after {
+    left: 115%;
+    opacity: 1;
+    transition:
+      left 0.45s ease,
+      opacity 0.18s ease;
+  }
+}
+
+html[data-party="app"] .vc-app-surface .vc-btn-blue:active {
+  transform: scale(0.98);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.10);
+}
+
+html[data-party="app"] .vc-app-surface .vc-btn-blue:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.14),
+    0 10px 22px rgba(0, 0, 0, 0.10);
+} /* CTA heredados con fondo primary / blue */
+html[data-party="app"] .vc-app-surface button[class*="bg-primary"],
+html[data-party="app"] .vc-app-surface a[class*="bg-primary"],
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-primary"],
+html[data-party="app"] .vc-app-surface button[class*="bg-blue"],
+html[data-party="app"] .vc-app-surface a[class*="bg-blue"],
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-blue"] {
+  position: relative;
+  overflow: hidden;
+}
+
+html[data-party="app"] .vc-app-surface button[class*="bg-primary"]::after,
+html[data-party="app"] .vc-app-surface a[class*="bg-primary"]::after,
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-primary"]::after,
+html[data-party="app"] .vc-app-surface button[class*="bg-blue"]::after,
+html[data-party="app"] .vc-app-surface a[class*="bg-blue"]::after,
+html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-blue"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -30%;
+  width: 30%;
+  height: 180%;
+  transform: translateY(-50%) rotate(18deg);
+  background: rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+  opacity: 0;
+}
+
+@media (hover: hover) {
+  html[data-party="app"] .vc-app-surface button[class*="bg-primary"]:hover::after,
+  html[data-party="app"] .vc-app-surface a[class*="bg-primary"]:hover::after,
+  html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-primary"]:hover::after,
+  html[data-party="app"] .vc-app-surface button[class*="bg-blue"]:hover::after,
+  html[data-party="app"] .vc-app-surface a[class*="bg-blue"]:hover::after,
+  html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-blue"]:hover::after {
+    left: 115%;
+    opacity: 1;
+    transition:
+      left 0.45s ease,
+      opacity 0.18s ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-party="app"] .vc-app-surface .vc-btn-blue,
+  html[data-party="app"] .vc-app-surface .vc-btn-blue::after,
+  html[data-party="app"] .vc-app-surface button[class*="bg-primary"]::after,
+  html[data-party="app"] .vc-app-surface a[class*="bg-primary"]::after,
+  html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-primary"]::after,
+  html[data-party="app"] .vc-app-surface button[class*="bg-blue"]::after,
+  html[data-party="app"] .vc-app-surface a[class*="bg-blue"]::after,
+  html[data-party="app"] .vc-app-surface input[type="submit"][class*="bg-blue"]::after {
+    transition: none !important;
+  }
 }
 
 /* =========================================================
@@ -951,16 +1052,18 @@ html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="hover:bg-gre
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(18px) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .vc-fade-up {
-  animation: fadeInUp 0.5s cubic-bezier(0.2, 0.9, 0.4, 1.1) forwards;
+  opacity: 0;
+  animation: fadeInUp 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
 }
 
 /* 2. Efecto hover en tarjetas (sutil elevación) */
@@ -1007,18 +1110,27 @@ html[data-party="app"] .vc-app-surface .vc-reflexion button[class*="hover:bg-gre
 @keyframes slideInRight {
   from {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(16px) scale(0.99);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 
 .vc-slide-in {
-  animation: slideInRight 0.3s ease-out forwards;
+  opacity: 0;
+  animation: slideInRight 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
 }
-
+  @media (prefers-reduced-motion: reduce) {
+  .vc-fade-up,
+  .vc-slide-in {
+    opacity: 1 !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
 /* 6. Animación sutil para iconos al hacer hover */
 /* 6. Animación más viva para iconos dentro de bloques */
 .vc-icon-hover {
