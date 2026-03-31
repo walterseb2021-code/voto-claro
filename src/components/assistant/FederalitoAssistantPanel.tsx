@@ -783,17 +783,17 @@ function buildDynamicPageContextText(pageContext: {
 );
   }
 
-  if (asksHelp) {
-    return (
-      `${pageContext.summary || "Estoy leyendo esta pantalla en tiempo real."}\n\n` +
-      (actions.length ? `Ahora mismo puedes hacer:\n- ${actions.join("\n- ")}\n\n` : "") +
-      "También puedes preguntarme, por ejemplo:\n" +
-      "- “¿qué puedo hacer aquí?”\n" +
-      "- “¿ya estoy verificado?”\n" +
-      "- “¿tengo mensajes?”\n" +
-      "- “¿cuántos proyectos tengo?”"
-    );
+       if (asksHelp) {
+  if (!participantLogueado) {
+    return "Aquí puedes registrarte ahora o iniciar sesión con tu código.";
   }
+
+  if (participantLogueado && !afiliadoVerificado) {
+    return "Aquí ya ingresaste, pero todavía falta completar o confirmar tu verificación de DNI para habilitar el panel emprendedor.";
+  }
+
+  return `Aquí puedes revisar tus proyectos, ver tus mensajes y gestionar tu espacio emprendedor. Ahora mismo detecto ${misProyectosCount} proyecto(s) y ${mensajesRecibidosCount} mensaje(s).`;
+}
 
   if (asksActions) {
     if (!actions.length) {
@@ -3583,10 +3583,40 @@ if (String(pathname || "").startsWith("/como-funciona")) {
     }
    
 
-       // ✅ Páginas que NO requieren candidato: primero usar contexto dinámico real
+           // ✅ Páginas con contexto dinámico: primero consultar endpoint contextual escalable
 const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
+const isDynamicContextPage =
+  ctxNow === "INTENCION" ||
+  ctxNow === "RETO" ||
+  ctxNow === "COMENTARIO" ||
+  String(pathname || "").startsWith("/espacio-emprendedor");
 
-if (ctxNow === "INTENCION" || ctxNow === "RETO" || ctxNow === "COMENTARIO" || String(pathname || "").startsWith("/espacio-emprendedor")) {
+if (isDynamicContextPage && pageContext?.pageId) {
+  try {
+    const res = await fetch("/api/assistant/context-answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        question: rawQ,
+        pathname: String(pathname || ""),
+        pageContext,
+      }),
+    });
+
+    const payload = await safeReadJson(res);
+    const contextAnswer = String((payload as any)?.answer ?? "").trim();
+
+    if (res.ok && contextAnswer) {
+      pushAssistant(contextAnswer);
+      await maybeSpeak(contextAnswer);
+      return;
+    }
+  } catch {
+    // silencio: cae al respaldo local
+  }
+
+  // Respaldo local si el endpoint no responde o falla
   const dynamicMsg = answerFromDynamicPageContext(rawQ, pageContext);
 
   if (dynamicMsg) {
@@ -3597,9 +3627,7 @@ if (ctxNow === "INTENCION" || ctxNow === "RETO" || ctxNow === "COMENTARIO" || St
 
   if (ctxNow === "INTENCION") {
     const msg =
-      "Estás en Intención de voto.\n\n" +
-      "Aquí puedes registrar o revisar intención de voto según las opciones de la pantalla.\n" +
-      "Dime qué ves (botones/opciones) y te digo exactamente qué hace cada una.";
+      "Estoy dentro de la pantalla de intención de voto, pero ahora mismo no tengo suficiente contexto para responder con precisión.";
     pushAssistant(msg);
     await maybeSpeak(msg);
     return;
@@ -3607,9 +3635,7 @@ if (ctxNow === "INTENCION" || ctxNow === "RETO" || ctxNow === "COMENTARIO" || St
 
   if (ctxNow === "RETO") {
     const msg =
-      "Estás en Reto ciudadano.\n\n" +
-      "Aquí puedes participar y registrar acciones según la dinámica de la pantalla.\n" +
-      "Dime qué acción quieres hacer (por ejemplo: participar, enviar, votar) y te guío.";
+      "Estoy dentro del reto ciudadano, pero en este momento no tengo suficiente contexto visible para responder con precisión.";
     pushAssistant(msg);
     await maybeSpeak(msg);
     return;
@@ -3617,23 +3643,15 @@ if (ctxNow === "INTENCION" || ctxNow === "RETO" || ctxNow === "COMENTARIO" || St
 
   if (ctxNow === "COMENTARIO") {
     const msg =
-      "Estás en Comentario ciudadano.\n\n" +
-      "Aquí puedes leer y publicar comentarios.\n" +
-      "Dime si quieres: 1) escribir un comentario, 2) ver comentarios, o 3) filtrar/ordenar, y te guío.";
+      "Estoy dentro de comentarios ciudadanos, pero ahora mismo no tengo suficiente contexto visible para responder con precisión.";
     pushAssistant(msg);
     await maybeSpeak(msg);
     return;
   }
 
-        if (String(pathname || "").startsWith("/espacio-emprendedor")) {
+  if (String(pathname || "").startsWith("/espacio-emprendedor")) {
     const msg =
-      "Estás en Espacio emprendedor.\n\n" +
-      "Puedo ayudarte según el estado real de esta pantalla: registro, acceso con código, verificación de DNI, proyectos y mensajes.\n\n" +
-      "Puedes preguntarme, por ejemplo:\n" +
-      "- “¿qué puedo hacer aquí?”\n" +
-      "- “¿ya estoy verificado?”\n" +
-      "- “¿tengo mensajes?”\n" +
-      "- “¿cuántos proyectos tengo?”";
+      "Estoy dentro del espacio emprendedor, pero ahora mismo no tengo suficiente contexto visible para responder con precisión.";
     pushAssistant(msg);
     await maybeSpeak(msg);
     return;
