@@ -2110,9 +2110,16 @@ async function handleGlobalPolicyAndRedirect(params: {
     return { handled: true };
   }
 
-  const ctx = getPageCtx(pathname);
-  // ✅ Estas pantallas nuevas nunca deben ser interceptadas por el gate global
-if (ctx === "INTENCION" || ctx === "RETO" || ctx === "COMENTARIO") {
+   const ctx = getPageCtx(String(pathname || ""));
+const isEspacioEmprendedor = String(pathname || "").startsWith("/espacio-emprendedor");
+
+// ✅ Estas pantallas no deben ser interceptadas por el gate global
+if (
+  ctx === "INTENCION" ||
+  ctx === "RETO" ||
+  ctx === "COMENTARIO" ||
+  isEspacioEmprendedor
+) {
   return { handled: false };
 }
   const redirect = buildRedirectMessage(ctx, rawQ);
