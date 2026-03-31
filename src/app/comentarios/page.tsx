@@ -348,12 +348,35 @@ export default function ComentariosPage() {
       setCheckingData(false);
     }
   }
+     async function loadMyParticipantData(currentDeviceId: string) {
+  try {
+    const { data, error } = await supabase
+      .from("comment_access_participants")
+      .select("email, celular, forum_alias, group_code")
+      .eq("device_id", currentDeviceId)
+      .limit(1)
+      .maybeSingle();
 
-  useEffect(() => {
-    if (!deviceId) return;
-    void checkIfHasData(deviceId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId]);
+    if (error) throw new Error(error.message);
+
+    if (!data) return;
+
+    setEmail(data.email ?? "");
+    setCelular(data.celular ?? "");
+    setForumAlias(data.forum_alias ?? "");
+    setGroupCode(data.group_code ?? "");
+  } catch {
+    // silencio
+  }
+}
+     useEffect(() => {
+  if (!deviceId) return;
+
+  void checkIfHasData(deviceId);
+  void loadMyParticipantData(deviceId);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [deviceId]);
 
    async function saveMyData() {
   setOkMsg(null);
@@ -1503,112 +1526,142 @@ async function voteForVideo(videoId: string) {
       visibleParts.push(`Error visible en foros abiertos: ${forumTopicsError}`);
     }
 
-    const activeSection = checkingData
-      ? "verificando-acceso"
-      : !hasData
-      ? "registro-acceso"
-      : showPublicVideos
-      ? "videos-aprobados"
-      : showPublic
-      ? "comentarios-publicados"
-      : "comentario-semanal";
+        const activeSection = checkingData
+  ? "verificando-acceso"
+  : !hasData
+  ? "registro-acceso"
+  : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+  ? "pregunta-al-fundador"
+  : votingVideos.length > 0
+  ? "votacion-semanal"
+  : showPublicVideos
+  ? "videos-aprobados"
+  : showPublic
+  ? "comentarios-publicados"
+  : forumTopics.length > 0
+  ? "foros-abiertos"
+  : "comentario-semanal";
 
-    const availableActions = !checkingData && !hasData
-      ? ["Guardar mis datos", "Verificar acceso"]
-      : [
-          "Enviar comentario",
-          "Enviar video",
-          "Ver comentarios publicados",
-          "Ver videos aprobados",
-          "Votar por un video",
-          "Entrar al foro",
-        ];
+const availableActions =
+  !checkingData && !hasData
+    ? ["Guardar mis datos", "Verificar acceso"]
+    : [
+        "Enviar comentario",
+        "Enviar video",
+        "Ver comentarios publicados",
+        "Ver videos aprobados",
+        "Votar por un video",
+        "Entrar al foro",
+        "Revisar preguntas al fundador",
+      ];
 
-    const summary = !checkingData && !hasData
-      ? "Pantalla de acceso verificado para habilitar comentarios y participación."
-      : "Pantalla de comentarios ciudadanos con tema semanal, videos, votación, fundador e historial público.";
+const summary =
+  !checkingData && !hasData
+    ? "Pantalla de acceso verificado para habilitar comentarios y participación."
+    : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+    ? "Pantalla de comentarios ciudadanos con acceso al bloque de pregunta al fundador."
+    : votingVideos.length > 0
+    ? "Pantalla de comentarios ciudadanos con votación activa de videos de la semana anterior."
+    : "Pantalla de comentarios ciudadanos con tema semanal, videos, votación, fundador e historial público.";
 
-    const status =
-      checkingData ||
-      publicLoading ||
-      publicVideosLoading ||
-      latestOfficialWinnerLoading ||
-      founderQuestionsPublicLoading ||
-      commentAwardsPublicLoading ||
-      forumTopicsLoading
-        ? "loading"
-        : errMsg ||
-          dataError ||
-          publicError ||
-          publicVideosError ||
-          latestOfficialWinnerError ||
-          founderQuestionsPublicError ||
-          commentAwardsPublicError ||
-          forumTopicsError
-        ? "error"
-        : "ready";
+const status =
+  checkingData ||
+  publicLoading ||
+  publicVideosLoading ||
+  latestOfficialWinnerLoading ||
+  founderQuestionsPublicLoading ||
+  commentAwardsPublicLoading ||
+  forumTopicsLoading
+    ? "loading"
+    : errMsg ||
+      dataError ||
+      publicError ||
+      publicVideosError ||
+      latestOfficialWinnerError ||
+      founderQuestionsPublicError ||
+      commentAwardsPublicError ||
+      forumTopicsError ||
+      winnerQuestionError
+    ? "error"
+    : "ready";
 
     setPageContext({
       pageId: "comentario-ciudadano",
       pageTitle: "Comentario ciudadano",
-      route: "/comentario-ciudadano",
+      route: "/comentarios",
       summary,
       activeSection,
       visibleText: visibleParts.join("\n"),
       availableActions,
       selectedItemTitle: latestOfficialWinner?.topic || weeklyTopic || undefined,
       status,
-      dynamicData: {
-        accesoVerificado: hasData,
-        checkingData,
-        weeklyTopic,
-        weeklyQuestion,
-        comentariosPublicadosCount: publicItems.length,
-        videosAprobadosCount: publicVideos.length,
-        videosEnVotacionCount: votingVideos.length,
-        preguntasFundadorCount: founderQuestionsPublic.length,
-        premiosTrimestralesCount: commentAwardsPublic.length,
-        forosAbiertosCount: forumTopics.length,
-        showPublic,
-        showPublicVideos,
-        yaVotoVideo: !!myVotedVideoId,
-        ganadorOficialVisible: !!latestOfficialWinner,
-        puedePreguntarFundador: isOfficialWinnerUser,
-      },
+        dynamicData: {
+  accesoVerificado: hasData,
+  checkingData,
+  weeklyTopic,
+  weeklyQuestion,
+  weeklyTopicId,
+  votingTopicId,
+  timeFilter,
+  comentariosPublicadosCount: publicItems.length,
+  videosAprobadosCount: publicVideos.length,
+  videosEnVotacionCount: votingVideos.length,
+  preguntasFundadorCount: founderQuestionsPublic.length,
+  premiosTrimestralesCount: commentAwardsPublic.length,
+  forosAbiertosCount: forumTopics.length,
+  showPublic,
+  showPublicVideos,
+  yaVotoVideo: !!myVotedVideoId,
+  myVotedVideoId,
+  ganadorOficialVisible: !!latestOfficialWinner,
+  latestOfficialWinnerTopic: latestOfficialWinner?.topic ?? null,
+  puedePreguntarFundador: isOfficialWinnerUser,
+  yaEnvioPreguntaFundador: !!myWinnerQuestion,
+  winnerQuestionPending:
+    !!myWinnerQuestion &&
+    !myWinnerQuestion.founder_answer_text &&
+    !myWinnerQuestion.founder_answer_video_url,
+  formularioAccesoVisible: !checkingData && !hasData,
+  votacionSemanalVisible: votingVideos.length > 0,
+},
     });
-  }, [
-    setPageContext,
-    checkingData,
-    hasData,
-    weeklyTopic,
-    weeklyQuestion,
-    latestOfficialWinner,
-    showPublic,
-    showPublicVideos,
-    publicItems.length,
-    publicVideos.length,
-    votingVideos.length,
-    founderQuestionsPublic.length,
-    commentAwardsPublic.length,
-    forumTopics.length,
-    myVotedVideoId,
-    isOfficialWinnerUser,
-    okMsg,
-    errMsg,
-    dataError,
-    publicError,
-    publicVideosError,
-    latestOfficialWinnerError,
-    founderQuestionsPublicError,
-    commentAwardsPublicError,
-    forumTopicsError,
-    publicLoading,
-    publicVideosLoading,
-    latestOfficialWinnerLoading,
-    founderQuestionsPublicLoading,
-    commentAwardsPublicLoading,
-    forumTopicsLoading,
-  ]);
+     }, [
+  setPageContext,
+  checkingData,
+  hasData,
+  weeklyTopic,
+  weeklyQuestion,
+  weeklyTopicId,
+  votingTopicId,
+  timeFilter,
+  latestOfficialWinner,
+  showPublic,
+  showPublicVideos,
+  publicItems.length,
+  publicVideos.length,
+  votingVideos.length,
+  founderQuestionsPublic.length,
+  commentAwardsPublic.length,
+  forumTopics.length,
+  myVotedVideoId,
+  isOfficialWinnerUser,
+  myWinnerQuestion,
+  okMsg,
+  errMsg,
+  dataError,
+  publicError,
+  publicVideosError,
+  latestOfficialWinnerError,
+  founderQuestionsPublicError,
+  commentAwardsPublicError,
+  forumTopicsError,
+  publicLoading,
+  publicVideosLoading,
+  latestOfficialWinnerLoading,
+  founderQuestionsPublicLoading,
+  commentAwardsPublicLoading,
+  forumTopicsLoading,
+]);
 
   useEffect(() => {
     return () => {
@@ -1712,9 +1765,17 @@ async function voteForVideo(videoId: string) {
               />
             </div>
 
-            <div>
-              <div className={label}>Celular (opcional si pones correo)</div>
-                   <div>
+               <div>
+  <div className={label}>Celular (opcional si pones correo)</div>
+  <input
+    className={input}
+    value={celular}
+    onChange={(e) => setCelular(e.target.value)}
+    placeholder="999888777"
+  />
+</div>
+
+<div>
   <div className={label}>Alias ciudadano</div>
   <input
     className={input}
@@ -1727,13 +1788,6 @@ async function voteForVideo(videoId: string) {
     Entre 3 y 20 caracteres. Solo letras, números y guion bajo.
   </div>
 </div>
-              <input
-                className={input}
-                value={celular}
-                onChange={(e) => setCelular(e.target.value)}
-                placeholder="999888777"
-              />
-            </div>
 
             <div className="flex gap-2 flex-wrap">
               <button type="button" className={btn} onClick={saveMyData} disabled={savingData}>

@@ -4,7 +4,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import CaminoCiudadano from './components/CaminoCiudadano';
+import CaminoCiudadano, {
+  type CaminoCiudadanoRuntimeState,
+} from "./components/CaminoCiudadano";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type PlayMode = "sin_premio" | "con_premio";
@@ -1474,7 +1476,14 @@ function Nivel2Partido(props: {
 // ============================================
 // COMPONENTE DE LISTA DE GANADORES
 // ============================================
-function ListaGanadores() {
+function ListaGanadores(props: {
+  onStateChange?: (state: {
+    filtro: string;
+    loading: boolean;
+    error: string | null;
+    ganadoresCount: number;
+  }) => void;
+}) {
   const [filtro, setFiltro] = useState<string>("HOY");
   const [ganadores, setGanadores] = useState<Winner[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1508,7 +1517,14 @@ function ListaGanadores() {
   useEffect(() => {
     cargarGanadores();
   }, [filtro]);
-
+     useEffect(() => {
+  props.onStateChange?.({
+    filtro,
+    loading,
+    error,
+    ganadoresCount: ganadores.length,
+  });
+}, [props, filtro, loading, error, ganadores.length]);
   const filtros = [
     { value: "HOY", label: "Hoy" },
     { value: "AYER", label: "Ayer" },
@@ -1655,7 +1671,14 @@ export default function RetoCiudadanoPage() {
   const [nivel2Good, setNivel2Good] = useState(0);
 
   const [sessionKey, setSessionKey] = useState(0);
-
+  
+  const [caminoState, setCaminoState] = useState<CaminoCiudadanoRuntimeState | null>(null);
+const [ganadoresState, setGanadoresState] = useState<{
+  filtro: string;
+  loading: boolean;
+  error: string | null;
+  ganadoresCount: number;
+} | null>(null);
   function hardResetToLevel1() {
     setNivel1Passed(false);
     setNivel1Good(0);
@@ -1710,131 +1733,205 @@ export default function RetoCiudadanoPage() {
       // ✅ Datos del ganador para pasar a la ruleta
   const winnerData = premioAutorizado ? { alias, dni, celular, email } : null;
 
-  useEffect(() => {
-    const visibleParts: string[] = [];
+     useEffect(() => {
+  const visibleParts: string[] = [];
 
-    visibleParts.push(`Modo actual visible: ${mode === "con_premio" ? "con premio" : "sin premio"}.`);
+  visibleParts.push(
+    `Modo actual visible: ${mode === "con_premio" ? "con premio" : "sin premio"}.`
+  );
 
-    if (mode === "con_premio" && !premioAutorizado) {
-      visibleParts.push("Se muestra el formulario de registro obligatorio para participar con premio.");
+  if (mode === "con_premio" && !premioAutorizado) {
+    visibleParts.push(
+      "Se muestra el formulario de registro obligatorio para participar con premio."
+    );
+  }
+
+  if (mode === "con_premio" && premioAutorizado) {
+    visibleParts.push(
+      `Registro validado para premio con alias visible: ${alias || "(sin alias)"}.`
+    );
+  }
+
+  if (premioError) {
+    visibleParts.push(`Error visible de premio: ${premioError}`);
+  }
+
+  if (nivel1Passed) {
+    visibleParts.push(`Nivel 1 aprobado con ${nivel1Good} respuestas buenas.`);
+  } else {
+    visibleParts.push(
+      `Nivel 1 aún no aprobado. Buenas actuales visibles: ${nivel1Good}.`
+    );
+  }
+
+  if (nivel2Passed) {
+    visibleParts.push(`Nivel 2 aprobado con ${nivel2Good} respuestas buenas.`);
+  } else {
+    visibleParts.push(
+      `Nivel 2 aún no aprobado. Buenas actuales visibles: ${nivel2Good}.`
+    );
+  }
+
+  if (partyLoading) {
+    visibleParts.push("Se están cargando partidos para el Nivel 2.");
+  }
+
+  if (partyError) {
+    visibleParts.push(`Error visible en partidos del Nivel 2: ${partyError}`);
+  }
+
+  if (partyId) {
+    visibleParts.push(`Partido actualmente seleccionado para Nivel 2: ${partyId}.`);
+  }
+
+  if (partyIds.length > 0) {
+    visibleParts.push(`Partidos disponibles visibles para Nivel 2: ${partyIds.length}.`);
+  }
+
+  if (caminoState) {
+    visibleParts.push(
+      `Camino Ciudadano visible: casilla ${caminoState.position} de 30, turnos restantes ${caminoState.turnsLeft}.`
+    );
+
+    if (caminoState.showQuestion) {
+      visibleParts.push(
+        `Hay una pregunta abierta en Camino Ciudadano con ${caminoState.timeLeft} segundos restantes.`
+      );
     }
 
-    if (mode === "con_premio" && premioAutorizado) {
-      visibleParts.push(`Registro validado para premio con alias visible: ${alias || "(sin alias)"}.`);
+    if (caminoState.won) {
+      visibleParts.push("Camino Ciudadano muestra estado ganador.");
+    } else if (caminoState.gameOver) {
+      visibleParts.push("Camino Ciudadano muestra estado de juego perdido.");
+    }
+  }
+
+  visibleParts.push("Está visible la lista pública de ganadores del reto.");
+
+  if (ganadoresState) {
+    visibleParts.push(`Filtro visible de ganadores: ${ganadoresState.filtro}.`);
+
+    if (ganadoresState.loading) {
+      visibleParts.push("La lista de ganadores se está cargando.");
     }
 
-    if (premioError) {
-      visibleParts.push(`Error visible de premio: ${premioError}`);
-    }
-
-    if (nivel1Passed) {
-      visibleParts.push(`Nivel 1 aprobado con ${nivel1Good} respuestas buenas.`);
+    if (ganadoresState.error) {
+      visibleParts.push(`Error visible en lista de ganadores: ${ganadoresState.error}`);
     } else {
-      visibleParts.push(`Nivel 1 aún no aprobado. Buenas actuales visibles: ${nivel1Good}.`);
+      visibleParts.push(
+        `Cantidad visible de ganadores cargados: ${ganadoresState.ganadoresCount}.`
+      );
     }
+  }
 
-    if (nivel2Passed) {
-      visibleParts.push(`Nivel 2 aprobado con ${nivel2Good} respuestas buenas.`);
-    } else {
-      visibleParts.push(`Nivel 2 aún no aprobado. Buenas actuales visibles: ${nivel2Good}.`);
-    }
+  const activeSection =
+    mode === "con_premio" && !premioAutorizado
+      ? "registro-premio"
+      : caminoState?.showQuestion
+      ? "camino-ciudadano-pregunta"
+      : caminoState?.won
+      ? "camino-ciudadano-ganado"
+      : !nivel1Passed
+      ? "nivel-1"
+      : !nivel2Passed
+      ? "nivel-2"
+      : "nivel-3";
 
-    if (partyLoading) {
-      visibleParts.push("Se están cargando partidos para el Nivel 2.");
-    }
+  const availableActions =
+    mode === "con_premio" && !premioAutorizado
+      ? ["Completar registro para premio", "Elegir modalidad"]
+      : caminoState?.showQuestion
+      ? ["Responder pregunta de Camino Ciudadano"]
+      : !nivel1Passed
+      ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
+      : !nivel2Passed
+      ? ["Seleccionar partido", "Comenzar Nivel 2", "Responder preguntas del partido"]
+      : [
+          "Comenzar Nivel 3",
+          "Girar la ruleta",
+          "Jugar Camino Ciudadano",
+          "Revisar lista de ganadores",
+        ];
 
-    if (partyError) {
-      visibleParts.push(`Error visible en partidos del Nivel 2: ${partyError}`);
-    }
+  const summary =
+    mode === "con_premio" && !premioAutorizado
+      ? "Pantalla del reto ciudadano con registro obligatorio antes de jugar por premio."
+      : caminoState?.showQuestion
+      ? "Pantalla del reto ciudadano con una pregunta activa en Camino Ciudadano."
+      : caminoState?.won
+      ? "Pantalla del reto ciudadano con Camino Ciudadano ganado."
+      : !nivel1Passed
+      ? "Pantalla del reto ciudadano en Nivel 1 de conocimiento general."
+      : !nivel2Passed
+      ? "Pantalla del reto ciudadano en Nivel 2 por partido político."
+      : "Pantalla del reto ciudadano con Nivel 3 desbloqueado y juegos activos.";
 
-    if (partyId) {
-      visibleParts.push(`Partido actualmente seleccionado para Nivel 2: ${partyId}.`);
-    }
+  const status =
+    partyError || premioError || ganadoresState?.error
+      ? "error"
+      : partyLoading || ganadoresState?.loading
+      ? "loading"
+      : "ready";
 
-    if (partyIds.length > 0) {
-      visibleParts.push(`Partidos disponibles visibles para Nivel 2: ${partyIds.length}.`);
-    }
-
-    visibleParts.push("Está visible la lista pública de ganadores del reto.");
-
-    const activeSection =
-      mode === "con_premio" && !premioAutorizado
-        ? "registro-premio"
-        : !nivel1Passed
-        ? "nivel-1"
-        : !nivel2Passed
-        ? "nivel-2"
-        : "nivel-3";
-
-    const availableActions =
-      mode === "con_premio" && !premioAutorizado
-        ? ["Completar registro para premio", "Elegir modalidad"]
-        : !nivel1Passed
-        ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
-        : !nivel2Passed
-        ? ["Seleccionar partido", "Comenzar Nivel 2", "Responder preguntas del partido"]
-        : ["Comenzar Nivel 3", "Girar la ruleta", "Revisar lista de ganadores"];
-
-    const summary =
-      mode === "con_premio" && !premioAutorizado
-        ? "Pantalla del reto ciudadano con registro obligatorio antes de jugar por premio."
-        : !nivel1Passed
-        ? "Pantalla del reto ciudadano en Nivel 1 de conocimiento general."
-        : !nivel2Passed
-        ? "Pantalla del reto ciudadano en Nivel 2 por partido político."
-        : "Pantalla del reto ciudadano con Nivel 3 desbloqueado y ruleta activa.";
-
-    const status =
-      partyError || premioError
-        ? "error"
-        : partyLoading
-        ? "loading"
-        : "ready";
-
-    setPageContext({
-      pageId: "reto-ciudadano",
-      pageTitle: "Reto ciudadano",
-      route: "/reto-ciudadano",
-      summary,
-      activeSection,
-      visibleText: visibleParts.join("\n"),
-      availableActions,
-      selectedItemTitle:
-        alias ||
-        partyId ||
-        (mode === "con_premio" ? "Modo con premio" : "Modo sin premio"),
-      status,
-      dynamicData: {
-        mode,
-        premioAutorizado,
-        alias,
-        nivel1Passed,
-        nivel1Good,
-        nivel2Passed,
-        nivel2Good,
-        partyId,
-        partyIdsCount: partyIds.length,
-        partyLoading,
-        tieneErrorPremio: !!premioError,
-        tieneErrorPartido: !!partyError,
-        listaGanadoresVisible: true,
-      },
-    });
-  }, [
-    setPageContext,
-    mode,
-    premioAutorizado,
-    alias,
-    premioError,
-    nivel1Passed,
-    nivel1Good,
-    nivel2Passed,
-    nivel2Good,
-    partyId,
-    partyIds.length,
-    partyLoading,
-    partyError,
-  ]);
+  setPageContext({
+    pageId: "reto-ciudadano",
+    pageTitle: "Reto ciudadano",
+    route: "/reto-ciudadano",
+    summary,
+    activeSection,
+    visibleText: visibleParts.join("\n"),
+    availableActions,
+    selectedItemTitle:
+      alias ||
+      partyId ||
+      (caminoState?.won
+        ? "Camino Ciudadano ganado"
+        : mode === "con_premio"
+        ? "Modo con premio"
+        : "Modo sin premio"),
+    status,
+    dynamicData: {
+      mode,
+      premioAutorizado,
+      alias,
+      nivel1Passed,
+      nivel1Good,
+      nivel2Passed,
+      nivel2Good,
+      partyId,
+      partyIdsCount: partyIds.length,
+      partyLoading,
+      tieneErrorPremio: !!premioError,
+      tieneErrorPartido: !!partyError,
+      listaGanadoresVisible: true,
+      filtroGanadores: ganadoresState?.filtro ?? null,
+      ganadoresCount: ganadoresState?.ganadoresCount ?? null,
+      caminoCiudadanoVisible: true,
+      caminoPosition: caminoState?.position ?? null,
+      caminoTurnsLeft: caminoState?.turnsLeft ?? null,
+      caminoShowQuestion: caminoState?.showQuestion ?? false,
+      caminoTimeLeft: caminoState?.timeLeft ?? null,
+      caminoWon: caminoState?.won ?? false,
+      caminoGameOver: caminoState?.gameOver ?? false,
+    },
+  });
+}, [
+  setPageContext,
+  mode,
+  premioAutorizado,
+  alias,
+  premioError,
+  nivel1Passed,
+  nivel1Good,
+  nivel2Passed,
+  nivel2Good,
+  partyId,
+  partyIds.length,
+  partyLoading,
+  partyError,
+  caminoState,
+  ganadoresState,
+]);
 
   useEffect(() => {
     return () => {
@@ -2047,30 +2144,32 @@ export default function RetoCiudadanoPage() {
             }, 2400);
           }}
         />
-          <CaminoCiudadano
-    mode={mode}
-    onGameWin={async () => {
-      if (mode !== 'con_premio') return;
-      if (!celular) return;
-      try {
-        await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            celular,
-            prize_segment: 0, // indicador de que es premio del juego Camino Ciudadano
-            prize_note: "Premio Camino Ciudadano",
-          }),
-        });
-      } catch (error) {
-        console.error("Error registrando premio:", error);
-      }
-    }}
-  />
+           <CaminoCiudadano
+  mode={mode}
+  onStateChange={setCaminoState}
+  onGameWin={async () => {
+    if (mode !== "con_premio") return;
+    if (!celular) return;
+
+    try {
+      await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          celular,
+          prize_segment: 0,
+          prize_note: "Premio Camino Ciudadano",
+        }),
+      });
+    } catch (error) {
+      console.error("Error registrando premio:", error);
+    }
+  }}
+/>
       </section>
 
       {/* ✅ NUEVO: LISTA DE GANADORES */}
-      <ListaGanadores />
+      <ListaGanadores onStateChange={setGanadoresState} />
     </main>
   );
 }

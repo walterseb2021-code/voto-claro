@@ -258,30 +258,37 @@ function IntencionDeVotoContent() {
   }
 
   async function checkIfVotedInCurrentRound(devId: string, roundId: string) {
-    try {
-      const res = await fetch(`/api/vote/status?device_id=${encodeURIComponent(devId)}&round_id=${roundId}`, {
+  try {
+    const res = await fetch(
+      `/api/vote/status?device_id=${encodeURIComponent(devId)}&round_id=${roundId}`,
+      {
         cache: "no-store",
-      });
-      const data = await res.json();
-
-      if (res.ok && data?.voted && data?.party_id) {
-        setConfirmedPartyId(String(data.party_id));
-        
-        const party = parties.find(o => o.id === data.party_id);
-        if (party) {
-          setConfirmedPartyName(party.name);
-        }
-        
-        setLocked(true);
-        setNotice(`Ya votaste en la ronda ${globalRound?.name || 'actual'}.`);
-        
-        // Verificar si ya respondió las preguntas en ESTA ronda
-        await checkIfAlreadyAnswered(devId, roundId, data.party_id);
       }
-    } catch {
-      // Silencio
+    );
+    const data = await res.json();
+
+    if (res.ok && data?.voted && data?.party_id) {
+      const partyId = String(data.party_id);
+
+      setConfirmedPartyId(partyId);
+
+      const party = parties.find((o) => String(o.id) === partyId);
+      if (party) {
+        setConfirmedPartyName(party.name);
+      } else {
+        setConfirmedPartyName(null);
+      }
+
+      setLocked(true);
+      setNotice(`Ya votaste en la ronda ${globalRound?.name || "actual"}.`);
+
+      // Verificar si ya respondió las preguntas en ESTA ronda
+      await checkIfAlreadyAnswered(devId, roundId, partyId);
     }
+  } catch {
+    // Silencio
   }
+}
 
   async function runGate() {
     if (!token) return;
@@ -549,8 +556,8 @@ function IntencionDeVotoContent() {
     } catch {
       window.scrollTo(0, 0);
     }
-  }
-       useEffect(() => {
+ }
+useEffect(() => {
     const visibleParts: string[] = [];
 
     if (globalRound?.name) {

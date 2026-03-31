@@ -197,7 +197,7 @@ function buildDynamicPageContextText(pageContext: {
   const weeklyTopic = String(data.weeklyTopic || "").trim();
   const weeklyQuestion = String(data.weeklyQuestion || "").trim();
 
-  const asksHelp =
+    const asksHelp =
     !q ||
     q.length < 2 ||
     q.includes("ayuda") ||
@@ -206,7 +206,17 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("como funciona") ||
     q.includes("cómo funciona") ||
     q.includes("que puedo hacer") ||
-    q.includes("qué puedo hacer");
+    q.includes("qué puedo hacer") ||
+    q.includes("como puedo participar") ||
+    q.includes("cómo puedo participar") ||
+    q.includes("como participo") ||
+    q.includes("cómo participo") ||
+    q.includes("como entro") ||
+    q.includes("cómo entro") ||
+    q.includes("que tengo que hacer") ||
+    q.includes("qué tengo que hacer") ||
+    q.includes("como empiezo") ||
+    q.includes("cómo empiezo");
 
   const asksActions =
     q.includes("acciones") ||
@@ -493,16 +503,31 @@ function buildDynamicPageContextText(pageContext: {
       q.includes("ganadores") ||
       q.includes("lista de ganadores");
 
-    if (asksHelp) {
+         if (asksHelp) {
+      if (retoMode === "con_premio" && !premioAutorizado) {
+        return (
+          "Para participar en este reto con premio, primero debes completar el registro que aparece en pantalla.\n\n" +
+          "Después podrás comenzar el Nivel 1, luego pasar al Nivel 2 y finalmente llegar a la ruleta."
+        );
+      }
+
+      if (!retoNivel1Passed) {
+        return (
+          "Para participar aquí, debes comenzar por el Nivel 1 de conocimiento general.\n\n" +
+          "Si lo apruebas, se desbloquea el Nivel 2. Después de aprobar el Nivel 2, se desbloquea la ruleta del Nivel 3."
+        );
+      }
+
+      if (!retoNivel2Passed) {
+        return (
+          "Ahora mismo ya avanzaste al Nivel 2.\n\n" +
+          "Tu siguiente paso es responder las preguntas del partido seleccionado. Si apruebas ese nivel, se desbloquea la ruleta."
+        );
+      }
+
       return (
-        `${pageContext.summary || "Estoy leyendo esta pantalla en tiempo real."}\n\n` +
-        (actions.length ? `Ahora mismo puedes hacer:\n- ${actions.join("\n- ")}\n\n` : "") +
-        "También puedes preguntarme, por ejemplo:\n" +
-        "- “¿qué modo está activo?”\n" +
-        "- “¿me falta registrarme?”\n" +
-        "- “¿en qué nivel voy?”\n" +
-        "- “¿qué partido está seleccionado?”\n" +
-        "- “¿ya llegué a la ruleta?”"
+        "Ya llegaste al Nivel 3.\n\n" +
+        "Ahora puedes girar la ruleta y también revisar la lista pública de ganadores."
       );
     }
 
@@ -612,16 +637,20 @@ function buildDynamicPageContextText(pageContext: {
     );
   }
   if (pageId === "comentario-ciudadano") {
-    if (asksHelp) {
+         if (asksHelp) {
+      if (!accesoVerificado) {
+        return (
+          "Para participar aquí, primero debes habilitar tu acceso.\n\n" +
+          "En esta pantalla se ve que todavía necesitas guardar por lo menos un correo o un celular.\n\n" +
+          "Después de eso ya podrás comentar y participar en las dinámicas disponibles."
+        );
+      }
+
       return (
-        `${pageContext.summary || "Estoy leyendo esta pantalla en tiempo real."}\n\n` +
-        (actions.length ? `Ahora mismo puedes hacer:\n- ${actions.join("\n- ")}\n\n` : "") +
-        "También puedes preguntarme, por ejemplo:\n" +
-        "- “¿ya puedo comentar?”\n" +
-        "- “¿qué tema está activo?”\n" +
-        "- “¿hay videos para votar?”\n" +
-        "- “¿hay ganador oficial?”\n" +
-        "- “¿puedo entrar al foro?”"
+        "Aquí ya puedes participar.\n\n" +
+        "En esta pantalla puedes comentar sobre el tema de la semana, revisar comentarios publicados, ver videos aprobados, votar cuando haya videos en votación y entrar a foros abiertos.\n\n" +
+        "Si quieres, pregúntame algo más específico como:\n" +
+        "“¿qué tema está activo?”, “¿hay videos para votar?” o “¿puedo entrar al foro?”."
       );
     }
 
