@@ -140,7 +140,8 @@ function buildDynamicPageContextText(pageContext: {
     status?: string;
     dynamicData?: Record<string, unknown>;
   } | null
-) {
+) 
+{
   if (!pageContext) return "";
 
   const q = normalizeLite(rawQ);
@@ -305,7 +306,7 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("foros") ||
     q.includes("debate") ||
     q.includes("foro abierto");
-         if (pageId === "intencion-de-voto") {
+    if (pageId === "intencion-de-voto") {
     const asksVote =
       q.includes("votar") ||
       q.includes("voto") ||
@@ -457,9 +458,12 @@ function buildDynamicPageContextText(pageContext: {
     }
 
     return (
-      `${contextText}\n\n` +
-      `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
-    );
+  "Estoy usando el estado real de esta pantalla para responderte.\n\n" +
+  (pageContext.summary ? `${pageContext.summary}\n\n` : "") +
+  (actions.length
+    ? `Ahora mismo, según lo visible aquí, puedes hacer esto:\n- ${actions.join("\n- ")}`
+    : "Si quieres, pregúntame algo más concreto sobre tu voto, la ronda activa, tu selección o las preguntas posteriores.")
+);
   }
        if (pageId === "reto-ciudadano") {
     const asksMode =
@@ -632,9 +636,12 @@ function buildDynamicPageContextText(pageContext: {
     }
 
     return (
-      `${contextText}\n\n` +
-      `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
-    );
+  "Estoy respondiendo según el estado real del reto que veo en esta pantalla.\n\n" +
+  (pageContext.summary ? `${pageContext.summary}\n\n` : "") +
+  (actions.length
+    ? `Ahora mismo puedes hacer esto:\n- ${actions.join("\n- ")}`
+    : "Si quieres, pregúntame algo concreto sobre el registro, el nivel 1, el nivel 2, la ruleta o la lista de ganadores.")
+);
   }
   if (pageId === "comentario-ciudadano") {
          if (asksHelp) {
@@ -768,9 +775,12 @@ function buildDynamicPageContextText(pageContext: {
     }
 
     return (
-      `${contextText}\n\n` +
-      `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
-    );
+  "Estoy respondiendo según lo que esta pantalla muestra ahora mismo.\n\n" +
+  (pageContext.summary ? `${pageContext.summary}\n\n` : "") +
+  (actions.length
+    ? `Desde aquí puedes hacer cosas como estas:\n- ${actions.join("\n- ")}`
+    : "Si quieres, pregúntame algo concreto sobre acceso, comentarios, videos, votación, fundador o foros.")
+);
   }
 
   if (asksHelp) {
@@ -872,9 +882,12 @@ function buildDynamicPageContextText(pageContext: {
   }
 
   return (
-    `${contextText}\n\n` +
-    `Interpreté tu pregunta dentro del contexto real de esta pantalla: "${rawQ.trim()}".`
-  );
+  "Estoy usando el contexto real de esta pantalla para ayudarte.\n\n" +
+  (pageContext.summary ? `${pageContext.summary}\n\n` : "") +
+  (actions.length
+    ? `Ahora mismo aparecen estas acciones disponibles:\n- ${actions.join("\n- ")}`
+    : "Hazme una pregunta más específica sobre lo que ves en esta pantalla.")
+);
 }
 function normalize(s: string) {
   return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
