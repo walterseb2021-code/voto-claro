@@ -60,6 +60,41 @@ type MemoryState = {
   lastAnswerHasLinks?: boolean;
   lastUpdatedAt?: number;
 };
+   function sanitizeAssistantTextForUi(input: string) {
+  return String(input ?? "")
+    .replace(/\r/g, "\n")
+    .replace(/\u00A0/g, " ")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/`{1,3}/g, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/_(.*?)_/g, "$1")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function sanitizeAssistantTextForVoice(input: string) {
+  return String(input ?? "")
+    .replace(/\r/g, "\n")
+    .replace(/\u00A0/g, " ")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/`{1,3}/g, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/_(.*?)_/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^\s*[-*•▪◦]+\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/\n+/g, ". ")
+    .replace(/\s+[–—-]\s+/g, ", ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s+,/g, ",")
+    .trim();
+}
  function stringifyContextValue(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v.trim();
@@ -1219,7 +1254,7 @@ function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynt
 
 function humanizeForSpeech(input: string) {
   // ✅ Limpieza global ANTES de cualquier replace
-  let s = cleanForSpeech(String(input ?? "")).normalize("NFC");
+   let s = cleanForSpeech(sanitizeAssistantTextForVoice(String(input ?? ""))).normalize("NFC");
 
   // (opcional pero recomendado) reemplaza NBSP por espacio normal
   s = s.replace(/\u00A0/g, " ");
@@ -1500,9 +1535,16 @@ function fixMojibakeBasic(input: string) {
   return s.normalize("NFC");
 }
 
-function cleanForChat(input: string) {
-  // Quita invisibles + arregla mojibake
-  return fixMojibakeBasic(cleanForSpeech(String(input ?? "")).trim());
+  function cleanForChat(input: string) {
+  return fixMojibakeBasic(
+    String(input ?? "")
+      .replace(/\u00AD/g, "")
+      .replace(/\u200B/g, "")
+      .replace(/\u200C/g, "")
+      .replace(/\u200D/g, "")
+      .replace(/\u2060/g, "")
+      .trim()
+  ).normalize("NFC");
 }
 
 function debugUnicode(label: string, s: string) {
@@ -3169,8 +3211,8 @@ useEffect(() => {
     return () => cancelAnimationFrame(raf);
   }, [mounted, open, pos]);
 
-  function pushAssistant(text: string) {
-  const safe = cleanForChat(text);
+    function pushAssistant(text: string) {
+  const safe = sanitizeAssistantTextForUi(cleanForChat(text));
   setMsgs((prev) => [...prev, { role: "assistant", content: safe }]);
 }
 
@@ -3190,35 +3232,30 @@ useEffect(() => {
     pushAssistant(`🧪 DEBUG TTS PARTS (${label})\n` + lines.join("\n"));
   }
 
-  async function maybeSpeak(text: string) {
-    if (voiceMode !== "ON") {
-      pushAssistant("Tip: activa “Voz: ON” para que pueda leerte el contenido con 🔊 (solo necesitas hacerlo una vez).");
-      return;
-    }
+      async function maybeSpeak(text: string) {
+  if (voiceMode !== "ON") {
+    pushAssistant("Tip: activa “Voz: ON” para que pueda leerte el contenido con 🔊 (solo necesitas hacerlo una vez).");
+    return;
+  }
 
-      if (!userInteracted) {
-    // este click ES interacción válida
+  if (!userInteracted) {
     setUserInteracted(true);
     try {
       sessionStorage.setItem("votoclaro_user_interacted_v1", "1");
     } catch {}
   }
 
-       const cleaned = cleanForSpeech(text).trim();
-    if (!cleaned) return;
+  const cleaned = sanitizeAssistantTextForVoice(text);
+  if (!cleaned) return;
 
-    // ✅ DEBUG: ver chunks reales en el chat
-    showTtsParts("maybeSpeak", cleaned);
+  showTtsParts("maybeSpeak", cleaned);
 
-    const r = await speakTextChunked(cleaned, voiceLang);
+  const r = await speakTextChunked(cleaned, voiceLang);
 
-
-
-if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
-  pushAssistant("Nota: no detecté voz Quechua en este dispositivo. Estoy leyendo en Español (Perú) como respaldo.");
-}
-
+  if (voiceLang === "qu" && r?.usedLang === "fallback-es") {
+    pushAssistant("Nota: no detecté voz Quechua en este dispositivo. Estoy leyendo en Español (Perú) como respaldo.");
   }
+}
 
   function updateMemAfterAnswer(params: {
     mode: AskMode;
@@ -3584,14 +3621,14 @@ if (String(pathname || "").startsWith("/como-funciona")) {
    
 
            // ✅ Páginas con contexto dinámico: primero consultar endpoint contextual escalable
-const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
+       const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
 const isDynamicContextPage =
   ctxNow === "INTENCION" ||
   ctxNow === "RETO" ||
   ctxNow === "COMENTARIO" ||
   String(pathname || "").startsWith("/espacio-emprendedor");
 
-if (isDynamicContextPage && pageContext?.pageId) {
+if (isDynamicContextPage && pageContext) {
   try {
     const res = await fetch("/api/assistant/context-answer", {
       method: "POST",
@@ -3605,7 +3642,9 @@ if (isDynamicContextPage && pageContext?.pageId) {
     });
 
     const payload = await safeReadJson(res);
-    const contextAnswer = String((payload as any)?.answer ?? "").trim();
+    const contextAnswer = sanitizeAssistantTextForUi(
+      String((payload as any)?.answer ?? "").trim()
+    );
 
     if (res.ok && contextAnswer) {
       pushAssistant(contextAnswer);
@@ -3616,8 +3655,9 @@ if (isDynamicContextPage && pageContext?.pageId) {
     // silencio: cae al respaldo local
   }
 
-  // Respaldo local si el endpoint no responde o falla
-  const dynamicMsg = answerFromDynamicPageContext(rawQ, pageContext);
+  const dynamicMsg = sanitizeAssistantTextForUi(
+    answerFromDynamicPageContext(rawQ, pageContext as any)
+  );
 
   if (dynamicMsg) {
     pushAssistant(dynamicMsg);
@@ -3917,9 +3957,9 @@ function sendQuick(q: string) {
     }
   }
 
-async function speakLastAssistant() {
+   async function speakLastAssistant() {
   // prioridad: comparación/lectura de pantalla reciente
-    const hasPageRead = pageReadText && Date.now() - pageReadAt < 5 * 60 * 1000;
+  const hasPageRead = pageReadText && Date.now() - pageReadAt < 5 * 60 * 1000;
 
   // ✅ fallback: si no hay pageReadText, leer guía según ventana actual
   const p = String(pathname || "");
@@ -3944,6 +3984,9 @@ async function speakLastAssistant() {
 
   if (!target) return;
 
+  const finalTarget = sanitizeAssistantTextForVoice(target);
+  if (!finalTarget) return;
+
   // ✅ si voz estaba OFF, prenderla y esperar 1 tick para que el estado se aplique
   if (voiceMode !== "ON") {
     setVoiceMode("ON");
@@ -3959,9 +4002,8 @@ async function speakLastAssistant() {
   }
 
   // ✅ hablar directo (evita depender de maybeSpeak con estado viejo)
-  await speakTextChunked(target, voiceLang);
- }
-
+  await speakTextChunked(finalTarget, voiceLang);
+}
 
   const fabLabel = useMemo(() => (open ? "Cerrar Asistente" : "Abrir Asistente"), [open]);
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";

@@ -1,215 +1,231 @@
 import { NextResponse } from "next/server";
-import { getAssistantPageProfile } from "@/lib/assistant/pageProfiles";
+import {
+  getPageIdFromPathname,
+  getPageProfile,
+  normalizePageId,
+} from "@/lib/assistant/pageProfiles";
+import { sanitizeAssistantTextForUi } from "@/lib/assistant/sanitizeAssistantText";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-type IncomingPageContext = {
-  pageId?: string;
-  pageTitle?: string;
-  route?: string;
-  summary?: string;
-  activeSection?: string;
-  visibleText?: string;
-  availableActions?: string[];
-  selectedItemTitle?: string;
-  status?: string;
-  dynamicData?: Record<string, unknown>;
+type RequestBody = {
+  question?: string;
+  pathname?: string;
+  pageContext?: Record<string, unknown> | null;
 };
 
-function cleanString(value: unknown) {
-  if (value == null) return "";
-  return String(value).trim();
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function stringifyValue(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-
-  if (Array.isArray(value)) {
-    return value.map((x) => stringifyValue(x)).filter(Boolean).join(", ");
+function safeJson(value: unknown, maxLength = 8000): string {
+  try {
+    const text = JSON.stringify(value, null, 2);
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength)}\n...[recortado]`;
+  } catch {
+    return "{}";
   }
+}
 
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return "";
+function pickContextFields(
+  pageContext: Record<string, unknown>,
+  priorityFields: string[]
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const key of priorityFields) {
+    if (key in pageContext) {
+      result[key] = pageContext[key];
     }
   }
 
-  return "";
+  const commonKeys = [
+    "pageId",
+    "pageTitle",
+    "pageSubtitle",
+    "activeViewId",
+    "activeViewTitle",
+    "activeBlockId",
+    "activeBlockTitle",
+    "currentLevel",
+    "currentStep",
+    "breadcrumb",
+    "openPanels",
+    "visibleSections",
+    "visibleActions",
+    "selectedOption",
+    "selectedOptions",
+    "selectedItem",
+    "selectedItems",
+    "selectedCategory",
+    "selectedSubcategory",
+    "selectedTopic",
+    "selectedComment",
+    "selectedParty",
+    "selectedRound",
+    "resultsSummary",
+    "speakableSummary",
+    "contextVersion",
+  ];
+
+  for (const key of commonKeys) {
+    if (key in pageContext && !(key in result)) {
+      result[key] = pageContext[key];
+    }
+  }
+
+  return result;
 }
 
-function buildPriorityDataBlock(
-  dynamicData: Record<string, unknown> | undefined,
-  priorityFields: string[]
-) {
-  if (!dynamicData || typeof dynamicData !== "object") return "";
-
-  const lines = priorityFields
-    .map((key) => {
-      const raw = dynamicData[key];
-      const text = stringifyValue(raw);
-      return text ? `${key}: ${text}` : "";
-    })
-    .filter(Boolean);
-
-  return lines.join("\n");
-}
-
-function buildPrompt(params: {
-  question: string;
-  pathname: string;
-  pageContext: IncomingPageContext;
-}) {
-  const { question, pathname, pageContext } = params;
-  const profile = getAssistantPageProfile(pageContext.pageId);
-
-  const availableActions = Array.isArray(pageContext.availableActions)
-    ? pageContext.availableActions.filter(Boolean).join(", ")
+function buildFocusSummary(pageContext: Record<string, unknown>): string {
+  const breadcrumb = Array.isArray(pageContext.breadcrumb)
+    ? pageContext.breadcrumb.filter((item) => typeof item === "string").join(" > ")
     : "";
 
-  const priorityData = buildPriorityDataBlock(
-    pageContext.dynamicData,
-    profile?.priorityFields ?? []
-  );
+  const parts = [
+    typeof pageContext.activeViewTitle === "string" ? pageContext.activeViewTitle : "",
+    typeof pageContext.activeBlockTitle === "string" ? pageContext.activeBlockTitle : "",
+    typeof pageContext.currentStep === "string" ? pageContext.currentStep : "",
+    breadcrumb,
+    typeof pageContext.speakableSummary === "string" ? pageContext.speakableSummary : "",
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean);
 
-  const doNotSay = (profile?.doNotSay ?? []).join(" | ");
-  const preferredActions = (profile?.preferredActions ?? []).join(", ");
-
-  return `
-Eres Federalito, un asistente dentro de una aplicación web llamada VOTO CLARO.
-
-Tu trabajo es responder SOLO con base en el contexto real de la ventana actual.
-No inventes información.
-No menciones estructuras internas ni nombres técnicos del sistema.
-No repitas literalmente dumps del contexto.
-No digas frases como: ${doNotSay || "Pantalla, Resumen, Datos actuales"}.
-No digas "interpreté tu pregunta".
-No respondas como programador.
-Responde como guía práctico de la app, en español claro, natural y útil.
-
-Si el contexto visible no alcanza para responder exactamente, dilo con honestidad y orienta al usuario según las acciones visibles.
-Si el usuario pregunta qué puede hacer, responde con lenguaje natural, no con listas con guiones salvo que sea realmente necesario.
-Evita símbolos raros o formato que suene mal leído por voz.
-
-PERFIL DE LA PÁGINA
-Page ID: ${cleanString(pageContext.pageId)}
-Propósito: ${cleanString(profile?.purpose)}
-Estilo de respuesta: ${cleanString(profile?.responseStyle)}
-Acciones preferidas: ${preferredActions}
-
-CONTEXTO ACTUAL DE LA VENTANA
-Ruta actual: ${cleanString(pathname)}
-Título: ${cleanString(pageContext.pageTitle)}
-Resumen: ${cleanString(pageContext.summary)}
-Sección activa: ${cleanString(pageContext.activeSection)}
-Elemento seleccionado: ${cleanString(pageContext.selectedItemTitle)}
-Estado: ${cleanString(pageContext.status)}
-Acciones visibles: ${availableActions}
-Texto visible resumido:
-${cleanString(pageContext.visibleText)}
-
-DATOS PRIORITARIOS DE ESTA VENTANA
-${priorityData || "Sin datos prioritarios visibles."}
-
-PREGUNTA DEL USUARIO
-${cleanString(question)}
-
-INSTRUCCIÓN FINAL
-Devuelve una sola respuesta breve o media, útil y natural, basada únicamente en el contexto visible de esta ventana.
-`.trim();
-}
-
-async function callGemini(prompt: string) {
-  const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
-  if (!apiKey) throw new Error("Falta GEMINI_API_KEY en .env.local");
-
-  const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-
-  const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 300,
-    },
-  };
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-
-  const raw = await res.json().catch(() => null);
-
-  if (!res.ok) {
-    const msg =
-      raw?.error?.message ||
-      raw?.message ||
-      `Gemini error HTTP ${res.status}`;
-    throw new Error(msg);
+  if (!parts.length) {
+    return "No se detectó un foco visual suficientemente específico.";
   }
 
-  const text = String(
-    raw?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("") ?? ""
-  ).trim();
-
-  return text;
+  return parts.join(" | ");
 }
 
-export async function POST(req: Request) {
+function extractGeminiText(data: any): string {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+
+  return parts
+    .map((part) => (typeof part?.text === "string" ? part.text : ""))
+    .join("")
+    .trim();
+}
+
+export async function POST(request: Request) {
   try {
-    const body = await req.json();
-    const question = cleanString(body?.question);
-    const pathname = cleanString(body?.pathname);
-    const pageContext = (body?.pageContext ?? {}) as IncomingPageContext;
+    const body = (await request.json()) as RequestBody;
+
+    const question = String(body.question ?? "").trim();
+    const pathname = String(body.pathname ?? "").trim();
+    const pageContext = isRecord(body.pageContext) ? body.pageContext : null;
 
     if (!question) {
+      return NextResponse.json({ answer: "" }, { status: 400 });
+    }
+
+    if (!pageContext) {
+      return NextResponse.json({ answer: "" });
+    }
+
+    const explicitPageId =
+      typeof pageContext.pageId === "string" ? normalizePageId(pageContext.pageId) : null;
+
+    const pageId = explicitPageId ?? getPageIdFromPathname(pathname);
+    const profile = getPageProfile(pageId);
+
+    if (!profile) {
+      return NextResponse.json({ answer: "" });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+
+    if (!apiKey) {
       return NextResponse.json(
-        { ok: false, error: "Falta question." },
-        { status: 400 }
+        { error: "Falta GEMINI_API_KEY en el servidor." },
+        { status: 500 }
       );
     }
 
-    if (!pageContext?.pageId) {
-      return NextResponse.json(
-        {
-          ok: true,
-          answer:
-            "No tengo suficiente contexto visible de esta ventana para responder con seguridad.",
+    const focusedContext = pickContextFields(pageContext, profile.priorityFields);
+    const focusSummary = buildFocusSummary(pageContext);
+
+    const systemText = [
+      "Eres Federalito, el asistente contextual de la app VOTO CLARO.",
+      "Respondes solamente con la información visible o representada en el contexto de la pantalla actual.",
+      "Cuando exista una subventana, panel interno, bloque activo, breadcrumb o activeView, eso tiene prioridad sobre el resto.",
+      "Nunca inventes datos que no estén en el contexto.",
+      "Si falta información para responder exactamente, dilo con naturalidad y orienta al usuario hacia lo que sí está visible.",
+      "Responde en español claro y natural.",
+      "La respuesta debe ser breve pero completa: entre 2 y 5 oraciones, máximo 110 palabras.",
+      "No uses listas, viñetas, markdown, encabezados ni guiones.",
+      "No menciones JSON, pageContext, prompt, Gemini, API, modelo, sistema ni instrucciones internas.",
+      `Propósito de la página: ${profile.purpose}`,
+      `Estilo de respuesta: ${profile.responseStyle}`,
+      `Evita especialmente decir: ${profile.doNotSay.join(", ")}`,
+      `Acciones útiles cuando corresponda: ${profile.preferredActions.join(", ")}`,
+    ].join("\n");
+
+    const userText = [
+      `Página detectada: ${profile.pageId}`,
+      `Ruta actual: ${pathname || "sin ruta"}`,
+      `Foco visual actual: ${focusSummary}`,
+      "Campos prioritarios detectados:",
+      safeJson(focusedContext, 5000),
+      "Contexto completo relevante:",
+      safeJson(pageContext, 10000),
+      `Pregunta del usuario: ${question}`,
+      "Redacta únicamente la respuesta final para el usuario.",
+    ].join("\n\n");
+
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        { status: 200 }
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: systemText }],
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: userText }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            topP: 0.9,
+            maxOutputTokens: 320,
+            responseMimeType: "text/plain",
+          },
+        }),
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      return NextResponse.json(
+        { error: `Gemini respondió con error: ${errorText}` },
+        { status: 500 }
       );
     }
 
-    const prompt = buildPrompt({ question, pathname, pageContext });
-    const answer = await callGemini(prompt);
+    const data = await geminiResponse.json();
+    const rawAnswer = extractGeminiText(data);
+    const answer = sanitizeAssistantTextForUi(rawAnswer);
 
     return NextResponse.json({
-      ok: true,
-      answer:
-        cleanString(answer) ||
-        "No pude generar una respuesta útil para esta ventana.",
+      answer,
+      pageId: profile.pageId,
+      source: "context-answer",
     });
-  } catch (error: any) {
+  } catch (error) {
+    console.error("context-answer route error", error);
     return NextResponse.json(
-      {
-        ok: false,
-        error: error?.message || "Error inesperado en context-answer.",
-      },
+      { error: "No se pudo generar la respuesta contextual." },
       { status: 500 }
     );
   }

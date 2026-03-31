@@ -1,195 +1,186 @@
-export type AssistantPageProfile = {
+export type PageProfile = {
   pageId: string;
   purpose: string;
   responseStyle: string;
   priorityFields: string[];
   doNotSay: string[];
-  preferredActions?: string[];
+  preferredActions: string[];
 };
 
-export const ASSISTANT_PAGE_PROFILES: Record<string, AssistantPageProfile> = {
+export const PAGE_PROFILES: Record<string, PageProfile> = {
   "espacio-emprendedor": {
     pageId: "espacio-emprendedor",
     purpose:
-      "Ayudar al usuario a entender su acceso, verificación, proyectos, mensajes y acciones disponibles dentro del panel emprendedor.",
+      "Ayudar al usuario a entender la ventana actual del espacio emprendedor usando solo el contexto visible y vigente.",
     responseStyle:
-      "Claro, práctico, orientado a acciones concretas según el estado visible de la pantalla.",
+      "Natural, claro, útil y breve. Debe responder según el bloque o subventana activa, no con plantilla rígida.",
     priorityFields: [
-      "participantLogueado",
-      "afiliadoVerificado",
-      "misProyectosCount",
-      "mensajesRecibidosCount",
-      "proyectosDestacadosCount",
-      "cargandoMensajes",
-      "loginCodigoLoading",
-      "verificandoDni",
+      "pageTitle",
+      "activeViewId",
+      "activeViewTitle",
+      "breadcrumb",
+      "selectedCategory",
+      "selectedSubcategory",
+      "selectedItem",
+      "visibleSections",
+      "visibleActions",
+      "speakableSummary",
     ],
     doNotSay: [
-      "Pantalla:",
-      "Resumen:",
-      "Sección activa:",
-      "Elemento seleccionado:",
-      "Estado:",
-      "Contenido visible:",
-      "Acciones disponibles:",
-      "Datos actuales:",
-      "Interpreté tu pregunta",
+      "No tengo suficiente información",
+      "Como modelo de IA",
+      "Según el JSON",
+      "No puedo ver tu pantalla",
     ],
     preferredActions: [
-      "Registrarme ahora",
-      "Iniciar sesión con código",
-      "Verificar DNI",
-      "Revisar proyectos",
-      "Revisar mensajes",
+      "explicar lo que está abierto ahora",
+      "resumir el bloque activo",
+      "indicar la acción disponible en esta pantalla",
     ],
   },
 
   "comentario-ciudadano": {
     pageId: "comentario-ciudadano",
     purpose:
-      "Ayudar al usuario a participar en comentarios, videos, votación, preguntas al fundador y foros abiertos según lo visible en la pantalla.",
+      "Responder preguntas sobre la ventana actual de comentarios, filtros, resultados visibles y acciones disponibles.",
     responseStyle:
-      "Natural, útil y orientado a participación ciudadana. Debe contestar con base en el tema visible, acceso, votación y foros.",
+      "Conversacional, claro y muy pegado a lo visible en la pantalla actual.",
     priorityFields: [
-      "accesoVerificado",
-      "checkingData",
-      "weeklyTopic",
-      "weeklyQuestion",
-      "weeklyTopicId",
-      "votingTopicId",
-      "timeFilter",
-      "comentariosPublicadosCount",
-      "videosAprobadosCount",
-      "videosEnVotacionCount",
-      "preguntasFundadorCount",
-      "premiosTrimestralesCount",
-      "forosAbiertosCount",
-      "showPublic",
-      "showPublicVideos",
-      "yaVotoVideo",
-      "myVotedVideoId",
-      "ganadorOficialVisible",
-      "latestOfficialWinnerTopic",
-      "puedePreguntarFundador",
-      "yaEnvioPreguntaFundador",
-      "winnerQuestionPending",
-      "formularioAccesoVisible",
-      "votacionSemanalVisible",
+      "pageTitle",
+      "activeViewId",
+      "activeViewTitle",
+      "breadcrumb",
+      "selectedFilter",
+      "selectedTopic",
+      "selectedComment",
+      "visibleComments",
+      "visibleSections",
+      "visibleActions",
+      "speakableSummary",
     ],
     doNotSay: [
-      "Pantalla:",
-      "Resumen:",
-      "Sección activa:",
-      "Elemento seleccionado:",
-      "Estado:",
-      "Contenido visible:",
-      "Acciones disponibles:",
-      "Datos actuales:",
-      "Interpreté tu pregunta",
+      "No tengo acceso",
+      "Como asistente",
+      "Según la estructura",
+      "No puedo leer esa parte",
     ],
     preferredActions: [
-      "Guardar mis datos",
-      "Enviar comentario",
-      "Enviar video",
-      "Votar por un video",
-      "Entrar al foro",
-      "Revisar preguntas al fundador",
+      "resumir lo visible",
+      "explicar el filtro o comentario activo",
+      "orientar sobre la siguiente acción dentro de la misma ventana",
     ],
   },
 
   "intencion-de-voto": {
     pageId: "intencion-de-voto",
     purpose:
-      "Ayudar al usuario a entender la ronda activa, su estado de voto, su selección, preguntas posteriores y reflexión asociada.",
+      "Explicar el estado actual de la pantalla de intención de voto, selecciones activas, resultados visibles y acciones posibles.",
     responseStyle:
-      "Claro, preciso y centrado en el estado actual del voto visible en pantalla.",
+      "Preciso, natural y enfocado en el estado actual de la votación o del bloque visible.",
     priorityFields: [
-      "rondaActiva",
-      "nombreRonda",
-      "grupoUsuario",
-      "votoBloqueado",
-      "opcionPendienteSlug",
-      "votoConfirmadoNombre",
-      "totalVotosRonda",
-      "opcionesHabilitadasCount",
-      "hayPreguntas",
-      "showQuestions",
-      "answersSubmitted",
-      "showReflection",
+      "pageTitle",
+      "activeViewId",
+      "activeViewTitle",
+      "breadcrumb",
+      "selectedGroup",
+      "selectedParty",
+      "selectedRound",
+      "resultsSummary",
+      "visibleParties",
+      "visibleSections",
+      "visibleActions",
+      "speakableSummary",
     ],
     doNotSay: [
-      "Pantalla:",
-      "Resumen:",
-      "Sección activa:",
-      "Elemento seleccionado:",
-      "Estado:",
-      "Contenido visible:",
-      "Acciones disponibles:",
-      "Datos actuales:",
-      "Interpreté tu pregunta",
+      "No sé",
+      "Como modelo",
+      "No tengo la data",
+      "No puedo ver la interfaz",
     ],
     preferredActions: [
-      "Seleccionar opción de voto",
-      "Confirmar voto",
-      "Responder preguntas posteriores",
-      "Revisar reflexión",
+      "aclarar la selección actual",
+      "resumir el resultado o bloque visible",
+      "indicar el siguiente paso posible en esta pantalla",
     ],
   },
 
   "reto-ciudadano": {
     pageId: "reto-ciudadano",
     purpose:
-      "Ayudar al usuario a entender el modo del reto, su progreso, niveles, ruleta, registro y lista de ganadores.",
+      "Responder sobre el reto ciudadano usando el bloque o subventana activa, el nivel actual y las acciones disponibles.",
     responseStyle:
-      "Guía práctica, enfocada en el avance real del usuario dentro del reto.",
+      "Natural, orientado a la pantalla activa y priorizando la subventana abierta sobre el resto del recorrido.",
     priorityFields: [
-      "mode",
-      "premioAutorizado",
-      "alias",
-      "nivel1Passed",
-      "nivel1Good",
-      "nivel2Passed",
-      "nivel2Good",
-      "partyId",
-      "partyIdsCount",
-      "partyLoading",
-      "tieneErrorPremio",
-      "tieneErrorPartido",
-      "listaGanadoresVisible",
-      "filtroGanadores",
-      "ganadoresCount",
-      "caminoCiudadanoVisible",
-      "caminoPosition",
-      "caminoTurnsLeft",
-      "caminoShowQuestion",
-      "caminoTimeLeft",
-      "caminoWon",
-      "caminoGameOver",
+      "pageTitle",
+      "activeViewId",
+      "activeViewTitle",
+      "activeBlockId",
+      "activeBlockTitle",
+      "currentLevel",
+      "currentStep",
+      "breadcrumb",
+      "openPanels",
+      "visibleSections",
+      "visibleActions",
+      "speakableSummary",
     ],
     doNotSay: [
-      "Pantalla:",
-      "Resumen:",
-      "Sección activa:",
-      "Elemento seleccionado:",
-      "Estado:",
-      "Contenido visible:",
-      "Acciones disponibles:",
-      "Datos actuales:",
-      "Interpreté tu pregunta",
+      "No puedo ayudarte",
+      "Como IA",
+      "No tengo contexto",
+      "Según la lógica interna",
     ],
     preferredActions: [
-      "Completar registro para premio",
-      "Comenzar Nivel 1",
-      "Seleccionar partido",
-      "Comenzar Nivel 2",
-      "Girar la ruleta",
-      "Jugar Camino Ciudadano",
-      "Revisar lista de ganadores",
+      "explicar el nivel o bloque activo",
+      "resumir la subventana abierta",
+      "guiar a la siguiente acción dentro del reto",
     ],
   },
 };
 
-export function getAssistantPageProfile(pageId?: string | null): AssistantPageProfile | null {
-  if (!pageId) return null;
-  return ASSISTANT_PAGE_PROFILES[pageId] ?? null;
+const PATH_ALIASES: Record<string, string> = {
+  "/espacio-emprendedor": "espacio-emprendedor",
+  "/comentarios": "comentario-ciudadano",
+  "/comentario-ciudadano": "comentario-ciudadano",
+  "/intencion-de-voto": "intencion-de-voto",
+  "/reto-ciudadano": "reto-ciudadano",
+};
+
+export function normalizePageId(value?: string | null): string | null {
+  if (!value) return null;
+
+  const cleaned = value.toLowerCase().trim();
+
+  if (cleaned === "comentarios") return "comentario-ciudadano";
+  if (cleaned === "comentario-ciudadano") return "comentario-ciudadano";
+
+  return cleaned;
+}
+
+export function getPageIdFromPathname(pathname?: string | null): string | null {
+  if (!pathname) return null;
+
+  const cleanPath = pathname.split("?")[0].split("#")[0];
+  if (PATH_ALIASES[cleanPath]) return PATH_ALIASES[cleanPath];
+
+  const firstSegment = `/${cleanPath.split("/").filter(Boolean)[0] ?? ""}`;
+  if (PATH_ALIASES[firstSegment]) return PATH_ALIASES[firstSegment];
+
+  return normalizePageId(firstSegment.replace(/^\//, ""));
+}
+
+export function getPageProfile(pageIdOrPathname?: string | null): PageProfile | null {
+  if (!pageIdOrPathname) return null;
+
+  const normalized = pageIdOrPathname.startsWith("/")
+    ? getPageIdFromPathname(pageIdOrPathname)
+    : normalizePageId(pageIdOrPathname);
+
+  if (!normalized) return null;
+
+  return PAGE_PROFILES[normalized] ?? null;
+}
+
+export function isContextualAssistantPage(pageIdOrPathname?: string | null): boolean {
+  return Boolean(getPageProfile(pageIdOrPathname));
 }
