@@ -1,8 +1,10 @@
 'use client';
+
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Project = {
   id: string;
@@ -41,6 +43,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,42 +58,51 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<string>('Conectando...');
 
-  // Formatear fecha en hora de Perú
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString('es-PE', { timeZone: 'America/Lima' });
   };
 
-  // Función para obtener el nombre del remitente
-  async function obtenerNombreRemitente(senderType: string, afiliadoId: string | null, participanteId: string | null): Promise<string> {
+  async function obtenerNombreRemitente(
+    senderType: string,
+    afiliadoId: string | null,
+    participanteId: string | null
+  ): Promise<string> {
     if (senderType === 'emprendedor' && afiliadoId) {
       const { data: afiliado } = await supabase
         .from('espacio_afiliados')
         .select('participant_id')
         .eq('id', afiliadoId)
         .maybeSingle();
+
       if (afiliado?.participant_id) {
         const { data: participante } = await supabase
           .from('project_participants')
           .select('full_name')
           .eq('id', afiliado.participant_id)
           .maybeSingle();
+
         return participante?.full_name || 'Emprendedor';
       }
+
       return 'Emprendedor';
-    } else if (senderType === 'inversionista' && participanteId) {
+    }
+
+    if (senderType === 'inversionista' && participanteId) {
       const { data: participante } = await supabase
         .from('project_participants')
         .select('full_name')
         .eq('id', participanteId)
         .maybeSingle();
+
       return participante?.full_name || 'Inversionista';
     }
+
     return 'Usuario';
   }
 
-  // Función para cargar mensajes
   async function cargarMensajes() {
     console.log('🔄 Cargando mensajes para proyecto:', projectId);
+
     const { data: messagesData, error } = await supabase
       .from('espacio_mensajes')
       .select('*')
@@ -109,6 +121,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           msg.sender_afiliado_id,
           msg.sender_participant_id
         );
+
         return {
           ...msg,
           remitente_nombre: nombre,
@@ -120,7 +133,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
     console.log('✅ Mensajes cargados:', mensajesConNombres.length);
   }
 
-  // Cargar datos iniciales
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -129,12 +141,14 @@ export default function EspacioEmprendedorProjectDetailPage() {
       try {
         const deviceId = localStorage.getItem('vc_device_id');
         let currentParticipant = null;
+
         if (deviceId) {
           const { data: pData } = await supabase
             .from('project_participants')
             .select('*')
             .eq('device_id', deviceId)
             .maybeSingle();
+
           currentParticipant = pData;
           setParticipant(currentParticipant);
         }
@@ -145,6 +159,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
             .select('id')
             .eq('participant_id', currentParticipant.id)
             .maybeSingle();
+
           setAfiliadoId(afiliadoData?.id || null);
         }
 
@@ -158,6 +173,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
         let ownerInfo = null;
         let ownerParticipantId = null;
+
         if (projectData.owner_id) {
           const { data: afiliadoData } = await supabase
             .from('espacio_afiliados')
@@ -167,6 +183,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
 
           if (afiliadoData?.participant_id) {
             ownerParticipantId = afiliadoData.participant_id;
+
             const { data: participantData } = await supabase
               .from('project_participants')
               .select('id, full_name, email, phone')
@@ -193,7 +210,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
           .eq('id', projectId);
 
         await cargarMensajes();
-
       } catch (err: any) {
         console.error('Error cargando proyecto:', err);
         setError(err.message || 'Error al cargar el proyecto');
@@ -205,14 +221,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
     loadData();
   }, [projectId]);
 
-  // SUSCRIPCIÓN EN TIEMPO REAL CON LOGS EXTENDIDOS
   useEffect(() => {
     if (!projectId) return;
 
     console.log('🔌 Configurando suscripción para proyecto:', projectId);
     setRealtimeStatus('Conectando...');
 
-    // Suscripción sin filtro para probar si llegan eventos de cualquier mensaje
     const channel = supabase
       .channel(`proyecto-mensajes-${projectId}`)
       .on(
@@ -221,10 +235,10 @@ export default function EspacioEmprendedorProjectDetailPage() {
           event: 'INSERT',
           schema: 'public',
           table: 'espacio_mensajes',
-          // SIN FILTRO INICIALMENTE PARA DEPURAR
         },
         async (payload) => {
           console.log('📨 EVENTO REALTIME RECIBIDO (sin filtro):', payload);
+
           if (payload.new.proyecto_id === projectId) {
             console.log('✅ Este mensaje es para este proyecto. Recargando...');
             await cargarMensajes();
@@ -237,12 +251,15 @@ export default function EspacioEmprendedorProjectDetailPage() {
       )
       .subscribe((status) => {
         console.log('🔌 Estado suscripción:', status);
+
         if (status === 'SUBSCRIBED') {
           setRealtimeStatus('✅ Conectado');
           console.log('✅ Suscripción activa para proyecto:', projectId);
         } else if (status === 'CHANNEL_ERROR') {
           setRealtimeStatus('❌ Error de conexión');
-          console.error('❌ Error en la suscripción. Realtime no está habilitado para la tabla espacio_mensajes.');
+          console.error(
+            '❌ Error en la suscripción. Realtime no está habilitado para la tabla espacio_mensajes.'
+          );
         } else {
           setRealtimeStatus(status);
         }
@@ -254,7 +271,154 @@ export default function EspacioEmprendedorProjectDetailPage() {
     };
   }, [projectId]);
 
-  // Enviar mensaje (unificado para emprendedor e inversionista)
+  useEffect(() => {
+    if (loading) return;
+
+    if (error || !project) {
+       setPageContext({
+  pageId: 'espacio-emprendedor',
+  pageTitle: 'Espacio Emprendedor',
+  route: `/espacio-emprendedor/proyectos/${projectId}`,
+  summary: 'No se pudo cargar el detalle del proyecto emprendedor.',
+  activeSection: 'proyecto-detalle-error',
+  visibleText: error || 'Proyecto no encontrado',
+  availableActions: ['Volver'],
+  selectedItemTitle: undefined,
+  status: 'error',
+  dynamicData: {
+    projectId,
+    detailLoaded: false,
+  },
+});
+      return;
+    }
+
+    const canSendMessage = Boolean(participant || (esPropietario && afiliadoId));
+    const latestMessage = messages.length ? messages[messages.length - 1] : null;
+
+    const visibleParts: string[] = [];
+    visibleParts.push(`Proyecto visible: ${project.title}.`);
+    visibleParts.push(`Categoría visible: ${project.category}.`);
+    visibleParts.push(
+      `Ubicación visible: ${project.department} - ${project.province} - ${project.district}.`
+    );
+    visibleParts.push(
+      `Rango de inversión visible: S/ ${project.investment_min?.toLocaleString()} a S/ ${project.investment_max?.toLocaleString()}.`
+    );
+
+    if (project.summary) {
+      visibleParts.push(`Resumen visible del proyecto: ${project.summary}`);
+    }
+
+    if (project.owner?.nombres_completos) {
+      visibleParts.push(`Emprendedor visible: ${project.owner.nombres_completos}.`);
+    }
+
+    if (project.owner?.email) {
+      visibleParts.push(`Correo visible del emprendedor: ${project.owner.email}.`);
+    }
+
+    if (project.owner?.celular) {
+      visibleParts.push(`Celular visible del emprendedor: ${project.owner.celular}.`);
+    }
+
+    if (project.pdf_url) {
+      visibleParts.push('Hay un botón visible para ver el proyecto en PDF.');
+    }
+
+    visibleParts.push(`Mensajes visibles en la conversación: ${messages.length}.`);
+
+    if (latestMessage) {
+      visibleParts.push(
+        `Último mensaje visible de ${latestMessage.remitente_nombre}: ${latestMessage.content}`
+      );
+    }
+
+    visibleParts.push(
+      esPropietario
+        ? 'El usuario actual está viendo su propio proyecto como emprendedor.'
+        : 'El usuario actual está viendo el proyecto como inversionista o visitante.'
+    );
+
+    visibleParts.push(
+      canSendMessage
+        ? 'La caja de mensaje está habilitada.'
+        : 'La caja de mensaje no está habilitada porque falta iniciar sesión.'
+    );
+
+    visibleParts.push(`Estado visible de realtime: ${realtimeStatus}.`);
+
+    if (successMsg) {
+      visibleParts.push(`Mensaje de éxito visible: ${successMsg}.`);
+    }
+
+    if (errorMsg) {
+      visibleParts.push(`Mensaje de error visible: ${errorMsg}.`);
+    }
+
+    const availableActions = [
+      project.pdf_url ? 'Ver proyecto' : null,
+      canSendMessage ? 'Enviar mensaje' : 'Iniciar sesión',
+      'Volver',
+    ].filter(Boolean) as string[];
+
+    const summary = esPropietario
+      ? 'Detalle de un proyecto propio con bloque de información y conversación con inversionistas.'
+      : 'Detalle de proyecto emprendedor con información del proyecto y conversación para contactar al emprendedor.';
+
+    
+            setPageContext({
+  pageId: 'espacio-emprendedor',
+  pageTitle: 'Espacio Emprendedor',
+  route: `/espacio-emprendedor/proyectos/${projectId}`,
+  summary,
+  activeSection: 'proyecto-detalle',
+  visibleText: visibleParts.join('\n'),
+  availableActions,
+  selectedItemTitle: project.title,
+  status: 'ready',
+  dynamicData: {
+    participantLogueado: !!participant,
+    afiliadoVerificado: !!afiliadoId,
+    esPropietario,
+    projectId: project.id,
+    projectTitle: project.title,
+    projectCategory: project.category,
+    projectStatus: project.status,
+    projectViews: project.views || 0,
+    projectHasPdf: !!project.pdf_url,
+    ownerName: project.owner?.nombres_completos || '',
+    mensajesCount: messages.length,
+    latestMessageAuthor: latestMessage?.remitente_nombre || '',
+    latestMessageContent: latestMessage?.content || '',
+    canSendMessage,
+    sendingMessage,
+    realtimeStatus,
+    detailLoaded: true,
+    conversationVisible: true,
+  },
+});
+
+    return () => {
+      clearPageContext();
+    };
+  }, [
+    setPageContext,
+    clearPageContext,
+    loading,
+    error,
+    project,
+    projectId,
+    participant,
+    afiliadoId,
+    esPropietario,
+    messages,
+    sendingMessage,
+    realtimeStatus,
+    successMsg,
+    errorMsg,
+  ]);
+
   const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
 
@@ -276,17 +440,15 @@ export default function EspacioEmprendedorProjectDetailPage() {
     }
 
     setSendingMessage(true);
+
     try {
-      const { error } = await supabase
-        .from('espacio_mensajes')
-        .insert(mensajeData);
+      const { error } = await supabase.from('espacio_mensajes').insert(mensajeData);
 
       if (error) throw error;
 
       setNewMessage('');
       setSuccessMsg('✅ Mensaje enviado correctamente');
       setTimeout(() => setSuccessMsg(null), 3000);
-      // No recargamos manualmente porque el realtime lo hará
     } catch (err: any) {
       console.error('Error al enviar mensaje:', err);
       setErrorMsg(err.message || 'Error al enviar mensaje');
@@ -313,10 +475,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
           <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4 mb-4">
             {error || 'Proyecto no encontrado'}
           </div>
-          <button
-            onClick={() => router.back()}
-            className="text-green-700 hover:underline"
-          >
+          <button onClick={() => router.back()} className="text-green-700 hover:underline">
             ← Volver
           </button>
         </div>
@@ -337,9 +496,12 @@ export default function EspacioEmprendedorProjectDetailPage() {
           </button>
         </div>
 
-        {/* Indicador de estado de realtime */}
         <div className="mb-4 text-right text-xs">
-          <span className={`inline-block w-2 h-2 rounded-full mr-1 ${realtimeStatus.includes('Conectado') ? 'bg-green-500' : 'bg-red-500'}`}></span>
+          <span
+            className={`inline-block w-2 h-2 rounded-full mr-1 ${
+              realtimeStatus.includes('Conectado') ? 'bg-green-500' : 'bg-red-500'
+            }`}
+          ></span>
           <span className="text-slate-500">Realtime: {realtimeStatus}</span>
         </div>
 
@@ -354,7 +516,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
           </div>
         )}
 
-        {/* Información del proyecto */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm mb-6">
           <div className="flex flex-wrap gap-2 mb-4">
             <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -364,7 +525,8 @@ export default function EspacioEmprendedorProjectDetailPage() {
               {project.department} - {project.province} - {project.district}
             </span>
             <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-              Inversión: S/ {project.investment_min?.toLocaleString()} - S/ {project.investment_max?.toLocaleString()}
+              Inversión: S/ {project.investment_min?.toLocaleString()} - S/{' '}
+              {project.investment_max?.toLocaleString()}
             </span>
             <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
               👁️ {project.views || 0} vistas
@@ -403,19 +565,19 @@ export default function EspacioEmprendedorProjectDetailPage() {
           )}
         </div>
 
-        {/* Sección de mensajes UNIFICADA */}
         <div className="bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-4">💬 Conversación</h2>
           <p className="text-sm text-slate-600 mb-4">
-            {esPropietario 
-              ? "Los inversionistas interesados en tu proyecto te enviarán mensajes aquí. Puedes responder desde esta misma caja."
-              : "Envía un mensaje para consultar sobre el proyecto o expresar tu interés como inversionista."}
+            {esPropietario
+              ? 'Los inversionistas interesados en tu proyecto te enviarán mensajes aquí. Puedes responder desde esta misma caja.'
+              : 'Envía un mensaje para consultar sobre el proyecto o expresar tu interés como inversionista.'}
           </p>
 
-          {/* Lista de mensajes */}
           <div className="space-y-4 mb-6 max-h-96 overflow-y-auto bg-slate-50 rounded-xl p-4">
             {messages.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center">No hay mensajes aún. Sé el primero en escribir.</p>
+              <p className="text-slate-500 text-sm text-center">
+                No hay mensajes aún. Sé el primero en escribir.
+              </p>
             ) : (
               messages.map((msg) => (
                 <div
@@ -423,19 +585,21 @@ export default function EspacioEmprendedorProjectDetailPage() {
                   className={`p-3 rounded-xl ${
                     (msg.sender_type === 'inversionista' && !esPropietario) ||
                     (msg.sender_type === 'emprendedor' && esPropietario)
-                      ? 'bg-green-100 ml-8'   // Mensaje propio (según rol)
-                      : 'bg-slate-200 mr-8'    // Mensaje del otro
+                      ? 'bg-green-100 ml-8'
+                      : 'bg-slate-200 mr-8'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-xs font-semibold text-slate-700">
                       {msg.remitente_nombre}
-                      {msg.sender_type === 'inversionista' && <span className="ml-1 text-green-600">💰</span>}
-                      {msg.sender_type === 'emprendedor' && <span className="ml-1 text-blue-600">🚀</span>}
+                      {msg.sender_type === 'inversionista' && (
+                        <span className="ml-1 text-green-600">💰</span>
+                      )}
+                      {msg.sender_type === 'emprendedor' && (
+                        <span className="ml-1 text-blue-600">🚀</span>
+                      )}
                     </span>
-                    <span className="text-xs text-slate-400">
-                      {formatDate(msg.created_at)}
-                    </span>
+                    <span className="text-xs text-slate-400">{formatDate(msg.created_at)}</span>
                   </div>
                   <p className="text-sm text-slate-800">{msg.content}</p>
                 </div>
@@ -443,13 +607,16 @@ export default function EspacioEmprendedorProjectDetailPage() {
             )}
           </div>
 
-          {/* Caja de texto única para escribir */}
           {(participant || (esPropietario && afiliadoId)) ? (
             <div className="flex gap-3 items-start">
               <textarea
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={esPropietario ? "Escribe tu respuesta como emprendedor..." : "Escribe tu mensaje para el emprendedor..."}
+                placeholder={
+                  esPropietario
+                    ? 'Escribe tu respuesta como emprendedor...'
+                    : 'Escribe tu mensaje para el emprendedor...'
+                }
                 rows={2}
                 className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
               />
@@ -466,7 +633,8 @@ export default function EspacioEmprendedorProjectDetailPage() {
               Para participar en la conversación, primero debes{' '}
               <Link href="/espacio-emprendedor" className="text-green-700 underline">
                 iniciar sesión
-              </Link>.
+              </Link>
+              .
             </p>
           )}
         </div>
