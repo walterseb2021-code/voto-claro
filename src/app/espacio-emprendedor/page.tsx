@@ -52,33 +52,42 @@ function getDeviceId(): string {
   }, [afiliado]);
 
   // Cargar proyectos destacados
-  const loadTopProjects = async () => {
-    try {
-      const { data: contactos } = await supabase
-        .from('espacio_contactos')
-        .select('project_id');
+        const loadTopProjects = async () => {
+  try {
+    const { data: proyectos } = await supabase
+      .from('espacio_proyectos')
+      .select('id, title, category, department')
+      .eq('status', 'active');
 
-      const contactCount: Record<string, number> = {};
-      contactos?.forEach(c => {
-        contactCount[c.project_id] = (contactCount[c.project_id] || 0) + 1;
-      });
+    const { data: mensajes } = await supabase
+      .from('espacio_mensajes')
+      .select('proyecto_id, sender_participant_id, sender_type, thread_key')
+      .neq('thread_key', 'legacy-no-thread');
 
-      const { data: proyectos } = await supabase
-        .from('espacio_proyectos')
-        .select('id, title, category, department')
-        .eq('status', 'active');
+    const contactosPorProyecto = new Map<string, Set<string>>();
 
-      const proyectosConContactos = (proyectos || []).map(p => ({
-        ...p,
-        contactos: contactCount[p.id] || 0
-      }));
+    (mensajes || []).forEach((m: any) => {
+      if (m.sender_type !== 'inversionista') return;
+      if (!m.sender_participant_id) return;
 
-      proyectosConContactos.sort((a, b) => b.contactos - a.contactos);
-      setTopProjects(proyectosConContactos.slice(0, 3));
-    } catch (err) {
-      console.error('Error cargando proyectos destacados:', err);
-    }
-  };
+      if (!contactosPorProyecto.has(m.proyecto_id)) {
+        contactosPorProyecto.set(m.proyecto_id, new Set<string>());
+      }
+
+      contactosPorProyecto.get(m.proyecto_id)!.add(m.sender_participant_id);
+    });
+
+    const proyectosConContactos = (proyectos || []).map((p) => ({
+      ...p,
+      contactos: contactosPorProyecto.get(p.id)?.size || 0,
+    }));
+
+    proyectosConContactos.sort((a, b) => b.contactos - a.contactos);
+    setTopProjects(proyectosConContactos.slice(0, 3));
+  } catch (err) {
+    console.error('Error cargando proyectos destacados:', err);
+  }
+};
 
   useEffect(() => {
     loadTopProjects();
@@ -135,19 +144,27 @@ function getDeviceId(): string {
       
       console.log('📦 Proyectos encontrados:', data?.length || 0);
       
-      const { data: contactos } = await supabase
-        .from('espacio_contactos')
-        .select('project_id');
-      
-      const contactCount: Record<string, number> = {};
-      contactos?.forEach(c => {
-        contactCount[c.project_id] = (contactCount[c.project_id] || 0) + 1;
-      });
+         const { data: mensajes } = await supabase
+  .from('espacio_mensajes')
+  .select('proyecto_id, sender_participant_id, sender_type');
 
-      const proyectosConContactos = (data || []).map(p => ({
-        ...p,
-        contactos: contactCount[p.id] || 0
-      }));
+const uniqueInvestorContacts = new Map<string, Set<string>>();
+
+(mensajes || []).forEach((m: any) => {
+  if (m.sender_type !== 'inversionista') return;
+  if (!m.sender_participant_id) return;
+
+  if (!uniqueInvestorContacts.has(m.proyecto_id)) {
+    uniqueInvestorContacts.set(m.proyecto_id, new Set<string>());
+  }
+
+  uniqueInvestorContacts.get(m.proyecto_id)!.add(m.sender_participant_id);
+});
+
+const proyectosConContactos = (data || []).map((p) => ({
+  ...p,
+  contactos: uniqueInvestorContacts.get(p.id)?.size || 0,
+}));
       
       setMisProyectos(proyectosConContactos);
     } catch (err) {
@@ -157,85 +174,98 @@ function getDeviceId(): string {
 
   // Cargar mensajes recibidos por el emprendedor
   const cargarMensajesRecibidos = async () => {
-    if (!participant) return;
-    setCargandoMensajes(true);
-    try {
-      const { data: proyectosDelEmprendedor } = await supabase
-        .from('espacio_proyectos')
-        .select('id, title')
-        .eq('owner_id', afiliado?.id);
+  if (!participant || !afiliado) return;
 
-      if (!proyectosDelEmprendedor?.length) {
-        setMensajesRecibidos([]);
-        setCargandoMensajes(false);
-        return;
-      }
+  setCargandoMensajes(true);
 
-      const projectIds = proyectosDelEmprendedor.map(p => p.id);
-      
-      // Obtener todos los mensajes de los proyectos
-      const { data: mensajes } = await supabase
-        .from('espacio_mensajes')
-        .select('*')
-        .in('proyecto_id', projectIds)
-        .order('created_at', { ascending: false });
+  try {
+    const { data: proyectosDelEmprendedor } = await supabase
+      .from('espacio_proyectos')
+      .select('id, title')
+      .eq('owner_id', afiliado.id);
 
-      if (!mensajes) {
-        setMensajesRecibidos([]);
-        return;
-      }
-
-      // Para cada mensaje, obtener el nombre del remitente
-      const mensajesConNombres = await Promise.all(
-        mensajes.map(async (msg) => {
-          let remitente = 'Usuario';
-          const proyecto = proyectosDelEmprendedor.find(p => p.id === msg.proyecto_id);
-
-          if (msg.sender_type === 'inversionista' && msg.sender_participant_id) {
-            const { data: participante } = await supabase
-              .from('project_participants')
-              .select('full_name')
-              .eq('id', msg.sender_participant_id)
-              .maybeSingle();
-            remitente = participante?.full_name || 'Inversionista';
-          } else if (msg.sender_type === 'emprendedor' && msg.sender_afiliado_id) {
-            const { data: afiliadoData } = await supabase
-              .from('espacio_afiliados')
-              .select('participant_id')
-              .eq('id', msg.sender_afiliado_id)
-              .maybeSingle();
-            if (afiliadoData?.participant_id) {
-              const { data: participante } = await supabase
-                .from('project_participants')
-                .select('full_name')
-                .eq('id', afiliadoData.participant_id)
-                .maybeSingle();
-              remitente = participante?.full_name || 'Emprendedor';
-            } else {
-              remitente = 'Emprendedor';
-            }
-          }
-
-          return {
-            id: msg.id,
-            mensaje: msg.content,
-            remitente: remitente,
-            remitente_id: msg.sender_type === 'inversionista' ? msg.sender_participant_id : msg.sender_afiliado_id,
-            proyecto_titulo: proyecto?.title || 'Proyecto',
-            proyecto_id: msg.proyecto_id,
-            created_at: msg.created_at,
-            sender_type: msg.sender_type,
-          };
-        })
-      );
-
-      setMensajesRecibidos(mensajesConNombres);
-    } catch (err) {
-      console.error('Error cargando mensajes recibidos:', err);
-    } finally {
+    if (!proyectosDelEmprendedor?.length) {
+      setMensajesRecibidos([]);
       setCargandoMensajes(false);
+      return;
     }
-  };
+
+    const projectIds = proyectosDelEmprendedor.map((p) => p.id);
+
+    const { data: mensajes } = await supabase
+      .from('espacio_mensajes')
+      .select('*')
+      .in('proyecto_id', projectIds)
+      .neq('thread_key', 'legacy-no-thread')
+      .order('created_at', { ascending: false });
+
+    if (!mensajes?.length) {
+      setMensajesRecibidos([]);
+      return;
+    }
+
+    const latestByThread = new Map<string, any>();
+
+    for (const msg of mensajes) {
+      if (!msg.thread_key) continue;
+      if (!latestByThread.has(msg.thread_key)) {
+        latestByThread.set(msg.thread_key, msg);
+      }
+    }
+
+    const latestMsgs = Array.from(latestByThread.values());
+
+    const investorIds = Array.from(
+      new Set(
+        latestMsgs
+          .map((msg: any) =>
+            msg.sender_type === 'inversionista'
+              ? msg.sender_participant_id
+              : msg.destinatario_participant_id
+          )
+          .filter(Boolean)
+      )
+    );
+
+    const { data: participantes } = investorIds.length
+      ? await supabase
+          .from('project_participants')
+          .select('id, full_name')
+          .in('id', investorIds)
+      : { data: [] as any[] };
+
+    const nameMap = new Map<string, string>();
+    (participantes || []).forEach((p: any) => {
+      nameMap.set(p.id, p.full_name || 'Inversionista');
+    });
+
+    const mensajesConNombres = latestMsgs.map((msg: any) => {
+      const proyecto = proyectosDelEmprendedor.find((p) => p.id === msg.proyecto_id);
+      const investorId =
+        msg.sender_type === 'inversionista'
+          ? msg.sender_participant_id
+          : msg.destinatario_participant_id;
+
+      return {
+        id: msg.id,
+        mensaje: msg.content,
+        remitente: investorId ? nameMap.get(investorId) || 'Inversionista' : 'Inversionista',
+        remitente_id: investorId,
+        proyecto_titulo: proyecto?.title || 'Proyecto',
+        proyecto_id: msg.proyecto_id,
+        created_at: msg.created_at,
+        sender_type: msg.sender_type,
+        thread_key: msg.thread_key,
+      };
+    });
+
+    setMensajesRecibidos(mensajesConNombres);
+  } catch (err) {
+    console.error('Error cargando mensajes recibidos:', err);
+  } finally {
+    setCargandoMensajes(false);
+  }
+};
 
   // Suscripción en tiempo real para nuevos mensajes
   useEffect(() => {
