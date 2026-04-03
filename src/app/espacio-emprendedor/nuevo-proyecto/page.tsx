@@ -1,9 +1,10 @@
-// src/app/espacio-emprendedor/nuevo-proyecto/page.tsx
 'use client';
+
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Categorías permitidas
 const CATEGORIAS = [
@@ -20,14 +21,37 @@ const CATEGORIAS = [
 
 // Departamentos del Perú
 const DEPARTAMENTOS = [
-  'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho',
-  'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica',
-  'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios',
-  'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali'
+  'Amazonas',
+  'Áncash',
+  'Apurímac',
+  'Arequipa',
+  'Ayacucho',
+  'Cajamarca',
+  'Callao',
+  'Cusco',
+  'Huancavelica',
+  'Huánuco',
+  'Ica',
+  'Junín',
+  'La Libertad',
+  'Lambayeque',
+  'Lima',
+  'Loreto',
+  'Madre de Dios',
+  'Moquegua',
+  'Pasco',
+  'Piura',
+  'Puno',
+  'San Martín',
+  'Tacna',
+  'Tumbes',
+  'Ucayali',
 ];
 
 export default function NuevoProyectoEmprendedorPage() {
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const [participant, setParticipant] = useState<any>(null);
   const [afiliado, setAfiliado] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +78,6 @@ export default function NuevoProyectoEmprendedorPage() {
         return;
       }
 
-      // Obtener participante
       const { data: participantData, error: participantError } = await supabase
         .from('project_participants')
         .select('*')
@@ -68,7 +91,6 @@ export default function NuevoProyectoEmprendedorPage() {
 
       setParticipant(participantData);
 
-      // Verificar afiliación
       const { data: afiliadoData, error: afiliadoError } = await supabase
         .from('espacio_afiliados')
         .select('*')
@@ -87,7 +109,9 @@ export default function NuevoProyectoEmprendedorPage() {
     loadData();
   }, [router]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
@@ -97,83 +121,41 @@ export default function NuevoProyectoEmprendedorPage() {
     }
   };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setSubmitting(true);
-  setError(null);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
 
-  // Validaciones
-  if (!form.title || !form.category || !form.department || !form.district || !form.summary) {
-    setError('Todos los campos obligatorios deben estar llenos.');
-    setSubmitting(false);
-    return;
-  }
-
-  if (!pdfFile) {
-    setError('Debes subir el archivo PDF del proyecto.');
-    setSubmitting(false);
-    return;
-  }
-
-  if (pdfFile.type !== 'application/pdf') {
-    setError('Solo se permiten archivos PDF.');
-    setSubmitting(false);
-    return;
-  }
-
-  if (pdfFile.size > 10 * 1024 * 1024) {
-    setError('El archivo no debe superar los 10 MB.');
-    setSubmitting(false);
-    return;
-  }
-
-  try {
-    // LOG 1: Verificar afiliado antes de empezar
-    console.log('👤 afiliado:', afiliado);
-    console.log('👤 afiliado.id:', afiliado?.id);
-
-    // LOG 2: Datos que se van a enviar
-    console.log('📦 Datos a insertar:', {
-      owner_id: afiliado?.id,
-      title: form.title,
-      category: form.category,
-      department: form.department,
-      province: form.province || null,
-      district: form.district,
-      summary: form.summary,
-      investment_min: form.investment_min ? parseInt(form.investment_min) : null,
-      investment_max: form.investment_max ? parseInt(form.investment_max) : null,
-      status: 'active',
-    });
-
-    // 1. Subir PDF a Supabase Storage
-    const fileExt = pdfFile.name.split('.').pop();
-    const fileName = `espacio-emprendedor/${afiliado.id}/${Date.now()}.${fileExt}`;
-    console.log('📤 Subiendo PDF a:', fileName);
-    
-    const { error: uploadError } = await supabase.storage
-      .from('project_pdfs')
-      .upload(fileName, pdfFile);
-
-    if (uploadError) {
-      console.error('❌ Error subiendo PDF:', uploadError);
-      throw new Error(`Error al subir PDF: ${uploadError.message}`);
+    if (!form.title || !form.category || !form.department || !form.district || !form.summary) {
+      setError('Todos los campos obligatorios deben estar llenos.');
+      setSubmitting(false);
+      return;
     }
 
-    const { data: urlData } = supabase.storage
-      .from('project_pdfs')
-      .getPublicUrl(fileName);
+    if (!pdfFile) {
+      setError('Debes subir el archivo PDF del proyecto.');
+      setSubmitting(false);
+      return;
+    }
 
-    const pdfUrl = urlData.publicUrl;
-    console.log('✅ PDF subido, URL:', pdfUrl);
+    if (pdfFile.type !== 'application/pdf') {
+      setError('Solo se permiten archivos PDF.');
+      setSubmitting(false);
+      return;
+    }
 
-    // 2. Insertar proyecto
-    console.log('💾 Insertando proyecto en BD...');
-    
-    const { data: newProject, error: insertError } = await supabase
-      .from('espacio_proyectos')
-      .insert({
-        owner_id: afiliado.id,
+    if (pdfFile.size > 10 * 1024 * 1024) {
+      setError('El archivo no debe superar los 10 MB.');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      console.log('👤 afiliado:', afiliado);
+      console.log('👤 afiliado.id:', afiliado?.id);
+
+      console.log('📦 Datos a insertar:', {
+        owner_id: afiliado?.id,
         title: form.title,
         category: form.category,
         department: form.department,
@@ -182,48 +164,216 @@ export default function NuevoProyectoEmprendedorPage() {
         summary: form.summary,
         investment_min: form.investment_min ? parseInt(form.investment_min) : null,
         investment_max: form.investment_max ? parseInt(form.investment_max) : null,
-        pdf_url: pdfUrl,
         status: 'active',
-      })
-      .select();
+      });
 
-    if (insertError) {
-      console.error('❌ Error insertando proyecto:', insertError);
-      console.error('❌ Código de error:', insertError.code);
-      console.error('❌ Mensaje detallado:', insertError.message);
-      throw new Error(`Error al guardar: ${insertError.message} (Código: ${insertError.code})`);
-    }
+      const fileExt = pdfFile.name.split('.').pop();
+      const fileName = `espacio-emprendedor/${afiliado.id}/${Date.now()}.${fileExt}`;
+      console.log('📤 Subiendo PDF a:', fileName);
 
-    console.log('✅ Proyecto insertado correctamente:', newProject);
+      const { error: uploadError } = await supabase.storage
+        .from('project_pdfs')
+        .upload(fileName, pdfFile);
 
-    // Enviar notificaciones a inversionistas (no bloquea)
-    try {
-      await fetch('/api/espacio-emprendedor/notificar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectTitle: form.title,
+      if (uploadError) {
+        console.error('❌ Error subiendo PDF:', uploadError);
+        throw new Error(`Error al subir PDF: ${uploadError.message}`);
+      }
+
+      const { data: urlData } = supabase.storage.from('project_pdfs').getPublicUrl(fileName);
+
+      const pdfUrl = urlData.publicUrl;
+      console.log('✅ PDF subido, URL:', pdfUrl);
+
+      console.log('💾 Insertando proyecto en BD...');
+
+      const { data: newProject, error: insertError } = await supabase
+        .from('espacio_proyectos')
+        .insert({
+          owner_id: afiliado.id,
+          title: form.title,
           category: form.category,
           department: form.department,
+          province: form.province || null,
+          district: form.district,
+          summary: form.summary,
           investment_min: form.investment_min ? parseInt(form.investment_min) : null,
           investment_max: form.investment_max ? parseInt(form.investment_max) : null,
-        }),
-      });
-    } catch (notifyErr) {
-      console.error('Error enviando notificaciones:', notifyErr);
+          pdf_url: pdfUrl,
+          status: 'active',
+        })
+        .select();
+
+      if (insertError) {
+        console.error('❌ Error insertando proyecto:', insertError);
+        console.error('❌ Código de error:', insertError.code);
+        console.error('❌ Mensaje detallado:', insertError.message);
+        throw new Error(`Error al guardar: ${insertError.message} (Código: ${insertError.code})`);
+      }
+
+      console.log('✅ Proyecto insertado correctamente:', newProject);
+
+      try {
+        await fetch('/api/espacio-emprendedor/notificar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectTitle: form.title,
+            category: form.category,
+            department: form.department,
+            investment_min: form.investment_min ? parseInt(form.investment_min) : null,
+            investment_max: form.investment_max ? parseInt(form.investment_max) : null,
+          }),
+        });
+      } catch (notifyErr) {
+        console.error('Error enviando notificaciones:', notifyErr);
+      }
+
+      setSuccess(true);
+      setTimeout(() => {
+        router.push('/espacio-emprendedor');
+      }, 3000);
+    } catch (err: any) {
+      console.error('❌ Error completo:', err);
+      setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    const visibleParts: string[] = [];
+
+    if (loading) {
+      visibleParts.push('La pantalla está cargando el formulario para publicar un nuevo proyecto.');
     }
 
-    setSuccess(true);
-    setTimeout(() => {
-      router.push('/espacio-emprendedor');
-    }, 3000);
-  } catch (err: any) {
-    console.error('❌ Error completo:', err);
-    setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
-  } finally {
-    setSubmitting(false);
-  }
-};
+    if (participant && !loading) {
+      visibleParts.push(
+        `Participante con sesión activa: ${participant.full_name || participant.alias || 'participante'}.`
+      );
+    }
+
+    if (afiliado && !loading) {
+      visibleParts.push('El usuario ya está verificado como emprendedor afiliado.');
+    }
+
+    if (form.title.trim()) {
+      visibleParts.push(`Título visible del proyecto: ${form.title.trim()}.`);
+    } else {
+      visibleParts.push('El campo de título del proyecto está vacío.');
+    }
+
+    if (form.category) {
+      visibleParts.push(`Categoría seleccionada: ${form.category}.`);
+    } else {
+      visibleParts.push('Aún no se ha seleccionado categoría.');
+    }
+
+    if (form.department) {
+      visibleParts.push(`Departamento seleccionado: ${form.department}.`);
+    }
+
+    if (form.province.trim()) {
+      visibleParts.push(`Provincia visible: ${form.province.trim()}.`);
+    }
+
+    if (form.district.trim()) {
+      visibleParts.push(`Distrito visible: ${form.district.trim()}.`);
+    }
+
+    if (form.summary.trim()) {
+      visibleParts.push('Ya hay contenido escrito en el resumen ejecutivo.');
+    } else {
+      visibleParts.push('El resumen ejecutivo aún está vacío.');
+    }
+
+    if (form.investment_min) {
+      visibleParts.push(`Monto mínimo visible: S/ ${form.investment_min}.`);
+    }
+
+    if (form.investment_max) {
+      visibleParts.push(`Monto máximo visible: S/ ${form.investment_max}.`);
+    }
+
+    if (pdfFile) {
+      visibleParts.push(`PDF cargado: ${pdfFile.name}.`);
+      visibleParts.push(`Tamaño visible del PDF: ${Math.round(pdfFile.size / 1024)} KB.`);
+    } else {
+      visibleParts.push('Todavía no se ha cargado el PDF del proyecto.');
+    }
+
+    if (submitting) {
+      visibleParts.push('El formulario del proyecto se está enviando.');
+    }
+
+    if (success) {
+      visibleParts.push('El proyecto ya fue publicado correctamente.');
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible: ${error}`);
+    }
+
+    const hasLocation = !!form.department || !!form.province.trim() || !!form.district.trim();
+    const hasInvestment = !!form.investment_min || !!form.investment_max;
+    const availableActions = [
+      'Completar título',
+      'Seleccionar categoría',
+      'Seleccionar ubicación',
+      'Escribir resumen ejecutivo',
+      'Definir inversión',
+      pdfFile ? 'Cambiar PDF' : 'Subir PDF',
+      'Publicar proyecto',
+      'Volver',
+    ];
+
+    const summary = loading
+      ? 'Pantalla para publicar nuevo proyecto cargando datos del emprendedor.'
+      : success
+      ? 'Pantalla de publicación de proyecto con confirmación exitosa.'
+      : error
+      ? 'Pantalla para publicar nuevo proyecto con error visible.'
+      : 'Formulario para publicar un nuevo proyecto emprendedor con datos, ubicación, inversión y PDF.';
+
+    const status = loading ? 'loading' : error ? 'error' : success ? 'ready' : 'ready';
+
+    setPageContext({
+      pageId: 'espacio-emprendedor',
+      pageTitle: 'Espacio Emprendedor',
+      route: '/espacio-emprendedor/nuevo-proyecto',
+      summary,
+      activeSection: success ? 'nuevo-proyecto-exito' : 'nuevo-proyecto-formulario',
+      visibleText: visibleParts.join('\n'),
+      availableActions,
+      selectedItemTitle: form.title.trim() || participant?.full_name || undefined,
+      status,
+      dynamicData: {
+        participantLogueado: !!participant,
+        afiliadoVerificado: !!afiliado,
+        submittingProject: submitting,
+        success,
+        title: form.title.trim(),
+        category: form.category,
+        department: form.department,
+        province: form.province.trim(),
+        district: form.district.trim(),
+        hasSummary: !!form.summary.trim(),
+        hasLocation,
+        hasInvestment,
+        investmentMin: form.investment_min,
+        investmentMax: form.investment_max,
+        pdfLoaded: !!pdfFile,
+        pdfName: pdfFile?.name || '',
+      },
+    });
+  }, [setPageContext, loading, participant, afiliado, submitting, success, error, form, pdfFile]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
 
   if (loading) {
     return (
@@ -285,9 +435,10 @@ export default function NuevoProyectoEmprendedorPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* ... resto del formulario igual ... */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Título del proyecto *</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Título del proyecto *
+              </label>
               <input
                 type="text"
                 name="title"
@@ -299,7 +450,9 @@ export default function NuevoProyectoEmprendedorPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Categoría *</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Categoría *
+              </label>
               <select
                 name="category"
                 value={form.category}
@@ -309,13 +462,17 @@ export default function NuevoProyectoEmprendedorPage() {
               >
                 <option value="">Selecciona una categoría</option>
                 {CATEGORIAS.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Departamento *</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Departamento *
+              </label>
               <select
                 name="department"
                 value={form.department}
@@ -325,13 +482,17 @@ export default function NuevoProyectoEmprendedorPage() {
               >
                 <option value="">Selecciona un departamento</option>
                 {DEPARTAMENTOS.map((dept) => (
-                  <option key={dept} value={dept}>{dept}</option>
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Provincia (opcional)</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Provincia (opcional)
+              </label>
               <input
                 type="text"
                 name="province"
@@ -342,7 +503,9 @@ export default function NuevoProyectoEmprendedorPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Distrito *</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Distrito *
+              </label>
               <input
                 type="text"
                 name="district"
@@ -354,7 +517,9 @@ export default function NuevoProyectoEmprendedorPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Resumen ejecutivo *</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Resumen ejecutivo *
+              </label>
               <textarea
                 name="summary"
                 value={form.summary}
@@ -368,7 +533,9 @@ export default function NuevoProyectoEmprendedorPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Inversión mínima (S/)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Inversión mínima (S/)
+                </label>
                 <input
                   type="number"
                   name="investment_min"
@@ -379,7 +546,9 @@ export default function NuevoProyectoEmprendedorPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Inversión máxima (S/)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Inversión máxima (S/)
+                </label>
                 <input
                   type="number"
                   name="investment_max"
@@ -392,7 +561,9 @@ export default function NuevoProyectoEmprendedorPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Archivo PDF del proyecto *
+              </label>
               <input
                 type="file"
                 accept=".pdf"
@@ -400,7 +571,9 @@ export default function NuevoProyectoEmprendedorPage() {
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                 required
               />
-              <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF. Incluye plan de negocio, proyecciones, etc.</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Máximo 10 MB. Solo PDF. Incluye plan de negocio, proyecciones, etc.
+              </p>
             </div>
 
             <div className="pt-4">

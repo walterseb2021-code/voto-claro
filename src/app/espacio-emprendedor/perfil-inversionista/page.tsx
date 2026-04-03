@@ -1,12 +1,13 @@
-// src/app/espacio-emprendedor/perfil-inversionista/page.tsx
 'use client';
+
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 const CATEGORIAS = [
-  'Todas',  // ← NUEVA OPCIÓN
+  'Todas',
   'Tecnología',
   'Ventas / Comercio',
   'Inmobiliaria',
@@ -19,20 +20,44 @@ const CATEGORIAS = [
 ];
 
 const DEPARTAMENTOS = [
-  'Todos',  // ← NUEVA OPCIÓN
-  'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho',
-  'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica',
-  'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios',
-  'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali'
+  'Todos',
+  'Amazonas',
+  'Áncash',
+  'Apurímac',
+  'Arequipa',
+  'Ayacucho',
+  'Cajamarca',
+  'Callao',
+  'Cusco',
+  'Huancavelica',
+  'Huánuco',
+  'Ica',
+  'Junín',
+  'La Libertad',
+  'Lambayeque',
+  'Lima',
+  'Loreto',
+  'Madre de Dios',
+  'Moquegua',
+  'Pasco',
+  'Piura',
+  'Puno',
+  'San Martín',
+  'Tacna',
+  'Tumbes',
+  'Ucayali',
 ];
 
 export default function PerfilInversionistaPage() {
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const [participant, setParticipant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const [perfil, setPerfil] = useState({
     company: '',
     investment_range_min: '',
@@ -40,7 +65,7 @@ export default function PerfilInversionistaPage() {
     categories: [] as string[],
     departments: [] as string[],
     notify_email: false,
-    monto_mayor: false, // ← NUEVO: opción para montos mayores a 100,000
+    monto_mayor: false,
   });
 
   useEffect(() => {
@@ -68,7 +93,7 @@ export default function PerfilInversionistaPage() {
 
       setParticipant(participantData);
 
-      const { data: perfilData, error: perfilError } = await supabase
+      const { data: perfilData } = await supabase
         .from('espacio_inversionistas')
         .select('*')
         .eq('participant_id', participantData.id)
@@ -78,7 +103,10 @@ export default function PerfilInversionistaPage() {
         setPerfil({
           company: perfilData.company || '',
           investment_range_min: perfilData.investment_range_min?.toString() || '',
-          investment_range_max: perfilData.investment_range_max?.toString() || '',
+          investment_range_max:
+            perfilData.investment_range_max && perfilData.investment_range_max <= 100000
+              ? perfilData.investment_range_max.toString()
+              : '',
           categories: perfilData.categories || [],
           departments: perfilData.departments || [],
           notify_email: perfilData.notify_email || false,
@@ -94,35 +122,34 @@ export default function PerfilInversionistaPage() {
 
   const toggleCategory = (category: string) => {
     if (category === 'Todas') {
-      // Si selecciona "Todas", selecciona todas las categorías (excepto "Todas" misma)
-      const todas = CATEGORIAS.filter(c => c !== 'Todas');
-      setPerfil(prev => ({
+      const todas = CATEGORIAS.filter((c) => c !== 'Todas');
+      setPerfil((prev) => ({
         ...prev,
-        categories: prev.categories.length === todas.length ? [] : todas
+        categories: prev.categories.length === todas.length ? [] : todas,
       }));
     } else {
-      setPerfil(prev => ({
+      setPerfil((prev) => ({
         ...prev,
         categories: prev.categories.includes(category)
-          ? prev.categories.filter(c => c !== category)
-          : [...prev.categories, category]
+          ? prev.categories.filter((c) => c !== category)
+          : [...prev.categories, category],
       }));
     }
   };
 
   const toggleDepartment = (department: string) => {
     if (department === 'Todos') {
-      const todos = DEPARTAMENTOS.filter(d => d !== 'Todos');
-      setPerfil(prev => ({
+      const todos = DEPARTAMENTOS.filter((d) => d !== 'Todos');
+      setPerfil((prev) => ({
         ...prev,
-        departments: prev.departments.length === todos.length ? [] : todos
+        departments: prev.departments.length === todos.length ? [] : todos,
       }));
     } else {
-      setPerfil(prev => ({
+      setPerfil((prev) => ({
         ...prev,
         departments: prev.departments.includes(department)
-          ? prev.departments.filter(d => d !== department)
-          : [...prev.departments, department]
+          ? prev.departments.filter((d) => d !== department)
+          : [...prev.departments, department],
       }));
     }
   };
@@ -133,10 +160,9 @@ export default function PerfilInversionistaPage() {
     setError(null);
     setMessage(null);
 
-    // Calcular investment_range_max según la opción "monto mayor"
     let maxValue = null;
     if (perfil.monto_mayor) {
-      maxValue = 999999; // Un valor grande para representar "mayor a 100,000"
+      maxValue = 999999;
     } else if (perfil.investment_range_max) {
       maxValue = parseInt(perfil.investment_range_max);
     }
@@ -147,7 +173,9 @@ export default function PerfilInversionistaPage() {
         .upsert({
           participant_id: participant.id,
           company: perfil.company || null,
-          investment_range_min: perfil.investment_range_min ? parseInt(perfil.investment_range_min) : null,
+          investment_range_min: perfil.investment_range_min
+            ? parseInt(perfil.investment_range_min)
+            : null,
           investment_range_max: maxValue,
           categories: perfil.categories,
           departments: perfil.departments,
@@ -156,7 +184,9 @@ export default function PerfilInversionistaPage() {
 
       if (error) throw error;
 
-      setMessage('✅ Perfil guardado correctamente. Recibirás notificaciones de proyectos que coincidan con tus intereses.');
+      setMessage(
+        '✅ Perfil guardado correctamente. Recibirás notificaciones de proyectos que coincidan con tus intereses.'
+      );
       setTimeout(() => setMessage(null), 5000);
     } catch (err: any) {
       console.error('Error guardando perfil:', err);
@@ -165,6 +195,118 @@ export default function PerfilInversionistaPage() {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    const visibleParts: string[] = [];
+
+    if (loading) {
+      visibleParts.push('La pantalla está cargando el perfil del inversionista.');
+    }
+
+    if (participant && !loading) {
+      visibleParts.push(
+        `Participante con sesión activa: ${participant.full_name || participant.alias || 'participante'}.`
+      );
+    }
+
+    if (!participant && !loading) {
+      visibleParts.push('No hay participante válido cargado en esta pantalla.');
+    }
+
+    if (perfil.company.trim()) {
+      visibleParts.push(`Empresa u organización visible: ${perfil.company.trim()}.`);
+    }
+
+    if (perfil.investment_range_min) {
+      visibleParts.push(`Monto mínimo visible: S/ ${perfil.investment_range_min}.`);
+    }
+
+    if (perfil.monto_mayor) {
+      visibleParts.push('Está marcada la opción de montos mayores a S/ 100000.');
+    } else if (perfil.investment_range_max) {
+      visibleParts.push(`Monto máximo visible: S/ ${perfil.investment_range_max}.`);
+    }
+
+    if (perfil.categories.length) {
+      visibleParts.push(`Categorías seleccionadas: ${perfil.categories.join(', ')}.`);
+    } else {
+      visibleParts.push('No hay categorías seleccionadas todavía.');
+    }
+
+    if (perfil.departments.length) {
+      visibleParts.push(`Departamentos seleccionados: ${perfil.departments.join(', ')}.`);
+    } else {
+      visibleParts.push('No hay departamentos seleccionados todavía.');
+    }
+
+    visibleParts.push(
+      perfil.notify_email
+        ? 'Las notificaciones por correo están activadas.'
+        : 'Las notificaciones por correo están desactivadas.'
+    );
+
+    if (saving) {
+      visibleParts.push('El perfil del inversionista se está guardando.');
+    }
+
+    if (message) {
+      visibleParts.push(`Mensaje de éxito visible: ${message}`);
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible: ${error}`);
+    }
+
+    const availableActions = [
+      'Guardar perfil',
+      'Cambiar empresa',
+      'Cambiar rango de inversión',
+      'Seleccionar categorías',
+      'Seleccionar departamentos',
+      'Activar o desactivar notificaciones',
+      'Volver',
+    ];
+
+    const summary = loading
+      ? 'Pantalla del perfil inversionista cargando datos.'
+      : error
+      ? 'Pantalla del perfil inversionista con error visible.'
+      : 'Pantalla para configurar preferencias del inversionista y recibir proyectos compatibles.';
+
+    const status = loading ? 'loading' : error ? 'error' : 'ready';
+
+    setPageContext({
+      pageId: 'espacio-emprendedor',
+      pageTitle: 'Espacio Emprendedor',
+      route: '/espacio-emprendedor/perfil-inversionista',
+      summary,
+      activeSection: 'perfil-inversionista',
+      visibleText: visibleParts.join('\n'),
+      availableActions,
+      selectedItemTitle:
+        participant?.full_name || participant?.alias || perfil.company || undefined,
+      status,
+      dynamicData: {
+        participantLogueado: !!participant,
+        savingProfile: saving,
+        company: perfil.company.trim(),
+        investmentRangeMin: perfil.investment_range_min,
+        investmentRangeMax: perfil.monto_mayor ? 'mayor-a-100000' : perfil.investment_range_max,
+        montoMayor: perfil.monto_mayor,
+        categoriesCount: perfil.categories.length,
+        departmentsCount: perfil.departments.length,
+        categoriesSelected: perfil.categories,
+        departmentsSelected: perfil.departments,
+        notifyEmail: perfil.notify_email,
+      },
+    });
+  }, [setPageContext, loading, saving, message, error, participant, perfil]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
 
   if (loading) {
     return (
@@ -205,7 +347,9 @@ export default function PerfilInversionistaPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Empresa / Organización (opcional)</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Empresa / Organización (opcional)
+              </label>
               <input
                 type="text"
                 value={perfil.company}
@@ -217,79 +361,111 @@ export default function PerfilInversionistaPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Inversión mínima (S/)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Inversión mínima (S/)
+                </label>
                 <input
                   type="number"
                   value={perfil.investment_range_min}
-                  onChange={(e) => setPerfil({ ...perfil, investment_range_min: e.target.value })}
+                  onChange={(e) =>
+                    setPerfil({ ...perfil, investment_range_min: e.target.value })
+                  }
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                   placeholder="Ej: 5000"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Inversión máxima (S/)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Inversión máxima (S/)
+                </label>
                 <input
                   type="number"
                   value={perfil.investment_range_max}
-                  onChange={(e) => setPerfil({ ...perfil, investment_range_max: e.target.value })}
+                  onChange={(e) =>
+                    setPerfil({ ...perfil, investment_range_max: e.target.value })
+                  }
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                   placeholder="Ej: 100000"
                   max={100000}
+                  disabled={perfil.monto_mayor}
                 />
                 <div className="flex items-center gap-2 mt-2">
                   <input
                     type="checkbox"
                     id="monto_mayor"
                     checked={perfil.monto_mayor}
-                    onChange={(e) => setPerfil({ ...perfil, monto_mayor: e.target.checked })}
-                    className="w-4 h-4 text-green-700 focus:ring-green-500"
+                    onChange={(e) =>
+                      setPerfil({
+                        ...perfil,
+                        monto_mayor: e.target.checked,
+                        investment_range_max: e.target.checked ? '' : perfil.investment_range_max,
+                      })
+                    }
                   />
-                  <label htmlFor="monto_mayor" className="text-xs text-slate-600">
-                    Montos mayores a S/ 100,000
+                  <label htmlFor="monto_mayor" className="text-sm text-slate-600">
+                    Busco proyectos con montos mayores a S/ 100000
                   </label>
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Categorías de interés</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Categorías de interés
+              </label>
               <div className="flex flex-wrap gap-2">
-                {CATEGORIAS.map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => toggleCategory(cat)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                      (cat === 'Todas' && perfil.categories.length === CATEGORIAS.filter(c => c !== 'Todas').length) ||
-                      (cat !== 'Todas' && perfil.categories.includes(cat))
-                        ? 'bg-green-700 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+                {CATEGORIAS.map((category) => {
+                  const active =
+                    category === 'Todas'
+                      ? perfil.categories.length === CATEGORIAS.filter((c) => c !== 'Todas').length
+                      : perfil.categories.includes(category);
+
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => toggleCategory(category)}
+                      className={`px-3 py-2 rounded-full text-sm font-semibold border ${
+                        active
+                          ? 'bg-green-700 text-white border-green-700'
+                          : 'bg-white text-slate-700 border-slate-300 hover:border-green-500'
+                      }`}
+                    >
+                      {category}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Departamentos de interés</label>
-              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-slate-200 rounded-xl">
-                {DEPARTAMENTOS.map(dept => (
-                  <button
-                    key={dept}
-                    type="button"
-                    onClick={() => toggleDepartment(dept)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                      (dept === 'Todos' && perfil.departments.length === DEPARTAMENTOS.filter(d => d !== 'Todos').length) ||
-                      (dept !== 'Todos' && perfil.departments.includes(dept))
-                        ? 'bg-green-700 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {dept}
-                  </button>
-                ))}
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Departamentos de interés
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {DEPARTAMENTOS.map((department) => {
+                  const active =
+                    department === 'Todos'
+                      ? perfil.departments.length ===
+                        DEPARTAMENTOS.filter((d) => d !== 'Todos').length
+                      : perfil.departments.includes(department);
+
+                  return (
+                    <button
+                      key={department}
+                      type="button"
+                      onClick={() => toggleDepartment(department)}
+                      className={`px-3 py-2 rounded-full text-sm font-semibold border ${
+                        active
+                          ? 'bg-blue-700 text-white border-blue-700'
+                          : 'bg-white text-slate-700 border-slate-300 hover:border-blue-500'
+                      }`}
+                    >
+                      {department}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -298,29 +474,23 @@ export default function PerfilInversionistaPage() {
                 type="checkbox"
                 id="notify_email"
                 checked={perfil.notify_email}
-                onChange={(e) => setPerfil({ ...perfil, notify_email: e.target.checked })}
-                className="w-4 h-4 text-green-700 focus:ring-green-500"
+                onChange={(e) =>
+                  setPerfil({ ...perfil, notify_email: e.target.checked })
+                }
               />
               <label htmlFor="notify_email" className="text-sm text-slate-700">
-                Recibir notificaciones por correo cuando se publiquen proyectos que coincidan con mis preferencias
+                Recibir notificaciones por correo cuando aparezcan proyectos compatibles
               </label>
             </div>
 
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
-              >
-                {saving ? 'Guardando...' : 'Guardar perfil'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-green-700 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50"
+            >
+              {saving ? 'Guardando...' : 'Guardar perfil'}
+            </button>
           </form>
-
-          <div className="mt-4 text-xs text-slate-500 text-center">
-            Tus preferencias se utilizan para enviarte notificaciones de proyectos relevantes.
-            No compartiremos tus datos con terceros.
-          </div>
         </div>
       </div>
     </main>

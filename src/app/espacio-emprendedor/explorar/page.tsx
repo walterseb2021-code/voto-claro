@@ -1,8 +1,9 @@
-// src/app/espacio-emprendedor/explorar/page.tsx
 'use client';
+
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Project = {
   id: string;
@@ -33,13 +34,36 @@ const CATEGORIAS = [
 
 const DEPARTAMENTOS = [
   'Todos',
-  'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho',
-  'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica',
-  'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios',
-  'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali'
+  'Amazonas',
+  'Áncash',
+  'Apurímac',
+  'Arequipa',
+  'Ayacucho',
+  'Cajamarca',
+  'Callao',
+  'Cusco',
+  'Huancavelica',
+  'Huánuco',
+  'Ica',
+  'Junín',
+  'La Libertad',
+  'Lambayeque',
+  'Lima',
+  'Loreto',
+  'Madre de Dios',
+  'Moquegua',
+  'Pasco',
+  'Piura',
+  'Puno',
+  'San Martín',
+  'Tacna',
+  'Tumbes',
+  'Ucayali',
 ];
 
 export default function ExplorarProyectosPage() {
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,29 +71,10 @@ export default function ExplorarProyectosPage() {
   const [selectedDepartment, setSelectedDepartment] = useState('Todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [participant, setParticipant] = useState<any>(null);
-  const [contactando, setContactando] = useState<string | null>(null);
-  const [contactMsg, setContactMsg] = useState<string | null>(null);
-  
-  const requestNotificationPermission = () => {
-    if ('Notification' in window) {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          console.log('✅ Notificaciones permitidas');
-        }
-      });
-    }
-  };
-
-  const showNotification = (title: string, body: string) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/favicon.ico' });
-    }
-  };
 
   useEffect(() => {
     cargarParticipante();
     cargarProyectos();
-    requestNotificationPermission();
   }, []);
 
   const cargarParticipante = async () => {
@@ -80,6 +85,7 @@ export default function ExplorarProyectosPage() {
         .select('id, alias, full_name')
         .eq('device_id', deviceId)
         .maybeSingle();
+
       setParticipant(data);
     }
   };
@@ -89,7 +95,7 @@ export default function ExplorarProyectosPage() {
     setError(null);
 
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('espacio_proyectos')
         .select(`
           id,
@@ -107,8 +113,6 @@ export default function ExplorarProyectosPage() {
         .eq('status', 'active')
         .order('created_at', { ascending: false });
 
-      const { data, error } = await query;
-
       if (error) throw error;
 
       setProjects(data || []);
@@ -120,34 +124,17 @@ export default function ExplorarProyectosPage() {
     }
   };
 
-  const handleContactar = async (projectId: string, ownerAlias: string) => {
-    if (!participant) {
-      setContactMsg('Debes registrarte para contactar a emprendedores.');
-      setTimeout(() => setContactMsg(null), 3000);
-      return;
-    }
+  const filteredProjects = projects.filter((project) => {
+    const matchesCategory =
+      selectedCategory === 'Todas' || project.category === selectedCategory;
 
-    setContactando(projectId);
-    setContactMsg(null);
+    const matchesDepartment =
+      selectedDepartment === 'Todos' || project.department === selectedDepartment;
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setContactMsg(`✅ Mensaje enviado a ${ownerAlias}. Te contactarán pronto.`);
-      showNotification('📩 Mensaje enviado', `Te contactarás con ${ownerAlias} pronto.`);
-      setTimeout(() => setContactMsg(null), 4000);
-    } catch (err) {
-      setContactMsg('❌ Error al enviar mensaje. Intenta nuevamente.');
-      setTimeout(() => setContactMsg(null), 3000);
-    } finally {
-      setContactando(null);
-    }
-  };
+    const matchesSearch =
+      project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.summary.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const filteredProjects = projects.filter(project => {
-    const matchesCategory = selectedCategory === 'Todas' || project.category === selectedCategory;
-    const matchesDepartment = selectedDepartment === 'Todos' || project.department === selectedDepartment;
-    const matchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          project.summary.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesDepartment && matchesSearch;
   });
 
@@ -157,6 +144,110 @@ export default function ExplorarProyectosPage() {
     if (max) return `Hasta S/ ${max.toLocaleString()}`;
     return 'No especificado';
   };
+
+  useEffect(() => {
+    const visibleParts: string[] = [];
+
+    if (loading) {
+      visibleParts.push('La pantalla está cargando proyectos emprendedores para explorar.');
+    }
+
+    if (!loading && !error) {
+      visibleParts.push(`Proyectos cargados en esta pantalla: ${projects.length}.`);
+      visibleParts.push(`Proyectos visibles con los filtros actuales: ${filteredProjects.length}.`);
+    }
+
+    if (participant) {
+      visibleParts.push(
+        `Hay un participante con sesión activa: ${participant.full_name || participant.alias || 'participante'}.`
+      );
+    } else if (!loading) {
+      visibleParts.push('No hay participante con sesión activa visible en esta pantalla.');
+    }
+
+    visibleParts.push(`Categoría seleccionada: ${selectedCategory}.`);
+    visibleParts.push(`Departamento seleccionado: ${selectedDepartment}.`);
+
+    if (searchTerm.trim()) {
+      visibleParts.push(`Texto de búsqueda visible: ${searchTerm.trim()}.`);
+    }
+
+    const visibleTitles = filteredProjects.slice(0, 5).map((p) => p.title).filter(Boolean);
+    if (visibleTitles.length) {
+      visibleParts.push(`Proyectos visibles en pantalla: ${visibleTitles.join(', ')}.`);
+    }
+
+    if (!loading && !error && filteredProjects.length === 0) {
+      visibleParts.push('No hay proyectos visibles que coincidan con los filtros actuales.');
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible: ${error}`);
+    }
+
+    const hasActiveFilters =
+      selectedCategory !== 'Todas' ||
+      selectedDepartment !== 'Todos' ||
+      searchTerm.trim().length > 0;
+
+    const availableActions = [
+      'Cambiar categoría',
+      'Cambiar departamento',
+      'Buscar por título',
+      filteredProjects.length > 0 ? 'Ver detalles' : null,
+      hasActiveFilters ? 'Limpiar filtros' : null,
+      'Volver',
+    ].filter(Boolean) as string[];
+
+    const summary = loading
+      ? 'Pantalla de exploración de proyectos emprendedores cargando resultados.'
+      : error
+      ? 'Pantalla de exploración de proyectos con error de carga.'
+      : filteredProjects.length === 0
+      ? 'Pantalla de exploración sin resultados visibles para los filtros actuales.'
+      : 'Pantalla de exploración de proyectos emprendedores con filtros y tarjetas de proyectos visibles.';
+
+    const status = loading ? 'loading' : error ? 'error' : 'ready';
+
+    setPageContext({
+      pageId: 'espacio-emprendedor',
+      pageTitle: 'Espacio Emprendedor',
+      route: '/espacio-emprendedor/explorar',
+      summary,
+      activeSection: 'explorar-proyectos',
+      visibleText: visibleParts.join('\n'),
+      availableActions,
+      selectedItemTitle: filteredProjects[0]?.title || undefined,
+      status,
+      dynamicData: {
+        participantLogueado: !!participant,
+        projectsCount: projects.length,
+        filteredProjectsCount: filteredProjects.length,
+        selectedCategory,
+        selectedDepartment,
+        searchTerm: searchTerm.trim(),
+        hasActiveFilters,
+        emptyResults: !loading && !error && filteredProjects.length === 0,
+        firstProjectTitle: filteredProjects[0]?.title || '',
+      },
+    });
+  }, [
+    setPageContext,
+    loading,
+    error,
+    projects,
+    filteredProjects,
+    participant,
+    selectedCategory,
+    selectedDepartment,
+    searchTerm,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -168,14 +259,6 @@ export default function ExplorarProyectosPage() {
           </Link>
         </div>
 
-        {contactMsg && (
-          <div className={`mb-4 p-3 rounded-xl text-sm ${
-            contactMsg.includes('✅') ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
-          }`}>
-            {contactMsg}
-          </div>
-        )}
-
         <div className="bg-white rounded-2xl border-2 border-red-600 p-4 mb-6 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -185,11 +268,14 @@ export default function ExplorarProyectosPage() {
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
               >
-                {CATEGORIAS.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                {CATEGORIAS.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Departamento</label>
               <select
@@ -197,11 +283,14 @@ export default function ExplorarProyectosPage() {
                 onChange={(e) => setSelectedDepartment(e.target.value)}
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
               >
-                {DEPARTAMENTOS.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
+                {DEPARTAMENTOS.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
                 ))}
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Buscar por título</label>
               <input
@@ -218,10 +307,14 @@ export default function ExplorarProyectosPage() {
         {loading ? (
           <p className="text-slate-600 text-center py-12">Cargando proyectos...</p>
         ) : error ? (
-          <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4">{error}</div>
+          <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4">
+            {error}
+          </div>
         ) : filteredProjects.length === 0 ? (
           <div className="bg-white rounded-2xl border-2 border-slate-200 p-8 text-center">
-            <p className="text-slate-600">No hay proyectos que coincidan con los filtros seleccionados.</p>
+            <p className="text-slate-600">
+              No hay proyectos que coincidan con los filtros seleccionados.
+            </p>
             <button
               onClick={() => {
                 setSelectedCategory('Todas');
@@ -236,7 +329,10 @@ export default function ExplorarProyectosPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => (
-              <div key={project.id} className="bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden">
+              <div
+                key={project.id}
+                className="bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
+              >
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-semibold bg-gradient-to-r from-green-600 to-green-700 text-black px-3 py-1 rounded-full shadow-sm">
@@ -244,7 +340,12 @@ export default function ExplorarProyectosPage() {
                     </span>
                     <span className="text-xs text-slate-500 flex items-center gap-1">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
                       </svg>
                       {new Date(project.created_at).toLocaleDateString()}
                     </span>
@@ -254,15 +355,23 @@ export default function ExplorarProyectosPage() {
                     {project.title}
                   </h2>
 
-                  <p className="text-sm text-slate-600 mb-4 line-clamp-3">
-                    {project.summary}
-                  </p>
+                  <p className="text-sm text-slate-600 mb-4 line-clamp-3">{project.summary}</p>
 
                   <div className="flex flex-wrap gap-2 mb-4">
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full flex items-center gap-1">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                        />
                       </svg>
                       {project.district}, {project.department}
                     </span>
