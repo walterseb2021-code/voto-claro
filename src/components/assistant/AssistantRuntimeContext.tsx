@@ -50,6 +50,11 @@ export type AssistantPageContext = {
   status?: "idle" | "loading" | "ready" | "error";
 
   dynamicData?: Record<string, unknown>;
+  suggestedPrompts?: Array<{
+  id: string;
+  label: string;
+  question: string;
+}>;
   updatedAt: number;
 };
 

@@ -305,7 +305,7 @@ export default function PerfilInversionistaPage() {
 
     const status = loading ? 'loading' : error ? 'error' : 'ready';
 
-    setPageContext({
+            setPageContext({
       pageId: 'espacio-emprendedor-perfil-inversionista',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/perfil-inversionista',
@@ -322,6 +322,33 @@ export default function PerfilInversionistaPage() {
         'departamentos',
         'notificaciones',
         'guardado',
+      ],
+      suggestedPrompts: [
+        {
+          id: 'ee-investor-1',
+          label: '¿Qué rango de inversión tengo?',
+          question: '¿Qué rango de inversión tengo configurado en esta pantalla?',
+        },
+        {
+          id: 'ee-investor-2',
+          label: '¿Tengo correo activado?',
+          question: '¿Las notificaciones por correo están activadas en esta pantalla?',
+        },
+        {
+          id: 'ee-investor-3',
+          label: '¿Qué categorías seleccioné?',
+          question: '¿Qué categorías seleccioné en esta pantalla?',
+        },
+        {
+          id: 'ee-investor-4',
+          label: '¿Qué departamentos seleccioné?',
+          question: '¿Qué departamentos seleccioné en esta pantalla?',
+        },
+        {
+          id: 'ee-investor-5',
+          label: '¿Mi perfil ya está guardado?',
+          question: '¿Mi perfil de inversionista ya está guardado o se está guardando en esta pantalla?',
+        },
       ],
       visibleActions: availableActions,
       visibleText: visibleParts.join('\n'),

@@ -254,7 +254,7 @@ export default function ExplorarProyectosPage() {
 
     const status = loading ? 'loading' : error ? 'error' : 'ready';
 
-    setPageContext({
+          setPageContext({
       pageId: 'espacio-emprendedor-explorar',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/explorar',
@@ -265,6 +265,33 @@ export default function ExplorarProyectosPage() {
       activeViewTitle,
       breadcrumb: ['Espacio Emprendedor', 'Explorar proyectos', activeViewTitle],
       visibleSections: ['filtros', 'busqueda', 'resultados'],
+      suggestedPrompts: [
+        {
+          id: 'ee-explore-1',
+          label: '¿Qué filtros tengo aplicados?',
+          question: '¿Qué filtros tengo aplicados en esta pantalla?',
+        },
+        {
+          id: 'ee-explore-2',
+          label: '¿Cuántos proyectos veo?',
+          question: '¿Cuántos proyectos estoy viendo en esta pantalla?',
+        },
+        {
+          id: 'ee-explore-3',
+          label: '¿Qué categoría está seleccionada?',
+          question: '¿Qué categoría está seleccionada en esta pantalla?',
+        },
+        {
+          id: 'ee-explore-4',
+          label: '¿Qué departamento está seleccionado?',
+          question: '¿Qué departamento está seleccionado en esta pantalla?',
+        },
+        {
+          id: 'ee-explore-5',
+          label: '¿Hay búsqueda activa?',
+          question: '¿Hay una búsqueda activa en esta pantalla?',
+        },
+      ],
       visibleActions: availableActions,
       visibleText: visibleParts.join('\n'),
       availableActions,

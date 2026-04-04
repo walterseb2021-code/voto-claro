@@ -64,7 +64,11 @@ type MemoryState = {
   lastAnswerHasLinks?: boolean;
   lastUpdatedAt?: number;
 };
-   
+   type SuggestedPrompt = {
+  id: string;
+  label: string;
+  question: string;
+};
  function stringifyContextValue(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v.trim();
@@ -4005,6 +4009,19 @@ function sendQuick(q: string) {
 
   const fabLabel = useMemo(() => (open ? "Cerrar Asistente" : "Abrir Asistente"), [open]);
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
+    const suggestedPrompts = useMemo<SuggestedPrompt[]>(() => {
+    const raw = (pageContext as any)?.suggestedPrompts;
+    if (!Array.isArray(raw)) return [];
+
+    return raw
+      .map((item: any, index: number) => ({
+        id: String(item?.id || `prompt-${index + 1}`),
+        label: String(item?.label || "").trim(),
+        question: String(item?.question || "").trim(),
+      }))
+      .filter((item) => item.label && item.question)
+      .slice(0, 6);
+  }, [pageContext]);
 
   return (
     <>
@@ -4251,6 +4268,28 @@ function sendQuick(q: string) {
 
             {/* Body */}
             <div ref={listRef} className="flex-1 overflow-auto p-4 space-y-3 bg-gradient-to-b from-green-50 via-white to-white vc-assistant-body">
+                          {suggestedPrompts.length ? (
+                <div className="mr-10 mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                  <div className="text-[12px] font-extrabold text-slate-700 mb-2">
+                    Preguntas clave de esta pantalla
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedPrompts.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => sendQuick(item.question)}
+                        disabled={busy}
+                        className="rounded-full border bg-slate-50 px-3 py-1 text-[12px] font-bold text-slate-800 hover:bg-slate-100 active:scale-[0.98] transition disabled:opacity-60"
+                        title={item.question}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {msgs.map((m, i) => (
                  <div
   key={i}

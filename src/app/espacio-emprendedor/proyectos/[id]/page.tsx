@@ -526,7 +526,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
         ? "Detalle del proyecto con hilo privado abierto para un inversionista específico."
         : "Detalle del proyecto con hilo privado del inversionista actual.";
 
-    setPageContext({
+            setPageContext({
       pageId: "espacio-emprendedor-proyecto-detalle",
       pageTitle: "Espacio Emprendedor",
       route: `/espacio-emprendedor/proyectos/${projectId}`,
@@ -536,6 +536,60 @@ export default function EspacioEmprendedorProjectDetailPage() {
       activeViewId,
       activeViewTitle,
       breadcrumb: ["Espacio Emprendedor", "Detalle del proyecto", project.title, activeViewTitle],
+      suggestedPrompts:
+        viewMode === "public-only"
+          ? [
+              {
+                id: "ee-detail-1",
+                label: "¿Qué estoy viendo aquí?",
+                question: "¿Qué estoy viendo aquí en esta pantalla?",
+              },
+              {
+                id: "ee-detail-2",
+                label: "¿Este proyecto tiene mensajes privados?",
+                question: "¿Este proyecto tiene mensajes privados visibles en esta pantalla?",
+              },
+              {
+                id: "ee-detail-3",
+                label: "¿Puedo ver conversaciones privadas?",
+                question: "¿Puedo ver conversaciones privadas desde esta pantalla?",
+              },
+            ]
+          : viewMode === "thread-list"
+          ? [
+              {
+                id: "ee-detail-4",
+                label: "¿Estoy en una lista o en un hilo?",
+                question: "¿Estoy viendo una lista de hilos o un hilo abierto en esta pantalla?",
+              },
+              {
+                id: "ee-detail-5",
+                label: "¿Cuántos hilos hay?",
+                question: "¿Cuántos hilos privados hay visibles en esta pantalla?",
+              },
+              {
+                id: "ee-detail-6",
+                label: "¿Cuál fue el último hilo?",
+                question: "¿Cuál es el hilo más reciente visible en esta pantalla?",
+              },
+            ]
+          : [
+              {
+                id: "ee-detail-7",
+                label: "¿Con quién estoy hablando?",
+                question: "¿Con quién estoy hablando en este hilo privado?",
+              },
+              {
+                id: "ee-detail-8",
+                label: "¿Cuándo fue el último mensaje?",
+                question: "¿Cuándo fue el último mensaje visible en este hilo?",
+              },
+              {
+                id: "ee-detail-9",
+                label: "¿Este hilo es privado?",
+                question: "¿Este hilo es privado según esta pantalla?",
+              },
+            ],
       visibleText: visibleParts.join("\n"),
       availableActions,
       selectedItemTitle: project.title,

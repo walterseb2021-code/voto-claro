@@ -390,7 +390,7 @@ export default function NuevoProyectoEmprendedorPage() {
 
     const status = loading ? 'loading' : error ? 'error' : 'ready';
 
-    setPageContext({
+           setPageContext({
       pageId: 'espacio-emprendedor-nuevo-proyecto',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/nuevo-proyecto',
@@ -407,6 +407,33 @@ export default function NuevoProyectoEmprendedorPage() {
         'inversion',
         'pdf',
         'envio',
+      ],
+      suggestedPrompts: [
+        {
+          id: 'ee-new-1',
+          label: '¿Qué me falta para publicar?',
+          question: 'Según esta pantalla, ¿qué me falta para publicar el proyecto?',
+        },
+        {
+          id: 'ee-new-2',
+          label: '¿Ya cargué el PDF?',
+          question: '¿Ya cargué el PDF en esta pantalla?',
+        },
+        {
+          id: 'ee-new-3',
+          label: '¿Qué categoría tengo?',
+          question: '¿Qué categoría tengo seleccionada en esta pantalla?',
+        },
+        {
+          id: 'ee-new-4',
+          label: '¿Hay error visible?',
+          question: '¿Hay un error visible en esta pantalla?',
+        },
+        {
+          id: 'ee-new-5',
+          label: '¿Ya se publicó?',
+          question: '¿El proyecto ya fue publicado correctamente o sigo en el formulario?',
+        },
       ],
       visibleActions: availableActions,
       visibleText: visibleParts.join('\n'),

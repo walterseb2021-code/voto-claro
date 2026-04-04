@@ -563,7 +563,7 @@ const proyectosConContactos = (data || []).map((p) => ({
     const status =
       loading ? 'loading' : error ? 'error' : 'ready';
 
-    setPageContext({
+           setPageContext({
       pageId: 'espacio-emprendedor',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor',
@@ -574,6 +574,74 @@ const proyectosConContactos = (data || []).map((p) => ({
       activeViewTitle,
       breadcrumb: ['Espacio Emprendedor', activeViewTitle],
       visibleSections,
+      suggestedPrompts: !participant
+        ? [
+            {
+              id: 'ee-main-1',
+              label: '¿Qué puedo hacer aquí?',
+              question: '¿Qué puedo hacer aquí en esta pantalla?',
+            },
+            {
+              id: 'ee-main-2',
+              label: '¿Cómo publico un proyecto?',
+              question: '¿Qué debo hacer en esta pantalla para poder publicar un proyecto?',
+            },
+            {
+              id: 'ee-main-3',
+              label: '¿Puedo explorar proyectos?',
+              question: '¿Puedo explorar proyectos desde esta pantalla?',
+            },
+            {
+              id: 'ee-main-4',
+              label: '¿Qué me falta?',
+              question: 'Según esta pantalla, ¿qué me falta para publicar un proyecto?',
+            },
+          ]
+        : !afiliado
+        ? [
+            {
+              id: 'ee-main-5',
+              label: '¿Qué me falta para publicar?',
+              question: 'Según esta pantalla, ¿qué me falta para poder publicar un proyecto?',
+            },
+            {
+              id: 'ee-main-6',
+              label: '¿Debo verificar DNI?',
+              question: '¿Debo verificar mi DNI en esta pantalla para continuar?',
+            },
+            {
+              id: 'ee-main-7',
+              label: '¿Puedo explorar proyectos?',
+              question: '¿Puedo explorar proyectos desde esta pantalla?',
+            },
+            {
+              id: 'ee-main-8',
+              label: '¿Puedo configurar mi perfil?',
+              question: '¿Puedo configurar mi perfil de inversionista desde esta pantalla?',
+            },
+          ]
+        : [
+            {
+              id: 'ee-main-9',
+              label: '¿Qué puedo hacer aquí?',
+              question: '¿Qué puedo hacer aquí en esta pantalla del panel emprendedor?',
+            },
+            {
+              id: 'ee-main-10',
+              label: '¿Cuántos proyectos tengo?',
+              question: '¿Cuántos proyectos propios tengo visibles en esta pantalla?',
+            },
+            {
+              id: 'ee-main-11',
+              label: '¿Cuántos mensajes tengo?',
+              question: '¿Cuántos mensajes recibidos tengo visibles en esta pantalla?',
+            },
+            {
+              id: 'ee-main-12',
+              label: '¿Cómo publico uno nuevo?',
+              question: '¿Cómo paso desde esta pantalla a publicar un nuevo proyecto?',
+            },
+          ],
       visibleText: visibleParts.join('\n'),
       availableActions,
       selectedItemId:
