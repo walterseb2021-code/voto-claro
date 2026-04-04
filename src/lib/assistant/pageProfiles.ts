@@ -7,24 +7,57 @@ export type PageProfile = {
   preferredActions: string[];
 };
 
+const COMMON_CONTEXT_FIELDS = [
+  "pageId",
+  "pageTitle",
+  "route",
+  "summary",
+  "activeSection",
+  "activeViewId",
+  "activeViewTitle",
+  "activeBlockId",
+  "activeBlockTitle",
+  "currentLevel",
+  "currentStep",
+  "breadcrumb",
+  "selectedItemTitle",
+  "selectedCategory",
+  "selectedSubcategory",
+  "selectedTopic",
+  "selectedComment",
+  "selectedParty",
+  "selectedRound",
+  "visibleText",
+  "visibleSections",
+  "availableActions",
+  "visibleActions",
+  "status",
+  "resultsSummary",
+  "speakableSummary",
+  "dynamicData",
+  "contextVersion",
+];
+
 export const PAGE_PROFILES: Record<string, PageProfile> = {
   "espacio-emprendedor": {
     pageId: "espacio-emprendedor",
     purpose:
-      "Ayudar al usuario a entender la ventana actual del espacio emprendedor usando solo el contexto visible y vigente.",
+      "Ayudar al usuario a entender la pantalla principal del espacio emprendedor usando solo el contexto visible y vigente.",
     responseStyle:
-      "Natural, claro, útil y breve. Debe responder según el bloque o subventana activa, no con plantilla rígida.",
+      "Natural, claro, útil y breve. Debe responder desde la subventana activa y sin mezclar esta pantalla con otras rutas de la app.",
     priorityFields: [
       "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
       "activeViewId",
       "activeViewTitle",
-      "breadcrumb",
-      "selectedCategory",
-      "selectedSubcategory",
-      "selectedItem",
-      "visibleSections",
-      "visibleActions",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "status",
       "speakableSummary",
+      "dynamicData",
     ],
     doNotSay: [
       "No tengo suficiente información",
@@ -33,9 +66,144 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
       "No puedo ver tu pantalla",
     ],
     preferredActions: [
-      "explicar lo que está abierto ahora",
-      "resumir el bloque activo",
+      "explicar qué pantalla del espacio emprendedor está abierta",
+      "resumir lo visible ahora",
       "indicar la acción disponible en esta pantalla",
+      "derivar a una subventana interna correcta cuando la pregunta pertenezca a otra parte del mismo dominio",
+    ],
+  },
+
+  "espacio-emprendedor-explorar": {
+    pageId: "espacio-emprendedor-explorar",
+    purpose:
+      "Responder desde la subruta Explorar usando filtros visibles, búsqueda activa, cantidad de proyectos y resultados mostrados.",
+    responseStyle:
+      "Muy contextual, breve y orientado a filtros, búsqueda, categoría, departamento y proyectos visibles.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedCategory",
+      "selectedSubcategory",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "status",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No tengo acceso",
+      "Como asistente",
+      "No veo nada",
+      "No puedo leer esa parte",
+    ],
+    preferredActions: [
+      "decir qué filtros están aplicados",
+      "resumir cuántos proyectos visibles hay",
+      "indicar categoría, departamento o búsqueda activa",
+    ],
+  },
+
+  "espacio-emprendedor-perfil-inversionista": {
+    pageId: "espacio-emprendedor-perfil-inversionista",
+    purpose:
+      "Responder desde la subruta de perfil inversionista usando datos visibles del formulario, rango, preferencias y estado de guardado.",
+    responseStyle:
+      "Claro, útil y breve. Debe hablar solo del perfil inversionista abierto ahora.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "visibleText",
+      "availableActions",
+      "status",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No sé",
+      "Como IA",
+      "No tengo la data",
+      "No puedo ver la interfaz",
+    ],
+    preferredActions: [
+      "resumir el estado del perfil",
+      "indicar empresa, rango y preferencias visibles",
+      "decir si el guardado aparece exitoso o con error",
+    ],
+  },
+
+  "espacio-emprendedor-nuevo-proyecto": {
+    pageId: "espacio-emprendedor-nuevo-proyecto",
+    purpose:
+      "Responder desde la subruta de nuevo proyecto usando el estado real del formulario, campos llenos, PDF y estado de envío.",
+    responseStyle:
+      "Natural, preciso y orientado al formulario visible y al siguiente paso posible.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "status",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No puedo ayudarte",
+      "Como modelo",
+      "No tengo contexto",
+      "Según la lógica interna",
+    ],
+    preferredActions: [
+      "decir qué falta en el formulario",
+      "confirmar si el PDF está cargado",
+      "indicar si el envío fue exitoso o falló",
+    ],
+  },
+
+  "espacio-emprendedor-proyecto-detalle": {
+    pageId: "espacio-emprendedor-proyecto-detalle",
+    purpose:
+      "Responder desde el detalle de un proyecto emprendedor distinguiendo entre detalle público, lista de hilos privados e hilo privado abierto.",
+    responseStyle:
+      "Muy contextual, claro y corto. Debe diferenciar bien la vista activa y nunca mezclar hilo abierto con lista de hilos ni exponer información privada que no esté visible.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "status",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No tengo suficiente información",
+      "Como modelo de IA",
+      "No puedo ver tu pantalla",
+      "No sé quién escribe",
+    ],
+    preferredActions: [
+      "explicar si el usuario está en detalle público, lista de hilos o hilo privado",
+      "decir quién es el inversionista visible si hay hilo abierto",
+      "decir fecha y hora del último mensaje visible",
+      "indicar cuántos hilos privados hay",
     ],
   },
 
@@ -47,16 +215,18 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
       "Conversacional, claro y muy pegado a lo visible en la pantalla actual.",
     priorityFields: [
       "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
       "activeViewId",
       "activeViewTitle",
-      "breadcrumb",
-      "selectedFilter",
       "selectedTopic",
       "selectedComment",
-      "visibleComments",
-      "visibleSections",
-      "visibleActions",
+      "visibleText",
+      "availableActions",
+      "status",
       "speakableSummary",
+      "dynamicData",
     ],
     doNotSay: [
       "No tengo acceso",
@@ -66,7 +236,7 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
     ],
     preferredActions: [
       "resumir lo visible",
-      "explicar el filtro o comentario activo",
+      "explicar el comentario o tema activo",
       "orientar sobre la siguiente acción dentro de la misma ventana",
     ],
   },
@@ -79,17 +249,19 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
       "Preciso, natural y enfocado en el estado actual de la votación o del bloque visible.",
     priorityFields: [
       "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
       "activeViewId",
       "activeViewTitle",
-      "breadcrumb",
-      "selectedGroup",
       "selectedParty",
       "selectedRound",
       "resultsSummary",
-      "visibleParties",
-      "visibleSections",
-      "visibleActions",
+      "visibleText",
+      "availableActions",
+      "status",
       "speakableSummary",
+      "dynamicData",
     ],
     doNotSay: [
       "No sé",
@@ -112,17 +284,20 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
       "Natural, orientado a la pantalla activa y priorizando la subventana abierta sobre el resto del recorrido.",
     priorityFields: [
       "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
       "activeViewId",
       "activeViewTitle",
       "activeBlockId",
       "activeBlockTitle",
       "currentLevel",
       "currentStep",
-      "breadcrumb",
-      "openPanels",
-      "visibleSections",
-      "visibleActions",
+      "visibleText",
+      "availableActions",
+      "status",
       "speakableSummary",
+      "dynamicData",
     ],
     doNotSay: [
       "No puedo ayudarte",
@@ -137,6 +312,13 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
     ],
   },
 };
+
+const PATH_PREFIX_ALIASES: Array<[string, string]> = [
+  ["/espacio-emprendedor/proyectos/", "espacio-emprendedor-proyecto-detalle"],
+  ["/espacio-emprendedor/explorar", "espacio-emprendedor-explorar"],
+  ["/espacio-emprendedor/perfil-inversionista", "espacio-emprendedor-perfil-inversionista"],
+  ["/espacio-emprendedor/nuevo-proyecto", "espacio-emprendedor-nuevo-proyecto"],
+];
 
 const PATH_ALIASES: Record<string, string> = {
   "/espacio-emprendedor": "espacio-emprendedor",
@@ -161,6 +343,11 @@ export function getPageIdFromPathname(pathname?: string | null): string | null {
   if (!pathname) return null;
 
   const cleanPath = pathname.split("?")[0].split("#")[0];
+
+  for (const [prefix, pageId] of PATH_PREFIX_ALIASES) {
+    if (cleanPath.startsWith(prefix)) return pageId;
+  }
+
   if (PATH_ALIASES[cleanPath]) return PATH_ALIASES[cleanPath];
 
   const firstSegment = `/${cleanPath.split("/").filter(Boolean)[0] ?? ""}`;

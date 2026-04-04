@@ -402,40 +402,97 @@ export default function EspacioEmprendedorProjectDetailPage() {
   useEffect(() => {
     if (loading) return;
 
-    if (error || !project) {
+            if (error || !project) {
       setPageContext({
-        pageId: 'espacio-emprendedor',
-        pageTitle: 'Espacio Emprendedor',
+        pageId: "espacio-emprendedor-proyecto-detalle",
+        pageTitle: "Espacio Emprendedor",
         route: `/espacio-emprendedor/proyectos/${projectId}`,
-        summary: 'No se pudo cargar el detalle del proyecto emprendedor.',
-        activeSection: 'proyecto-detalle-error',
-        visibleText: error || 'Proyecto no encontrado',
-        availableActions: ['Volver'],
+        summary: "No se pudo cargar el detalle del proyecto emprendedor.",
+        speakableSummary: "No se pudo cargar el detalle del proyecto emprendedor.",
+        activeSection: "proyecto-detalle-error",
+        activeViewId: "error",
+        activeViewTitle: "Detalle del proyecto no disponible",
+        breadcrumb: ["Espacio Emprendedor", "Detalle del proyecto"],
+        visibleText:
+          `Vista activa: detalle del proyecto no disponible.\n` +
+          `Estado: error.\n` +
+          `${error || "Proyecto no encontrado"}`,
+        availableActions: ["Volver"],
         selectedItemTitle: undefined,
-        status: 'error',
+        status: "error",
         dynamicData: {
           projectId,
           detailLoaded: false,
+          viewMode: "error",
+          userRole: "desconocido",
+          privacyMode: "private-threads",
         },
       });
       return;
     }
+         const latestMessage = messages.length ? messages[messages.length - 1] : null;
+    const latestThread = threads.length ? threads[0] : null;
 
-    const latestMessage = messages.length ? messages[messages.length - 1] : null;
     const canSendMessage = Boolean(
       project &&
         ((esPropietario && afiliadoId && selectedInvestorId) ||
           (!esPropietario && participant?.id))
     );
 
+    const viewMode =
+      !participant
+        ? "public-only"
+        : esPropietario && !selectedInvestorId
+        ? "thread-list"
+        : "thread-detail";
+
+    const activeViewId =
+      viewMode === "public-only"
+        ? "public-detail"
+        : viewMode === "thread-list"
+        ? "thread-list"
+        : "thread-detail";
+
+    const activeViewTitle =
+      viewMode === "public-only"
+        ? "Detalle público del proyecto"
+        : viewMode === "thread-list"
+        ? "Lista de hilos privados"
+        : "Hilo privado abierto";
+
+    const userRole = !participant
+      ? "visitante"
+      : esPropietario
+      ? "emprendedor"
+      : "inversionista";
+
+    const activeSection =
+      viewMode === "public-only"
+        ? "proyecto-detalle-publico"
+        : viewMode === "thread-list"
+        ? "proyecto-hilos-emprendedor"
+        : "proyecto-hilo-privado";
+
     const visibleParts: string[] = [];
+    visibleParts.push(`Vista activa: ${activeViewTitle}.`);
     visibleParts.push(`Proyecto visible: ${project.title}.`);
-    visibleParts.push(`Emprendedor visible: ${project.owner?.nombres_completos || 'No especificado'}.`);
-    visibleParts.push(`Mensajes visibles en el hilo actual: ${messages.length}.`);
+    visibleParts.push(`Emprendedor visible: ${project.owner?.nombres_completos || "No especificado"}.`);
+    visibleParts.push(`Rol actual del usuario: ${userRole}.`);
     visibleParts.push(`Hilos privados detectados para este proyecto: ${threads.length}.`);
+    visibleParts.push(`Mensajes visibles en el hilo actual: ${messages.length}.`);
 
     if (selectedInvestorName) {
-      visibleParts.push(`Inversionista del hilo actual: ${selectedInvestorName}.`);
+      visibleParts.push(`Inversionista visible del hilo actual: ${selectedInvestorName}.`);
+    }
+
+    if (latestThread && viewMode === "thread-list") {
+      visibleParts.push(`Hilo más reciente detectado: ${latestThread.investorName}.`);
+      if (latestThread.lastAt) {
+        visibleParts.push(`Fecha y hora del último hilo detectado: ${formatDate(latestThread.lastAt)}.`);
+      }
+      if (latestThread.lastMessage) {
+        visibleParts.push(`Último mensaje resumido del hilo más reciente: ${latestThread.lastMessage}.`);
+      }
     }
 
     if (latestMessage) {
@@ -444,60 +501,82 @@ export default function EspacioEmprendedorProjectDetailPage() {
     }
 
     if (!participant) {
-      visibleParts.push('La conversación privada está oculta para visitantes.');
+      visibleParts.push("La conversación privada está oculta para visitantes.");
     } else if (esPropietario && !selectedInvestorId) {
-      visibleParts.push('El emprendedor está viendo la lista de hilos privados disponibles.');
-    } else if (!esPropietario) {
-      visibleParts.push('El inversionista solo está viendo su propio hilo privado.');
+      visibleParts.push("El emprendedor está viendo la lista de hilos privados disponibles.");
+    } else if (esPropietario) {
+      visibleParts.push("El emprendedor está viendo un hilo privado abierto con un inversionista específico.");
+    } else {
+      visibleParts.push("El inversionista solo está viendo su propio hilo privado.");
     }
 
     const availableActions = [
-      project.pdf_url ? 'Ver proyecto' : null,
-      canSendMessage ? 'Enviar mensaje' : null,
-      esPropietario && selectedInvestorId ? 'Volver a hilos' : null,
-      'Volver',
+      project.pdf_url ? "Ver proyecto" : null,
+      canSendMessage ? "Enviar mensaje" : null,
+      esPropietario && selectedInvestorId ? "Volver a hilos" : null,
+      "Volver",
     ].filter(Boolean) as string[];
 
-    const summary = !participant
-      ? 'Detalle público del proyecto. La conversación privada está protegida.'
-      : esPropietario && !selectedInvestorId
-      ? 'Detalle del proyecto con lista de hilos privados por inversionista.'
-      : esPropietario
-      ? 'Detalle del proyecto con hilo privado abierto para un inversionista específico.'
-      : 'Detalle del proyecto con hilo privado del inversionista actual.';
+    const summary =
+      viewMode === "public-only"
+        ? "Detalle público del proyecto. La conversación privada está protegida."
+        : viewMode === "thread-list"
+        ? "Detalle del proyecto con lista de hilos privados por inversionista."
+        : esPropietario
+        ? "Detalle del proyecto con hilo privado abierto para un inversionista específico."
+        : "Detalle del proyecto con hilo privado del inversionista actual.";
 
     setPageContext({
-      pageId: 'espacio-emprendedor',
-      pageTitle: 'Espacio Emprendedor',
+      pageId: "espacio-emprendedor-proyecto-detalle",
+      pageTitle: "Espacio Emprendedor",
       route: `/espacio-emprendedor/proyectos/${projectId}`,
       summary,
-      activeSection: !participant
-        ? 'proyecto-detalle-publico'
-        : esPropietario && !selectedInvestorId
-        ? 'proyecto-hilos-emprendedor'
-        : 'proyecto-hilo-privado',
-      visibleText: visibleParts.join('\n'),
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ["Espacio Emprendedor", "Detalle del proyecto", project.title, activeViewTitle],
+      visibleText: visibleParts.join("\n"),
       availableActions,
       selectedItemTitle: project.title,
-      status: 'ready',
+      status: "ready",
       dynamicData: {
+        userRole,
+        viewMode,
+        privacyMode: "private-threads",
         participantLogueado: !!participant,
         afiliadoVerificado: !!afiliadoId,
         esPropietario,
         projectId: project.id,
         projectTitle: project.title,
-        ownerName: project.owner?.nombres_completos || '',
+        ownerName: project.owner?.nombres_completos || "",
         threadCount: threads.length,
-        selectedInvestorId: selectedInvestorId || '',
-        selectedInvestorName: selectedInvestorName || '',
+        threadListVisible: viewMode === "thread-list",
+        threadDetailVisible: viewMode === "thread-detail",
+        selectedThreadKey: selectedInvestorId ? buildThreadKey(projectId, selectedInvestorId) : "",
+        selectedInvestorId: selectedInvestorId || "",
+        selectedInvestorName: selectedInvestorName || "",
+        latestThreadInvestorName: latestThread?.investorName || "",
+        latestThreadAtIso: latestThread?.lastAt || "",
+        latestThreadAtLabel: latestThread?.lastAt ? formatDate(latestThread.lastAt) : "",
+        latestThreadLastMessage: latestThread?.lastMessage || "",
         mensajesCount: messages.length,
-        latestMessageAuthor: latestMessage?.remitente_nombre || '',
-        latestMessageContent: latestMessage?.content || '',
-        latestMessageCreatedAt: latestMessage ? formatDate(latestMessage.created_at) : '',
+        latestMessageAuthor: latestMessage?.remitente_nombre || "",
+        latestMessageContent: latestMessage?.content || "",
+        latestMessageCreatedAtIso: latestMessage?.created_at || "",
+        latestMessageCreatedAtLabel: latestMessage ? formatDate(latestMessage.created_at) : "",
         canSendMessage,
         conversationVisible: !!participant && (!esPropietario || !!selectedInvestorId),
         conversationPrivateByThread: true,
         realtimeStatus,
+        threadSummaries: threads.slice(0, 5).map((thread) => ({
+          investorId: thread.investorId,
+          investorName: thread.investorName,
+          lastAtIso: thread.lastAt,
+          lastAtLabel: thread.lastAt ? formatDate(thread.lastAt) : "",
+          lastMessage: thread.lastMessage,
+          threadKey: thread.threadKey,
+        })),
       },
     });
 

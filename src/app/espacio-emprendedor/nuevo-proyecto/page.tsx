@@ -241,8 +241,49 @@ export default function NuevoProyectoEmprendedorPage() {
     }
   };
 
-  useEffect(() => {
+        useEffect(() => {
     const visibleParts: string[] = [];
+
+    const titleValue = form.title.trim();
+    const provinceValue = form.province.trim();
+    const districtValue = form.district.trim();
+    const summaryValue = form.summary.trim();
+
+    const hasTitle = !!titleValue;
+    const hasCategory = !!form.category;
+    const hasDepartment = !!form.department;
+    const hasProvince = !!provinceValue;
+    const hasDistrict = !!districtValue;
+    const hasSummary = !!summaryValue;
+    const hasLocation = !!form.department || !!provinceValue || !!districtValue;
+    const hasInvestment = !!form.investment_min || !!form.investment_max;
+
+    const activeSection = loading
+      ? 'nuevo-proyecto-cargando'
+      : success
+      ? 'nuevo-proyecto-exito'
+      : error
+      ? 'nuevo-proyecto-error'
+      : 'nuevo-proyecto-formulario';
+
+    const activeViewId = loading
+      ? 'loading-form'
+      : success
+      ? 'success-form'
+      : error
+      ? 'error-form'
+      : 'project-form';
+
+    const activeViewTitle = loading
+      ? 'Nuevo proyecto cargando'
+      : success
+      ? 'Proyecto enviado correctamente'
+      : error
+      ? 'Nuevo proyecto con error'
+      : 'Formulario de nuevo proyecto';
+
+    visibleParts.push(`Vista activa: ${activeViewTitle}.`);
+    visibleParts.push('Pantalla visible: Publicar nuevo proyecto del Espacio Emprendedor.');
 
     if (loading) {
       visibleParts.push('La pantalla está cargando el formulario para publicar un nuevo proyecto.');
@@ -254,54 +295,67 @@ export default function NuevoProyectoEmprendedorPage() {
       );
     }
 
+    if (!participant && !loading) {
+      visibleParts.push('No hay participante con sesión activa visible en esta pantalla.');
+    }
+
     if (afiliado && !loading) {
-      visibleParts.push('El usuario ya está verificado como emprendedor afiliado.');
+      visibleParts.push('El usuario aparece verificado como afiliado para publicar proyectos.');
+    } else if (!loading) {
+      visibleParts.push('No se detecta afiliación verificada para publicar proyectos.');
     }
 
-    if (form.title.trim()) {
-      visibleParts.push(`Título visible del proyecto: ${form.title.trim()}.`);
+    if (hasTitle) {
+      visibleParts.push(`Título visible del proyecto: ${titleValue}.`);
     } else {
-      visibleParts.push('El campo de título del proyecto está vacío.');
+      visibleParts.push('No hay título escrito todavía.');
     }
 
-    if (form.category) {
+    if (hasCategory) {
       visibleParts.push(`Categoría seleccionada: ${form.category}.`);
     } else {
-      visibleParts.push('Aún no se ha seleccionado categoría.');
+      visibleParts.push('No hay categoría seleccionada todavía.');
     }
 
-    if (form.department) {
+    if (hasDepartment) {
       visibleParts.push(`Departamento seleccionado: ${form.department}.`);
-    }
-
-    if (form.province.trim()) {
-      visibleParts.push(`Provincia visible: ${form.province.trim()}.`);
-    }
-
-    if (form.district.trim()) {
-      visibleParts.push(`Distrito visible: ${form.district.trim()}.`);
-    }
-
-    if (form.summary.trim()) {
-      visibleParts.push('Ya hay contenido escrito en el resumen ejecutivo.');
     } else {
-      visibleParts.push('El resumen ejecutivo aún está vacío.');
+      visibleParts.push('No hay departamento seleccionado todavía.');
+    }
+
+    if (hasProvince) {
+      visibleParts.push(`Provincia visible: ${provinceValue}.`);
+    }
+
+    if (hasDistrict) {
+      visibleParts.push(`Distrito visible: ${districtValue}.`);
+    } else {
+      visibleParts.push('No hay distrito escrito todavía.');
+    }
+
+    if (hasSummary) {
+      visibleParts.push('El resumen ejecutivo ya tiene contenido visible.');
+    } else {
+      visibleParts.push('El resumen ejecutivo todavía no tiene contenido visible.');
     }
 
     if (form.investment_min) {
-      visibleParts.push(`Monto mínimo visible: S/ ${form.investment_min}.`);
+      visibleParts.push(`Inversión mínima visible: ${form.investment_min}.`);
     }
 
     if (form.investment_max) {
-      visibleParts.push(`Monto máximo visible: S/ ${form.investment_max}.`);
+      visibleParts.push(`Inversión máxima visible: ${form.investment_max}.`);
     }
 
-    if (pdfFile) {
-      visibleParts.push(`PDF cargado: ${pdfFile.name}.`);
-      visibleParts.push(`Tamaño visible del PDF: ${Math.round(pdfFile.size / 1024)} KB.`);
-    } else {
-      visibleParts.push('Todavía no se ha cargado el PDF del proyecto.');
+    if (!hasInvestment) {
+      visibleParts.push('No hay monto de inversión visible todavía.');
     }
+
+    visibleParts.push(
+      pdfFile
+        ? `PDF cargado: ${pdfFile.name}.`
+        : 'No hay PDF cargado todavía.'
+    );
 
     if (submitting) {
       visibleParts.push('El formulario del proyecto se está enviando.');
@@ -315,8 +369,6 @@ export default function NuevoProyectoEmprendedorPage() {
       visibleParts.push(`Error visible: ${error}`);
     }
 
-    const hasLocation = !!form.department || !!form.province.trim() || !!form.district.trim();
-    const hasInvestment = !!form.investment_min || !!form.investment_max;
     const availableActions = [
       'Completar título',
       'Seleccionar categoría',
@@ -336,35 +388,55 @@ export default function NuevoProyectoEmprendedorPage() {
       ? 'Pantalla para publicar nuevo proyecto con error visible.'
       : 'Formulario para publicar un nuevo proyecto emprendedor con datos, ubicación, inversión y PDF.';
 
-    const status = loading ? 'loading' : error ? 'error' : success ? 'ready' : 'ready';
+    const status = loading ? 'loading' : error ? 'error' : 'ready';
 
     setPageContext({
-      pageId: 'espacio-emprendedor',
+      pageId: 'espacio-emprendedor-nuevo-proyecto',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/nuevo-proyecto',
       summary,
-      activeSection: success ? 'nuevo-proyecto-exito' : 'nuevo-proyecto-formulario',
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Espacio Emprendedor', 'Nuevo proyecto', activeViewTitle],
+      visibleSections: [
+        'identidad-del-proyecto',
+        'ubicacion',
+        'resumen',
+        'inversion',
+        'pdf',
+        'envio',
+      ],
+      visibleActions: availableActions,
       visibleText: visibleParts.join('\n'),
       availableActions,
-      selectedItemTitle: form.title.trim() || participant?.full_name || undefined,
+      selectedItemTitle: titleValue || participant?.full_name || undefined,
       status,
       dynamicData: {
         participantLogueado: !!participant,
         afiliadoVerificado: !!afiliado,
         submittingProject: submitting,
         success,
-        title: form.title.trim(),
+        title: titleValue,
         category: form.category,
         department: form.department,
-        province: form.province.trim(),
-        district: form.district.trim(),
-        hasSummary: !!form.summary.trim(),
+        province: provinceValue,
+        district: districtValue,
+        hasTitle,
+        hasCategory,
+        hasDepartment,
+        hasProvince,
+        hasDistrict,
+        hasSummary,
         hasLocation,
         hasInvestment,
         investmentMin: form.investment_min,
         investmentMax: form.investment_max,
         pdfLoaded: !!pdfFile,
         pdfName: pdfFile?.name || '',
+        errorVisible: error || '',
+        canPublishProject: !!participant && !!afiliado && !!pdfFile,
       },
     });
   }, [setPageContext, loading, participant, afiliado, submitting, success, error, form, pdfFile]);

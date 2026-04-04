@@ -433,16 +433,83 @@ const proyectosConContactos = (data || []).map((p) => ({
       setVerificando(false);
     }
   };
-        useEffect(() => {
+          useEffect(() => {
     const topTitles = topProjects
       .slice(0, 3)
       .map((p) => p?.title)
       .filter(Boolean);
 
+    const myProjectTitles = misProyectos
+      .slice(0, 5)
+      .map((p) => p?.title)
+      .filter(Boolean);
+
+    const latestReceived =
+      mensajesRecibidos.length > 0 ? mensajesRecibidos[0] : null;
+
     const lastMessageProject =
-      mensajesRecibidos.length > 0 ? mensajesRecibidos[0]?.proyecto_titulo || '' : '';
+      latestReceived?.proyecto_titulo || '';
+
+    const activeSection = !participant
+      ? 'registro-o-login'
+      : !afiliado
+      ? 'verificacion-dni'
+      : 'panel-emprendedor';
+
+    const activeViewId = !participant
+      ? 'guest-access'
+      : !afiliado
+      ? 'dni-verification'
+      : 'entrepreneur-dashboard';
+
+    const activeViewTitle = !participant
+      ? 'Acceso al Espacio Emprendedor'
+      : !afiliado
+      ? 'Verificación de afiliación'
+      : 'Panel del emprendedor';
+
+    const visibleSections = [
+      'bienvenida',
+      'proyectos-mas-contactados',
+      activeSection,
+      'bloque-inversionista',
+      participant && afiliado ? 'mis-proyectos' : null,
+      participant && afiliado ? 'mensajes-recibidos' : null,
+    ].filter(Boolean) as string[];
+
+    const availableActions = !participant
+      ? [
+          'Registrarme ahora',
+          'Iniciar sesión con código',
+          'Explorar proyectos',
+          'Configurar mi perfil',
+        ]
+      : !afiliado
+      ? [
+          'Verificar DNI',
+          'Afiliarme en JNE',
+          'Explorar proyectos',
+          'Configurar mi perfil',
+        ]
+      : [
+          'Publicar nuevo proyecto',
+          'Ver detalles de proyecto',
+          'Responder mensajes',
+          'Explorar proyectos',
+          'Configurar mi perfil',
+        ];
+
+    const summary = !participant
+      ? 'Pantalla de acceso al Espacio Emprendedor para registro o ingreso con código.'
+      : !afiliado
+      ? 'Pantalla de verificación de afiliación para habilitar publicación de proyectos.'
+      : 'Panel del emprendedor con proyectos propios, mensajes recibidos y accesos para explorar o invertir.';
 
     const visibleParts: string[] = [];
+    visibleParts.push(`Vista activa: ${activeViewTitle}.`);
+    visibleParts.push('Pantalla visible: Espacio Emprendedor APP.');
+    visibleParts.push('Mensaje principal visible: conecta tu proyecto emprendedor con inversionistas.');
+    visibleParts.push('Bloque visible para inversionistas: explorar proyectos y configurar perfil.');
 
     if (loading) {
       visibleParts.push('La pantalla está cargando datos del Espacio Emprendedor.');
@@ -463,7 +530,22 @@ const proyectosConContactos = (data || []).map((p) => ({
     }
 
     if (topTitles.length) {
-      visibleParts.push(`Proyectos destacados visibles: ${topTitles.join(', ')}.`);
+      visibleParts.push(`Proyectos más contactados visibles: ${topTitles.join(', ')}.`);
+    } else {
+      visibleParts.push('No hay proyectos más contactados visibles en este momento.');
+    }
+
+    if (myProjectTitles.length) {
+      visibleParts.push(`Proyectos propios visibles: ${myProjectTitles.join(', ')}.`);
+    }
+
+    if (latestReceived) {
+      visibleParts.push(`Último mensaje visible de ${latestReceived.remitente || 'Inversionista'} sobre el proyecto ${latestReceived.proyecto_titulo || 'Proyecto'}.`);
+      visibleParts.push(`Fecha y hora visibles del último mensaje: ${formatDate(latestReceived.created_at)}.`);
+    }
+
+    if (cargandoMensajes) {
+      visibleParts.push('La bandeja de mensajes está cargando.');
     }
 
     if (error) {
@@ -478,32 +560,6 @@ const proyectosConContactos = (data || []).map((p) => ({
       visibleParts.push(`Mensaje visible de acceso: ${loginCodigoError}`);
     }
 
-    if (cargandoMensajes) {
-      visibleParts.push('La bandeja de mensajes está cargando.');
-    }
-
-    if (lastMessageProject) {
-      visibleParts.push(`Último proyecto con mensaje visible: ${lastMessageProject}.`);
-    }
-
-    const activeSection = !participant
-      ? 'registro-o-login'
-      : !afiliado
-      ? 'verificacion-dni'
-      : 'panel-emprendedor';
-
-    const availableActions = !participant
-      ? ['Registrarme ahora', 'Iniciar sesión con código']
-      : !afiliado
-      ? ['Verificar DNI', 'Afiliarme en JNE']
-      : ['Publicar nuevo proyecto', 'Ver detalles de proyecto', 'Responder mensajes'];
-
-    const summary = !participant
-      ? 'Pantalla de acceso al Espacio Emprendedor para registro o ingreso con código.'
-      : !afiliado
-      ? 'Pantalla de verificación de afiliación para habilitar publicación de proyectos.'
-      : 'Panel del emprendedor con proyectos propios y mensajes recibidos.';
-
     const status =
       loading ? 'loading' : error ? 'error' : 'ready';
 
@@ -512,20 +568,52 @@ const proyectosConContactos = (data || []).map((p) => ({
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor',
       summary,
+      speakableSummary: summary,
       activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Espacio Emprendedor', activeViewTitle],
+      visibleSections,
       visibleText: visibleParts.join('\n'),
       availableActions,
-      selectedItemTitle: lastMessageProject || undefined,
+      selectedItemId:
+        latestReceived?.proyecto_id ||
+        topProjects[0]?.id ||
+        misProyectos[0]?.id ||
+        undefined,
+      selectedItemTitle:
+        lastMessageProject ||
+        topTitles[0] ||
+        myProjectTitles[0] ||
+        undefined,
       status,
       dynamicData: {
         participantLogueado: !!participant,
         afiliadoVerificado: !!afiliado,
+        accessMode: activeViewId,
+        investorBlockVisible: true,
+        entrepreneurBlockVisible: !!participant,
+        verificationBlockVisible: !!participant && !afiliado,
+        dashboardVisible: !!participant && !!afiliado,
         proyectosDestacadosCount: topProjects.length,
+        proyectosDestacadosTitles: topTitles,
         misProyectosCount: misProyectos.length,
+        misProyectosTitles: myProjectTitles,
         mensajesRecibidosCount: mensajesRecibidos.length,
         cargandoMensajes,
         loginCodigoLoading,
         verificandoDni: verificando,
+        lastMessageProjectTitle: latestReceived?.proyecto_titulo || '',
+        lastMessageSenderName: latestReceived?.remitente || '',
+        lastMessageAtIso: latestReceived?.created_at || '',
+        lastMessageAtLabel: latestReceived?.created_at
+          ? formatDate(latestReceived.created_at)
+          : '',
+        latestInvestorThreadKey: latestReceived?.thread_key || '',
+        canExploreProjects: true,
+        canOpenInvestorProfile: true,
+        canPublishProject: !!participant && !!afiliado,
+        canVerifyDni: !!participant && !afiliado,
       },
     });
   }, [

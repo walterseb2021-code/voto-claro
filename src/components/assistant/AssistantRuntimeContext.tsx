@@ -7,14 +7,45 @@ export type AssistantPageContext = {
   pageTitle: string;
   route: string;
 
+  pageSubtitle?: string;
+
   summary?: string;
+  speakableSummary?: string;
+
   activeSection?: string;
+  activeViewId?: string;
+  activeViewTitle?: string;
+
+  activeBlockId?: string;
+  activeBlockTitle?: string;
+
+  currentLevel?: string;
+  currentStep?: string;
+
+  breadcrumb?: string[];
+  openPanels?: string[];
 
   visibleText?: string;
+  visibleSections?: string[];
+  visibleActions?: string[];
   availableActions?: string[];
 
   selectedItemId?: string;
   selectedItemTitle?: string;
+  selectedItem?: string;
+  selectedItems?: string[];
+  selectedOption?: string;
+  selectedOptions?: string[];
+
+  selectedCategory?: string;
+  selectedSubcategory?: string;
+  selectedTopic?: string;
+  selectedComment?: string;
+  selectedParty?: string;
+  selectedRound?: string;
+
+  resultsSummary?: string;
+  contextVersion?: string | number;
 
   status?: "idle" | "loading" | "ready" | "error";
 

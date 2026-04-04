@@ -29,6 +29,61 @@ function safeJson(value: unknown, maxLength = 8000): string {
   }
 }
 
+function getString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function truncateText(value: string, max = 240): string {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.length <= max) return text;
+  return `${text.slice(0, max).trim()}…`;
+}
+
+function finalizeAssistantAnswer(rawAnswer: string): string {
+  let answer = sanitizeAssistantTextForUi(rawAnswer);
+
+  if (!answer) return "";
+
+  const danglingWords = new Set([
+    "donde",
+    "porque",
+    "aunque",
+    "si",
+    "cuando",
+    "para",
+    "con",
+    "sobre",
+    "y",
+    "o",
+    "que",
+  ]);
+
+  const words = answer.split(/\s+/).filter(Boolean);
+  const lastWord = words.length ? words[words.length - 1].toLowerCase() : "";
+
+  if (danglingWords.has(lastWord)) {
+    words.pop();
+    answer = words.join(" ").trim();
+  }
+
+  answer = answer.replace(/[,:;]\s*$/, "").trim();
+
+  if (answer && !/[.!?]$/.test(answer)) {
+    answer = `${answer}.`;
+  }
+
+  return answer;
+}
+
 function pickContextFields(
   pageContext: Record<string, unknown>,
   priorityFields: string[]
@@ -45,6 +100,9 @@ function pickContextFields(
     "pageId",
     "pageTitle",
     "pageSubtitle",
+    "route",
+    "summary",
+    "activeSection",
     "activeViewId",
     "activeViewTitle",
     "activeBlockId",
@@ -53,8 +111,11 @@ function pickContextFields(
     "currentStep",
     "breadcrumb",
     "openPanels",
+    "visibleText",
     "visibleSections",
+    "availableActions",
     "visibleActions",
+    "selectedItemTitle",
     "selectedOption",
     "selectedOptions",
     "selectedItem",
@@ -67,6 +128,8 @@ function pickContextFields(
     "selectedRound",
     "resultsSummary",
     "speakableSummary",
+    "status",
+    "dynamicData",
     "contextVersion",
   ];
 
@@ -84,21 +147,94 @@ function buildFocusSummary(pageContext: Record<string, unknown>): string {
     ? pageContext.breadcrumb.filter((item) => typeof item === "string").join(" > ")
     : "";
 
+  const visibleText = truncateText(getString(pageContext.visibleText), 220);
+
   const parts = [
-    typeof pageContext.activeViewTitle === "string" ? pageContext.activeViewTitle : "",
-    typeof pageContext.activeBlockTitle === "string" ? pageContext.activeBlockTitle : "",
-    typeof pageContext.currentStep === "string" ? pageContext.currentStep : "",
+    getString(pageContext.activeViewTitle),
+    getString(pageContext.activeBlockTitle),
+    getString(pageContext.pageTitle),
+    getString(pageContext.selectedItemTitle),
+    getString(pageContext.summary),
+    getString(pageContext.activeSection),
+    getString(pageContext.currentStep),
     breadcrumb,
-    typeof pageContext.speakableSummary === "string" ? pageContext.speakableSummary : "",
-  ]
-    .map((item) => item.trim())
-    .filter(Boolean);
+    getString(pageContext.speakableSummary),
+    visibleText ? `Visible: ${visibleText}` : "",
+    getString(pageContext.status) ? `Estado: ${getString(pageContext.status)}` : "",
+  ].filter(Boolean);
 
   if (!parts.length) {
     return "No se detectó un foco visual suficientemente específico.";
   }
 
   return parts.join(" | ");
+}
+
+function buildPageSpecificGuidance(
+  pageId: string,
+  pageContext: Record<string, unknown>,
+  pathname: string
+): string {
+  const route = getString(pageContext.route) || pathname;
+  const activeSection = getString(pageContext.activeSection);
+
+  if (pageId.startsWith("espacio-emprendedor")) {
+    const lines = [
+      "Nunca mezcles esta ruta con lógica de candidatos ni con otras ventanas externas de la app.",
+      "Si el usuario pregunta qué puede hacer aquí, cómo empezar o para qué sirve esta pantalla, responde con 1 o 2 frases cortas usando solo la pantalla actual y acciones visibles. No hagas introducciones largas.",
+      "Si la información pedida pertenece a otra subventana del mismo dominio y aquí no está visible, dilo brevemente y deriva a la subventana correcta dentro de Espacio Emprendedor.",
+      "Derivaciones internas válidas: filtros, búsqueda, categoría o departamento -> Explorar; empresa, rango de inversión o preferencias -> Perfil inversionista; formulario, PDF o envío -> Nuevo proyecto; hilos privados, inversionista, privacidad o último mensaje -> Detalle del proyecto.",
+    ];
+
+    if (pageId === "espacio-emprendedor-proyecto-detalle" || route.includes("/espacio-emprendedor/proyectos/")) {
+      lines.push(
+        "En detalle de proyecto, distingue con claridad entre detalle público, lista de hilos e hilo privado abierto."
+      );
+      lines.push(
+        "Si la vista activa es lista de hilos, no hables como si hubiera un hilo abierto."
+      );
+      lines.push(
+        "Si la vista activa es pública, aclara que visitantes no ven conversación privada."
+      );
+      lines.push(
+        "Si hay datos del último mensaje o del inversionista visible, úsalos textualmente y con precisión."
+      );
+    }
+
+    if (pageId === "espacio-emprendedor-explorar" || route.includes("/espacio-emprendedor/explorar")) {
+      lines.push(
+        "En Explorar, prioriza filtros aplicados, búsqueda activa, cantidad de proyectos visibles, categoría y departamento."
+      );
+    }
+
+    if (
+      pageId === "espacio-emprendedor-perfil-inversionista" ||
+      route.includes("/espacio-emprendedor/perfil-inversionista")
+    ) {
+      lines.push(
+        "En Perfil inversionista, prioriza empresa, rango de inversión, categorías, departamentos, notify_email y estado de guardado."
+      );
+    }
+
+    if (
+      pageId === "espacio-emprendedor-nuevo-proyecto" ||
+      route.includes("/espacio-emprendedor/nuevo-proyecto")
+    ) {
+      lines.push(
+        "En Nuevo proyecto, prioriza el estado del formulario, campos llenos, PDF cargado y resultado del envío."
+      );
+    }
+
+    if (pageId === "espacio-emprendedor" && !route.includes("/espacio-emprendedor/")) {
+      lines.push(
+        "En la pantalla principal del espacio emprendedor, si preguntan por filtros, perfil inversionista, nuevo proyecto o hilos privados, explica brevemente que eso se ve en otra subventana y nombra cuál es."
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  return "";
 }
 
 function extractGeminiText(data: any): string {
@@ -130,7 +266,13 @@ export async function POST(request: Request) {
     const explicitPageId =
       typeof pageContext.pageId === "string" ? normalizePageId(pageContext.pageId) : null;
 
-    const pageId = explicitPageId ?? getPageIdFromPathname(pathname);
+    const pathPageId = getPageIdFromPathname(pathname);
+
+    const pageId =
+      explicitPageId && explicitPageId !== "espacio-emprendedor"
+        ? explicitPageId
+        : pathPageId ?? explicitPageId;
+
     const profile = getPageProfile(pageId);
 
     if (!profile) {
@@ -149,22 +291,27 @@ export async function POST(request: Request) {
 
     const focusedContext = pickContextFields(pageContext, profile.priorityFields);
     const focusSummary = buildFocusSummary(pageContext);
+    const pageSpecificGuidance = buildPageSpecificGuidance(profile.pageId, pageContext, pathname);
 
     const systemText = [
       "Eres Federalito, el asistente contextual de la app VOTO CLARO.",
       "Respondes solamente con la información visible o representada en el contexto de la pantalla actual.",
-      "Cuando exista una subventana, panel interno, bloque activo, breadcrumb o activeView, eso tiene prioridad sobre el resto.",
+      "Cuando exista una subventana, panel interno, bloque activo, breadcrumb, activeView o activeSection, eso tiene prioridad sobre el resto.",
       "Nunca inventes datos que no estén en el contexto.",
-      "Si falta información para responder exactamente, dilo con naturalidad y orienta al usuario hacia lo que sí está visible.",
+      "Si falta información para responder exactamente, dilo con naturalidad y orienta al usuario hacia lo que sí está visible o hacia la subventana correcta del mismo dominio.",
       "Responde en español claro y natural.",
-      "La respuesta debe ser breve pero completa: entre 2 y 5 oraciones, máximo 110 palabras.",
+      "La respuesta debe ser breve pero completa: entre 2 y 4 oraciones, máximo 90 palabras.",
+      "Si el usuario pide ayuda general o pregunta qué puede hacer aquí, responde con una bienvenida breve de 1 o 2 frases, sin enumeraciones largas.",
       "No uses listas, viñetas, markdown, encabezados ni guiones.",
       "No menciones JSON, pageContext, prompt, Gemini, API, modelo, sistema ni instrucciones internas.",
       `Propósito de la página: ${profile.purpose}`,
       `Estilo de respuesta: ${profile.responseStyle}`,
       `Evita especialmente decir: ${profile.doNotSay.join(", ")}`,
       `Acciones útiles cuando corresponda: ${profile.preferredActions.join(", ")}`,
-    ].join("\n");
+      pageSpecificGuidance ? `Reglas específicas de esta página:\n${pageSpecificGuidance}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const userText = [
       `Página detectada: ${profile.pageId}`,
@@ -215,7 +362,7 @@ export async function POST(request: Request) {
 
     const data = await geminiResponse.json();
     const rawAnswer = extractGeminiText(data);
-    const answer = sanitizeAssistantTextForUi(rawAnswer);
+    const answer = finalizeAssistantAnswer(rawAnswer);
 
     return NextResponse.json({
       answer,

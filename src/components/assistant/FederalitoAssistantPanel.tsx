@@ -23,6 +23,10 @@ import {
   COMO_FUNCIONA_FAQ,
 } from "@/lib/comoFuncionaContent";
 import { useAssistantRuntime } from "./AssistantRuntimeContext";
+import {
+  sanitizeAssistantTextForUi,
+  sanitizeAssistantTextForVoice,
+} from "@/lib/assistant/sanitizeAssistantText";
 
 type GuideEventDetail = {
   action?: "SAY" | "OPEN" | "CLOSE" | "SAY_AND_OPEN";
@@ -60,41 +64,7 @@ type MemoryState = {
   lastAnswerHasLinks?: boolean;
   lastUpdatedAt?: number;
 };
-   function sanitizeAssistantTextForUi(input: string) {
-  return String(input ?? "")
-    .replace(/\r/g, "\n")
-    .replace(/\u00A0/g, " ")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-    .replace(/`{1,3}/g, "")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/\*(.*?)\*/g, "$1")
-    .replace(/_(.*?)_/g, "$1")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function sanitizeAssistantTextForVoice(input: string) {
-  return String(input ?? "")
-    .replace(/\r/g, "\n")
-    .replace(/\u00A0/g, " ")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-    .replace(/`{1,3}/g, "")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/\*(.*?)\*/g, "$1")
-    .replace(/_(.*?)_/g, "$1")
-    .replace(/^#{1,6}\s*/gm, "")
-    .replace(/^\s*[-*•▪◦]+\s+/gm, "")
-    .replace(/^\s*\d+[.)]\s+/gm, "")
-    .replace(/\n+/g, ". ")
-    .replace(/\s+[–—-]\s+/g, ", ")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\.{2,}/g, ".")
-    .replace(/\s+,/g, ",")
-    .trim();
-}
+   
  function stringifyContextValue(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v.trim();
@@ -3621,82 +3591,110 @@ if (String(pathname || "").startsWith("/como-funciona")) {
    
 
            // ✅ Páginas con contexto dinámico: primero consultar endpoint contextual escalable
-       const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
-const isDynamicContextPage =
-  ctxNow === "INTENCION" ||
-  ctxNow === "RETO" ||
-  ctxNow === "COMENTARIO" ||
-  String(pathname || "").startsWith("/espacio-emprendedor");
+           const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
+    const isEspacioEmprendedorPage = String(pathname || "").startsWith("/espacio-emprendedor");
+    const isDynamicContextPage =
+      ctxNow === "INTENCION" ||
+      ctxNow === "RETO" ||
+      ctxNow === "COMENTARIO" ||
+      isEspacioEmprendedorPage;
 
-if (isDynamicContextPage && pageContext) {
-  try {
-    const res = await fetch("/api/assistant/context-answer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({
-        question: rawQ,
-        pathname: String(pathname || ""),
-        pageContext,
-      }),
-    });
+    if (isDynamicContextPage && pageContext) {
+      let contextAnswer = "";
 
-    const payload = await safeReadJson(res);
-    const contextAnswer = sanitizeAssistantTextForUi(
-      String((payload as any)?.answer ?? "").trim()
-    );
+      try {
+        const res = await fetch("/api/assistant/context-answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({
+            question: rawQ,
+            pathname: String(pathname || ""),
+            pageContext,
+          }),
+        });
 
-    if (res.ok && contextAnswer) {
-      pushAssistant(contextAnswer);
-      await maybeSpeak(contextAnswer);
-      return;
+        const payload = await safeReadJson(res);
+        contextAnswer = sanitizeAssistantTextForUi(
+          String((payload as any)?.answer ?? "").trim()
+        );
+
+        if (res.ok && contextAnswer) {
+          pushAssistant(contextAnswer);
+          await maybeSpeak(contextAnswer);
+          return;
+        }
+      } catch {
+        // silencio: cae al respaldo local
+      }
+
+      if (isEspacioEmprendedorPage) {
+        const summary = String((pageContext as any)?.summary ?? "").trim();
+        const activeViewTitle = String((pageContext as any)?.activeViewTitle ?? "").trim();
+        const activeSection = String((pageContext as any)?.activeSection ?? "").trim();
+        const availableActions = Array.isArray((pageContext as any)?.availableActions)
+          ? (pageContext as any).availableActions.filter(
+              (item: unknown): item is string => typeof item === "string" && item.trim().length > 0
+            )
+          : [];
+
+        const fallback = sanitizeAssistantTextForUi(
+          [
+            activeViewTitle || summary || "Estoy dentro de Espacio Emprendedor.",
+            availableActions.length
+              ? `Ahora mismo puedo ayudarte con esta subventana y con acciones como ${availableActions
+                  .slice(0, 3)
+                  .join(", ")}.`
+              : "Puedo ayudarte con lo que está visible en esta subventana.",
+            activeSection ? "Hazme una pregunta concreta sobre esta pantalla." : "",
+          ]
+            .filter(Boolean)
+            .join(" ")
+        );
+
+        const msg =
+          fallback ||
+          "Estoy dentro de Espacio Emprendedor, pero no pude leer bien el contexto actual. Hazme una pregunta sobre la sección visible.";
+
+        pushAssistant(msg);
+        await maybeSpeak(msg);
+        return;
+      }
+
+      const dynamicMsg = sanitizeAssistantTextForUi(
+        answerFromDynamicPageContext(rawQ, pageContext as any)
+      );
+
+      if (dynamicMsg) {
+        pushAssistant(dynamicMsg);
+        await maybeSpeak(dynamicMsg);
+        return;
+      }
+
+      if (ctxNow === "INTENCION") {
+        const msg =
+          "Estoy dentro de la pantalla de intención de voto, pero ahora mismo no tengo suficiente contexto para responder con precisión.";
+        pushAssistant(msg);
+        await maybeSpeak(msg);
+        return;
+      }
+
+      if (ctxNow === "RETO") {
+        const msg =
+          "Estoy dentro del reto ciudadano, pero en este momento no tengo suficiente contexto visible para responder con precisión.";
+        pushAssistant(msg);
+        await maybeSpeak(msg);
+        return;
+      }
+
+      if (ctxNow === "COMENTARIO") {
+        const msg =
+          "Estoy dentro de comentarios ciudadanos, pero ahora mismo no tengo suficiente contexto visible para responder con precisión.";
+        pushAssistant(msg);
+        await maybeSpeak(msg);
+        return;
+      }
     }
-  } catch {
-    // silencio: cae al respaldo local
-  }
-
-  const dynamicMsg = sanitizeAssistantTextForUi(
-    answerFromDynamicPageContext(rawQ, pageContext as any)
-  );
-
-  if (dynamicMsg) {
-    pushAssistant(dynamicMsg);
-    await maybeSpeak(dynamicMsg);
-    return;
-  }
-
-  if (ctxNow === "INTENCION") {
-    const msg =
-      "Estoy dentro de la pantalla de intención de voto, pero ahora mismo no tengo suficiente contexto para responder con precisión.";
-    pushAssistant(msg);
-    await maybeSpeak(msg);
-    return;
-  }
-
-  if (ctxNow === "RETO") {
-    const msg =
-      "Estoy dentro del reto ciudadano, pero en este momento no tengo suficiente contexto visible para responder con precisión.";
-    pushAssistant(msg);
-    await maybeSpeak(msg);
-    return;
-  }
-
-  if (ctxNow === "COMENTARIO") {
-    const msg =
-      "Estoy dentro de comentarios ciudadanos, pero ahora mismo no tengo suficiente contexto visible para responder con precisión.";
-    pushAssistant(msg);
-    await maybeSpeak(msg);
-    return;
-  }
-
-  if (String(pathname || "").startsWith("/espacio-emprendedor")) {
-    const msg =
-      "Estoy dentro del espacio emprendedor, pero ahora mismo no tengo suficiente contexto visible para responder con precisión.";
-    pushAssistant(msg);
-    await maybeSpeak(msg);
-    return;
-  }
-}
     if (!candidateId) {
       const msg =
         "Primero abre la ficha de un candidato.\n\n" +

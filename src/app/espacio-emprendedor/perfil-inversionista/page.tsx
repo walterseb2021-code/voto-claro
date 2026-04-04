@@ -196,12 +196,37 @@ export default function PerfilInversionistaPage() {
     }
   };
 
-  useEffect(() => {
+        useEffect(() => {
     const visibleParts: string[] = [];
+
+    const companyValue = perfil.company.trim();
+    const minValue = perfil.investment_range_min.trim();
+    const maxValue = perfil.investment_range_max.trim();
+
+    const activeSection = loading
+      ? 'perfil-inversionista-cargando'
+      : error
+      ? 'perfil-inversionista-error'
+      : 'perfil-inversionista-formulario';
+
+    const activeViewId = loading
+      ? 'loading-profile'
+      : error
+      ? 'error-profile'
+      : 'investor-profile-form';
+
+    const activeViewTitle = loading
+      ? 'Perfil inversionista cargando'
+      : error
+      ? 'Perfil inversionista con error'
+      : 'Formulario del perfil inversionista';
 
     if (loading) {
       visibleParts.push('La pantalla está cargando el perfil del inversionista.');
     }
+
+    visibleParts.push(`Vista activa: ${activeViewTitle}.`);
+    visibleParts.push('Pantalla visible: Perfil inversionista del Espacio Emprendedor.');
 
     if (participant && !loading) {
       visibleParts.push(
@@ -213,18 +238,24 @@ export default function PerfilInversionistaPage() {
       visibleParts.push('No hay participante válido cargado en esta pantalla.');
     }
 
-    if (perfil.company.trim()) {
-      visibleParts.push(`Empresa u organización visible: ${perfil.company.trim()}.`);
+    if (companyValue) {
+      visibleParts.push(`Empresa u organización visible: ${companyValue}.`);
+    } else {
+      visibleParts.push('No hay empresa u organización escrita todavía.');
     }
 
-    if (perfil.investment_range_min) {
-      visibleParts.push(`Monto mínimo visible: S/ ${perfil.investment_range_min}.`);
+    if (minValue) {
+      visibleParts.push(`Monto mínimo visible: S/ ${minValue}.`);
+    } else {
+      visibleParts.push('No hay monto mínimo visible todavía.');
     }
 
     if (perfil.monto_mayor) {
       visibleParts.push('Está marcada la opción de montos mayores a S/ 100000.');
-    } else if (perfil.investment_range_max) {
-      visibleParts.push(`Monto máximo visible: S/ ${perfil.investment_range_max}.`);
+    } else if (maxValue) {
+      visibleParts.push(`Monto máximo visible: S/ ${maxValue}.`);
+    } else {
+      visibleParts.push('No hay monto máximo visible todavía.');
     }
 
     if (perfil.categories.length) {
@@ -258,12 +289,11 @@ export default function PerfilInversionistaPage() {
     }
 
     const availableActions = [
-      'Guardar perfil',
-      'Cambiar empresa',
-      'Cambiar rango de inversión',
+      'Editar empresa',
+      'Editar rango de inversión',
       'Seleccionar categorías',
       'Seleccionar departamentos',
-      'Activar o desactivar notificaciones',
+      'Guardar perfil',
       'Volver',
     ];
 
@@ -276,28 +306,47 @@ export default function PerfilInversionistaPage() {
     const status = loading ? 'loading' : error ? 'error' : 'ready';
 
     setPageContext({
-      pageId: 'espacio-emprendedor',
+      pageId: 'espacio-emprendedor-perfil-inversionista',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/perfil-inversionista',
       summary,
-      activeSection: 'perfil-inversionista',
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Espacio Emprendedor', 'Perfil inversionista', activeViewTitle],
+      visibleSections: [
+        'empresa',
+        'rango-inversion',
+        'categorias',
+        'departamentos',
+        'notificaciones',
+        'guardado',
+      ],
+      visibleActions: availableActions,
       visibleText: visibleParts.join('\n'),
       availableActions,
       selectedItemTitle:
-        participant?.full_name || participant?.alias || perfil.company || undefined,
+        participant?.full_name || participant?.alias || companyValue || undefined,
       status,
       dynamicData: {
         participantLogueado: !!participant,
         savingProfile: saving,
-        company: perfil.company.trim(),
-        investmentRangeMin: perfil.investment_range_min,
-        investmentRangeMax: perfil.monto_mayor ? 'mayor-a-100000' : perfil.investment_range_max,
+        company: companyValue,
+        investmentRangeMin: minValue,
+        investmentRangeMax: perfil.monto_mayor ? 'mayor-a-100000' : maxValue,
         montoMayor: perfil.monto_mayor,
         categoriesCount: perfil.categories.length,
         departmentsCount: perfil.departments.length,
         categoriesSelected: perfil.categories,
         departmentsSelected: perfil.departments,
         notifyEmail: perfil.notify_email,
+        hasCompany: !!companyValue,
+        hasInvestmentMin: !!minValue,
+        hasInvestmentMax: !!maxValue || perfil.monto_mayor,
+        saveMessageVisible: message || '',
+        errorMessageVisible: error || '',
+        canSaveProfile: !!participant,
       },
     });
   }, [setPageContext, loading, saving, message, error, participant, perfil]);

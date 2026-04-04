@@ -145,8 +145,48 @@ export default function ExplorarProyectosPage() {
     return 'No especificado';
   };
 
-  useEffect(() => {
+      useEffect(() => {
+    const visibleTitles = filteredProjects
+      .slice(0, 5)
+      .map((p) => p.title)
+      .filter(Boolean);
+
+    const normalizedSearch = searchTerm.trim();
+
+    const hasCategoryFilter = selectedCategory !== 'Todas';
+    const hasDepartmentFilter = selectedDepartment !== 'Todos';
+    const hasSearchFilter = normalizedSearch.length > 0;
+
+    const hasActiveFilters =
+      hasCategoryFilter || hasDepartmentFilter || hasSearchFilter;
+
+    const activeSection = loading
+      ? 'explorar-cargando'
+      : error
+      ? 'explorar-error'
+      : filteredProjects.length === 0
+      ? 'explorar-sin-resultados'
+      : 'explorar-resultados';
+
+    const activeViewId = loading
+      ? 'loading-results'
+      : error
+      ? 'error-results'
+      : filteredProjects.length === 0
+      ? 'empty-results'
+      : 'project-results';
+
+    const activeViewTitle = loading
+      ? 'Explorar proyectos cargando'
+      : error
+      ? 'Explorar proyectos con error'
+      : filteredProjects.length === 0
+      ? 'Sin resultados visibles'
+      : 'Resultados de proyectos';
+
     const visibleParts: string[] = [];
+    visibleParts.push(`Vista activa: ${activeViewTitle}.`);
+    visibleParts.push('Pantalla visible: Explorar proyectos del Espacio Emprendedor.');
 
     if (loading) {
       visibleParts.push('La pantalla está cargando proyectos emprendedores para explorar.');
@@ -165,14 +205,24 @@ export default function ExplorarProyectosPage() {
       visibleParts.push('No hay participante con sesión activa visible en esta pantalla.');
     }
 
-    visibleParts.push(`Categoría seleccionada: ${selectedCategory}.`);
-    visibleParts.push(`Departamento seleccionado: ${selectedDepartment}.`);
-
-    if (searchTerm.trim()) {
-      visibleParts.push(`Texto de búsqueda visible: ${searchTerm.trim()}.`);
+    if (hasCategoryFilter) {
+      visibleParts.push(`Categoría seleccionada: ${selectedCategory}.`);
+    } else {
+      visibleParts.push('No hay categoría específica seleccionada.');
     }
 
-    const visibleTitles = filteredProjects.slice(0, 5).map((p) => p.title).filter(Boolean);
+    if (hasDepartmentFilter) {
+      visibleParts.push(`Departamento seleccionado: ${selectedDepartment}.`);
+    } else {
+      visibleParts.push('No hay departamento específico seleccionado.');
+    }
+
+    if (hasSearchFilter) {
+      visibleParts.push(`Texto de búsqueda visible: ${normalizedSearch}.`);
+    } else {
+      visibleParts.push('No hay texto de búsqueda activo.');
+    }
+
     if (visibleTitles.length) {
       visibleParts.push(`Proyectos visibles en pantalla: ${visibleTitles.join(', ')}.`);
     }
@@ -184,11 +234,6 @@ export default function ExplorarProyectosPage() {
     if (error) {
       visibleParts.push(`Error visible: ${error}`);
     }
-
-    const hasActiveFilters =
-      selectedCategory !== 'Todas' ||
-      selectedDepartment !== 'Todos' ||
-      searchTerm.trim().length > 0;
 
     const availableActions = [
       'Cambiar categoría',
@@ -210,25 +255,40 @@ export default function ExplorarProyectosPage() {
     const status = loading ? 'loading' : error ? 'error' : 'ready';
 
     setPageContext({
-      pageId: 'espacio-emprendedor',
+      pageId: 'espacio-emprendedor-explorar',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/explorar',
       summary,
-      activeSection: 'explorar-proyectos',
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Espacio Emprendedor', 'Explorar proyectos', activeViewTitle],
+      visibleSections: ['filtros', 'busqueda', 'resultados'],
+      visibleActions: availableActions,
       visibleText: visibleParts.join('\n'),
       availableActions,
+      selectedCategory: hasCategoryFilter ? selectedCategory : undefined,
       selectedItemTitle: filteredProjects[0]?.title || undefined,
       status,
       dynamicData: {
         participantLogueado: !!participant,
         projectsCount: projects.length,
         filteredProjectsCount: filteredProjects.length,
+        visibleProjectTitles: visibleTitles,
         selectedCategory,
         selectedDepartment,
-        searchTerm: searchTerm.trim(),
+        searchTerm: normalizedSearch,
+        hasCategoryFilter,
+        hasDepartmentFilter,
+        hasSearchFilter,
         hasActiveFilters,
         emptyResults: !loading && !error && filteredProjects.length === 0,
         firstProjectTitle: filteredProjects[0]?.title || '',
+        canOpenProjectDetail: filteredProjects.length > 0,
+        canFilterByCategory: true,
+        canFilterByDepartment: true,
+        canSearchProjects: true,
       },
     });
   }, [
@@ -242,7 +302,6 @@ export default function ExplorarProyectosPage() {
     selectedDepartment,
     searchTerm,
   ]);
-
   useEffect(() => {
     return () => {
       clearPageContext();
