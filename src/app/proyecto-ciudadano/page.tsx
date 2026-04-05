@@ -1,9 +1,9 @@
-﻿// src/app/proyecto-ciudadano/page.tsx
-'use client';
+﻿'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Función para obtener o crear device_id
 function getOrCreateDeviceId(): string {
@@ -19,6 +19,8 @@ function getOrCreateDeviceId(): string {
 
 export default function ProyectoCiudadanoPage() {
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const [participant, setParticipant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
@@ -29,7 +31,7 @@ export default function ProyectoCiudadanoPage() {
   const [winnersLoading, setWinnersLoading] = useState(true);
 
   useEffect(() => {
-    const id = getOrCreateDeviceId();
+    getOrCreateDeviceId();
     loadParticipant();
     loadWinners();
   }, []);
@@ -37,7 +39,7 @@ export default function ProyectoCiudadanoPage() {
   // Función para cargar el participante por device_id
   const loadParticipant = async () => {
     const currentDeviceId = getOrCreateDeviceId();
-    
+
     if (!currentDeviceId) {
       setParticipant(null);
       setLoading(false);
@@ -136,7 +138,7 @@ export default function ProyectoCiudadanoPage() {
       console.log('📦 Resultado:', data);
 
       if (error) throw error;
-      
+
       if (!data) {
         setLoginCodigoError('Código de acceso no válido');
         setLoginCodigoLoading(false);
@@ -174,6 +176,218 @@ export default function ProyectoCiudadanoPage() {
   const btnBlue = "bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50 vc-btn-wave vc-btn-pulse";
   const inputStyle = "w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono";
 
+  useEffect(() => {
+    const participantReady = !!participant;
+    const participantName = participant?.full_name || '';
+    const participantAlias = participant?.alias || '';
+    const participantCode = participant?.codigo_acceso || '';
+
+    const activeSection =
+      loading || checking
+        ? 'principal-cargando'
+        : !participant
+        ? 'principal-sin-registro'
+        : 'principal-participante-activo';
+
+    const activeViewId =
+      loading || checking
+        ? 'loading'
+        : !participant
+        ? 'guest-home'
+        : 'participant-home';
+
+    const activeViewTitle =
+      loading || checking
+        ? 'Cargando Proyecto Ciudadano'
+        : !participant
+        ? 'Acceso y registro a Proyecto Ciudadano'
+        : 'Panel principal del participante';
+
+    const winnersVisible = winners.slice(0, 3);
+    const winnersTitles = winnersVisible.map((winner) => winner?.name).filter(Boolean);
+    const hasWinners = winnersVisible.length > 0;
+    const hasLoginCodeText = codigoAcceso.trim().length > 0;
+
+    const visibleParts: string[] = [];
+
+    if (loading || checking) {
+      visibleParts.push('La pantalla principal de Proyecto Ciudadano está cargando.');
+    }
+
+    if (!participantReady && !(loading || checking)) {
+      visibleParts.push('El usuario todavía no aparece como participante registrado en esta pantalla.');
+      visibleParts.push('Se ve una acción para registrarse y otra para iniciar sesión con código.');
+    }
+
+    if (participantReady) {
+      visibleParts.push(`Participante visible: ${participantName}.`);
+      if (participantAlias) {
+        visibleParts.push(`Alias visible: ${participantAlias}.`);
+      }
+      if (participantCode) {
+        visibleParts.push(`Código de acceso visible: ${participantCode}.`);
+      }
+      visibleParts.push('Se ven acciones para presentar proyecto y para ver proyectos activos.');
+    }
+
+    if (hasLoginCodeText) {
+      visibleParts.push(`Texto visible en el campo de código: ${codigoAcceso.trim().toUpperCase()}.`);
+    } else if (!participantReady && !(loading || checking)) {
+      visibleParts.push('No hay código escrito en el campo de acceso rápido.');
+    }
+
+    if (loginCodigoError) {
+      visibleParts.push(`Error visible en inicio de sesión con código: ${loginCodigoError}.`);
+    }
+
+    if (loginCodigoLoading) {
+      visibleParts.push('Se está verificando un código de acceso.');
+    }
+
+    if (winnersLoading) {
+      visibleParts.push('El bloque de ganadores del ciclo anterior está cargando.');
+    } else if (!hasWinners) {
+      visibleParts.push('No hay ganadores del ciclo anterior visibles en pantalla.');
+    } else {
+      visibleParts.push(`Ganadores visibles del ciclo anterior: ${winnersTitles.join(', ')}.`);
+    }
+
+    const availableActions = [
+      'Recargar',
+      'Volver al inicio',
+      !participantReady ? 'Registrarme ahora' : null,
+      !participantReady ? 'Iniciar sesión con código' : null,
+      participantReady ? 'Presentar proyecto' : null,
+      'Ver proyectos activos',
+      hasWinners ? 'Ver proyecto ganador' : null,
+    ].filter(Boolean) as string[];
+
+    const summary =
+      loading || checking
+        ? 'Pantalla principal de Proyecto Ciudadano cargando estado del participante y contenido visible.'
+        : !participantReady
+        ? 'Pantalla principal de Proyecto Ciudadano con acceso para registrarse o iniciar sesión con código.'
+        : 'Pantalla principal de Proyecto Ciudadano con participante identificado y acciones para presentar proyectos o ver proyectos activos.';
+
+    const suggestedPrompts = !participantReady
+      ? [
+          {
+            id: 'pc-home-1',
+            label: '¿Qué puedo hacer aquí?',
+            question: '¿Qué puedo hacer en esta pantalla de Proyecto Ciudadano?',
+          },
+          {
+            id: 'pc-home-2',
+            label: '¿Necesito registrarme?',
+            question: '¿Necesito registrarme para participar en Proyecto Ciudadano?',
+          },
+          {
+            id: 'pc-home-3',
+            label: '¿Cómo entro con mi código?',
+            question: '¿Cómo funciona el inicio de sesión con código en esta pantalla?',
+          },
+          {
+            id: 'pc-home-4',
+            label: '¿Dónde veo los proyectos?',
+            question: '¿Dónde puedo ver los proyectos activos desde esta pantalla?',
+          },
+          {
+            id: 'pc-home-5',
+            label: '¿Qué muestran los ganadores?',
+            question: '¿Qué muestra el bloque de ganadores del ciclo anterior en esta pantalla?',
+          },
+        ]
+      : [
+          {
+            id: 'pc-home-1',
+            label: '¿Qué puedo hacer aquí?',
+            question: '¿Qué puedo hacer ahora en esta pantalla de Proyecto Ciudadano?',
+          },
+          {
+            id: 'pc-home-2',
+            label: '¿Ya aparezco registrado?',
+            question: '¿Ya aparezco como participante registrado en esta pantalla?',
+          },
+          {
+            id: 'pc-home-3',
+            label: '¿Dónde presento un proyecto?',
+            question: '¿Dónde presento un nuevo proyecto desde esta pantalla?',
+          },
+          {
+            id: 'pc-home-4',
+            label: '¿Dónde veo los proyectos activos?',
+            question: '¿Dónde puedo ver los proyectos activos desde esta pantalla?',
+          },
+          {
+            id: 'pc-home-5',
+            label: '¿Qué ganadores se ven?',
+            question: '¿Qué ganadores del ciclo anterior se están mostrando en esta pantalla?',
+          },
+        ];
+
+    setPageContext({
+      pageId: 'proyecto-ciudadano',
+      pageTitle: 'Proyecto Ciudadano',
+      route: '/proyecto-ciudadano',
+      summary,
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Proyecto Ciudadano', activeViewTitle],
+      visibleSections: [
+        'cabecera',
+        'bienvenida',
+        'bases-del-premio',
+        'ganadores-ciclo-anterior',
+        participantReady ? 'panel-participante' : 'registro-o-acceso',
+        'proyectos-destacados',
+      ],
+      visibleActions: availableActions,
+      availableActions,
+      visibleText: visibleParts.join('\n'),
+      selectedItemTitle: winnersTitles[0] || participantName || undefined,
+      status: loading || checking ? 'loading' : loginCodigoError ? 'error' : 'ready',
+      resultsSummary: hasWinners
+        ? `Se muestran ${winnersVisible.length} ganadores del ciclo anterior.`
+        : 'No hay ganadores visibles del ciclo anterior.',
+      suggestedPrompts,
+      dynamicData: {
+        participantVisible: participantReady,
+        participantName: participantName || null,
+        participantAlias: participantAlias || null,
+        participantCodeVisible: !!participantCode,
+        loginCodeTyped: hasLoginCodeText,
+        loginCodigoLoading,
+        loginCodigoError: loginCodigoError || null,
+        winnersLoading,
+        winnersCount: winners.length,
+        visibleWinnerTitles: winnersTitles,
+        canRegister: !participantReady,
+        canLoginWithCode: !participantReady,
+        canCreateProject: participantReady,
+        canViewProjects: true,
+      },
+      contextVersion: 'pc-home-v1',
+    });
+  }, [
+    setPageContext,
+    participant,
+    loading,
+    checking,
+    codigoAcceso,
+    loginCodigoLoading,
+    loginCodigoError,
+    winners,
+    winnersLoading,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
+
   if (loading || checking) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -209,7 +423,7 @@ export default function ProyectoCiudadanoPage() {
             💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
             Los mejores proyectos serán reconocidos en un evento oficial cada 3 meses.
           </p>
-          
+
           {/* Bases del premio */}
           <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
             <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
@@ -278,13 +492,13 @@ export default function ProyectoCiudadanoPage() {
               <p className="text-slate-600 mb-4 text-sm">
                 Si ya tienes un código de acceso (el que te dieron al registrarte), ingrésalo aquí.
               </p>
-              
+
               {loginCodigoError && (
                 <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm vc-slide-in">
                   {loginCodigoError}
                 </div>
               )}
-              
+
               <form onSubmit={handleLoginConCodigo} className="space-y-3">
                 <input
                   type="text"
@@ -322,11 +536,11 @@ export default function ProyectoCiudadanoPage() {
                 ↻ Actualizar datos
               </button>
             </div>
-            
+
             <p className="text-slate-600 mb-4">
               Puedes presentar un nuevo proyecto o apoyar iniciativas existentes.
             </p>
-            
+
             <div className="flex flex-wrap gap-4">
               <Link
                 href="/proyecto-ciudadano/nuevo-proyecto"

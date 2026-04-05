@@ -1,8 +1,8 @@
-// src/app/proyecto-ciudadano/proyectos/page.tsx
 'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Project = {
   id: string;
@@ -23,6 +23,8 @@ type Project = {
 };
 
 export default function ProyectosActivosPage() {
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,11 +90,229 @@ export default function ProyectosActivosPage() {
 
   const filteredProjects = projects.filter(project => {
     const matchesDepartment = selectedDepartment === 'todos' || project.department === selectedDepartment;
-    const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          project.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          project.district.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.district.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesDepartment && matchesSearch;
   });
+
+  useEffect(() => {
+    const visibleTitles = filteredProjects.slice(0, 8).map((project) => project.name).filter(Boolean);
+    const highlightedProject = filteredProjects[0] || null;
+    const hasSearch = searchTerm.trim().length > 0;
+    const selectedDepartmentLabel =
+      selectedDepartment === 'todos' ? 'Todos los departamentos' : selectedDepartment;
+
+    const activeSection = loading
+      ? 'proyectos-cargando'
+      : error
+      ? 'proyectos-con-error'
+      : filteredProjects.length === 0
+      ? 'proyectos-sin-resultados'
+      : 'proyectos-listado';
+
+    const activeViewId = loading
+      ? 'loading'
+      : error
+      ? 'error'
+      : filteredProjects.length === 0
+      ? 'empty'
+      : 'results';
+
+    const activeViewTitle = loading
+      ? 'Cargando proyectos activos'
+      : error
+      ? 'Error al cargar proyectos'
+      : filteredProjects.length === 0
+      ? 'Sin proyectos visibles'
+      : 'Listado de proyectos activos';
+
+    const visibleParts: string[] = [];
+
+    if (loading) {
+      visibleParts.push('La lista de proyectos activos está cargando.');
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible al cargar proyectos: ${error}.`);
+    }
+
+    visibleParts.push(`Filtro de departamento visible: ${selectedDepartmentLabel}.`);
+
+    if (hasSearch) {
+      visibleParts.push(`Búsqueda visible: ${searchTerm.trim()}.`);
+    } else {
+      visibleParts.push('No hay texto de búsqueda escrito.');
+    }
+
+    visibleParts.push(`Cantidad total de proyectos cargados: ${projects.length}.`);
+    visibleParts.push(`Cantidad de proyectos visibles con los filtros actuales: ${filteredProjects.length}.`);
+
+    if (highlightedProject) {
+      visibleParts.push(`Primer proyecto visible: ${highlightedProject.name}.`);
+      visibleParts.push(`Categoría visible del primer proyecto: ${highlightedProject.category}.`);
+      visibleParts.push(`Departamento visible del primer proyecto: ${highlightedProject.department}.`);
+      visibleParts.push(`Distrito visible del primer proyecto: ${highlightedProject.district}.`);
+    }
+
+    if (visibleTitles.length) {
+      visibleParts.push(`Títulos visibles: ${visibleTitles.join(', ')}.`);
+    }
+
+    if (!loading && !error && filteredProjects.length === 0) {
+      if (selectedDepartment !== 'todos') {
+        visibleParts.push(`No hay proyectos visibles para el departamento de ${selectedDepartment}.`);
+      } else {
+        visibleParts.push('No hay proyectos activos visibles en este momento.');
+      }
+    }
+
+    const availableActions = [
+      'Volver',
+      'Cambiar departamento',
+      'Buscar proyecto',
+      filteredProjects.length === 0 ? 'Presentar proyecto' : null,
+      filteredProjects.length > 0 ? 'Ver detalles' : null,
+    ].filter(Boolean) as string[];
+
+    const suggestedPrompts = loading
+      ? [
+          {
+            id: 'pc-proyectos-1',
+            label: '¿Qué está cargando?',
+            question: '¿Qué está cargando en esta pantalla de proyectos?',
+          },
+        ]
+      : error
+      ? [
+          {
+            id: 'pc-proyectos-1',
+            label: '¿Qué error se ve?',
+            question: '¿Qué error se muestra ahora en esta pantalla?',
+          },
+          {
+            id: 'pc-proyectos-2',
+            label: '¿Qué puedo hacer aquí?',
+            question: '¿Qué puedo hacer en esta pantalla aunque haya error?',
+          },
+        ]
+      : filteredProjects.length === 0
+      ? [
+          {
+            id: 'pc-proyectos-1',
+            label: '¿Qué filtro tengo?',
+            question: '¿Qué filtro de departamento está aplicado ahora?',
+          },
+          {
+            id: 'pc-proyectos-2',
+            label: '¿Hay búsqueda activa?',
+            question: '¿Hay alguna búsqueda activa en esta pantalla?',
+          },
+          {
+            id: 'pc-proyectos-3',
+            label: '¿Por qué no veo proyectos?',
+            question: '¿Por qué no se están viendo proyectos en esta pantalla?',
+          },
+          {
+            id: 'pc-proyectos-4',
+            label: '¿Dónde presento uno?',
+            question: '¿Dónde puedo presentar un proyecto desde esta pantalla?',
+          },
+        ]
+      : [
+          {
+            id: 'pc-proyectos-1',
+            label: '¿Qué filtro tengo?',
+            question: '¿Qué filtro de departamento está aplicado en esta pantalla?',
+          },
+          {
+            id: 'pc-proyectos-2',
+            label: '¿Hay búsqueda activa?',
+            question: '¿Hay una búsqueda activa en esta pantalla?',
+          },
+          {
+            id: 'pc-proyectos-3',
+            label: '¿Cuántos proyectos veo?',
+            question: '¿Cuántos proyectos se están viendo ahora con los filtros actuales?',
+          },
+          {
+            id: 'pc-proyectos-4',
+            label: '¿Cuál es el primer proyecto?',
+            question: '¿Cuál es el primer proyecto visible en esta pantalla?',
+          },
+          {
+            id: 'pc-proyectos-5',
+            label: '¿Qué departamentos veo?',
+            question: '¿Qué departamento está seleccionado y qué proyectos visibles hay ahora?',
+          },
+        ];
+
+    const summary = loading
+      ? 'Pantalla de proyectos ciudadanos cargando la lista de proyectos activos.'
+      : error
+      ? 'Pantalla de proyectos ciudadanos con error visible al cargar la lista.'
+      : filteredProjects.length === 0
+      ? 'Pantalla de proyectos ciudadanos sin resultados visibles con los filtros actuales.'
+      : 'Pantalla de proyectos ciudadanos con filtros, búsqueda y proyectos activos visibles.';
+
+    setPageContext({
+      pageId: 'proyecto-ciudadano-proyectos',
+      pageTitle: 'Proyectos Ciudadanos Activos',
+      route: '/proyecto-ciudadano/proyectos',
+      summary,
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Proyecto Ciudadano', 'Proyectos', activeViewTitle],
+      visibleSections: [
+        'cabecera',
+        'descripcion',
+        'filtros',
+        loading ? 'estado-carga' : error ? 'estado-error' : filteredProjects.length === 0 ? 'estado-vacio' : 'listado-proyectos',
+      ],
+      visibleActions: availableActions,
+      availableActions,
+      visibleText: visibleParts.join('\n'),
+      selectedItemTitle: highlightedProject?.name || undefined,
+      status: loading ? 'loading' : error ? 'error' : 'ready',
+      resultsSummary: loading
+        ? 'La lista de proyectos sigue cargando.'
+        : error
+        ? 'Hay un error visible al cargar los proyectos.'
+        : `Se muestran ${filteredProjects.length} proyectos con los filtros actuales.`,
+      suggestedPrompts,
+      dynamicData: {
+        loading,
+        error: error || null,
+        totalProjects: projects.length,
+        visibleProjects: filteredProjects.length,
+        selectedDepartment,
+        selectedDepartmentLabel,
+        searchTerm: searchTerm.trim() || null,
+        searchActive: hasSearch,
+        visibleProjectTitles: visibleTitles,
+        highlightedProject: highlightedProject
+          ? {
+              id: highlightedProject.id,
+              name: highlightedProject.name,
+              category: highlightedProject.category,
+              department: highlightedProject.department,
+              district: highlightedProject.district,
+              beneficiary_count: highlightedProject.beneficiary_count || 0,
+            }
+          : null,
+      },
+      contextVersion: 'pc-proyectos-v1',
+    });
+  }, [setPageContext, projects, filteredProjects, loading, error, selectedDepartment, searchTerm]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -156,7 +376,7 @@ export default function ProyectosActivosPage() {
           <div className="bg-white rounded-2xl border-2 border-slate-200 p-8 text-center">
             <p className="text-slate-600">No hay proyectos activos en este momento.</p>
             <p className="text-slate-500 text-sm mt-2">
-              {selectedDepartment !== 'todos' 
+              {selectedDepartment !== 'todos'
                 ? `No hay proyectos para el departamento de ${selectedDepartment}.`
                 : 'Sé el primero en presentar un proyecto ciudadano.'}
             </p>

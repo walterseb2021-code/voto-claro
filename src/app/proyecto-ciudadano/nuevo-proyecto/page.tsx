@@ -1,9 +1,9 @@
-// src/app/proyecto-ciudadano/nuevo-proyecto/page.tsx
 'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Categorías permitidas
 const CATEGORIAS = [
@@ -19,6 +19,8 @@ const CATEGORIAS = [
 
 export default function NuevoProyectoPage() {
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const [participant, setParticipant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -191,6 +193,221 @@ export default function NuevoProyectoPage() {
     }
   };
 
+  useEffect(() => {
+    const filledFields = [
+      form.name ? 'nombre del proyecto' : null,
+      form.category ? 'categoría' : null,
+      form.objective ? 'objetivo general' : null,
+      form.description ? 'descripción' : null,
+      form.district ? 'distrito' : null,
+      form.department ? 'departamento' : null,
+    ].filter(Boolean) as string[];
+
+    const missingFields = [
+      !form.name ? 'nombre del proyecto' : null,
+      !form.category ? 'categoría' : null,
+      !form.objective ? 'objetivo general' : null,
+      !form.description ? 'descripción' : null,
+      !form.district ? 'distrito' : null,
+      !form.department ? 'departamento' : null,
+      !pdfFile ? 'archivo PDF' : null,
+    ].filter(Boolean) as string[];
+
+    const activeSection = loading
+      ? 'nuevo-proyecto-cargando'
+      : success
+      ? 'nuevo-proyecto-enviado'
+      : submitting
+      ? 'nuevo-proyecto-enviando'
+      : 'nuevo-proyecto-formulario';
+
+    const activeViewId = loading
+      ? 'loading'
+      : success
+      ? 'success'
+      : submitting
+      ? 'submitting'
+      : 'form';
+
+    const activeViewTitle = loading
+      ? 'Cargando formulario de proyecto'
+      : success
+      ? 'Proyecto enviado'
+      : submitting
+      ? 'Enviando proyecto'
+      : 'Formulario de nuevo proyecto';
+
+    const visibleParts: string[] = [];
+
+    if (loading) {
+      visibleParts.push('La pantalla para presentar proyecto está cargando.');
+    }
+
+    if (participant) {
+      visibleParts.push(`Participante visible: ${participant.full_name || participant.alias || 'participante registrado'}.`);
+    } else if (!loading) {
+      visibleParts.push('No se muestra un participante válido en esta pantalla.');
+    }
+
+    if (cycle?.id) {
+      visibleParts.push('Hay un ciclo activo disponible para registrar el proyecto.');
+    } else if (!loading) {
+      visibleParts.push('No se muestra un ciclo activo confirmado en esta pantalla.');
+    }
+
+    if (!success && !loading) {
+      visibleParts.push('Está visible el formulario para presentar un nuevo proyecto.');
+      if (filledFields.length) {
+        visibleParts.push(`Campos con contenido: ${filledFields.join(', ')}.`);
+      }
+      if (missingFields.length) {
+        visibleParts.push(`Campos pendientes: ${missingFields.join(', ')}.`);
+      }
+      if (form.category) {
+        visibleParts.push(`Categoría seleccionada: ${form.category}.`);
+      }
+      if (form.department) {
+        visibleParts.push(`Departamento seleccionado: ${form.department}.`);
+      }
+      if (pdfFile) {
+        visibleParts.push(`PDF cargado: ${pdfFile.name}.`);
+      } else {
+        visibleParts.push('Todavía no hay un archivo PDF cargado.');
+      }
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible: ${error}.`);
+    }
+
+    if (submitting) {
+      visibleParts.push('El proyecto se está enviando en este momento.');
+    }
+
+    if (success) {
+      visibleParts.push('El proyecto ya fue enviado y aparece el mensaje de éxito.');
+      visibleParts.push('La acción visible permite volver a Proyecto Ciudadano.');
+    }
+
+    const availableActions = success
+      ? ['Volver a Proyecto Ciudadano']
+      : ['Volver', 'Enviar proyecto'];
+
+    const suggestedPrompts = success
+      ? [
+          {
+            id: 'pc-nuevo-1',
+            label: '¿Ya se envió?',
+            question: '¿Ya se envió mi proyecto en esta pantalla?',
+          },
+          {
+            id: 'pc-nuevo-2',
+            label: '¿Qué pasa ahora?',
+            question: '¿Qué pasa ahora después de enviar este proyecto?',
+          },
+          {
+            id: 'pc-nuevo-3',
+            label: '¿A dónde vuelve?',
+            question: '¿A dónde me lleva la acción visible después del envío?',
+          },
+        ]
+      : [
+          {
+            id: 'pc-nuevo-1',
+            label: '¿Qué me falta?',
+            question: '¿Qué me falta completar en este formulario para enviar el proyecto?',
+          },
+          {
+            id: 'pc-nuevo-2',
+            label: '¿Ya cargué el PDF?',
+            question: '¿Ya cargué el PDF del proyecto en esta pantalla?',
+          },
+          {
+            id: 'pc-nuevo-3',
+            label: '¿Qué categoría tengo?',
+            question: '¿Qué categoría está seleccionada en este formulario?',
+          },
+          {
+            id: 'pc-nuevo-4',
+            label: '¿Qué departamento tengo?',
+            question: '¿Qué departamento está seleccionado en este formulario?',
+          },
+          {
+            id: 'pc-nuevo-5',
+            label: '¿Hay algún error visible?',
+            question: '¿Hay algún error visible ahora en esta pantalla?',
+          },
+        ];
+
+    const summary = loading
+      ? 'Pantalla de nuevo proyecto cargando datos del participante y del ciclo activo.'
+      : success
+      ? 'Pantalla de nuevo proyecto con envío exitoso y mensaje de confirmación visible.'
+      : 'Pantalla de nuevo proyecto con formulario visible, validaciones, PDF y estado de envío.';
+
+    setPageContext({
+      pageId: 'proyecto-ciudadano-nuevo-proyecto',
+      pageTitle: 'Presentar nuevo proyecto',
+      route: '/proyecto-ciudadano/nuevo-proyecto',
+      summary,
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Proyecto Ciudadano', 'Nuevo proyecto', activeViewTitle],
+      visibleSections: success
+        ? ['resultado-envio', 'confirmacion', 'retorno']
+        : ['cabecera', 'descripcion', 'formulario', 'bases-del-premio'],
+      visibleActions: availableActions,
+      availableActions,
+      visibleText: visibleParts.join('\n'),
+      selectedItemTitle: form.name || undefined,
+      selectedCategory: form.category || undefined,
+      status: loading || submitting ? 'loading' : error ? 'error' : 'ready',
+      suggestedPrompts,
+      dynamicData: {
+        participantVisible: !!participant,
+        participantName: participant?.full_name || participant?.alias || null,
+        cycleActive: !!cycle?.id,
+        cycleId: cycle?.id || null,
+        loading,
+        submitting,
+        success,
+        error: error || null,
+        filledFields,
+        missingFields,
+        pdfLoaded: !!pdfFile,
+        pdfFileName: pdfFile?.name || null,
+        pdfFileSize: pdfFile?.size || null,
+        formValues: {
+          name: form.name || null,
+          category: form.category || null,
+          objective: form.objective || null,
+          description: form.description || null,
+          district: form.district || null,
+          department: form.department || null,
+        },
+      },
+      contextVersion: 'pc-nuevo-proyecto-v1',
+    });
+  }, [
+    setPageContext,
+    participant,
+    loading,
+    submitting,
+    error,
+    success,
+    form,
+    pdfFile,
+    cycle,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
+
   if (loading) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -348,35 +565,35 @@ export default function NuevoProyectoPage() {
               </select>
             </div>
 
-                    <div>
-  <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
-  <input
-    type="file"
-    accept=".pdf"
-    onChange={handleFileChange}
-    className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-    required
-  />
-  <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF.</p>
-</div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleFileChange}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+                required
+              />
+              <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF.</p>
+            </div>
 
-{/* Bases del premio */}
-<div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-  <strong>⚠️ Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
-  El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-  No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
-  La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
-</div>
+            {/* Bases del premio */}
+            <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
+              <strong>⚠️ Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
+              El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
+              No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
+              La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+            </div>
 
-<div className="pt-4">
-  <button
-    type="submit"
-    disabled={submitting}
-    className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
-  >
-    {submitting ? 'Enviando...' : 'Enviar proyecto'}
-  </button>
-</div>
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
+              >
+                {submitting ? 'Enviando...' : 'Enviar proyecto'}
+              </button>
+            </div>
           </form>
 
           <p className="text-xs text-slate-500 mt-4 text-center">

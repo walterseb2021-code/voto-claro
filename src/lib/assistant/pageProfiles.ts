@@ -207,6 +207,186 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
     ],
   },
 
+  "proyecto-ciudadano": {
+    pageId: "proyecto-ciudadano",
+    purpose:
+      "Ayudar al usuario a entender la pantalla principal de Proyecto Ciudadano usando el estado visible de acceso, registro, participación y acciones disponibles.",
+    responseStyle:
+      "Natural, claro, útil y breve. Debe responder desde la pantalla principal activa sin mezclarla con otras rutas del dominio.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "visibleActions",
+      "status",
+      "resultsSummary",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No tengo suficiente información",
+      "Como modelo de IA",
+      "Según el JSON",
+      "No puedo ver tu pantalla",
+    ],
+    preferredActions: [
+      "explicar qué pantalla de Proyecto Ciudadano está abierta",
+      "resumir lo visible ahora",
+      "indicar si el usuario puede registrarse, presentar proyectos o ver proyectos",
+      "derivar a la subventana correcta cuando la pregunta pertenezca a otra parte del mismo dominio",
+    ],
+  },
+
+  "proyecto-ciudadano-registro": {
+    pageId: "proyecto-ciudadano-registro",
+    purpose:
+      "Responder desde la subruta de registro usando el estado visible del formulario, validaciones, éxito del registro, código de acceso y acción de retorno.",
+    responseStyle:
+      "Claro, breve y orientado al formulario visible y al siguiente paso posible.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "visibleText",
+      "availableActions",
+      "visibleActions",
+      "status",
+      "selectedItemTitle",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No sé",
+      "Como IA",
+      "No tengo la data",
+      "No puedo ver la interfaz",
+    ],
+    preferredActions: [
+      "decir qué campos faltan o qué validación está visible",
+      "confirmar si el registro fue exitoso",
+      "indicar si ya se generó el código de acceso",
+      "orientar sobre el siguiente paso después del registro",
+    ],
+  },
+
+  "proyecto-ciudadano-nuevo-proyecto": {
+    pageId: "proyecto-ciudadano-nuevo-proyecto",
+    purpose:
+      "Responder desde la subruta de nuevo proyecto usando el estado real del formulario, validaciones, PDF cargado, ciclo activo y resultado del envío.",
+    responseStyle:
+      "Natural, preciso y orientado al formulario visible y a la siguiente acción disponible.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedCategory",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "visibleActions",
+      "status",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No puedo ayudarte",
+      "Como modelo",
+      "No tengo contexto",
+      "Según la lógica interna",
+    ],
+    preferredActions: [
+      "decir qué falta en el formulario",
+      "confirmar si el PDF está cargado",
+      "indicar la categoría o departamento seleccionados",
+      "decir si el proyecto ya fue enviado o si hay error visible",
+    ],
+  },
+
+  "proyecto-ciudadano-proyectos": {
+    pageId: "proyecto-ciudadano-proyectos",
+    purpose:
+      "Responder desde la subruta de proyectos usando filtros visibles, búsqueda activa, cantidad de proyectos mostrados y resultados visibles.",
+    responseStyle:
+      "Muy contextual, breve y orientado a filtros, búsqueda, departamento y proyectos visibles.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedCategory",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "visibleActions",
+      "status",
+      "resultsSummary",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No tengo acceso",
+      "Como asistente",
+      "No veo nada",
+      "No puedo leer esa parte",
+    ],
+    preferredActions: [
+      "decir qué filtro está aplicado",
+      "resumir cuántos proyectos visibles hay",
+      "indicar si hay búsqueda activa",
+      "resumir qué proyecto o departamento destaca en pantalla",
+    ],
+  },
+
+  "proyecto-ciudadano-proyecto-detalle": {
+    pageId: "proyecto-ciudadano-proyecto-detalle",
+    purpose:
+      "Responder desde el detalle de un proyecto ciudadano usando el proyecto visible, líder, apoyos, PDF, foro y estado de participación del usuario.",
+    responseStyle:
+      "Muy contextual, claro y corto. Debe diferenciar el detalle del proyecto, el bloque de apoyo y el foro visible.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "visibleActions",
+      "status",
+      "resultsSummary",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No tengo suficiente información",
+      "Como modelo de IA",
+      "No puedo ver tu pantalla",
+      "No sé quién participa",
+    ],
+    preferredActions: [
+      "explicar qué proyecto está abierto",
+      "decir cuántos apoyos visibles tiene",
+      "indicar si se puede apoyar o comentar",
+      "resumir el estado del foro o del PDF visible",
+    ],
+  },
+
   "comentario-ciudadano": {
     pageId: "comentario-ciudadano",
     purpose:
@@ -318,10 +498,16 @@ const PATH_PREFIX_ALIASES: Array<[string, string]> = [
   ["/espacio-emprendedor/explorar", "espacio-emprendedor-explorar"],
   ["/espacio-emprendedor/perfil-inversionista", "espacio-emprendedor-perfil-inversionista"],
   ["/espacio-emprendedor/nuevo-proyecto", "espacio-emprendedor-nuevo-proyecto"],
+
+  ["/proyecto-ciudadano/proyectos/", "proyecto-ciudadano-proyecto-detalle"],
+  ["/proyecto-ciudadano/proyectos", "proyecto-ciudadano-proyectos"],
+  ["/proyecto-ciudadano/nuevo-proyecto", "proyecto-ciudadano-nuevo-proyecto"],
+  ["/proyecto-ciudadano/registro", "proyecto-ciudadano-registro"],
 ];
 
 const PATH_ALIASES: Record<string, string> = {
   "/espacio-emprendedor": "espacio-emprendedor",
+  "/proyecto-ciudadano": "proyecto-ciudadano",
   "/comentarios": "comentario-ciudadano",
   "/comentario-ciudadano": "comentario-ciudadano",
   "/intencion-de-voto": "intencion-de-voto",

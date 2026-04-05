@@ -1,9 +1,9 @@
-// src/app/proyecto-ciudadano/proyectos/[id]/page.tsx
 'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Project = {
   id: string;
@@ -38,6 +38,8 @@ type ForumPost = {
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const projectId = params.id as string;
 
   const [project, setProject] = useState<Project | null>(null);
@@ -67,6 +69,7 @@ export default function ProjectDetailPage() {
             .select('*')
             .eq('device_id', deviceId)
             .maybeSingle();
+
           currentParticipant = pData;
           setParticipant(currentParticipant);
         }
@@ -77,6 +80,7 @@ export default function ProjectDetailPage() {
           .select('*')
           .eq('is_active', true)
           .maybeSingle();
+
         setActiveCycle(cycleData);
 
         // 3. Obtener proyecto
@@ -110,8 +114,12 @@ export default function ProjectDetailPage() {
         // Transformar leader (viene como array)
         const transformedProject = {
           ...projectData,
-          leader: projectData.leader && projectData.leader.length > 0 ? projectData.leader[0] : null,
+          leader:
+            projectData.leader && projectData.leader.length > 0
+              ? projectData.leader[0]
+              : null,
         };
+
         setProject(transformedProject);
 
         // 4. Verificar si el usuario ya apoya este proyecto
@@ -123,6 +131,7 @@ export default function ProjectDetailPage() {
             .eq('participant_id', currentParticipant.id)
             .eq('cycle_id', cycleData.id)
             .maybeSingle();
+
           setSupporting(!!supportData);
         }
 
@@ -142,8 +151,12 @@ export default function ProjectDetailPage() {
 
         const transformedForum = (forumData || []).map((post: any) => ({
           ...post,
-          participant: post.participant && post.participant.length > 0 ? post.participant[0] : { alias: 'Anónimo' },
+          participant:
+            post.participant && post.participant.length > 0
+              ? post.participant[0]
+              : { alias: 'Anónimo' },
         }));
+
         setForumPosts(transformedForum);
       } catch (err: any) {
         console.error('Error cargando proyecto:', err);
@@ -203,8 +216,11 @@ export default function ProjectDetailPage() {
       if (error) throw error;
 
       setSupporting(true);
-      // Actualizar contador
-      setProject(prev => prev ? { ...prev, beneficiary_count: (prev.beneficiary_count || 0) + 1 } : null);
+      setProject((prev) =>
+        prev
+          ? { ...prev, beneficiary_count: (prev.beneficiary_count || 0) + 1 }
+          : null
+      );
       alert('¡Gracias por apoyar este proyecto!');
     } catch (err: any) {
       console.error('Error al apoyar:', err);
@@ -236,14 +252,14 @@ export default function ProjectDetailPage() {
 
       if (error) throw error;
 
-      // Agregar post localmente
       const newPostObj: ForumPost = {
         id: Date.now().toString(),
         content: newPost.trim(),
         created_at: new Date().toISOString(),
         participant: { alias: participant.alias || 'Anónimo' },
       };
-      setForumPosts(prev => [...prev, newPostObj]);
+
+      setForumPosts((prev) => [...prev, newPostObj]);
       setNewPost('');
     } catch (err: any) {
       console.error('Error al publicar:', err);
@@ -252,6 +268,236 @@ export default function ProjectDetailPage() {
       setSendingPost(false);
     }
   };
+
+  useEffect(() => {
+    const forumCount = forumPosts.length;
+    const lastPost = forumPosts.length ? forumPosts[forumPosts.length - 1] : null;
+    const canSupport = !!project && project.status === 'active';
+    const canComment = !!participant;
+    const supportBlockVisible = !!project && project.status === 'active';
+    const pdfVisible = !!project?.pdf_url;
+
+    const activeSection = loading
+      ? 'proyecto-detalle-cargando'
+      : error || !project
+      ? 'proyecto-detalle-error'
+      : sendingPost
+      ? 'foro-publicando'
+      : supportLoading
+      ? 'apoyo-procesando'
+      : 'proyecto-detalle-visible';
+
+    const activeViewId = loading
+      ? 'loading'
+      : error || !project
+      ? 'error'
+      : 'detail';
+
+    const activeViewTitle = loading
+      ? 'Cargando detalle del proyecto'
+      : error || !project
+      ? 'Error en detalle del proyecto'
+      : 'Detalle del proyecto ciudadano';
+
+    const visibleParts: string[] = [];
+
+    if (loading) {
+      visibleParts.push('El detalle del proyecto ciudadano está cargando.');
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible: ${error}.`);
+    }
+
+    if (project) {
+      visibleParts.push(`Proyecto visible: ${project.name}.`);
+      visibleParts.push(`Categoría visible: ${project.category}.`);
+      visibleParts.push(`Ubicación visible: ${project.department} - ${project.district}.`);
+      visibleParts.push(`Objetivo visible: ${project.objective}.`);
+      visibleParts.push(`Estado visible del proyecto: ${project.status}.`);
+      visibleParts.push(`Apoyos visibles: ${project.beneficiary_count || 0}.`);
+
+      if (project.leader?.alias || project.leader?.full_name) {
+        visibleParts.push(
+          `Líder visible: ${project.leader?.alias || project.leader?.full_name}.`
+        );
+      }
+
+      if (project.leader?.email) {
+        visibleParts.push(`Correo visible del líder: ${project.leader.email}.`);
+      }
+
+      if (pdfVisible) {
+        visibleParts.push('Hay un PDF visible para descargar.');
+      } else {
+        visibleParts.push('No hay un PDF visible para descargar.');
+      }
+    }
+
+    if (supportBlockVisible) {
+      if (supporting) {
+        visibleParts.push('El usuario ya aparece apoyando este proyecto.');
+      } else {
+        visibleParts.push('El bloque de apoyo está visible y el apoyo todavía no aparece registrado para este usuario.');
+      }
+    } else if (project && project.status !== 'active') {
+      visibleParts.push('El bloque de apoyo no está disponible porque el proyecto no está activo.');
+    }
+
+    if (participant) {
+      visibleParts.push(`Participante visible en esta pantalla: ${participant.full_name || participant.alias}.`);
+    } else if (!loading) {
+      visibleParts.push('No aparece un participante registrado en esta pantalla.');
+    }
+
+    visibleParts.push(`Cantidad de mensajes visibles en el foro: ${forumCount}.`);
+
+    if (lastPost) {
+      visibleParts.push(`Último comentario visible: ${lastPost.content}.`);
+      visibleParts.push(`Autor visible del último comentario: ${lastPost.participant?.alias || 'Anónimo'}.`);
+    }
+
+    if (newPost.trim()) {
+      visibleParts.push(`Texto escrito en el foro: ${newPost.trim()}.`);
+    }
+
+    if (supportLoading) {
+      visibleParts.push('Se está procesando el apoyo al proyecto.');
+    }
+
+    if (sendingPost) {
+      visibleParts.push('Se está publicando un comentario en el foro.');
+    }
+
+    const availableActions = [
+      'Volver a proyectos',
+      pdfVisible ? 'Descargar documento del proyecto' : null,
+      supportBlockVisible ? 'Apoyar este proyecto' : null,
+      participant ? 'Publicar comentario' : 'Registrarme para participar',
+    ].filter(Boolean) as string[];
+
+    const suggestedPrompts =
+      loading || error || !project
+        ? [
+            {
+              id: 'pc-detalle-1',
+              label: '¿Qué pasa aquí?',
+              question: '¿Qué pasa en esta pantalla del proyecto?',
+            },
+          ]
+        : [
+            {
+              id: 'pc-detalle-1',
+              label: '¿Qué proyecto estoy viendo?',
+              question: '¿Qué proyecto está abierto ahora en esta pantalla?',
+            },
+            {
+              id: 'pc-detalle-2',
+              label: '¿Cuántos apoyos tiene?',
+              question: '¿Cuántos apoyos visibles tiene este proyecto?',
+            },
+            {
+              id: 'pc-detalle-3',
+              label: '¿Puedo apoyarlo?',
+              question: '¿Puedo apoyar este proyecto desde esta pantalla?',
+            },
+            {
+              id: 'pc-detalle-4',
+              label: '¿Hay PDF visible?',
+              question: '¿Hay un documento PDF visible para este proyecto?',
+            },
+            {
+              id: 'pc-detalle-5',
+              label: '¿Cómo está el foro?',
+              question: '¿Cómo está el foro visible de este proyecto en esta pantalla?',
+            },
+          ];
+
+    const summary = loading
+      ? 'Pantalla de detalle de proyecto ciudadano cargando información del proyecto, apoyos y foro.'
+      : error || !project
+      ? 'Pantalla de detalle de proyecto ciudadano con error visible o proyecto no encontrado.'
+      : 'Pantalla de detalle de proyecto ciudadano con información del proyecto, bloque de apoyo y foro visibles.';
+
+    setPageContext({
+      pageId: 'proyecto-ciudadano-proyecto-detalle',
+      pageTitle: project?.name || 'Detalle de proyecto ciudadano',
+      route: projectId ? `/proyecto-ciudadano/proyectos/${projectId}` : '/proyecto-ciudadano/proyectos/[id]',
+      summary,
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Proyecto Ciudadano', 'Proyectos', project?.name || 'Detalle'],
+      visibleSections: [
+        'cabecera',
+        'informacion-del-proyecto',
+        supportBlockVisible ? 'bloque-de-apoyo' : null,
+        'foro-de-discusion',
+      ].filter(Boolean) as string[],
+      visibleActions: availableActions,
+      availableActions,
+      visibleText: visibleParts.join('\n'),
+      selectedItemTitle: project?.name || undefined,
+      status: loading ? 'loading' : error ? 'error' : 'ready',
+      resultsSummary: `Foro visible con ${forumCount} comentario${forumCount === 1 ? '' : 's'}.`,
+      suggestedPrompts,
+      dynamicData: {
+        projectId: project?.id || projectId || null,
+        projectVisible: !!project,
+        projectName: project?.name || null,
+        category: project?.category || null,
+        department: project?.department || null,
+        district: project?.district || null,
+        projectStatus: project?.status || null,
+        beneficiaryCount: project?.beneficiary_count || 0,
+        leaderVisible: !!project?.leader,
+        leaderAlias: project?.leader?.alias || null,
+        leaderFullName: project?.leader?.full_name || null,
+        leaderEmail: project?.leader?.email || null,
+        pdfVisible,
+        participantVisible: !!participant,
+        participantName: participant?.full_name || participant?.alias || null,
+        activeCycleVisible: !!activeCycle,
+        supporting,
+        supportBlockVisible,
+        supportLoading,
+        forumCount,
+        lastForumPost: lastPost
+          ? {
+              content: lastPost.content,
+              alias: lastPost.participant?.alias || 'Anónimo',
+              created_at: lastPost.created_at,
+            }
+          : null,
+        newPostDraft: newPost.trim() || null,
+        sendingPost,
+        canSupport,
+        canComment,
+        error: error || null,
+      },
+      contextVersion: 'pc-proyecto-detalle-v1',
+    });
+  }, [
+    setPageContext,
+    projectId,
+    project,
+    loading,
+    error,
+    participant,
+    supporting,
+    supportLoading,
+    forumPosts,
+    newPost,
+    sendingPost,
+    activeCycle,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
 
   if (loading) {
     return (
@@ -315,7 +561,9 @@ export default function ProjectDetailPage() {
           <div className="mb-4">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">Líder del proyecto</h2>
             <p className="text-slate-800">{project.leader?.alias || project.leader?.full_name || 'Anónimo'}</p>
-            {project.leader?.email && <p className="text-sm text-slate-500">{project.leader.email}</p>}
+            {project.leader?.email && (
+              <p className="text-sm text-slate-500">{project.leader.email}</p>
+            )}
           </div>
 
           {project.pdf_url && (
@@ -330,35 +578,17 @@ export default function ProjectDetailPage() {
               </a>
             </div>
           )}
-              {project.pdf_url && (
-  <div className="mt-4">
-    <a
-      href={project.pdf_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-2 bg-slate-200 text-slate-800 px-4 py-2 rounded-xl font-semibold hover:bg-slate-300 transition"
-    >
-      📄 Descargar documento del proyecto (PDF)
-    </a>
-  </div>
-)}
 
-{/* Bases del premio */}
-{project.status === 'active' && (
-  <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-    <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
-    El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-    No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
-    La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
-  </div>
-)}
+          {/* Bases del premio */}
+          {project.status === 'active' && (
+            <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
+              <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
+              El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
+              No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
+              La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+            </div>
+          )}
 
-{/* Botón de apoyo */}
-{project.status === 'active' && (
-  <div className="mt-6 pt-4 border-t border-slate-200">
-    ...
-  </div>
-)}
           {/* Botón de apoyo */}
           {project.status === 'active' && (
             <div className="mt-6 pt-4 border-t border-slate-200">
@@ -371,11 +601,19 @@ export default function ProjectDetailPage() {
                     : 'bg-green-700 text-white hover:bg-green-800'
                 }`}
               >
-                {supportLoading ? 'Procesando...' : supporting ? '✓ Ya estás apoyando este proyecto' : '🤝 Apoyar este proyecto'}
+                {supportLoading
+                  ? 'Procesando...'
+                  : supporting
+                  ? '✓ Ya estás apoyando este proyecto'
+                  : '🤝 Apoyar este proyecto'}
               </button>
+
               {!participant && (
                 <p className="text-xs text-slate-500 mt-2 text-center">
-                  Para apoyar, primero debes <Link href="/proyecto-ciudadano/registro" className="text-green-700 underline">registrarte</Link>.
+                  Para apoyar, primero debes{' '}
+                  <Link href="/proyecto-ciudadano/registro" className="text-green-700 underline">
+                    registrarte
+                  </Link>.
                 </p>
               )}
             </div>
@@ -397,7 +635,9 @@ export default function ProjectDetailPage() {
               forumPosts.map((post) => (
                 <div key={post.id} className="bg-slate-50 rounded-xl p-3">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-semibold text-slate-700">{post.participant?.alias || 'Anónimo'}</span>
+                    <span className="text-xs font-semibold text-slate-700">
+                      {post.participant?.alias || 'Anónimo'}
+                    </span>
                     <span className="text-xs text-slate-400">
                       {new Date(post.created_at).toLocaleDateString()}
                     </span>
@@ -428,7 +668,10 @@ export default function ProjectDetailPage() {
             </div>
           ) : (
             <p className="text-sm text-slate-500 text-center">
-              <Link href="/proyecto-ciudadano/registro" className="text-green-700 underline">Regístrate</Link> para participar en el foro.
+              <Link href="/proyecto-ciudadano/registro" className="text-green-700 underline">
+                Regístrate
+              </Link>{' '}
+              para participar en el foro.
             </p>
           )}
         </div>

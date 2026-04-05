@@ -1,9 +1,9 @@
-// src/app/proyecto-ciudadano/registro/page.tsx
 'use client';
 import Link from 'next/link';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Función para obtener o crear device_id
 function getOrCreateDeviceId(): string {
@@ -28,6 +28,8 @@ async function generarCodigoAcceso(): Promise<string> {
 function RegistroForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
   const returnTo = searchParams.get('returnTo');
   const [deviceId, setDeviceId] = useState<string>("");
   const [form, setForm] = useState({
@@ -85,7 +87,7 @@ function RegistroForm() {
     try {
       // Generar código de acceso
       const codigo = await generarCodigoAcceso();
-      
+
       const { data, error } = await supabase
         .from('project_participants')
         .insert({
@@ -116,6 +118,202 @@ function RegistroForm() {
     }
   };
 
+  useEffect(() => {
+    const destinationLabel =
+      returnTo === 'espacio-emprendedor' ? 'Espacio Emprendedor' : 'Proyecto Ciudadano';
+
+    const filledFields = [
+      form.full_name ? 'nombres completos' : null,
+      form.dni ? 'DNI' : null,
+      form.email ? 'correo electrónico' : null,
+      form.phone ? 'celular' : null,
+      form.alias ? 'alias' : null,
+      form.address ? 'dirección' : null,
+      form.district ? 'distrito' : null,
+    ].filter(Boolean) as string[];
+
+    const missingFields = [
+      !form.full_name ? 'nombres completos' : null,
+      !form.dni ? 'DNI' : null,
+      !form.email ? 'correo electrónico' : null,
+      !form.phone ? 'celular' : null,
+      !form.alias ? 'alias' : null,
+      !form.address ? 'dirección' : null,
+      !form.district ? 'distrito' : null,
+    ].filter(Boolean) as string[];
+
+    const activeSection = success
+      ? 'registro-exitoso'
+      : loading
+      ? 'registro-enviando'
+      : 'formulario-registro';
+
+    const activeViewId = success
+      ? 'success'
+      : loading
+      ? 'submitting'
+      : 'form';
+
+    const activeViewTitle = success
+      ? 'Registro completado'
+      : loading
+      ? 'Enviando registro'
+      : 'Formulario de registro';
+
+    const visibleParts: string[] = [];
+
+    if (success) {
+      visibleParts.push('El registro ya fue completado exitosamente.');
+      if (codigoAcceso) {
+        visibleParts.push(`Código de acceso visible: ${codigoAcceso}.`);
+      }
+      visibleParts.push(`La acción visible de continuación lleva a ${destinationLabel}.`);
+    } else {
+      visibleParts.push('Está visible el formulario de registro de participante.');
+      if (filledFields.length) {
+        visibleParts.push(`Campos con contenido: ${filledFields.join(', ')}.`);
+      }
+      if (missingFields.length) {
+        visibleParts.push(`Campos faltantes: ${missingFields.join(', ')}.`);
+      }
+      if (form.dni) {
+        visibleParts.push(`DNI escrito: ${form.dni}.`);
+      }
+      if (form.email) {
+        visibleParts.push(`Correo escrito: ${form.email}.`);
+      }
+      if (form.alias) {
+        visibleParts.push(`Alias escrito: ${form.alias}.`);
+      }
+      visibleParts.push(`La acción de volver regresa a ${destinationLabel}.`);
+    }
+
+    if (error) {
+      visibleParts.push(`Error visible: ${error}.`);
+    }
+
+    if (loading) {
+      visibleParts.push('El registro se está procesando en este momento.');
+    }
+
+    if (deviceId) {
+      visibleParts.push('El dispositivo ya fue identificado para este registro.');
+    } else {
+      visibleParts.push('Todavía no se confirma la identificación del dispositivo.');
+    }
+
+    const availableActions = success
+      ? ['Continuar']
+      : ['Volver', 'Registrarme'];
+
+    const suggestedPrompts = success
+      ? [
+          {
+            id: 'pc-registro-1',
+            label: '¿Ya me registré?',
+            question: '¿Ya se completó mi registro en esta pantalla?',
+          },
+          {
+            id: 'pc-registro-2',
+            label: '¿Cuál es mi código?',
+            question: '¿Cuál es el código de acceso que aparece en esta pantalla?',
+          },
+          {
+            id: 'pc-registro-3',
+            label: '¿Qué hago ahora?',
+            question: '¿Cuál es el siguiente paso después de este registro?',
+          },
+        ]
+      : [
+          {
+            id: 'pc-registro-1',
+            label: '¿Qué me falta completar?',
+            question: '¿Qué campos me faltan completar en este formulario?',
+          },
+          {
+            id: 'pc-registro-2',
+            label: '¿Hay algún error visible?',
+            question: '¿Hay algún error visible ahora en este formulario?',
+          },
+          {
+            id: 'pc-registro-3',
+            label: '¿A dónde vuelve esta pantalla?',
+            question: '¿A dónde vuelve esta pantalla si presiono Volver?',
+          },
+          {
+            id: 'pc-registro-4',
+            label: '¿Qué hace el alias?',
+            question: '¿Para qué sirve el alias en este formulario?',
+          },
+          {
+            id: 'pc-registro-5',
+            label: '¿Qué pasa al registrarme?',
+            question: '¿Qué pasa cuando termino de registrarme en esta pantalla?',
+          },
+        ];
+
+    const summary = success
+      ? 'Pantalla de registro completado con código de acceso visible y acción para continuar.'
+      : 'Pantalla de registro de participante con formulario visible, validaciones y acción para completar el registro.';
+
+    setPageContext({
+      pageId: 'proyecto-ciudadano-registro',
+      pageTitle: 'Registro de participante',
+      route: '/proyecto-ciudadano/registro',
+      summary,
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ['Proyecto Ciudadano', 'Registro', activeViewTitle],
+      visibleSections: success
+        ? ['resultado-registro', 'codigo-acceso', 'continuacion']
+        : ['cabecera', 'descripcion', 'formulario', 'aviso-importante'],
+      visibleActions: availableActions,
+      availableActions,
+      visibleText: visibleParts.join('\n'),
+      selectedItemTitle: success ? codigoAcceso || undefined : undefined,
+      status: loading ? 'loading' : error ? 'error' : 'ready',
+      suggestedPrompts,
+      dynamicData: {
+        returnTo: returnTo || 'proyecto-ciudadano',
+        returnDestinationLabel: destinationLabel,
+        deviceReady: !!deviceId,
+        success,
+        loading,
+        error: error || null,
+        codigoAcceso: codigoAcceso || null,
+        filledFields,
+        missingFields,
+        formValues: {
+          full_name: form.full_name || null,
+          dni: form.dni || null,
+          email: form.email || null,
+          phone: form.phone || null,
+          address: form.address || null,
+          district: form.district || null,
+          alias: form.alias || null,
+        },
+      },
+      contextVersion: 'pc-registro-v1',
+    });
+  }, [
+    setPageContext,
+    returnTo,
+    deviceId,
+    form,
+    loading,
+    error,
+    success,
+    codigoAcceso,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
+
   if (success) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -126,7 +324,7 @@ function RegistroForm() {
             <p className="text-slate-600 mb-4">
               Tu perfil ha sido creado correctamente. Guarda tu código de acceso para iniciar sesión más rápido.
             </p>
-            
+
             {/* Mostrar código de acceso */}
             <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 mb-6">
               <p className="text-sm font-semibold text-amber-800 mb-1">Tu código de acceso único:</p>
@@ -135,7 +333,7 @@ function RegistroForm() {
                 Guarda este código. Lo usarás para iniciar sesión rápidamente.
               </p>
             </div>
-            
+
             <Link
               href={returnTo === 'espacio-emprendedor' ? '/espacio-emprendedor?registered=true' : '/proyecto-ciudadano?registered=true'}
               className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"

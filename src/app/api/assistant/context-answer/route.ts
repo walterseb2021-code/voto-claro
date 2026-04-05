@@ -177,6 +177,8 @@ function buildPageSpecificGuidance(
 ): string {
   const route = getString(pageContext.route) || pathname;
   const activeSection = getString(pageContext.activeSection);
+  const visibleActions = getStringList(pageContext.visibleActions);
+  const availableActions = getStringList(pageContext.availableActions);
 
   if (pageId.startsWith("espacio-emprendedor")) {
     const lines = [
@@ -234,6 +236,87 @@ function buildPageSpecificGuidance(
     return lines.join("\n");
   }
 
+  if (pageId.startsWith("proyecto-ciudadano")) {
+    const lines = [
+      "Nunca mezcles esta ruta con Espacio Emprendedor, comentarios, intención de voto o candidatos.",
+      "Si el usuario pregunta qué puede hacer aquí, cómo empezar o para qué sirve esta pantalla, responde con 1 o 2 frases cortas usando solo la pantalla actual y acciones visibles.",
+      "Si la información pedida pertenece a otra subventana del mismo dominio y aquí no está visible, dilo brevemente y deriva a la subventana correcta dentro de Proyecto Ciudadano.",
+      "Derivaciones internas válidas: registro, código de acceso o datos personales -> Registro; formulario, PDF, categoría, departamento o envío del proyecto -> Nuevo proyecto; filtros, búsqueda, departamentos o lista visible -> Proyectos; apoyos, líder, PDF o foro del proyecto -> Detalle del proyecto.",
+    ];
+
+    if (pageId === "proyecto-ciudadano" && !route.includes("/proyecto-ciudadano/")) {
+      lines.push(
+        "En la pantalla principal de Proyecto Ciudadano, si preguntan por registro, presentar proyecto, filtros de proyectos, apoyo o foro, explica brevemente que eso se ve en otra subventana y nombra cuál es."
+      );
+      lines.push(
+        "Prioriza si el usuario ya aparece como participante registrado, si puede presentar proyectos y si hay acceso visible a ver proyectos activos."
+      );
+    }
+
+    if (
+      pageId === "proyecto-ciudadano-registro" ||
+      route.includes("/proyecto-ciudadano/registro")
+    ) {
+      lines.push(
+        "En Registro, prioriza estado del formulario, campos faltantes, validaciones visibles, error visible, éxito de registro y código de acceso generado."
+      );
+      lines.push(
+        "Si el registro ya fue exitoso, orienta al siguiente paso visible sin repetir instrucciones largas."
+      );
+    }
+
+    if (
+      pageId === "proyecto-ciudadano-nuevo-proyecto" ||
+      route.includes("/proyecto-ciudadano/nuevo-proyecto")
+    ) {
+      lines.push(
+        "En Nuevo proyecto, prioriza estado del formulario, categoría, departamento, PDF cargado, ciclo activo, error visible y resultado del envío."
+      );
+      lines.push(
+        "Si el usuario no aparece habilitado para presentar proyecto, dilo brevemente y orienta a registro si esa acción está indicada por el contexto."
+      );
+    }
+
+    if (
+      pageId === "proyecto-ciudadano-proyectos" ||
+      route.includes("/proyecto-ciudadano/proyectos")
+    ) {
+      lines.push(
+        "En Proyectos, prioriza filtro de departamento, búsqueda activa, cantidad de proyectos visibles, resultados vacíos, carga o error."
+      );
+      lines.push(
+        "Si el usuario pregunta por un proyecto concreto y no está visible en el listado actual, responde solo con lo que muestra la lista actual."
+      );
+    }
+
+    if (
+      pageId === "proyecto-ciudadano-proyecto-detalle" ||
+      route.includes("/proyecto-ciudadano/proyectos/")
+    ) {
+      lines.push(
+        "En Detalle del proyecto, diferencia claramente entre información del proyecto, bloque de apoyo y foro."
+      );
+      lines.push(
+        "Prioriza nombre del proyecto, categoría, ubicación, líder visible, cantidad de apoyos, PDF disponible, estado de apoyo del usuario y actividad visible del foro."
+      );
+      lines.push(
+        "Si el usuario pregunta por apoyar o comentar y no está registrado, aclara brevemente ese límite solo si el contexto visible lo muestra."
+      );
+    }
+
+    if (activeSection) {
+      lines.push(`Sección activa detectada: ${activeSection}.`);
+    }
+
+    if (visibleActions.length) {
+      lines.push(`Acciones visibles detectadas: ${visibleActions.join(", ")}.`);
+    } else if (availableActions.length) {
+      lines.push(`Acciones disponibles detectadas: ${availableActions.join(", ")}.`);
+    }
+
+    return lines.join("\n");
+  }
+
   return "";
 }
 
@@ -269,7 +352,9 @@ export async function POST(request: Request) {
     const pathPageId = getPageIdFromPathname(pathname);
 
     const pageId =
-      explicitPageId && explicitPageId !== "espacio-emprendedor"
+      explicitPageId &&
+      explicitPageId !== "espacio-emprendedor" &&
+      explicitPageId !== "proyecto-ciudadano"
         ? explicitPageId
         : pathPageId ?? explicitPageId;
 
