@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
@@ -62,6 +62,7 @@ const DEPARTAMENTOS = [
 ];
 
 export default function ExplorarProyectosPage() {
+  const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -340,12 +341,13 @@ export default function ExplorarProyectosPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Explorar proyectos emprendedores</h1>
-          <Link
-  href="/espacio-emprendedor"
-  className="vc-ee-explorar-link text-sm text-slate-600 hover:underline"
->
-  ← Volver
-</Link>
+            <button
+           type="button"
+           onClick={() => router.push('/espacio-emprendedor')}
+           className="vc-ee-explorar-link text-sm text-slate-600 hover:underline cursor-pointer"
+           >
+           ← Volver
+         </button>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-4 mb-6 shadow-sm">
@@ -471,12 +473,13 @@ export default function ExplorarProyectosPage() {
                   </div>
 
                   <div className="flex justify-end mt-4 pt-3 border-t border-slate-100">
-                    <Link
-  href={`/espacio-emprendedor/proyectos/${project.id}`}
-  className="vc-ee-explorar-link bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm"
+                     <button
+  type="button"
+  onClick={() => router.push(`/espacio-emprendedor/proyectos/${project.id}`)}
+  className="vc-ee-explorar-link bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm cursor-pointer"
 >
   Ver detalles
-</Link>
+</button>
                   </div>
                 </div>
               </div>

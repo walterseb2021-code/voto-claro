@@ -1936,15 +1936,18 @@ html[data-party="app"] .vc-app-surface .vc-ee-explorar-card {
 /* =========================================================
    FIX navegación en Explorar proyectos emprendedores
    ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-card {
+  position: relative;
+  isolation: isolate;
+  pointer-events: auto !important;
+}
+
 html[data-party="app"] .vc-app-surface .vc-ee-explorar-link,
 html[data-party="app"] .vc-app-surface .vc-ee-explorar-link * {
   pointer-events: auto !important;
-  position: relative;
-  z-index: 3;
 }
 
-html[data-party="app"] .vc-app-surface .vc-ee-explorar-card {
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-link {
   position: relative;
-  z-index: 1;
-  pointer-events: auto;
+  z-index: 20;
 }
