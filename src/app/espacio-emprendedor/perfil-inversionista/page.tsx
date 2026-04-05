@@ -67,7 +67,8 @@ export default function PerfilInversionistaPage() {
     notify_email: false,
     monto_mayor: false,
   });
-
+      const [showCategories, setShowCategories] = useState(false);
+  const [showDepartments, setShowDepartments] = useState(false);
   useEffect(() => {
     cargarDatos();
   }, []);
@@ -486,63 +487,108 @@ export default function PerfilInversionistaPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Categorías de interés
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORIAS.map((category) => {
-                  const active =
-                    category === 'Todas'
-                      ? perfil.categories.length === CATEGORIAS.filter((c) => c !== 'Todas').length
-                      : perfil.categories.includes(category);
+                       <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowCategories((prev) => !prev)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition text-left"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-slate-700">
+                    Categorías de interés
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {perfil.categories.length
+                      ? `${perfil.categories.length} seleccionada(s)`
+                      : 'Ninguna seleccionada todavía'}
+                  </div>
+                </div>
 
-                  return (
-                    <button
-                      key={category}
-                      type="button"
-                      onClick={() => toggleCategory(category)}
-                      className={`px-3 py-2 rounded-full text-sm font-semibold border ${
-                        active
-                          ? 'bg-green-700 text-white border-green-700'
-                          : 'bg-white text-slate-700 border-slate-300 hover:border-green-500'
-                      }`}
-                    >
-                      {category}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                <span className="text-lg text-slate-600">
+                  {showCategories ? '▾' : '▸'}
+                </span>
+              </button>
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Departamentos de interés
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {DEPARTAMENTOS.map((department) => {
-                  const active =
-                    department === 'Todos'
-                      ? perfil.departments.length ===
-                        DEPARTAMENTOS.filter((d) => d !== 'Todos').length
-                      : perfil.departments.includes(department);
+              {showCategories ? (
+                <div className="p-4 border-t border-slate-200">
+                  <div className="flex flex-wrap gap-2">
+                    {CATEGORIAS.map((category) => {
+                      const active =
+                        category === 'Todas'
+                          ? perfil.categories.length ===
+                            CATEGORIAS.filter((c) => c !== 'Todas').length
+                          : perfil.categories.includes(category);
 
-                  return (
-                    <button
-                      key={department}
-                      type="button"
-                      onClick={() => toggleDepartment(department)}
-                      className={`px-3 py-2 rounded-full text-sm font-semibold border ${
-                        active
-                          ? 'bg-blue-700 text-white border-blue-700'
-                          : 'bg-white text-slate-700 border-slate-300 hover:border-blue-500'
-                      }`}
-                    >
-                      {department}
-                    </button>
-                  );
-                })}
-              </div>
+                      return (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => toggleCategory(category)}
+                          className={`px-3 py-2 rounded-full text-sm font-semibold border ${
+                            active
+                              ? 'bg-green-700 text-white border-green-700'
+                              : 'bg-white text-slate-700 border-slate-300 hover:border-green-500'
+                          }`}
+                        >
+                          {category}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>             
+
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowDepartments((prev) => !prev)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition text-left"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-slate-700">
+                    Departamentos de interés
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {perfil.departments.length
+                      ? `${perfil.departments.length} seleccionado(s)`
+                      : 'Ninguno seleccionado todavía'}
+                  </div>
+                </div>
+
+                <span className="text-lg text-slate-600">
+                  {showDepartments ? '▾' : '▸'}
+                </span>
+              </button>
+
+              {showDepartments ? (
+                <div className="p-4 border-t border-slate-200">
+                  <div className="flex flex-wrap gap-2">
+                    {DEPARTAMENTOS.map((department) => {
+                      const active =
+                        department === 'Todos'
+                          ? perfil.departments.length ===
+                            DEPARTAMENTOS.filter((d) => d !== 'Todos').length
+                          : perfil.departments.includes(department);
+
+                      return (
+                        <button
+                          key={department}
+                          type="button"
+                          onClick={() => toggleDepartment(department)}
+                          className={`px-3 py-2 rounded-full text-sm font-semibold border ${
+                            active
+                              ? 'bg-blue-700 text-white border-blue-700'
+                              : 'bg-white text-slate-700 border-slate-300 hover:border-blue-500'
+                          }`}
+                        >
+                          {department}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex items-center gap-2">

@@ -1143,10 +1143,11 @@ html[data-party="app"] .vc-app-surface .rounded-2xl {
 }
 
 /* filas clicables o resultados */
-html[data-party="app"] .vc-app-surface [role="button"],
-html[data-party="app"] .vc-app-surface button,
-html[data-party="app"] .vc-app-surface a {
+ html[data-party="app"] .vc-app-surface button,
+html[data-party="app"] .vc-app-surface a,
+html[data-party="app"] .vc-app-surface [role="button"] {
   -webkit-tap-highlight-color: transparent;
+  pointer-events: auto;
 }
 
 /* 3. Botón con efecto "pulse" al hacer clic */
@@ -1920,4 +1921,30 @@ html[data-party="app"] .vc-app-surface input[placeholder*="buscar"]:focus {
 .vc-assistant-control.bg-green-600 *,
 .vc-assistant-control.border-green-700 * {
   color: #ffffff !important;
+}
+/* =========================================================
+   FIX navegación en tarjetas de Espacio Emprendedor
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-link,
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-link * {
+  pointer-events: auto !important;
+}
+
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-card {
+  pointer-events: auto;
+}
+/* =========================================================
+   FIX navegación en Explorar proyectos emprendedores
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-link,
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-link * {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 3;
+}
+
+html[data-party="app"] .vc-app-surface .vc-ee-explorar-card {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }

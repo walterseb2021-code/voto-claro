@@ -340,9 +340,12 @@ export default function ExplorarProyectosPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Explorar proyectos emprendedores</h1>
-          <Link href="/espacio-emprendedor" className="text-sm text-slate-600 hover:underline">
-            ← Volver
-          </Link>
+          <Link
+  href="/espacio-emprendedor"
+  className="vc-ee-explorar-link text-sm text-slate-600 hover:underline"
+>
+  ← Volver
+</Link>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-4 mb-6 shadow-sm">
@@ -416,9 +419,10 @@ export default function ExplorarProyectosPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => (
               <div
-                key={project.id}
-                className="bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
-              >
+                
+              key={project.id}
+  className="vc-ee-explorar-card bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
+>
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-semibold bg-gradient-to-r from-green-600 to-green-700 text-black px-3 py-1 rounded-full shadow-sm">
@@ -468,11 +472,11 @@ export default function ExplorarProyectosPage() {
 
                   <div className="flex justify-end mt-4 pt-3 border-t border-slate-100">
                     <Link
-                      href={`/espacio-emprendedor/proyectos/${project.id}`}
-                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm"
-                    >
-                      Ver detalles
-                    </Link>
+  href={`/espacio-emprendedor/proyectos/${project.id}`}
+  className="vc-ee-explorar-link bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm"
+>
+  Ver detalles
+</Link>
                   </div>
                 </div>
               </div>
