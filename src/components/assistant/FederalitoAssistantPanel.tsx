@@ -2491,13 +2491,16 @@ export default function FederalitoAssistantPanel() {
   }, []);
 
   // ✅ Al cambiar de ventana, cortar cualquier narración en curso
-      useEffect(() => {
+        useEffect(() => {
     try {
       window.speechSynthesis?.cancel();
     } catch {}
 
     pendingGuideSpeakRef.current = null;
     pendingGuidePathRef.current = null;
+    pageReadPathRef.current = String(pathname || "");
+    setPageReadText("");
+    setPageReadAt(0);
   }, [pathname]);
 
   useEffect(() => {
@@ -2935,6 +2938,7 @@ function safeResetFabPos() {
 
   const [pageReadText, setPageReadText] = useState<string>("");
   const [pageReadAt, setPageReadAt] = useState<number>(0);
+  const pageReadPathRef = useRef<string>("");
 
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3059,14 +3063,14 @@ const text = cleanForChat(raw);
     if (action === "OPEN" || action === "SAY_AND_OPEN") setOpen(true);
         if (action === "CLOSE") setOpen(false);
 
-    if (text) {
+        if (text) {
   setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
 
   // ✅ SOLO guarda para 🔊 Leer si hay texto real
   setPageReadText(text);
   setPageReadAt(Date.now());
+  pageReadPathRef.current = String(pathname || "");
 }
-
     if (!text || !speak) return;
 
         if (voiceMode !== "ON") {
@@ -3126,21 +3130,33 @@ useEffect(() => {
 // Regla PRO:
 // - Se lee 1 vez por sesión por cada ruta
 // - Inicio (/) NO vuelve a narrar al regresar
-useEffect(() => {
+ useEffect(() => {
   if (!mounted) return;
 
   const p = String(pathname || "");
   const isHome = p === "/" || p.startsWith("/#");
+  const isContextualDomain =
+    p.startsWith("/espacio-emprendedor") ||
+    p.startsWith("/proyecto-ciudadano") ||
+    p.startsWith("/intencion-de-voto") ||
+    p.startsWith("/reto-ciudadano") ||
+    p.startsWith("/comentarios");
 
-  // Clave estable por ruta
-  const key = `votoclaro_autoguide_seen:${isHome ? "/" : p}`;
+  const contextualViewKey = [
+    p,
+    String((pageContext as any)?.pageId || ""),
+    String((pageContext as any)?.activeViewId || ""),
+    String((pageContext as any)?.activeSection || ""),
+    String((pageContext as any)?.selectedItemTitle || ""),
+  ].join("::");
+
+  const key = `votoclaro_autoguide_seen:${isContextualDomain ? contextualViewKey : isHome ? "/" : p}`;
 
   try {
     const seen = sessionStorage.getItem(key) === "1";
-    if (seen) return; // ✅ ya se narró esta ruta en esta sesión
+    if (seen) return;
     sessionStorage.setItem(key, "1");
   } catch {
-    // Si sessionStorage falla, igual continuamos (no bloquea)
   }
 
   let text = "";
@@ -3166,11 +3182,20 @@ useEffect(() => {
     text =
       "Estás en Cómo funciona VOTO CLARO. " +
       "Aquí tienes la guía de uso: flujo recomendado, qué hace el Asistente, límites técnicos y política de uso.";
+  } else if (isContextualDomain && pageContext) {
+    text = String(
+      (pageContext as any)?.speakableSummary ||
+      (pageContext as any)?.summary ||
+      (pageContext as any)?.activeViewTitle ||
+      (pageContext as any)?.pageTitle ||
+      ""
+    ).trim();
   } else {
-    return; // no hay texto para esta ruta
+    return;
   }
 
-  // ✅ Mandar evento para que el asistente lo muestre y lo hable si corresponde
+  if (!text) return;
+
   setTimeout(() => {
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
@@ -3178,7 +3203,7 @@ useEffect(() => {
       })
     );
   }, 0);
-}, [mounted, pathname]);
+}, [mounted, pathname, pageContext]);
 
 
 useEffect(() => {
@@ -3190,12 +3215,13 @@ useEffect(() => {
     if (!txt) return;
 
     setPageReadText(txt);
-    setPageReadAt(Date.now());
+setPageReadAt(Date.now());
+pageReadPathRef.current = String(pathname || "");
 
-    setMsgs((prev) => [
-      ...prev,
-      { role: "assistant", content: "📄 Listo: tengo una comparación en pantalla para leer con 🔊 Leer." },
-    ]);
+setMsgs((prev) => [
+  ...prev,
+  { role: "assistant", content: "📄 Listo: tengo una comparación en pantalla para leer con 🔊 Leer." },
+]);
   }
 
   window.addEventListener("votoclaro:page-read", onPageRead as any);
@@ -4026,7 +4052,10 @@ function sendQuick(q: string) {
 
    async function speakLastAssistant() {
   // prioridad: comparación/lectura de pantalla reciente
-  const hasPageRead = pageReadText && Date.now() - pageReadAt < 5 * 60 * 1000;
+  const hasPageRead =
+  pageReadText &&
+  Date.now() - pageReadAt < 5 * 60 * 1000 &&
+  pageReadPathRef.current === String(pathname || "");
 
   // ✅ fallback: si no hay pageReadText, leer guía según ventana actual
   const p = String(pathname || "");
