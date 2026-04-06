@@ -2126,18 +2126,21 @@ async function handleGlobalPolicyAndRedirect(params: {
     return { handled: true };
   }
 
-   const ctx = getPageCtx(String(pathname || ""));
-const isEspacioEmprendedor = String(pathname || "").startsWith("/espacio-emprendedor");
+      const ctx = getPageCtx(String(pathname || ""));
+  const currentPath = String(pathname || "");
+  const isEspacioEmprendedor = currentPath.startsWith("/espacio-emprendedor");
+  const isProyectoCiudadano = currentPath.startsWith("/proyecto-ciudadano");
 
-// ✅ Estas pantallas no deben ser interceptadas por el gate global
-if (
-  ctx === "INTENCION" ||
-  ctx === "RETO" ||
-  ctx === "COMENTARIO" ||
-  isEspacioEmprendedor
-) {
-  return { handled: false };
-}
+  // ✅ Estas pantallas no deben ser interceptadas por el gate global
+  if (
+    ctx === "INTENCION" ||
+    ctx === "RETO" ||
+    ctx === "COMENTARIO" ||
+    isEspacioEmprendedor ||
+    isProyectoCiudadano
+  ) {
+    return { handled: false };
+  }
   const redirect = buildRedirectMessage(ctx, rawQ);
 
   // ✅ null => estás en pantalla correcta / o HOME help => NO interceptar
@@ -3595,13 +3598,16 @@ if (String(pathname || "").startsWith("/como-funciona")) {
    
 
            // ✅ Páginas con contexto dinámico: primero consultar endpoint contextual escalable
-           const ctxNow: PageCtx = getPageCtx(String(pathname || ""));
-    const isEspacioEmprendedorPage = String(pathname || "").startsWith("/espacio-emprendedor");
+               const currentPath = String(pathname || "");
+    const ctxNow: PageCtx = getPageCtx(currentPath);
+    const isEspacioEmprendedorPage = currentPath.startsWith("/espacio-emprendedor");
+    const isProyectoCiudadanoPage = currentPath.startsWith("/proyecto-ciudadano");
     const isDynamicContextPage =
       ctxNow === "INTENCION" ||
       ctxNow === "RETO" ||
       ctxNow === "COMENTARIO" ||
-      isEspacioEmprendedorPage;
+      isEspacioEmprendedorPage ||
+      isProyectoCiudadanoPage;
 
     if (isDynamicContextPage && pageContext) {
       let contextAnswer = "";
@@ -3632,7 +3638,7 @@ if (String(pathname || "").startsWith("/como-funciona")) {
         // silencio: cae al respaldo local
       }
 
-      if (isEspacioEmprendedorPage) {
+              if (isEspacioEmprendedorPage || isProyectoCiudadanoPage) {
         const summary = String((pageContext as any)?.summary ?? "").trim();
         const activeViewTitle = String((pageContext as any)?.activeViewTitle ?? "").trim();
         const activeSection = String((pageContext as any)?.activeSection ?? "").trim();
@@ -3642,9 +3648,13 @@ if (String(pathname || "").startsWith("/como-funciona")) {
             )
           : [];
 
+        const domainLabel = isEspacioEmprendedorPage
+          ? "Espacio Emprendedor"
+          : "Proyecto Ciudadano";
+
         const fallback = sanitizeAssistantTextForUi(
           [
-            activeViewTitle || summary || "Estoy dentro de Espacio Emprendedor.",
+            activeViewTitle || summary || `Estoy dentro de ${domainLabel}.`,
             availableActions.length
               ? `Ahora mismo puedo ayudarte con esta subventana y con acciones como ${availableActions
                   .slice(0, 3)
@@ -3658,13 +3668,12 @@ if (String(pathname || "").startsWith("/como-funciona")) {
 
         const msg =
           fallback ||
-          "Estoy dentro de Espacio Emprendedor, pero no pude leer bien el contexto actual. Hazme una pregunta sobre la sección visible.";
+          `Estoy dentro de ${domainLabel}, pero no pude leer bien el contexto actual. Hazme una pregunta sobre la sección visible.`;
 
         pushAssistant(msg);
         await maybeSpeak(msg);
         return;
       }
-
       const dynamicMsg = sanitizeAssistantTextForUi(
         answerFromDynamicPageContext(rawQ, pageContext as any)
       );
