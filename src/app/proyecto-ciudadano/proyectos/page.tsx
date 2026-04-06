@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
@@ -23,8 +24,12 @@ type Project = {
 };
 
 export default function ProyectosActivosPage() {
+  const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
+  const goToPath = (path: string) => {
+    window.location.href = path;
+  };
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -319,9 +324,13 @@ export default function ProyectosActivosPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Proyectos Ciudadanos Activos</h1>
-          <Link href="/proyecto-ciudadano" className="text-sm text-slate-600 hover:underline">
-            ← Volver
-          </Link>
+            <button
+  type="button"
+  onClick={() => goToPath('/proyecto-ciudadano')}
+  className="vc-pc-proyectos-link text-sm text-slate-600 hover:underline cursor-pointer"
+>
+  ← Volver
+</button>
         </div>
 
         {/* Descripción */}
@@ -390,10 +399,10 @@ export default function ProyectosActivosPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => (
-              <div
-                key={project.id}
-                className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
-              >
+                  <div
+  key={project.id}
+  className="vc-pc-proyectos-card bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
+>
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -421,12 +430,13 @@ export default function ProyectosActivosPage() {
                       <span>🤝</span>
                       <span>{project.beneficiary_count || 0} apoyos</span>
                     </div>
-                    <Link
-                      href={`/proyecto-ciudadano/proyectos/${project.id}`}
-                      className="text-sm font-semibold text-green-700 hover:text-green-800"
-                    >
-                      Ver detalles →
-                    </Link>
+                      <button
+  type="button"
+  onClick={() => goToPath(`/proyecto-ciudadano/proyectos/${project.id}`)}
+  className="vc-pc-proyectos-link text-sm font-semibold text-green-700 hover:text-green-800 cursor-pointer"
+>
+  Ver detalles →
+</button>
                   </div>
                 </div>
               </div>

@@ -1958,3 +1958,25 @@ html[data-party="app"] .vc-app-surface button.vc-ee-explorar-link {
   -webkit-appearance: none;
   border: 0;
 }
+/* =========================================================
+   FIX navegación en Proyecto Ciudadano /proyectos
+   ========================================================= */
+html[data-party="app"] .vc-app-surface .vc-pc-proyectos-card {
+  position: relative;
+  isolation: isolate;
+  pointer-events: auto !important;
+}
+
+html[data-party="app"] .vc-app-surface .vc-pc-proyectos-link {
+  position: relative !important;
+  z-index: 50 !important;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+html[data-party="app"] .vc-app-surface .vc-pc-proyectos-link * {
+  pointer-events: none !important;
+}
