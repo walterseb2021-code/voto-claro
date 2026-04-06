@@ -69,6 +69,48 @@ type MemoryState = {
   label: string;
   question: string;
 };
+
+function getDefaultAssistantGreeting(pathname: string) {
+  const p = String(pathname || "");
+
+  if (p.startsWith("/proyecto-ciudadano")) {
+    return "Hola, soy el asistente de Proyecto Ciudadano. Puedo ayudarte a entender esta pantalla, las acciones visibles y las preguntas clave de esta subventana.";
+  }
+
+  if (p.startsWith("/espacio-emprendedor")) {
+    return "Hola, soy el asistente de Espacio Emprendedor. Puedo ayudarte con lo que está visible en esta pantalla y sus subventanas.";
+  }
+
+  if (p.startsWith("/comentarios")) {
+    return "Hola, soy el asistente de Comentarios Ciudadanos. Puedo ayudarte a entender lo que está visible en esta pantalla.";
+  }
+
+  if (p.startsWith("/reto-ciudadano")) {
+    return "Hola, soy el asistente del Reto Ciudadano. Puedo ayudarte a entender el nivel, bloque o paso visible.";
+  }
+
+  if (p.startsWith("/intencion-de-voto")) {
+    return "Hola, soy el asistente de Intención de Voto. Puedo ayudarte con el estado visible de esta pantalla.";
+  }
+
+  if (p.startsWith("/reflexion")) {
+    return "Hola, soy el asistente de Reflexión antes de votar. Puedo ayudarte con las preguntas y reflexiones visibles.";
+  }
+
+  if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")) {
+    return "Hola, soy el asistente de Servicios al ciudadano. Puedo ayudarte a ubicar el servicio correcto en esta pantalla.";
+  }
+
+  if (p.startsWith("/cambio-con-valentia")) {
+    return "Hola, soy el asistente de esta ventana. Puedo explicarte el contenido visible y el acceso disponible.";
+  }
+
+  if (p.startsWith("/candidate/")) {
+    return "Hola, soy el asistente de VOTO CLARO. Puedo ayudarte con la Hoja de Vida, el Plan y Actuar político del candidato abierto.";
+  }
+
+  return "Hola, soy el asistente de VOTO CLARO. Puedo ayudarte a entender la pantalla actual y sus acciones visibles.";
+}
  function stringifyContextValue(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v.trim();
@@ -2449,10 +2491,13 @@ export default function FederalitoAssistantPanel() {
   }, []);
 
   // ✅ Al cambiar de ventana, cortar cualquier narración en curso
-  useEffect(() => {
+      useEffect(() => {
     try {
       window.speechSynthesis?.cancel();
     } catch {}
+
+    pendingGuideSpeakRef.current = null;
+    pendingGuidePathRef.current = null;
   }, [pathname]);
 
   useEffect(() => {
@@ -2879,12 +2924,12 @@ function safeResetFabPos() {
   const [mem, setMem] = useState<MemoryState>({});
   const [userInteracted, setUserInteracted] = useState(false);
   const pendingGuideSpeakRef = useRef<string | null>(null);
+  const pendingGuidePathRef = useRef<string | null>(null);
 
-  const [msgs, setMsgs] = useState<Msg[]>(() => [
+    const [msgs, setMsgs] = useState<Msg[]>(() => [
     {
       role: "system",
-      content:
-        "Hola, soy el asistente de VOTO CLARO. Puedes elegir: Hoja de vida (HV), Plan (PLAN) o Actuar político (NEWS). También puedo escucharte con 🎙️ y responder con voz.",
+      content: getDefaultAssistantGreeting(typeof window !== "undefined" ? window.location.pathname : ""),
     },
   ]);
 
@@ -3024,8 +3069,9 @@ const text = cleanForChat(raw);
 
     if (!text || !speak) return;
 
-    if (voiceMode !== "ON") {
+        if (voiceMode !== "ON") {
       pendingGuideSpeakRef.current = text;
+      pendingGuidePathRef.current = String(pathname || "");
       setMsgs((prev) => [
         ...prev,
         { role: "assistant", content: "Tip: activa “Voz: ON” para que pueda hablar en voz alta." },
@@ -3035,6 +3081,7 @@ const text = cleanForChat(raw);
 
     if (!userInteracted) {
       pendingGuideSpeakRef.current = text;
+      pendingGuidePathRef.current = String(pathname || "");
       return;
     }
 
@@ -3054,17 +3101,26 @@ const text = cleanForChat(raw);
 useEffect(() => {
   async function flushPending() {
     const pending = pendingGuideSpeakRef.current;
+    const pendingPath = pendingGuidePathRef.current;
+    const currentPath = String(pathname || "");
+
     if (!pending) return;
     if (voiceMode !== "ON") return;
     if (!userInteracted) return;
 
-    pendingGuideSpeakRef.current = null;
-    await speakTextChunked(pending, voiceLang);
+    if (pendingPath && pendingPath !== currentPath) {
+      pendingGuideSpeakRef.current = null;
+      pendingGuidePathRef.current = null;
+      return;
+    }
 
+    pendingGuideSpeakRef.current = null;
+    pendingGuidePathRef.current = null;
+    await speakTextChunked(pending, voiceLang);
   }
 
   flushPending();
-}, [voiceMode, voiceLang, userInteracted]);
+}, [voiceMode, voiceLang, userInteracted, pathname]);
 
  // ✅ MENSAJE AUTOMÁTICO AL ENTRAR A CADA VENTANA (sin abrir panel)
 // Regla PRO:
@@ -4018,6 +4074,21 @@ function sendQuick(q: string) {
 
   const fabLabel = useMemo(() => (open ? "Cerrar Asistente" : "Abrir Asistente"), [open]);
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
+     useEffect(() => {
+    const greeting = getDefaultAssistantGreeting(String(pathname || ""));
+
+    setMsgs((prev) => {
+      if (!prev.length) {
+        return [{ role: "system", content: greeting }];
+      }
+
+      if (prev.length === 1 && prev[0]?.role === "system") {
+        return [{ role: "system", content: greeting }];
+      }
+
+      return prev;
+    });
+  }, [pathname]);
     const suggestedPrompts = useMemo<SuggestedPrompt[]>(() => {
     const raw = (pageContext as any)?.suggestedPrompts;
     if (!Array.isArray(raw)) return [];
