@@ -562,7 +562,7 @@ function FederalitoSplash(props: {
                 marginBottom: "8px"
               }}
             >
-              📲 INSTALAR APP EN MI CELULAR
+              📲 Intalar APP en mi celular
             </button>
 
             {/* Botones existentes */}
@@ -577,7 +577,7 @@ function FederalitoSplash(props: {
                   fontWeight: 900,
                   borderRadius: 12,
                   padding: "10px 14px",
-                  fontSize: 13,
+                  fontSize: 14,
                   cursor: "pointer",
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 }}
@@ -595,7 +595,7 @@ function FederalitoSplash(props: {
                   fontWeight: 900,
                   borderRadius: 12,
                   padding: "10px 14px",
-                  fontSize: 13,
+                  fontSize: 14,
                   cursor: "pointer",
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 }}

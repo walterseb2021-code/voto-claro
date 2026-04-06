@@ -2509,7 +2509,7 @@ export default function FederalitoAssistantPanel() {
     // Preferencias (voz/idioma/modo)
     try {
       const vm = sessionStorage.getItem(LS_VOICE_MODE) as VoiceMode | null;
-      if (vm === "ON" || vm === "OFF") setVoiceMode(vm);
+      setVoiceMode(vm === "OFF" ? "OFF" : "ON");
 
       const vl = sessionStorage.getItem(LS_VOICE_LANG) as VoiceLang | null;
       if (vl === "es-PE" || vl === "qu") setVoiceLang(vl);
@@ -2921,7 +2921,7 @@ function safeResetFabPos() {
     setRefWaitingNumber(false);
   }
 
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>("OFF");
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>("ON");
   const [voiceLang, setVoiceLang] = useState<VoiceLang>("es-PE");
   const [askMode, setAskMode] = useState<AskMode>("HV");
   const [mem, setMem] = useState<MemoryState>({});
