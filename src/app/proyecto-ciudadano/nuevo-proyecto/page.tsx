@@ -5,401 +5,422 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
-// Categorías permitidas
-const CATEGORIAS = [
-  'Ambiente',
-  'Educación',
-  'Seguridad',
-  'Salud',
-  'Cultura',
-  'Deporte',
-  'Infraestructura',
-  'Otros',
+// Función para obtener o crear device_id
+function getOrCreateDeviceId(): string {
+  if (typeof window === "undefined") return "";
+  const KEY = "vc_device_id";
+  const existing = localStorage.getItem(KEY);
+  if (existing && existing.length > 10) return existing;
+
+  const newId = crypto.randomUUID();
+  localStorage.setItem(KEY, newId);
+  return newId;
+}
+
+const MIN_SUPPORTS_REQUIRED = 100;
+const BUDGET_CATEGORIES = [
+  { id: 'hasta_10000', label: 'Hasta S/10,000' },
+  { id: 'hasta_20000', label: 'Hasta S/20,000' },
+  { id: 'hasta_30000', label: 'Hasta S/30,000' },
 ];
 
-export default function NuevoProyectoPage() {
+const EVALUATION_WEIGHTS = {
+  citizenSupport: 40,
+  projectQuality: 60,
+};
+
+const EVALUATION_CRITERIA = [
+  'Impacto comunitario',
+  'Claridad del problema y la solución',
+  'Viabilidad técnica y presupuestal',
+  'Sostenibilidad del beneficio',
+];
+
+const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
+const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.pdf';
+
+export default function ProyectoCiudadanoPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [participant, setParticipant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    category: '',
-    objective: '',
-    description: '',
-    district: '',
-    department: '',
-  });
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [cycle, setCycle] = useState<any>(null);
+  const [checking, setChecking] = useState(false);
+  const [codigoAcceso, setCodigoAcceso] = useState('');
+  const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
+  const [loginCodigoError, setLoginCodigoError] = useState('');
+  const [winners, setWinners] = useState<any[]>([]);
+  const [winnersLoading, setWinnersLoading] = useState(true);
 
-  // Cargar datos del participante y ciclo activo
   useEffect(() => {
-    async function loadData() {
-      const deviceId = localStorage.getItem('vc_device_id');
-      if (!deviceId) {
-        router.push('/proyecto-ciudadano/registro');
-        return;
-      }
+    getOrCreateDeviceId();
+    loadParticipant();
+    loadWinners();
+  }, []);
 
-      // Obtener participante
-      const { data: participantData, error: participantError } = await supabase
+  // Función para cargar el participante por device_id
+  const loadParticipant = async () => {
+    const currentDeviceId = getOrCreateDeviceId();
+
+    if (!currentDeviceId) {
+      setParticipant(null);
+      setLoading(false);
+      return;
+    }
+
+    setChecking(true);
+    try {
+      const { data, error } = await supabase
         .from('project_participants')
         .select('*')
-        .eq('device_id', deviceId)
+        .eq('device_id', currentDeviceId)
         .maybeSingle();
 
-      if (participantError || !participantData) {
-        router.push('/proyecto-ciudadano/registro');
+      if (error) throw error;
+      setParticipant(data || null);
+    } catch (err) {
+      console.error('Error cargando participante:', err);
+      setParticipant(null);
+    } finally {
+      setChecking(false);
+      setLoading(false);
+    }
+  };
+
+  // Cargar ganadores del ciclo anterior
+  const loadWinners = async () => {
+    setWinnersLoading(true);
+    try {
+      const { data: previousCycle } = await supabase
+        .from('project_cycles')
+        .select('id')
+        .eq('is_active', false)
+        .order('ends_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!previousCycle) {
+        setWinners([]);
         return;
       }
 
-      setParticipant(participantData);
+      const { data } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          name,
+          category,
+          district,
+          department,
+          beneficiary_count,
+          leader:project_participants!leader_id (
+            alias
+          )
+        `)
+        .eq('cycle_id', previousCycle.id)
+        .eq('status', 'active')
+        .order('beneficiary_count', { ascending: false })
+        .limit(3);
 
-      // Obtener ciclo activo
-      const { data: cycleData, error: cycleError } = await supabase
-        .from('project_cycles')
-        .select('*')
-        .eq('is_active', true)
-        .maybeSingle();
+      const transformed = (data || []).map((item: any) => ({
+        ...item,
+        leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
+      }));
 
-      if (cycleError) {
-        console.error('Error cargando ciclo:', cycleError);
-      } else {
-        setCycle(cycleData);
-      }
-
-      setLoading(false);
+      setWinners(transformed);
+    } catch (err) {
+      console.error('Error cargando ganadores:', err);
+      setWinners([]);
+    } finally {
+      setWinnersLoading(false);
     }
-
-    loadData();
-  }, [router]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setPdfFile(e.target.files[0]);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Función para iniciar sesión con código de acceso
+  const handleLoginConCodigo = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
-    setError(null);
+    setLoginCodigoLoading(true);
+    setLoginCodigoError('');
 
-    // Validaciones básicas
-    if (!form.name || !form.category || !form.objective || !form.description || !form.district) {
-      setError('Todos los campos son obligatorios.');
-      setSubmitting(false);
-      return;
-    }
-
-    if (!form.department) {
-      setError('Debes seleccionar un departamento.');
-      setSubmitting(false);
-      return;
-    }
-
-    if (!pdfFile) {
-      setError('Debes subir el archivo PDF del proyecto.');
-      setSubmitting(false);
-      return;
-    }
-
-    if (pdfFile.type !== 'application/pdf') {
-      setError('Solo se permiten archivos PDF.');
-      setSubmitting(false);
-      return;
-    }
-
-    if (pdfFile.size > 10 * 1024 * 1024) {
-      setError('El archivo no debe superar los 10 MB.');
-      setSubmitting(false);
+    const codigo = codigoAcceso.trim().toUpperCase();
+    if (!codigo) {
+      setLoginCodigoError('Ingresa tu código de acceso');
+      setLoginCodigoLoading(false);
       return;
     }
 
     try {
-      // Verificar si ya existe proyecto en este departamento para el ciclo activo
-      const { data: existingProject, error: existingError } = await supabase
-        .from('projects')
-        .select('id')
-        .eq('cycle_id', cycle?.id)
-        .eq('department', form.department)
-        .in('status', ['pending', 'active'])
+      const { data, error } = await supabase
+        .from('project_participants')
+        .select('*')
+        .eq('codigo_acceso', codigo)
         .maybeSingle();
 
-      if (existingError) {
-        console.error('Error verificando proyecto existente:', existingError);
-      }
+      console.log('🔍 Buscando código:', codigo);
+      console.log('📦 Resultado:', data);
 
-      if (existingProject) {
-        setError(`Ya existe un proyecto registrado para el departamento de ${form.department}. Solo se permite uno por departamento por ciclo.`);
-        setSubmitting(false);
+      if (error) throw error;
+
+      if (!data) {
+        setLoginCodigoError('Código de acceso no válido');
+        setLoginCodigoLoading(false);
         return;
       }
 
-      // 1. Subir PDF a Supabase Storage
-      const fileExt = pdfFile.name.split('.').pop();
-      const fileName = `${participant.id}/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('project_pdfs')
-        .upload(fileName, pdfFile);
+      const currentDeviceId = getOrCreateDeviceId();
+      const { error: updateError } = await supabase
+        .from('project_participants')
+        .update({ device_id: currentDeviceId })
+        .eq('id', data.id);
 
-      if (uploadError) throw uploadError;
+      if (updateError) throw updateError;
 
-      // Obtener URL pública del PDF
-      const { data: urlData } = supabase.storage
-        .from('project_pdfs')
-        .getPublicUrl(fileName);
-
-      const pdfUrl = urlData.publicUrl;
-
-      // 2. Insertar proyecto en la base de datos
-      const { data: project, error: insertError } = await supabase
-        .from('projects')
-        .insert({
-          cycle_id: cycle?.id,
-          leader_id: participant.id,
-          name: form.name,
-          category: form.category,
-          objective: form.objective,
-          description: form.description,
-          district: form.district,
-          department: form.department,
-          pdf_url: pdfUrl,
-          status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/proyecto-ciudadano');
-      }, 3000);
+      await loadParticipant();
+      setCodigoAcceso('');
     } catch (err: any) {
-      console.error('Error al guardar proyecto:', err);
-      setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
+      console.error('Error al iniciar sesión con código:', err);
+      setLoginCodigoError(err.message || 'Error al iniciar sesión');
     } finally {
-      setSubmitting(false);
+      setLoginCodigoLoading(false);
     }
   };
 
+  // Forzar recarga manual
+  const handleRefresh = () => {
+    setLoading(true);
+    loadParticipant();
+  };
+
+  // Estilos con animaciones
+  const card = "rounded-2xl border-2 border-red-600 p-6 shadow-sm vc-fade-up vc-card-hover";
+  const btnPrimary = "bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse";
+  const btnSecondary = "bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse";
+  const btnBlue = "bg-blue-700 text-white py-2 rounded-xl font-semibold hover:bg-blue-800 transition disabled:opacity-50 vc-btn-wave vc-btn-pulse";
+  const inputStyle = "w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none font-mono";
+
   useEffect(() => {
-    const filledFields = [
-      form.name ? 'nombre del proyecto' : null,
-      form.category ? 'categoría' : null,
-      form.objective ? 'objetivo general' : null,
-      form.description ? 'descripción' : null,
-      form.district ? 'distrito' : null,
-      form.department ? 'departamento' : null,
-    ].filter(Boolean) as string[];
+    const participantReady = !!participant;
+    const participantName = participant?.full_name || '';
+    const participantAlias = participant?.alias || '';
+    const participantCode = participant?.codigo_acceso || '';
 
-    const missingFields = [
-      !form.name ? 'nombre del proyecto' : null,
-      !form.category ? 'categoría' : null,
-      !form.objective ? 'objetivo general' : null,
-      !form.description ? 'descripción' : null,
-      !form.district ? 'distrito' : null,
-      !form.department ? 'departamento' : null,
-      !pdfFile ? 'archivo PDF' : null,
-    ].filter(Boolean) as string[];
+    const activeSection =
+      loading || checking
+        ? 'principal-cargando'
+        : !participant
+        ? 'principal-sin-registro'
+        : 'principal-participante-activo';
 
-    const activeSection = loading
-      ? 'nuevo-proyecto-cargando'
-      : success
-      ? 'nuevo-proyecto-enviado'
-      : submitting
-      ? 'nuevo-proyecto-enviando'
-      : 'nuevo-proyecto-formulario';
+    const activeViewId =
+      loading || checking
+        ? 'loading'
+        : !participant
+        ? 'guest-home'
+        : 'participant-home';
 
-    const activeViewId = loading
-      ? 'loading'
-      : success
-      ? 'success'
-      : submitting
-      ? 'submitting'
-      : 'form';
+    const activeViewTitle =
+      loading || checking
+        ? 'Cargando Proyecto Ciudadano'
+        : !participant
+        ? 'Acceso y registro a Proyecto Ciudadano'
+        : 'Panel principal del participante';
 
-    const activeViewTitle = loading
-      ? 'Cargando formulario de proyecto'
-      : success
-      ? 'Proyecto enviado'
-      : submitting
-      ? 'Enviando proyecto'
-      : 'Formulario de nuevo proyecto';
+    const winnersVisible = winners.slice(0, 3);
+    const winnersTitles = winnersVisible.map((winner) => winner?.name).filter(Boolean);
+    const hasWinners = winnersVisible.length > 0;
+    const hasLoginCodeText = codigoAcceso.trim().length > 0;
 
     const visibleParts: string[] = [];
 
-    if (loading) {
-      visibleParts.push('La pantalla para presentar proyecto está cargando.');
+    if (loading || checking) {
+      visibleParts.push('La pantalla principal de Proyecto Ciudadano está cargando.');
     }
 
-    if (participant) {
-      visibleParts.push(`Participante visible: ${participant.full_name || participant.alias || 'participante registrado'}.`);
-    } else if (!loading) {
-      visibleParts.push('No se muestra un participante válido en esta pantalla.');
+    if (!participantReady && !(loading || checking)) {
+      visibleParts.push('El usuario todavía no aparece como participante registrado en esta pantalla.');
+      visibleParts.push('Se ve una acción para registrarse y otra para iniciar sesión con código.');
     }
 
-    if (cycle?.id) {
-      visibleParts.push('Hay un ciclo activo disponible para registrar el proyecto.');
-    } else if (!loading) {
-      visibleParts.push('No se muestra un ciclo activo confirmado en esta pantalla.');
-    }
-
-    if (!success && !loading) {
-      visibleParts.push('Está visible el formulario para presentar un nuevo proyecto.');
-      if (filledFields.length) {
-        visibleParts.push(`Campos con contenido: ${filledFields.join(', ')}.`);
+    if (participantReady) {
+      visibleParts.push(`Participante visible: ${participantName}.`);
+      if (participantAlias) {
+        visibleParts.push(`Alias visible: ${participantAlias}.`);
       }
-      if (missingFields.length) {
-        visibleParts.push(`Campos pendientes: ${missingFields.join(', ')}.`);
+      if (participantCode) {
+        visibleParts.push(`Código de acceso visible: ${participantCode}.`);
       }
-      if (form.category) {
-        visibleParts.push(`Categoría seleccionada: ${form.category}.`);
-      }
-      if (form.department) {
-        visibleParts.push(`Departamento seleccionado: ${form.department}.`);
-      }
-      if (pdfFile) {
-        visibleParts.push(`PDF cargado: ${pdfFile.name}.`);
-      } else {
-        visibleParts.push('Todavía no hay un archivo PDF cargado.');
-      }
+      visibleParts.push('Se ven acciones para presentar proyecto y para ver proyectos activos.');
     }
 
-    if (error) {
-      visibleParts.push(`Error visible: ${error}.`);
+    if (hasLoginCodeText) {
+      visibleParts.push(`Texto visible en el campo de código: ${codigoAcceso.trim().toUpperCase()}.`);
+    } else if (!participantReady && !(loading || checking)) {
+      visibleParts.push('No hay código escrito en el campo de acceso rápido.');
     }
 
-    if (submitting) {
-      visibleParts.push('El proyecto se está enviando en este momento.');
+    if (loginCodigoError) {
+      visibleParts.push(`Error visible en inicio de sesión con código: ${loginCodigoError}.`);
     }
 
-    if (success) {
-      visibleParts.push('El proyecto ya fue enviado y aparece el mensaje de éxito.');
-      visibleParts.push('La acción visible permite volver a Proyecto Ciudadano.');
+    if (loginCodigoLoading) {
+      visibleParts.push('Se está verificando un código de acceso.');
     }
 
-    const availableActions = success
-      ? ['Volver a Proyecto Ciudadano']
-      : ['Volver', 'Enviar proyecto'];
+    if (winnersLoading) {
+      visibleParts.push('El bloque de ganadores del ciclo anterior está cargando.');
+    } else if (!hasWinners) {
+      visibleParts.push('No hay ganadores del ciclo anterior visibles en pantalla.');
+    } else {
+      visibleParts.push(`Ganadores visibles del ciclo anterior: ${winnersTitles.join(', ')}.`);
+    }
 
-    const suggestedPrompts = success
+    visibleParts.push(`Regla visible del programa: se requieren al menos ${MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos para entrar a evaluación final.`);
+    visibleParts.push(`Categorías presupuestales visibles: ${BUDGET_CATEGORIES.map((item) => item.label).join(', ')}.`);
+    visibleParts.push(`Ponderación visible de evaluación: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto.`);
+    visibleParts.push(`Criterios visibles de calidad del proyecto: ${EVALUATION_CRITERIA.join(', ')}.`);
+    visibleParts.push('Hay acceso visible para descargar el formato oficial del proyecto en DOCX y ver el modelo en PDF.');
+
+    const availableActions = [
+      'Recargar',
+      'Volver al inicio',
+      !participantReady ? 'Registrarme ahora' : null,
+      !participantReady ? 'Iniciar sesión con código' : null,
+      participantReady ? 'Presentar proyecto' : null,
+      'Ver proyectos activos',
+      'Descargar formato oficial en DOCX',
+      'Ver formato modelo en PDF',
+      hasWinners ? 'Ver proyecto ganador' : null,
+    ].filter(Boolean) as string[];
+
+    const summary =
+      loading || checking
+        ? 'Pantalla principal de Proyecto Ciudadano cargando estado del participante y contenido visible.'
+        : !participantReady
+        ? 'Pantalla principal de Proyecto Ciudadano con acceso para registrarse o iniciar sesión con código, reglas de participación visibles y formato oficial descargable.'
+        : 'Pantalla principal de Proyecto Ciudadano con participante identificado, reglas de evaluación visibles, formato oficial descargable y acciones para presentar proyectos o ver proyectos activos.';
+
+    const suggestedPrompts = !participantReady
       ? [
           {
-            id: 'pc-nuevo-1',
-            label: '¿Ya se envió?',
-            question: '¿Ya se envió mi proyecto en esta pantalla?',
+            id: 'pc-home-1',
+            label: '¿Qué puedo hacer aquí?',
+            question: '¿Qué puedo hacer en esta pantalla de Proyecto Ciudadano?',
           },
           {
-            id: 'pc-nuevo-2',
-            label: '¿Qué pasa ahora?',
-            question: '¿Qué pasa ahora después de enviar este proyecto?',
+            id: 'pc-home-2',
+            label: '¿Necesito registrarme?',
+            question: '¿Necesito registrarme para participar en Proyecto Ciudadano?',
           },
           {
-            id: 'pc-nuevo-3',
-            label: '¿A dónde vuelve?',
-            question: '¿A dónde me lleva la acción visible después del envío?',
+            id: 'pc-home-3',
+            label: '¿Cuántos apoyos mínimos se necesitan?',
+            question: '¿Cuántos apoyos mínimos necesita un proyecto para entrar a evaluación final?',
+          },
+          {
+            id: 'pc-home-4',
+            label: '¿Cómo se evalúa?',
+            question: '¿Cómo se evalúan los proyectos en Proyecto Ciudadano?',
+          },
+          {
+            id: 'pc-home-5',
+            label: '¿Dónde descargo el formato?',
+            question: '¿Dónde puedo descargar el formato oficial del proyecto desde esta pantalla?',
           },
         ]
       : [
           {
-            id: 'pc-nuevo-1',
-            label: '¿Qué me falta?',
-            question: '¿Qué me falta completar en este formulario para enviar el proyecto?',
+            id: 'pc-home-1',
+            label: '¿Qué puedo hacer aquí?',
+            question: '¿Qué puedo hacer ahora en esta pantalla de Proyecto Ciudadano?',
           },
           {
-            id: 'pc-nuevo-2',
-            label: '¿Ya cargué el PDF?',
-            question: '¿Ya cargué el PDF del proyecto en esta pantalla?',
+            id: 'pc-home-2',
+            label: '¿Ya aparezco registrado?',
+            question: '¿Ya aparezco como participante registrado en esta pantalla?',
           },
           {
-            id: 'pc-nuevo-3',
-            label: '¿Qué categoría tengo?',
-            question: '¿Qué categoría está seleccionada en este formulario?',
+            id: 'pc-home-3',
+            label: '¿Dónde presento un proyecto?',
+            question: '¿Dónde presento un nuevo proyecto desde esta pantalla?',
           },
           {
-            id: 'pc-nuevo-4',
-            label: '¿Qué departamento tengo?',
-            question: '¿Qué departamento está seleccionado en este formulario?',
+            id: 'pc-home-4',
+            label: '¿Cómo se evalúan los proyectos?',
+            question: '¿Cómo se evalúan los proyectos en Proyecto Ciudadano?',
           },
           {
-            id: 'pc-nuevo-5',
-            label: '¿Hay algún error visible?',
-            question: '¿Hay algún error visible ahora en esta pantalla?',
+            id: 'pc-home-5',
+            label: '¿Dónde descargo el formato?',
+            question: '¿Dónde puedo descargar el formato oficial del proyecto desde esta pantalla?',
           },
         ];
 
-    const summary = loading
-      ? 'Pantalla de nuevo proyecto cargando datos del participante y del ciclo activo.'
-      : success
-      ? 'Pantalla de nuevo proyecto con envío exitoso y mensaje de confirmación visible.'
-      : 'Pantalla de nuevo proyecto con formulario visible, validaciones, PDF y estado de envío.';
-
     setPageContext({
-      pageId: 'proyecto-ciudadano-nuevo-proyecto',
-      pageTitle: 'Presentar nuevo proyecto',
-      route: '/proyecto-ciudadano/nuevo-proyecto',
+      pageId: 'proyecto-ciudadano',
+      pageTitle: 'Proyecto Ciudadano',
+      route: '/proyecto-ciudadano',
       summary,
       speakableSummary: summary,
       activeSection,
       activeViewId,
       activeViewTitle,
-      breadcrumb: ['Proyecto Ciudadano', 'Nuevo proyecto', activeViewTitle],
-      visibleSections: success
-        ? ['resultado-envio', 'confirmacion', 'retorno']
-        : ['cabecera', 'descripcion', 'formulario', 'bases-del-premio'],
+      breadcrumb: ['Proyecto Ciudadano', activeViewTitle],
+      visibleSections: [
+        'cabecera',
+        'bienvenida',
+        'reglas-de-participacion-y-evaluacion',
+        'formato-oficial-del-proyecto',
+        'ganadores-ciclo-anterior',
+        participantReady ? 'panel-participante' : 'registro-o-acceso',
+        'proyectos-destacados',
+      ],
       visibleActions: availableActions,
       availableActions,
       visibleText: visibleParts.join('\n'),
-      selectedItemTitle: form.name || undefined,
-      selectedCategory: form.category || undefined,
-      status: loading || submitting ? 'loading' : error ? 'error' : 'ready',
+      selectedItemTitle: winnersTitles[0] || participantName || undefined,
+      status: loading || checking ? 'loading' : loginCodigoError ? 'error' : 'ready',
+      resultsSummary: hasWinners
+        ? `Se muestran ${winnersVisible.length} ganadores del ciclo anterior.`
+        : 'No hay ganadores visibles del ciclo anterior.',
       suggestedPrompts,
       dynamicData: {
-        participantVisible: !!participant,
-        participantName: participant?.full_name || participant?.alias || null,
-        cycleActive: !!cycle?.id,
-        cycleId: cycle?.id || null,
-        loading,
-        submitting,
-        success,
-        error: error || null,
-        filledFields,
-        missingFields,
-        pdfLoaded: !!pdfFile,
-        pdfFileName: pdfFile?.name || null,
-        pdfFileSize: pdfFile?.size || null,
-        formValues: {
-          name: form.name || null,
-          category: form.category || null,
-          objective: form.objective || null,
-          description: form.description || null,
-          district: form.district || null,
-          department: form.department || null,
-        },
+        participantVisible: participantReady,
+        participantName: participantName || null,
+        participantAlias: participantAlias || null,
+        participantCodeVisible: !!participantCode,
+        loginCodeTyped: hasLoginCodeText,
+        loginCodigoLoading,
+        loginCodigoError: loginCodigoError || null,
+        winnersLoading,
+        winnersCount: winners.length,
+        visibleWinnerTitles: winnersTitles,
+        canRegister: !participantReady,
+        canLoginWithCode: !participantReady,
+        canCreateProject: participantReady,
+        canViewProjects: true,
+        officialTemplateAvailable: true,
+        officialTemplateDocxUrl: OFFICIAL_TEMPLATE_DOCX,
+        officialTemplatePdfUrl: OFFICIAL_TEMPLATE_PDF,
+        minimumSupportsRequired: MIN_SUPPORTS_REQUIRED,
+        budgetCategories: BUDGET_CATEGORIES,
+        evaluationWeights: EVALUATION_WEIGHTS,
+        evaluationCriteria: EVALUATION_CRITERIA,
+        competitionFrequency: 'trimestral',
+        winnersPerCycle: 3,
+        winnerRule: 'un ganador por cada categoría presupuestal',
       },
-      contextVersion: 'pc-nuevo-proyecto-v1',
+      contextVersion: 'pc-home-v2',
     });
   }, [
     setPageContext,
     participant,
     loading,
-    submitting,
-    error,
-    success,
-    form,
-    pdfFile,
-    cycle,
+    checking,
+    codigoAcceso,
+    loginCodigoLoading,
+    loginCodigoError,
+    winners,
+    winnersLoading,
   ]);
 
   useEffect(() => {
@@ -408,33 +429,11 @@ export default function NuevoProyectoPage() {
     };
   }, [clearPageContext]);
 
-  if (loading) {
+  if (loading || checking) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
-        <div className="max-w-3xl mx-auto text-center">
+        <div className="max-w-5xl mx-auto text-center">
           <p className="text-slate-600">Cargando...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (success) {
-    return (
-      <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
-        <div className="max-w-3xl mx-auto text-center">
-          <div className="bg-white rounded-2xl border-2 border-green-600 p-8 shadow-sm">
-            <div className="text-6xl mb-4">📄✅</div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">¡Proyecto enviado!</h1>
-            <p className="text-slate-600 mb-4">
-              Tu proyecto ha sido recibido y está en revisión por el administrador. Recibirás notificación cuando sea aprobado.
-            </p>
-            <Link
-              href="/proyecto-ciudadano"
-              className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
-            >
-              Volver a Proyecto Ciudadano
-            </Link>
-          </div>
         </div>
       </main>
     );
@@ -442,163 +441,229 @@ export default function NuevoProyectoPage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Presentar nuevo proyecto</h1>
-          <Link href="/proyecto-ciudadano" className="text-sm text-slate-600 hover:underline">
-            ← Volver
-          </Link>
+      <div className="max-w-5xl mx-auto">
+        {/* Cabecera */}
+        <div className="flex justify-between items-center mb-6 vc-fade-up">
+          <h1 className="text-3xl font-bold text-slate-900">Proyecto Ciudadano</h1>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRefresh}
+              className={btnSecondary}
+            >
+              🔄 Recargar
+            </button>
+            <Link href="/" className={btnPrimary}>
+              ← Volver al inicio
+            </Link>
+          </div>
         </div>
 
-        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
-          <p className="text-slate-600 mb-4 text-sm">
-            Completa la información de tu proyecto. Debe beneficiar a tu comunidad y no tener fines particulares.
-            El proyecto será revisado antes de ser publicado.
+        {/* Mensaje de bienvenida */}
+        <div className={`bg-white ${card}`}>
+          <p className="text-slate-700 text-lg font-semibold">
+            💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
+            Cada 3 meses se elige un proyecto ganador por categoría presupuestal.
           </p>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
-              {error}
+          {/* Bases del premio */}
+          <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
+            <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
+            El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
+            No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
+            La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+          </div>
+        </div>
+
+        {/* Reglas de participación y evaluación */}
+        <div className="bg-white rounded-2xl border-2 border-emerald-600 p-6 shadow-sm mb-6 vc-fade-up vc-delay-1">
+          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+            📋 Reglas de participación y evaluación
+          </h2>
+
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>
+              Para entrar a evaluación final, un proyecto debe reunir <strong>al menos 100 apoyos vecinales válidos</strong>.
+            </p>
+            <p>
+              Los proyectos compiten en <strong>tres categorías presupuestales</strong>: hasta S/10,000, hasta S/20,000 y hasta S/30,000.
+            </p>
+            <p>
+              Cada 3 meses se elige <strong>un ganador por categoría</strong>.
+            </p>
+            <p>
+              La nota final combina <strong>40 puntos por respaldo ciudadano</strong> y <strong>60 puntos por calidad del proyecto</strong>.
+            </p>
+            <p>
+              La calidad del proyecto se evalúa considerando <strong>impacto comunitario</strong>, <strong>claridad del problema y la solución</strong>, <strong>viabilidad técnica y presupuestal</strong> y <strong>sostenibilidad del beneficio</strong>.
+            </p>
+          </div>
+        </div>
+
+        {/* Formato oficial */}
+        <div className="bg-white rounded-2xl border-2 border-indigo-600 p-6 shadow-sm mb-6 vc-fade-up vc-delay-1">
+          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+            📄 Formato oficial del proyecto
+          </h2>
+          <p className="text-slate-600 mb-4 text-sm">
+            Descarga el formato oficial, complétalo con la información de tu proyecto y luego súbelo en PDF para su revisión.
+            Este formato está diseñado para que todos los proyectos se presenten de manera clara, breve y comparable.
+          </p>
+
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={OFFICIAL_TEMPLATE_DOCX}
+              download
+              className="inline-block bg-indigo-700 text-white px-5 py-2 rounded-xl font-semibold hover:bg-indigo-800 transition vc-btn-wave vc-btn-pulse"
+            >
+              ⬇️ Descargar formato editable (.docx)
+            </a>
+
+            <a
+              href={OFFICIAL_TEMPLATE_PDF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-slate-200 text-slate-800 px-5 py-2 rounded-xl font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
+            >
+              👁️ Ver formato modelo (.pdf)
+            </a>
+          </div>
+        </div>
+
+        {/* Bloque de ganadores del ciclo anterior */}
+        <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border-2 border-yellow-600 p-6 mb-6 shadow-sm vc-fade-up vc-delay-1">
+          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+            🏆 Ganadores del ciclo anterior
+          </h2>
+          {winnersLoading ? (
+            <p className="text-slate-600">Cargando ganadores...</p>
+          ) : winners.length === 0 ? (
+            <p className="text-slate-500">Próximamente se mostrarán los proyectos ganadores.</p>
+          ) : (
+            <div className="space-y-3">
+              {winners.map((winner, index) => (
+                <div key={winner.id} className="bg-white rounded-xl p-4 shadow-sm border border-yellow-200 vc-card-hover">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl font-bold text-yellow-600">
+                      {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                    </span>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-slate-900">{winner.name}</h3>
+                      <p className="text-sm text-slate-600">{winner.category} • {winner.department} - {winner.district}</p>
+                      <p className="text-xs text-slate-500 mt-1">Líder: {winner.leader?.alias || 'Anónimo'}</p>
+                    </div>
+                    <Link
+                      href={`/proyecto-ciudadano/proyectos/${winner.id}`}
+                      className="text-sm text-green-700 hover:underline"
+                    >
+                      Ver proyecto →
+                    </Link>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre del proyecto *</label>
-              <input
-                type="text"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Categoría *</label>
-              <select
-                name="category"
-                value={form.category}
-                onChange={handleChange}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
+        {/* Estado del usuario */}
+        {!participant ? (
+          <>
+            <div className={`bg-white ${card} mb-4`}>
+              <h2 className="text-xl font-bold text-slate-900 mb-3">Regístrate para participar</h2>
+              <p className="text-slate-600 mb-4">
+                Completa tu perfil para poder presentar proyectos o apoyar iniciativas ciudadanas.
+              </p>
+              <Link
+                href="/proyecto-ciudadano/registro"
+                className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 vc-btn-wave vc-btn-pulse"
               >
-                <option value="">Selecciona una categoría</option>
-                {CATEGORIAS.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+                Registrarme ahora
+              </Link>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Objetivo general *</label>
-              <textarea
-                name="objective"
-                value={form.objective}
-                onChange={handleChange}
-                rows={3}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
-              />
-            </div>
+            {/* Inicio de sesión con código */}
+            <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm vc-fade-up vc-delay-2">
+              <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <span className="text-2xl">🔑</span> Iniciar sesión con código
+              </h2>
+              <p className="text-slate-600 mb-4 text-sm">
+                Si ya tienes un código de acceso (el que te dieron al registrarte), ingrésalo aquí.
+              </p>
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Descripción del proyecto *</label>
-              <textarea
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                rows={5}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
-              />
-            </div>
+              {loginCodigoError && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm vc-slide-in">
+                  {loginCodigoError}
+                </div>
+              )}
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Distrito de ejecución *</label>
-              <input
-                type="text"
-                name="district"
-                value={form.district}
-                onChange={handleChange}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
-              />
+              <form onSubmit={handleLoginConCodigo} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Ej: EMP-2026-3A7F"
+                  value={codigoAcceso}
+                  onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
+                  className={inputStyle}
+                  disabled={loginCodigoLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={loginCodigoLoading}
+                  className={"w-full " + btnBlue}
+                >
+                  {loginCodigoLoading ? 'Verificando...' : 'Iniciar sesión con código'}
+                </button>
+              </form>
             </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Departamento *</label>
-              <select
-                name="department"
-                value={form.department}
-                onChange={handleChange}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
-              >
-                <option value="">Selecciona un departamento</option>
-                <option value="Amazonas">Amazonas</option>
-                <option value="Áncash">Áncash</option>
-                <option value="Apurímac">Apurímac</option>
-                <option value="Arequipa">Arequipa</option>
-                <option value="Ayacucho">Ayacucho</option>
-                <option value="Cajamarca">Cajamarca</option>
-                <option value="Callao">Callao</option>
-                <option value="Cusco">Cusco</option>
-                <option value="Huancavelica">Huancavelica</option>
-                <option value="Huánuco">Huánuco</option>
-                <option value="Ica">Ica</option>
-                <option value="Junín">Junín</option>
-                <option value="La Libertad">La Libertad</option>
-                <option value="Lambayeque">Lambayeque</option>
-                <option value="Lima">Lima</option>
-                <option value="Loreto">Loreto</option>
-                <option value="Madre de Dios">Madre de Dios</option>
-                <option value="Moquegua">Moquegua</option>
-                <option value="Pasco">Pasco</option>
-                <option value="Piura">Piura</option>
-                <option value="Puno">Puno</option>
-                <option value="San Martín">San Martín</option>
-                <option value="Tacna">Tacna</option>
-                <option value="Tumbes">Tumbes</option>
-                <option value="Ucayali">Ucayali</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={handleFileChange}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-                required
-              />
-              <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF.</p>
-            </div>
-
-            {/* Bases del premio */}
-            <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-              <strong>⚠️ Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
-              El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-              No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
-              La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
-            </div>
-
-            <div className="pt-4">
+          </>
+        ) : (
+          <div className={`bg-white rounded-2xl border-2 border-green-600 p-6 shadow-sm vc-fade-up`}>
+            <div className="flex justify-between items-start flex-wrap gap-4 mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 mb-1">Bienvenido, {participant.full_name}</h2>
+                <p className="text-sm text-slate-600">Alias: {participant.alias}</p>
+                <p className="text-xs text-slate-500 mt-1">Registrado el {new Date(participant.created_at).toLocaleDateString()}</p>
+                {participant.codigo_acceso && (
+                  <p className="text-xs text-blue-600 mt-1 font-mono">Código: {participant.codigo_acceso}</p>
+                )}
+              </div>
               <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
+                onClick={handleRefresh}
+                className="text-sm text-green-700 hover:text-green-800 font-semibold vc-btn-wave"
               >
-                {submitting ? 'Enviando...' : 'Enviar proyecto'}
+                ↻ Actualizar datos
               </button>
             </div>
-          </form>
 
-          <p className="text-xs text-slate-500 mt-4 text-center">
-            El proyecto será revisado por el administrador antes de ser publicado. Solo se aceptan proyectos que beneficien a la comunidad.
-          </p>
+            <p className="text-slate-600 mb-4">
+              Puedes presentar un nuevo proyecto o apoyar iniciativas existentes.
+            </p>
+
+            <div className="flex flex-wrap gap-4">
+              <Link
+                href="/proyecto-ciudadano/nuevo-proyecto"
+                className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block vc-btn-wave vc-btn-pulse"
+              >
+                📝 Presentar proyecto
+              </Link>
+              <Link
+                href="/proyecto-ciudadano/proyectos"
+                className="bg-slate-200 text-slate-800 px-6 py-2 rounded-xl font-semibold hover:bg-slate-300 inline-block vc-btn-wave vc-btn-pulse"
+              >
+                🔍 Ver proyectos activos
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Lista de proyectos destacados */}
+        <div className={`bg-white ${card} mt-6`}>
+          <h2 className="text-xl font-bold text-slate-900 mb-3">Proyectos destacados</h2>
+          <p className="text-slate-500">Próximamente se mostrarán los proyectos con más apoyo ciudadano.</p>
+          <Link
+            href="/proyecto-ciudadano/proyectos"
+            className="inline-block mt-3 text-green-700 hover:text-green-800 font-semibold vc-btn-wave"
+          >
+            Ver todos los proyectos →
+          </Link>
         </div>
       </div>
     </main>

@@ -17,6 +17,28 @@ function getOrCreateDeviceId(): string {
   return newId;
 }
 
+const MIN_SUPPORTS_REQUIRED = 100;
+const BUDGET_CATEGORIES = [
+  { id: 'hasta_10000', label: 'Hasta S/10,000' },
+  { id: 'hasta_20000', label: 'Hasta S/20,000' },
+  { id: 'hasta_30000', label: 'Hasta S/30,000' },
+];
+
+const EVALUATION_WEIGHTS = {
+  citizenSupport: 40,
+  projectQuality: 60,
+};
+
+const EVALUATION_CRITERIA = [
+  'Impacto comunitario',
+  'Claridad del problema y la solución',
+  'Viabilidad técnica y presupuestal',
+  'Sostenibilidad del beneficio',
+];
+
+const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
+const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.pdf';
+
 export default function ProyectoCiudadanoPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
@@ -252,6 +274,12 @@ export default function ProyectoCiudadanoPage() {
       visibleParts.push(`Ganadores visibles del ciclo anterior: ${winnersTitles.join(', ')}.`);
     }
 
+    visibleParts.push(`Regla visible del programa: se requieren al menos ${MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos para entrar a evaluación final.`);
+    visibleParts.push(`Categorías presupuestales visibles: ${BUDGET_CATEGORIES.map((item) => item.label).join(', ')}.`);
+    visibleParts.push(`Ponderación visible de evaluación: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto.`);
+    visibleParts.push(`Criterios visibles de calidad del proyecto: ${EVALUATION_CRITERIA.join(', ')}.`);
+    visibleParts.push('Hay acceso visible para descargar el formato oficial del proyecto en DOCX y ver el modelo en PDF.');
+
     const availableActions = [
       'Recargar',
       'Volver al inicio',
@@ -259,6 +287,8 @@ export default function ProyectoCiudadanoPage() {
       !participantReady ? 'Iniciar sesión con código' : null,
       participantReady ? 'Presentar proyecto' : null,
       'Ver proyectos activos',
+      'Descargar formato oficial en DOCX',
+      'Ver formato modelo en PDF',
       hasWinners ? 'Ver proyecto ganador' : null,
     ].filter(Boolean) as string[];
 
@@ -266,8 +296,8 @@ export default function ProyectoCiudadanoPage() {
       loading || checking
         ? 'Pantalla principal de Proyecto Ciudadano cargando estado del participante y contenido visible.'
         : !participantReady
-        ? 'Pantalla principal de Proyecto Ciudadano con acceso para registrarse o iniciar sesión con código.'
-        : 'Pantalla principal de Proyecto Ciudadano con participante identificado y acciones para presentar proyectos o ver proyectos activos.';
+        ? 'Pantalla principal de Proyecto Ciudadano con acceso para registrarse o iniciar sesión con código, reglas de participación visibles y formato oficial descargable.'
+        : 'Pantalla principal de Proyecto Ciudadano con participante identificado, reglas de evaluación visibles, formato oficial descargable y acciones para presentar proyectos o ver proyectos activos.';
 
     const suggestedPrompts = !participantReady
       ? [
@@ -283,18 +313,18 @@ export default function ProyectoCiudadanoPage() {
           },
           {
             id: 'pc-home-3',
-            label: '¿Cómo entro con mi código?',
-            question: '¿Cómo funciona el inicio de sesión con código en esta pantalla?',
+            label: '¿Cuántos apoyos mínimos se necesitan?',
+            question: '¿Cuántos apoyos mínimos necesita un proyecto para entrar a evaluación final?',
           },
           {
             id: 'pc-home-4',
-            label: '¿Dónde veo los proyectos?',
-            question: '¿Dónde puedo ver los proyectos activos desde esta pantalla?',
+            label: '¿Cómo se evalúa?',
+            question: '¿Cómo se evalúan los proyectos en Proyecto Ciudadano?',
           },
           {
             id: 'pc-home-5',
-            label: '¿Qué muestran los ganadores?',
-            question: '¿Qué muestra el bloque de ganadores del ciclo anterior en esta pantalla?',
+            label: '¿Dónde descargo el formato?',
+            question: '¿Dónde puedo descargar el formato oficial del proyecto desde esta pantalla?',
           },
         ]
       : [
@@ -315,13 +345,13 @@ export default function ProyectoCiudadanoPage() {
           },
           {
             id: 'pc-home-4',
-            label: '¿Dónde veo los proyectos activos?',
-            question: '¿Dónde puedo ver los proyectos activos desde esta pantalla?',
+            label: '¿Cómo se evalúan los proyectos?',
+            question: '¿Cómo se evalúan los proyectos en Proyecto Ciudadano?',
           },
           {
             id: 'pc-home-5',
-            label: '¿Qué ganadores se ven?',
-            question: '¿Qué ganadores del ciclo anterior se están mostrando en esta pantalla?',
+            label: '¿Dónde descargo el formato?',
+            question: '¿Dónde puedo descargar el formato oficial del proyecto desde esta pantalla?',
           },
         ];
 
@@ -338,7 +368,8 @@ export default function ProyectoCiudadanoPage() {
       visibleSections: [
         'cabecera',
         'bienvenida',
-        'bases-del-premio',
+        'reglas-de-participacion-y-evaluacion',
+        'formato-oficial-del-proyecto',
         'ganadores-ciclo-anterior',
         participantReady ? 'panel-participante' : 'registro-o-acceso',
         'proyectos-destacados',
@@ -367,8 +398,18 @@ export default function ProyectoCiudadanoPage() {
         canLoginWithCode: !participantReady,
         canCreateProject: participantReady,
         canViewProjects: true,
+        officialTemplateAvailable: true,
+        officialTemplateDocxUrl: OFFICIAL_TEMPLATE_DOCX,
+        officialTemplatePdfUrl: OFFICIAL_TEMPLATE_PDF,
+        minimumSupportsRequired: MIN_SUPPORTS_REQUIRED,
+        budgetCategories: BUDGET_CATEGORIES,
+        evaluationWeights: EVALUATION_WEIGHTS,
+        evaluationCriteria: EVALUATION_CRITERIA,
+        competitionFrequency: 'trimestral',
+        winnersPerCycle: 3,
+        winnerRule: 'un ganador por cada categoría presupuestal',
       },
-      contextVersion: 'pc-home-v1',
+      contextVersion: 'pc-home-v2',
     });
   }, [
     setPageContext,
@@ -421,7 +462,7 @@ export default function ProyectoCiudadanoPage() {
         <div className={`bg-white ${card}`}>
           <p className="text-slate-700 text-lg font-semibold">
             💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
-            Los mejores proyectos serán reconocidos en un evento oficial cada 3 meses.
+            Cada 3 meses se elige un proyecto ganador por categoría presupuestal.
           </p>
 
           {/* Bases del premio */}
@@ -430,6 +471,61 @@ export default function ProyectoCiudadanoPage() {
             El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
             No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
             La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+          </div>
+        </div>
+
+        {/* Reglas de participación y evaluación */}
+        <div className="bg-white rounded-2xl border-2 border-emerald-600 p-6 shadow-sm mb-6 vc-fade-up vc-delay-1">
+          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+            📋 Reglas de participación y evaluación
+          </h2>
+
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>
+              Para entrar a evaluación final, un proyecto debe reunir <strong>al menos 100 apoyos vecinales válidos</strong>.
+            </p>
+            <p>
+              Los proyectos compiten en <strong>tres categorías presupuestales</strong>: hasta S/10,000, hasta S/20,000 y hasta S/30,000.
+            </p>
+            <p>
+              Cada 3 meses se elige <strong>un ganador por categoría</strong>.
+            </p>
+            <p>
+              La nota final combina <strong>40 puntos por respaldo ciudadano</strong> y <strong>60 puntos por calidad del proyecto</strong>.
+            </p>
+            <p>
+              La calidad del proyecto se evalúa considerando <strong>impacto comunitario</strong>, <strong>claridad del problema y la solución</strong>, <strong>viabilidad técnica y presupuestal</strong> y <strong>sostenibilidad del beneficio</strong>.
+            </p>
+          </div>
+        </div>
+
+        {/* Formato oficial */}
+        <div className="bg-white rounded-2xl border-2 border-indigo-600 p-6 shadow-sm mb-6 vc-fade-up vc-delay-1">
+          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+            📄 Formato oficial del proyecto
+          </h2>
+          <p className="text-slate-600 mb-4 text-sm">
+            Descarga el formato oficial, complétalo con la información de tu proyecto y luego súbelo en PDF para su revisión.
+            Este formato está diseñado para que todos los proyectos se presenten de manera clara, breve y comparable.
+          </p>
+
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={OFFICIAL_TEMPLATE_DOCX}
+              download
+              className="inline-block bg-indigo-700 text-white px-5 py-2 rounded-xl font-semibold hover:bg-indigo-800 transition vc-btn-wave vc-btn-pulse"
+            >
+              ⬇️ Descargar formato editable (.docx)
+            </a>
+
+            <a
+              href={OFFICIAL_TEMPLATE_PDF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-slate-200 text-slate-800 px-5 py-2 rounded-xl font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
+            >
+              👁️ Ver formato modelo (.pdf)
+            </a>
           </div>
         </div>
 

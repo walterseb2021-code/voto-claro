@@ -18,6 +18,10 @@ type Project = {
   beneficiary_count: number;
   created_at: string;
   status: string;
+  requested_budget?: number | null;
+  budget_category?: string | null;
+  minimum_supports_required?: number | null;
+  eligible_for_final_review?: boolean | null;
   leader: {
     id: string;
     alias: string;
@@ -34,6 +38,26 @@ type ForumPost = {
     alias: string;
   };
 };
+
+const DEFAULT_MIN_SUPPORTS_REQUIRED = 100;
+const EVALUATION_WEIGHTS = {
+  citizenSupport: 40,
+  projectQuality: 60,
+};
+
+const EVALUATION_CRITERIA = [
+  'Impacto comunitario',
+  'Claridad del problema y la solución',
+  'Viabilidad técnica y presupuestal',
+  'Sostenibilidad del beneficio',
+];
+
+function getBudgetCategoryLabel(category: string | null | undefined): string {
+  if (category === 'hasta_10000') return 'Hasta S/10,000';
+  if (category === 'hasta_20000') return 'Hasta S/20,000';
+  if (category === 'hasta_30000') return 'Hasta S/30,000';
+  return 'Sin categoría presupuestal';
+}
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -53,14 +77,12 @@ export default function ProjectDetailPage() {
   const [sendingPost, setSendingPost] = useState(false);
   const [activeCycle, setActiveCycle] = useState<any>(null);
 
-  // Cargar datos
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       setError(null);
 
       try {
-        // 1. Obtener participante actual
         const deviceId = localStorage.getItem('vc_device_id');
         let currentParticipant = null;
         if (deviceId) {
@@ -74,7 +96,6 @@ export default function ProjectDetailPage() {
           setParticipant(currentParticipant);
         }
 
-        // 2. Obtener ciclo activo
         const { data: cycleData } = await supabase
           .from('project_cycles')
           .select('*')
@@ -83,7 +104,6 @@ export default function ProjectDetailPage() {
 
         setActiveCycle(cycleData);
 
-        // 3. Obtener proyecto
         const { data: projectData, error: projectError } = await supabase
           .from('projects')
           .select(`
@@ -99,6 +119,10 @@ export default function ProjectDetailPage() {
             beneficiary_count,
             created_at,
             status,
+            requested_budget,
+            budget_category,
+            minimum_supports_required,
+            eligible_for_final_review,
             leader:project_participants!leader_id (
               id,
               alias,
@@ -111,7 +135,6 @@ export default function ProjectDetailPage() {
 
         if (projectError) throw projectError;
 
-        // Transformar leader (viene como array)
         const transformedProject = {
           ...projectData,
           leader:
@@ -122,7 +145,6 @@ export default function ProjectDetailPage() {
 
         setProject(transformedProject);
 
-        // 4. Verificar si el usuario ya apoya este proyecto
         if (currentParticipant && cycleData) {
           const { data: supportData } = await supabase
             .from('project_supports')
@@ -135,7 +157,6 @@ export default function ProjectDetailPage() {
           setSupporting(!!supportData);
         }
 
-        // 5. Cargar foro
         const { data: forumData } = await supabase
           .from('project_forum_posts')
           .select(`
@@ -171,7 +192,6 @@ export default function ProjectDetailPage() {
     }
   }, [projectId]);
 
-  // Apoyar proyecto
   const handleSupport = async () => {
     if (!participant) {
       alert('Debes registrarte para apoyar proyectos.');
@@ -189,7 +209,6 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    // Verificar si ya apoya otro proyecto en este ciclo
     const { data: existingSupport } = await supabase
       .from('project_supports')
       .select('id, project_id')
@@ -215,10 +234,32 @@ export default function ProjectDetailPage() {
 
       if (error) throw error;
 
+      const nextBeneficiaryCount = (project?.beneficiary_count || 0) + 1;
+      const minSupports = project?.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+      const nextEligible = nextBeneficiaryCount >= minSupports;
+
+      if (project) {
+        const { error: updateProjectError } = await supabase
+          .from('projects')
+          .update({
+            beneficiary_count: nextBeneficiaryCount,
+            eligible_for_final_review: nextEligible,
+          })
+          .eq('id', project.id);
+
+        if (updateProjectError) {
+          console.error('Error actualizando el proyecto tras el apoyo:', updateProjectError);
+        }
+      }
+
       setSupporting(true);
       setProject((prev) =>
         prev
-          ? { ...prev, beneficiary_count: (prev.beneficiary_count || 0) + 1 }
+          ? {
+              ...prev,
+              beneficiary_count: nextBeneficiaryCount,
+              eligible_for_final_review: nextEligible,
+            }
           : null
       );
       alert('¡Gracias por apoyar este proyecto!');
@@ -230,7 +271,6 @@ export default function ProjectDetailPage() {
     }
   };
 
-  // Publicar en el foro
   const handlePost = async () => {
     if (!participant) {
       alert('Debes registrarte para participar en el foro.');
@@ -277,6 +317,24 @@ export default function ProjectDetailPage() {
     const supportBlockVisible = !!project && project.status === 'active';
     const pdfVisible = !!project?.pdf_url;
 
+    const minSupportsRequired = project?.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+    const beneficiaryCount = project?.beneficiary_count || 0;
+    const supportsRemaining = Math.max(minSupportsRequired - beneficiaryCount, 0);
+    const meetsMinimumSupports = beneficiaryCount >= minSupportsRequired;
+    const eligibleForFinalReview =
+      project?.eligible_for_final_review != null
+        ? Boolean(project.eligible_for_final_review)
+        : meetsMinimumSupports;
+
+    const budgetCategoryLabel = getBudgetCategoryLabel(project?.budget_category);
+    const requestedBudgetLabel =
+      project?.requested_budget != null
+        ? `S/${Number(project.requested_budget).toLocaleString('es-PE', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+          })}`
+        : 'No especificado';
+
     const activeSection = loading
       ? 'proyecto-detalle-cargando'
       : error || !project
@@ -311,11 +369,24 @@ export default function ProjectDetailPage() {
 
     if (project) {
       visibleParts.push(`Proyecto visible: ${project.name}.`);
-      visibleParts.push(`Categoría visible: ${project.category}.`);
+      visibleParts.push(`Categoría temática visible: ${project.category}.`);
       visibleParts.push(`Ubicación visible: ${project.department} - ${project.district}.`);
       visibleParts.push(`Objetivo visible: ${project.objective}.`);
       visibleParts.push(`Estado visible del proyecto: ${project.status}.`);
-      visibleParts.push(`Apoyos visibles: ${project.beneficiary_count || 0}.`);
+      visibleParts.push(`Apoyos visibles: ${beneficiaryCount}.`);
+      visibleParts.push(`Apoyos mínimos requeridos: ${minSupportsRequired}.`);
+      visibleParts.push(`Apoyos faltantes para evaluación final: ${supportsRemaining}.`);
+      visibleParts.push(
+        eligibleForFinalReview
+          ? 'El proyecto ya es elegible para evaluación final.'
+          : 'El proyecto todavía no es elegible para evaluación final.'
+      );
+      visibleParts.push(`Monto solicitado visible: ${requestedBudgetLabel}.`);
+      visibleParts.push(`Categoría presupuestal visible: ${budgetCategoryLabel}.`);
+      visibleParts.push(
+        `Ponderación visible: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto.`
+      );
+      visibleParts.push(`Criterios visibles de calidad: ${EVALUATION_CRITERIA.join(', ')}.`);
 
       if (project.leader?.alias || project.leader?.full_name) {
         visibleParts.push(
@@ -398,18 +469,18 @@ export default function ProjectDetailPage() {
             },
             {
               id: 'pc-detalle-3',
-              label: '¿Puedo apoyarlo?',
-              question: '¿Puedo apoyar este proyecto desde esta pantalla?',
+              label: '¿Cuántos apoyos faltan?',
+              question: '¿Cuántos apoyos le faltan a este proyecto para entrar a evaluación final?',
             },
             {
               id: 'pc-detalle-4',
-              label: '¿Hay PDF visible?',
-              question: '¿Hay un documento PDF visible para este proyecto?',
+              label: '¿Ya es elegible?',
+              question: '¿Este proyecto ya es elegible para evaluación final?',
             },
             {
               id: 'pc-detalle-5',
-              label: '¿Cómo está el foro?',
-              question: '¿Cómo está el foro visible de este proyecto en esta pantalla?',
+              label: '¿Qué categoría presupuestal tiene?',
+              question: '¿Qué categoría presupuestal y qué monto solicitado tiene este proyecto?',
             },
           ];
 
@@ -417,7 +488,7 @@ export default function ProjectDetailPage() {
       ? 'Pantalla de detalle de proyecto ciudadano cargando información del proyecto, apoyos y foro.'
       : error || !project
       ? 'Pantalla de detalle de proyecto ciudadano con error visible o proyecto no encontrado.'
-      : 'Pantalla de detalle de proyecto ciudadano con información del proyecto, bloque de apoyo y foro visibles.';
+      : 'Pantalla de detalle de proyecto ciudadano con información del proyecto, apoyos visibles, elegibilidad para evaluación final y foro visibles.';
 
     setPageContext({
       pageId: 'proyecto-ciudadano-proyecto-detalle',
@@ -432,6 +503,7 @@ export default function ProjectDetailPage() {
       visibleSections: [
         'cabecera',
         'informacion-del-proyecto',
+        'reglas-de-evaluacion',
         supportBlockVisible ? 'bloque-de-apoyo' : null,
         'foro-de-discusion',
       ].filter(Boolean) as string[],
@@ -450,7 +522,17 @@ export default function ProjectDetailPage() {
         department: project?.department || null,
         district: project?.district || null,
         projectStatus: project?.status || null,
-        beneficiaryCount: project?.beneficiary_count || 0,
+        beneficiaryCount,
+        minimumSupportsRequired: minSupportsRequired,
+        supportsRemaining,
+        meetsMinimumSupports,
+        eligibleForFinalReview,
+        requestedBudget: project?.requested_budget ?? null,
+        requestedBudgetLabel,
+        budgetCategory: project?.budget_category || null,
+        budgetCategoryLabel,
+        evaluationWeights: EVALUATION_WEIGHTS,
+        evaluationCriteria: EVALUATION_CRITERIA,
         leaderVisible: !!project?.leader,
         leaderAlias: project?.leader?.alias || null,
         leaderFullName: project?.leader?.full_name || null,
@@ -476,7 +558,7 @@ export default function ProjectDetailPage() {
         canComment,
         error: error || null,
       },
-      contextVersion: 'pc-proyecto-detalle-v1',
+      contextVersion: 'pc-proyecto-detalle-v2',
     });
   }, [
     setPageContext,
@@ -524,6 +606,22 @@ export default function ProjectDetailPage() {
     );
   }
 
+  const minSupportsRequired = project.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+  const beneficiaryCount = project.beneficiary_count || 0;
+  const supportsRemaining = Math.max(minSupportsRequired - beneficiaryCount, 0);
+  const eligibleForFinalReview =
+    project.eligible_for_final_review != null
+      ? Boolean(project.eligible_for_final_review)
+      : beneficiaryCount >= minSupportsRequired;
+  const budgetCategoryLabel = getBudgetCategoryLabel(project.budget_category);
+  const requestedBudgetLabel =
+    project.requested_budget != null
+      ? `S/${Number(project.requested_budget).toLocaleString('es-PE', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        })}`
+      : 'No especificado';
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-4xl mx-auto">
@@ -534,7 +632,6 @@ export default function ProjectDetailPage() {
           </Link>
         </div>
 
-        {/* Información del proyecto */}
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm mb-6">
           <div className="flex flex-wrap gap-2 mb-4">
             <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -544,8 +641,39 @@ export default function ProjectDetailPage() {
               {project.department} - {project.district}
             </span>
             <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-              {project.beneficiary_count || 0} apoyos
+              {beneficiaryCount} apoyos
             </span>
+            <span className="text-xs font-semibold bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
+              {budgetCategoryLabel}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            <div className="rounded-xl bg-slate-50 p-3 border border-slate-200">
+              <p className="text-xs font-semibold text-slate-500 mb-1">Monto solicitado</p>
+              <p className="text-sm font-bold text-slate-900">{requestedBudgetLabel}</p>
+            </div>
+
+            <div className="rounded-xl bg-slate-50 p-3 border border-slate-200">
+              <p className="text-xs font-semibold text-slate-500 mb-1">Apoyos para evaluación final</p>
+              <p className="text-sm font-bold text-slate-900">
+                {beneficiaryCount} / {minSupportsRequired}
+              </p>
+            </div>
+          </div>
+
+          <div className={`mb-4 rounded-xl p-4 border ${
+            eligibleForFinalReview
+              ? 'bg-green-50 border-green-300'
+              : 'bg-amber-50 border-amber-300'
+          }`}>
+            <p className={`text-sm font-semibold ${
+              eligibleForFinalReview ? 'text-green-800' : 'text-amber-800'
+            }`}>
+              {eligibleForFinalReview
+                ? '✅ Este proyecto ya es elegible para evaluación final.'
+                : `⏳ A este proyecto le faltan ${supportsRemaining} apoyos para entrar a evaluación final.`}
+            </p>
           </div>
 
           <div className="mb-4">
@@ -579,17 +707,20 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
-          {/* Bases del premio */}
+          <div className="mt-4 text-xs text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-300">
+            <strong>📊 Evaluación del proyecto:</strong> Para entrar a evaluación final, este proyecto necesita al menos <strong>{minSupportsRequired} apoyos válidos</strong>.
+            La nota final combina <strong>{EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano</strong> y <strong>{EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto</strong>.
+            La calidad se evalúa por impacto comunitario, claridad del problema y la solución, viabilidad técnica y presupuestal, y sostenibilidad del beneficio.
+          </div>
+
           {project.status === 'active' && (
             <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
               <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
               El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-              No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
-              La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+              No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado.
             </div>
           )}
 
-          {/* Botón de apoyo */}
           {project.status === 'active' && (
             <div className="mt-6 pt-4 border-t border-slate-200">
               <button
@@ -620,14 +751,12 @@ export default function ProjectDetailPage() {
           )}
         </div>
 
-        {/* Foro de discusión */}
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-4">Foro de discusión</h2>
           <p className="text-sm text-slate-600 mb-4">
             Participa con ideas y preguntas sobre este proyecto.
           </p>
 
-          {/* Lista de posts */}
           <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
             {forumPosts.length === 0 ? (
               <p className="text-slate-500 text-sm">No hay comentarios aún. Sé el primero en participar.</p>
@@ -648,7 +777,6 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* Formulario para nuevo post */}
           {participant ? (
             <div className="flex gap-2">
               <textarea

@@ -1,7 +1,6 @@
 'use client';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
@@ -17,26 +16,42 @@ type Project = {
   leader_id: string;
   beneficiary_count: number;
   created_at: string;
+  requested_budget?: number | null;
+  budget_category?: string | null;
+  minimum_supports_required?: number | null;
+  eligible_for_final_review?: boolean | null;
   leader: {
     alias: string;
     full_name: string;
   } | null;
 };
 
+const DEFAULT_MIN_SUPPORTS_REQUIRED = 100;
+
+function getBudgetCategoryLabel(category: string | null | undefined): string {
+  if (category === 'hasta_10000') return 'Hasta S/10,000';
+  if (category === 'hasta_20000') return 'Hasta S/20,000';
+  if (category === 'hasta_30000') return 'Hasta S/30,000';
+  return 'Sin categoría presupuestal';
+}
+
+function getRequestedBudgetLabel(value: number | null | undefined): string {
+  if (value == null) return 'No especificado';
+  return `S/${Number(value).toLocaleString('es-PE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export default function ProyectosActivosPage() {
-  const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
-  const goToPath = (path: string) => {
-    window.location.href = path;
-  };
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Departamentos de Perú
   const departments = [
     'todos', 'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho',
     'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica',
@@ -53,7 +68,6 @@ export default function ProyectosActivosPage() {
     setError(null);
 
     try {
-      // Obtener proyectos activos (aprobados)
       const { data, error } = await supabase
         .from('projects')
         .select(`
@@ -68,6 +82,10 @@ export default function ProyectosActivosPage() {
           leader_id,
           beneficiary_count,
           created_at,
+          requested_budget,
+          budget_category,
+          minimum_supports_required,
+          eligible_for_final_review,
           leader:project_participants!leader_id (
             alias,
             full_name
@@ -78,7 +96,6 @@ export default function ProyectosActivosPage() {
 
       if (error) throw error;
 
-      // Transformar los datos: leader viene como array, lo convertimos a objeto
       const transformedProjects: Project[] = (data || []).map((item: any) => ({
         ...item,
         leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
@@ -155,15 +172,34 @@ export default function ProyectosActivosPage() {
     visibleParts.push(`Cantidad de proyectos visibles con los filtros actuales: ${filteredProjects.length}.`);
 
     if (highlightedProject) {
+      const minSupports = highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+      const currentSupports = highlightedProject.beneficiary_count || 0;
+      const supportsRemaining = Math.max(minSupports - currentSupports, 0);
+      const eligible =
+        highlightedProject.eligible_for_final_review != null
+          ? Boolean(highlightedProject.eligible_for_final_review)
+          : currentSupports >= minSupports;
+
       visibleParts.push(`Primer proyecto visible: ${highlightedProject.name}.`);
-      visibleParts.push(`Categoría visible del primer proyecto: ${highlightedProject.category}.`);
+      visibleParts.push(`Categoría temática visible del primer proyecto: ${highlightedProject.category}.`);
       visibleParts.push(`Departamento visible del primer proyecto: ${highlightedProject.department}.`);
       visibleParts.push(`Distrito visible del primer proyecto: ${highlightedProject.district}.`);
+      visibleParts.push(`Monto solicitado visible del primer proyecto: ${getRequestedBudgetLabel(highlightedProject.requested_budget)}.`);
+      visibleParts.push(`Categoría presupuestal visible del primer proyecto: ${getBudgetCategoryLabel(highlightedProject.budget_category)}.`);
+      visibleParts.push(`Apoyos visibles del primer proyecto: ${currentSupports}.`);
+      visibleParts.push(`Apoyos faltantes del primer proyecto para evaluación final: ${supportsRemaining}.`);
+      visibleParts.push(
+        eligible
+          ? 'El primer proyecto visible ya es elegible para evaluación final.'
+          : 'El primer proyecto visible todavía no es elegible para evaluación final.'
+      );
     }
 
     if (visibleTitles.length) {
       visibleParts.push(`Títulos visibles: ${visibleTitles.join(', ')}.`);
     }
+
+    visibleParts.push(`Regla visible del programa: cada proyecto necesita al menos ${DEFAULT_MIN_SUPPORTS_REQUIRED} apoyos válidos para entrar a evaluación final.`);
 
     if (!loading && !error && filteredProjects.length === 0) {
       if (selectedDepartment !== 'todos') {
@@ -243,13 +279,13 @@ export default function ProyectosActivosPage() {
           },
           {
             id: 'pc-proyectos-4',
-            label: '¿Cuál es el primer proyecto?',
-            question: '¿Cuál es el primer proyecto visible en esta pantalla?',
+            label: '¿Qué categoría presupuestal tiene el primero?',
+            question: '¿Qué categoría presupuestal y qué monto tiene el primer proyecto visible?',
           },
           {
             id: 'pc-proyectos-5',
-            label: '¿Qué departamentos veo?',
-            question: '¿Qué departamento está seleccionado y qué proyectos visibles hay ahora?',
+            label: '¿Ya es elegible el primero?',
+            question: '¿El primer proyecto visible ya es elegible para evaluación final?',
           },
         ];
 
@@ -259,7 +295,7 @@ export default function ProyectosActivosPage() {
       ? 'Pantalla de proyectos ciudadanos con error visible al cargar la lista.'
       : filteredProjects.length === 0
       ? 'Pantalla de proyectos ciudadanos sin resultados visibles con los filtros actuales.'
-      : 'Pantalla de proyectos ciudadanos con filtros, búsqueda y proyectos activos visibles.';
+      : 'Pantalla de proyectos ciudadanos con filtros, búsqueda, apoyos visibles, categoría presupuestal y elegibilidad para evaluación final.';
 
     setPageContext({
       pageId: 'proyecto-ciudadano-proyectos',
@@ -297,6 +333,7 @@ export default function ProyectosActivosPage() {
         selectedDepartmentLabel,
         searchTerm: searchTerm.trim() || null,
         searchActive: hasSearch,
+        minimumSupportsRequired: DEFAULT_MIN_SUPPORTS_REQUIRED,
         visibleProjectTitles: visibleTitles,
         highlightedProject: highlightedProject
           ? {
@@ -306,10 +343,20 @@ export default function ProyectosActivosPage() {
               department: highlightedProject.department,
               district: highlightedProject.district,
               beneficiary_count: highlightedProject.beneficiary_count || 0,
+              requested_budget: highlightedProject.requested_budget ?? null,
+              budget_category: highlightedProject.budget_category || null,
+              budget_category_label: getBudgetCategoryLabel(highlightedProject.budget_category),
+              minimum_supports_required:
+                highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED,
+              eligible_for_final_review:
+                highlightedProject.eligible_for_final_review != null
+                  ? Boolean(highlightedProject.eligible_for_final_review)
+                  : (highlightedProject.beneficiary_count || 0) >=
+                    (highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED),
             }
           : null,
       },
-      contextVersion: 'pc-proyectos-v1',
+      contextVersion: 'pc-proyectos-v2',
     });
   }, [setPageContext, projects, filteredProjects, loading, error, selectedDepartment, searchTerm]);
 
@@ -324,24 +371,18 @@ export default function ProyectosActivosPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Proyectos Ciudadanos Activos</h1>
-            <button
-  type="button"
-  onClick={() => goToPath('/proyecto-ciudadano')}
-  className="vc-pc-proyectos-link text-sm text-slate-600 hover:underline cursor-pointer"
->
-  ← Volver
-</button>
+          <Link href="/proyecto-ciudadano" className="text-sm text-slate-600 hover:underline">
+            ← Volver
+          </Link>
         </div>
 
-        {/* Descripción */}
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
           <p className="text-slate-700">
             Estos son los proyectos ciudadanos que han sido aprobados y están recibiendo apoyo vecinal.
-            Cada departamento puede tener un proyecto activo. Apoya los proyectos de tu comunidad.
+            Cada proyecto necesita al menos <strong>100 apoyos válidos</strong> para entrar a evaluación final.
           </p>
         </div>
 
-        {/* Filtros */}
         <div className="bg-white rounded-2xl border-2 border-red-600 p-4 mb-6 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -372,7 +413,6 @@ export default function ProyectosActivosPage() {
           </div>
         </div>
 
-        {/* Lista de proyectos */}
         {loading ? (
           <div className="text-center py-12">
             <p className="text-slate-600">Cargando proyectos...</p>
@@ -398,49 +438,80 @@ export default function ProyectosActivosPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-                  <div
-  key={project.id}
-  className="vc-pc-proyectos-card bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
->
-                <div className="p-5">
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                      {project.category}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {project.department}
-                    </span>
-                  </div>
+            {filteredProjects.map((project) => {
+              const minSupports = project.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+              const currentSupports = project.beneficiary_count || 0;
+              const supportsRemaining = Math.max(minSupports - currentSupports, 0);
+              const eligible =
+                project.eligible_for_final_review != null
+                  ? Boolean(project.eligible_for_final_review)
+                  : currentSupports >= minSupports;
 
-                  <h2 className="text-lg font-bold text-slate-900 mb-2 line-clamp-2">
-                    {project.name}
-                  </h2>
-
-                  <p className="text-sm text-slate-600 mb-3 line-clamp-3">
-                    {project.objective}
-                  </p>
-
-                  <div className="text-xs text-slate-500 mb-3">
-                    📍 {project.district} | 👤 {project.leader?.alias || project.leader?.full_name?.split(' ')[0] || 'Anónimo'}
-                  </div>
-
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center gap-1 text-sm font-semibold text-slate-700">
-                      <span>🤝</span>
-                      <span>{project.beneficiary_count || 0} apoyos</span>
+              return (
+                <div
+                  key={project.id}
+                  className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
+                >
+                  <div className="p-5">
+                    <div className="flex justify-between items-start mb-3 gap-2 flex-wrap">
+                      <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                        {project.category}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {project.department}
+                      </span>
                     </div>
-                      <button
-  type="button"
-  onClick={() => goToPath(`/proyecto-ciudadano/proyectos/${project.id}`)}
-  className="vc-pc-proyectos-link text-sm font-semibold text-green-700 hover:text-green-800 cursor-pointer"
->
-  Ver detalles →
-</button>
+
+                    <div className="flex gap-2 flex-wrap mb-3">
+                      <span className="text-xs font-semibold bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
+                        {getBudgetCategoryLabel(project.budget_category)}
+                      </span>
+                      <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-1 rounded-full">
+                        {getRequestedBudgetLabel(project.requested_budget)}
+                      </span>
+                    </div>
+
+                    <h2 className="text-lg font-bold text-slate-900 mb-2 line-clamp-2">
+                      {project.name}
+                    </h2>
+
+                    <p className="text-sm text-slate-600 mb-3 line-clamp-3">
+                      {project.objective}
+                    </p>
+
+                    <div className="text-xs text-slate-500 mb-2">
+                      📍 {project.district} | 👤 {project.leader?.alias || project.leader?.full_name?.split(' ')[0] || 'Anónimo'}
+                    </div>
+
+                    <div className="text-xs text-slate-500 mb-3">
+                      🤝 {currentSupports} / {minSupports} apoyos
+                    </div>
+
+                    <div className={`text-xs font-semibold rounded-lg px-3 py-2 mb-4 ${
+                      eligible
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {eligible
+                        ? '✅ Elegible para evaluación final'
+                        : `⏳ Faltan ${supportsRemaining} apoyos`}
+                    </div>
+
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="text-sm font-semibold text-slate-700">
+                        Ver más
+                      </div>
+                      <Link
+                        href={`/proyecto-ciudadano/proyectos/${project.id}`}
+                        className="text-sm font-semibold text-green-700 hover:text-green-800"
+                      >
+                        Ver detalles →
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
