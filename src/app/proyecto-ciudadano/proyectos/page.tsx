@@ -371,15 +371,15 @@ export default function ProyectosActivosPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Proyectos Ciudadanos Activos</h1>
-          <button
-  type="button"
-  onClick={() => router.push('/proyecto-ciudadano')}
-  className="text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
->
-  ← Volver
-</button>
+            <button
+            type="button"
+            onClick={() => router.push('/proyecto-ciudadano')}
+            className="self-start text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
+            >
+           ← Volver
+           </button>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
@@ -507,13 +507,13 @@ export default function ProyectosActivosPage() {
                       <div className="text-sm font-semibold text-slate-700">
                         Ver más
                       </div>
-                              <button
-  type="button"
-  onClick={() => router.push(`/proyecto-ciudadano/proyectos/${project.id}`)}
-  className="vc-pc-proyectos-link text-sm font-semibold text-green-700 hover:text-green-800 cursor-pointer relative z-10"
->
-  Ver detalles →
-</button>
+                      <button
+                     type="button"
+                     onClick={() => router.push(`/proyecto-ciudadano/proyectos/${project.id}`)}
+                     className="vc-pc-proyectos-link text-sm font-semibold text-green-700 hover:text-green-800 cursor-pointer relative z-10"
+                     >
+                     Ver detalles →
+                     </button>
                     </div>
                   </div>
                 </div>

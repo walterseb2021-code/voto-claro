@@ -459,7 +459,7 @@ export default function ProyectoCiudadanoPage() {
         </div>
 
         {/* Mensaje de bienvenida */}
-        <div className={`bg-white ${card}`}>
+           <div className={`bg-white ${card} mb-6`}>
           <p className="text-slate-700 text-lg font-semibold">
             💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
             Cada 3 meses se elige un proyecto ganador por categoría presupuestal.
