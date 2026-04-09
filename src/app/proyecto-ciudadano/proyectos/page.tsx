@@ -1,6 +1,7 @@
 'use client';
+
 import Link from 'next/link';
- import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
@@ -45,7 +46,7 @@ function getRequestedBudgetLabel(value: number | null | undefined): string {
 }
 
 export default function ProyectosActivosPage() {
-    const router = useRouter();
+  const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -58,7 +59,7 @@ export default function ProyectosActivosPage() {
     'todos', 'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho',
     'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica',
     'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios',
-    'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali'
+    'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali',
   ];
 
   useEffect(() => {
@@ -112,12 +113,16 @@ export default function ProyectosActivosPage() {
     }
   };
 
-  const filteredProjects = projects.filter(project => {
-    const matchesDepartment = selectedDepartment === 'todos' || project.department === selectedDepartment;
+  const filteredProjects = projects.filter((project) => {
+    const matchesDepartment =
+      selectedDepartment === 'todos' || project.department === selectedDepartment;
+
+    const q = searchTerm.toLowerCase().trim();
     const matchesSearch =
-      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.district.toLowerCase().includes(searchTerm.toLowerCase());
+      project.name.toLowerCase().includes(q) ||
+      project.category.toLowerCase().includes(q) ||
+      project.district.toLowerCase().includes(q);
+
     return matchesDepartment && matchesSearch;
   });
 
@@ -186,8 +191,12 @@ export default function ProyectosActivosPage() {
       visibleParts.push(`Categoría temática visible del primer proyecto: ${highlightedProject.category}.`);
       visibleParts.push(`Departamento visible del primer proyecto: ${highlightedProject.department}.`);
       visibleParts.push(`Distrito visible del primer proyecto: ${highlightedProject.district}.`);
-      visibleParts.push(`Monto solicitado visible del primer proyecto: ${getRequestedBudgetLabel(highlightedProject.requested_budget)}.`);
-      visibleParts.push(`Categoría presupuestal visible del primer proyecto: ${getBudgetCategoryLabel(highlightedProject.budget_category)}.`);
+      visibleParts.push(
+        `Monto solicitado visible del primer proyecto: ${getRequestedBudgetLabel(highlightedProject.requested_budget)}.`
+      );
+      visibleParts.push(
+        `Categoría presupuestal visible del primer proyecto: ${getBudgetCategoryLabel(highlightedProject.budget_category)}.`
+      );
       visibleParts.push(`Apoyos visibles del primer proyecto: ${currentSupports}.`);
       visibleParts.push(`Apoyos faltantes del primer proyecto para evaluación final: ${supportsRemaining}.`);
       visibleParts.push(
@@ -201,7 +210,9 @@ export default function ProyectosActivosPage() {
       visibleParts.push(`Títulos visibles: ${visibleTitles.join(', ')}.`);
     }
 
-    visibleParts.push(`Regla visible del programa: cada proyecto necesita al menos ${DEFAULT_MIN_SUPPORTS_REQUIRED} apoyos válidos para entrar a evaluación final.`);
+    visibleParts.push(
+      `Regla visible del programa: cada proyecto necesita al menos ${DEFAULT_MIN_SUPPORTS_REQUIRED} apoyos válidos para entrar a evaluación final.`
+    );
 
     if (!loading && !error && filteredProjects.length === 0) {
       if (selectedDepartment !== 'todos') {
@@ -313,7 +324,13 @@ export default function ProyectosActivosPage() {
         'cabecera',
         'descripcion',
         'filtros',
-        loading ? 'estado-carga' : error ? 'estado-error' : filteredProjects.length === 0 ? 'estado-vacio' : 'listado-proyectos',
+        loading
+          ? 'estado-carga'
+          : error
+          ? 'estado-error'
+          : filteredProjects.length === 0
+          ? 'estado-vacio'
+          : 'listado-proyectos',
       ],
       visibleActions: availableActions,
       availableActions,
@@ -368,18 +385,31 @@ export default function ProyectosActivosPage() {
     };
   }, [clearPageContext]);
 
+  const handleGoBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push('/proyecto-ciudadano');
+  };
+
+  const handleOpenDetails = (projectId: string) => {
+    window.location.href = `/proyecto-ciudadano/proyectos/${projectId}`;
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-6xl mx-auto">
-           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Proyectos Ciudadanos Activos</h1>
-            <button
+
+          <button
             type="button"
-            onClick={() => router.push('/proyecto-ciudadano')}
+            onClick={handleGoBack}
             className="self-start text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
-            >
-           ← Volver
-           </button>
+          >
+            ← Volver
+          </button>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
@@ -407,7 +437,9 @@ export default function ProyectosActivosPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Buscar por nombre, categoría o distrito</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Buscar por nombre, categoría o distrito
+              </label>
               <input
                 type="text"
                 placeholder="Ej: Árboles, Educación, Salud..."
@@ -435,6 +467,7 @@ export default function ProyectosActivosPage() {
                 ? `No hay proyectos para el departamento de ${selectedDepartment}.`
                 : 'Sé el primero en presentar un proyecto ciudadano.'}
             </p>
+
             <Link
               href="/proyecto-ciudadano/nuevo-proyecto"
               className="inline-block mt-4 bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
@@ -454,15 +487,16 @@ export default function ProyectosActivosPage() {
                   : currentSupports >= minSupports;
 
               return (
-                  <div
-  key={project.id}
-  className="vc-pc-proyectos-card bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
->
+                <div
+                  key={project.id}
+                  className="vc-pc-proyectos-card bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
+                >
                   <div className="p-5">
                     <div className="flex justify-between items-start mb-3 gap-2 flex-wrap">
                       <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
                         {project.category}
                       </span>
+
                       <span className="text-xs text-slate-500">
                         {project.department}
                       </span>
@@ -472,6 +506,7 @@ export default function ProyectosActivosPage() {
                       <span className="text-xs font-semibold bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
                         {getBudgetCategoryLabel(project.budget_category)}
                       </span>
+
                       <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-1 rounded-full">
                         {getRequestedBudgetLabel(project.requested_budget)}
                       </span>
@@ -493,27 +528,30 @@ export default function ProyectosActivosPage() {
                       🤝 {currentSupports} / {minSupports} apoyos
                     </div>
 
-                    <div className={`text-xs font-semibold rounded-lg px-3 py-2 mb-4 ${
-                      eligible
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}>
+                    <div
+                      className={`text-xs font-semibold rounded-lg px-3 py-2 mb-4 ${
+                        eligible
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
                       {eligible
                         ? '✅ Elegible para evaluación final'
                         : `⏳ Faltan ${supportsRemaining} apoyos`}
                     </div>
 
-                     <div className="flex items-center justify-between mt-4 relative z-10">
+                    <div className="flex items-center justify-between mt-4 relative z-10">
                       <div className="text-sm font-semibold text-slate-700">
                         Ver más
                       </div>
+
                       <button
-                     type="button"
-                     onClick={() => router.push(`/proyecto-ciudadano/proyectos/${project.id}`)}
-                     className="vc-pc-proyectos-link text-sm font-semibold text-green-700 hover:text-green-800 cursor-pointer relative z-10"
-                     >
-                     Ver detalles →
-                     </button>
+                        type="button"
+                        onClick={() => handleOpenDetails(project.id)}
+                        className="vc-pc-proyectos-link text-sm font-semibold text-green-700 hover:text-green-800 cursor-pointer relative z-10"
+                      >
+                        Ver detalles →
+                      </button>
                     </div>
                   </div>
                 </div>
