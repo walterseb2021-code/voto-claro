@@ -4136,36 +4136,36 @@ function sendQuick(q: string) {
     <>
       {/* ✅ FAB MOVIBLE */}
       {!isPitchPage && (
-          <div
+            <div
   ref={fabRef}
   className={[
-    "fixed z-[60] touch-none vc-assistant-fab-wrap",
+    "fixed z-[60] pointer-events-none vc-assistant-fab-wrap",
     open ? "vc-assistant-open" : "",
   ].join(" ")}
-          style={
-            mounted
-              ? { left: fabPos.x, top: fabPos.y }
-              : { right: 16, bottom: 16, left: "auto", top: "auto" }
-          }
-          onPointerDown={onFabPointerDown}
-          onPointerMove={onFabPointerMove}
-          onPointerUp={onFabPointerUp}
-        >
-          <button
-            type="button"
-               className={[
-  "flex items-center gap-2 rounded-full border bg-white",
-  "shadow-lg px-3 py-2",
-  "hover:shadow-xl active:scale-[0.98] transition",
-  "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-200",
-  "hover:-translate-y-[2px]",
-  "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-  "select-none",
-  "vc-assistant-fab",
-].join(" ")}
-            aria-label={fabLabel}
-            title={fabLabel}
-          >
+  style={
+    mounted
+      ? { left: fabPos.x, top: fabPos.y }
+      : { right: 16, bottom: 16, left: "auto", top: "auto" }
+  }
+>
+              <button
+  type="button"
+  onPointerDown={onFabPointerDown}
+  onPointerMove={onFabPointerMove}
+  onPointerUp={onFabPointerUp}
+  className={[
+    "flex items-center gap-2 rounded-full border bg-white",
+    "shadow-lg px-3 py-2",
+    "hover:shadow-xl active:scale-[0.98] transition",
+    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-200",
+    "hover:-translate-y-[2px]",
+    "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+    "select-none pointer-events-auto touch-none",
+    "vc-assistant-fab",
+  ].join(" ")}
+  aria-label={fabLabel}
+  title={fabLabel}
+>
             <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gray-100 shrink-0">
               <FederalitoAvatar className="w-full h-full" />
               <span

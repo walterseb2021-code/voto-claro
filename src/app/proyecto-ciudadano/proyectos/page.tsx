@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+ import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
@@ -44,6 +45,7 @@ function getRequestedBudgetLabel(value: number | null | undefined): string {
 }
 
 export default function ProyectosActivosPage() {
+    const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -371,9 +373,13 @@ export default function ProyectosActivosPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Proyectos Ciudadanos Activos</h1>
-          <Link href="/proyecto-ciudadano" className="text-sm text-slate-600 hover:underline">
-            ← Volver
-          </Link>
+          <button
+  type="button"
+  onClick={() => router.push('/proyecto-ciudadano')}
+  className="text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
+>
+  ← Volver
+</button>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
@@ -448,10 +454,10 @@ export default function ProyectosActivosPage() {
                   : currentSupports >= minSupports;
 
               return (
-                <div
-                  key={project.id}
-                  className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
-                >
+                  <div
+  key={project.id}
+  className="vc-pc-proyectos-card bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"
+>
                   <div className="p-5">
                     <div className="flex justify-between items-start mb-3 gap-2 flex-wrap">
                       <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -497,16 +503,17 @@ export default function ProyectosActivosPage() {
                         : `⏳ Faltan ${supportsRemaining} apoyos`}
                     </div>
 
-                    <div className="flex items-center justify-between mt-4">
+                     <div className="flex items-center justify-between mt-4 relative z-10">
                       <div className="text-sm font-semibold text-slate-700">
                         Ver más
                       </div>
-                      <Link
-                        href={`/proyecto-ciudadano/proyectos/${project.id}`}
-                        className="text-sm font-semibold text-green-700 hover:text-green-800"
-                      >
-                        Ver detalles →
-                      </Link>
+                              <button
+  type="button"
+  onClick={() => router.push(`/proyecto-ciudadano/proyectos/${project.id}`)}
+  className="vc-pc-proyectos-link text-sm font-semibold text-green-700 hover:text-green-800 cursor-pointer relative z-10"
+>
+  Ver detalles →
+</button>
                     </div>
                   </div>
                 </div>

@@ -728,9 +728,13 @@ const proyectosConContactos = (data || []).map((p) => ({
         {/* Cabecera */}
         <div className="flex justify-between items-center mb-6 vc-fade-up">
           <h1 className="text-3xl font-bold text-slate-900">Espacio Emprendedor APP</h1>
-          <Link href="/" className={btnPrimary}>
-            ← Volver al inicio
-          </Link>
+            <button
+  type="button"
+  onClick={() => router.push('/')}
+  className={btnPrimary}
+>
+  ← Volver al inicio
+</button>
         </div>
 
         {/* Mensajes de éxito y error */}

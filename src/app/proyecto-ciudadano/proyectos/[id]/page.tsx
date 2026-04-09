@@ -598,9 +598,13 @@ export default function ProjectDetailPage() {
           <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4 mb-4">
             {error || 'Proyecto no encontrado'}
           </div>
-          <Link href="/proyecto-ciudadano/proyectos" className="text-green-700 hover:underline">
-            ← Volver a proyectos
-          </Link>
+            <button
+  type="button"
+  onClick={() => router.push('/proyecto-ciudadano/proyectos')}
+  className="text-green-700 hover:underline cursor-pointer relative z-10"
+>
+  ← Volver a proyectos
+</button>
         </div>
       </main>
     );
@@ -627,9 +631,13 @@ export default function ProjectDetailPage() {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
-          <Link href="/proyecto-ciudadano/proyectos" className="text-sm text-slate-600 hover:underline">
-            ← Volver a proyectos
-          </Link>
+          <button
+  type="button"
+  onClick={() => router.push('/proyecto-ciudadano/proyectos')}
+  className="text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
+>
+  ← Volver a proyectos
+</button>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm mb-6">

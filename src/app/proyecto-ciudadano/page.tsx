@@ -551,12 +551,13 @@ export default function ProyectoCiudadanoPage() {
                       <p className="text-sm text-slate-600">{winner.category} • {winner.department} - {winner.district}</p>
                       <p className="text-xs text-slate-500 mt-1">Líder: {winner.leader?.alias || 'Anónimo'}</p>
                     </div>
-                    <Link
-                      href={`/proyecto-ciudadano/proyectos/${winner.id}`}
-                      className="text-sm text-green-700 hover:underline"
-                    >
-                      Ver proyecto →
-                    </Link>
+                       <button
+  type="button"
+  onClick={() => router.push(`/proyecto-ciudadano/proyectos/${winner.id}`)}
+  className="text-sm text-green-700 hover:underline cursor-pointer relative z-10"
+>
+  Ver proyecto →
+</button>
                   </div>
                 </div>
               ))}
@@ -637,20 +638,23 @@ export default function ProyectoCiudadanoPage() {
               Puedes presentar un nuevo proyecto o apoyar iniciativas existentes.
             </p>
 
-            <div className="flex flex-wrap gap-4">
-              <Link
-                href="/proyecto-ciudadano/nuevo-proyecto"
-                className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block vc-btn-wave vc-btn-pulse"
-              >
-                📝 Presentar proyecto
-              </Link>
-              <Link
-                href="/proyecto-ciudadano/proyectos"
-                className="bg-slate-200 text-slate-800 px-6 py-2 rounded-xl font-semibold hover:bg-slate-300 inline-block vc-btn-wave vc-btn-pulse"
-              >
-                🔍 Ver proyectos activos
-              </Link>
-            </div>
+              <div className="flex flex-wrap gap-4 relative z-10">
+  <button
+    type="button"
+    onClick={() => router.push('/proyecto-ciudadano/nuevo-proyecto')}
+    className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block vc-btn-wave vc-btn-pulse cursor-pointer"
+  >
+    📝 Presentar proyecto
+  </button>
+
+  <button
+    type="button"
+    onClick={() => router.push('/proyecto-ciudadano/proyectos')}
+    className="bg-slate-200 text-slate-800 px-6 py-2 rounded-xl font-semibold hover:bg-slate-300 inline-block vc-btn-wave vc-btn-pulse cursor-pointer"
+  >
+    🔍 Ver proyectos activos
+  </button>
+</div>
           </div>
         )}
 
@@ -658,12 +662,13 @@ export default function ProyectoCiudadanoPage() {
         <div className={`bg-white ${card} mt-6`}>
           <h2 className="text-xl font-bold text-slate-900 mb-3">Proyectos destacados</h2>
           <p className="text-slate-500">Próximamente se mostrarán los proyectos con más apoyo ciudadano.</p>
-          <Link
-            href="/proyecto-ciudadano/proyectos"
-            className="inline-block mt-3 text-green-700 hover:text-green-800 font-semibold vc-btn-wave"
-          >
-            Ver todos los proyectos →
-          </Link>
+              <button
+  type="button"
+  onClick={() => router.push('/proyecto-ciudadano/proyectos')}
+  className="inline-block mt-3 text-green-700 hover:text-green-800 font-semibold vc-btn-wave cursor-pointer relative z-10"
+>
+  Ver todos los proyectos →
+</button>
         </div>
       </div>
     </main>
