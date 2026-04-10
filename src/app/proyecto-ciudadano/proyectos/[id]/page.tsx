@@ -1,4 +1,5 @@
 'use client';
+
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -76,6 +77,14 @@ export default function ProjectDetailPage() {
   const [newPost, setNewPost] = useState('');
   const [sendingPost, setSendingPost] = useState(false);
   const [activeCycle, setActiveCycle] = useState<any>(null);
+
+  const [uiMessage, setUiMessage] = useState<string | null>(null);
+  const [uiMessageType, setUiMessageType] = useState<'success' | 'warning' | 'error'>('warning');
+
+  const showMessage = (message: string, type: 'success' | 'warning' | 'error' = 'warning') => {
+    setUiMessage(message);
+    setUiMessageType(type);
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -193,19 +202,21 @@ export default function ProjectDetailPage() {
   }, [projectId]);
 
   const handleSupport = async () => {
+    setUiMessage(null);
+
     if (!participant) {
-      alert('Debes registrarte para apoyar proyectos.');
+      showMessage('Debes registrarte para apoyar proyectos.', 'warning');
       router.push('/proyecto-ciudadano/registro');
       return;
     }
 
     if (!activeCycle) {
-      alert('No hay un ciclo activo en este momento.');
+      showMessage('No hay un ciclo activo en este momento.', 'warning');
       return;
     }
 
     if (supporting) {
-      alert('Ya estás apoyando este proyecto.');
+      showMessage('Ya estás apoyando este proyecto.', 'warning');
       return;
     }
 
@@ -217,7 +228,7 @@ export default function ProjectDetailPage() {
       .maybeSingle();
 
     if (existingSupport) {
-      alert('Solo puedes apoyar un proyecto por ciclo. Ya estás apoyando otro proyecto.');
+      showMessage('Solo puedes apoyar un proyecto por ciclo. Ya estás apoyando otro proyecto.', 'warning');
       return;
     }
 
@@ -262,18 +273,21 @@ export default function ProjectDetailPage() {
             }
           : null
       );
-      alert('¡Gracias por apoyar este proyecto!');
+
+      showMessage('¡Gracias por apoyar este proyecto!', 'success');
     } catch (err: any) {
       console.error('Error al apoyar:', err);
-      alert(err.message || 'Error al apoyar el proyecto');
+      showMessage(err.message || 'Error al apoyar el proyecto', 'error');
     } finally {
       setSupportLoading(false);
     }
   };
 
   const handlePost = async () => {
+    setUiMessage(null);
+
     if (!participant) {
-      alert('Debes registrarte para participar en el foro.');
+      showMessage('Debes registrarte para participar en el foro.', 'warning');
       router.push('/proyecto-ciudadano/registro');
       return;
     }
@@ -301,9 +315,10 @@ export default function ProjectDetailPage() {
 
       setForumPosts((prev) => [...prev, newPostObj]);
       setNewPost('');
+      showMessage('Tu comentario fue publicado correctamente.', 'success');
     } catch (err: any) {
       console.error('Error al publicar:', err);
-      alert(err.message || 'Error al publicar');
+      showMessage(err.message || 'Error al publicar', 'error');
     } finally {
       setSendingPost(false);
     }
@@ -367,6 +382,10 @@ export default function ProjectDetailPage() {
       visibleParts.push(`Error visible: ${error}.`);
     }
 
+    if (uiMessage) {
+      visibleParts.push(`Aviso visible: ${uiMessage}.`);
+    }
+
     if (project) {
       visibleParts.push(`Proyecto visible: ${project.name}.`);
       visibleParts.push(`Categoría temática visible: ${project.category}.`);
@@ -389,9 +408,7 @@ export default function ProjectDetailPage() {
       visibleParts.push(`Criterios visibles de calidad: ${EVALUATION_CRITERIA.join(', ')}.`);
 
       if (project.leader?.alias || project.leader?.full_name) {
-        visibleParts.push(
-          `Líder visible: ${project.leader?.alias || project.leader?.full_name}.`
-        );
+        visibleParts.push(`Líder visible: ${project.leader?.alias || project.leader?.full_name}.`);
       }
 
       if (project.leader?.email) {
@@ -556,9 +573,11 @@ export default function ProjectDetailPage() {
         sendingPost,
         canSupport,
         canComment,
+        uiMessage: uiMessage || null,
+        uiMessageType,
         error: error || null,
       },
-      contextVersion: 'pc-proyecto-detalle-v2',
+      contextVersion: 'pc-proyecto-detalle-v3',
     });
   }, [
     setPageContext,
@@ -573,6 +592,8 @@ export default function ProjectDetailPage() {
     newPost,
     sendingPost,
     activeCycle,
+    uiMessage,
+    uiMessageType,
   ]);
 
   useEffect(() => {
@@ -598,13 +619,13 @@ export default function ProjectDetailPage() {
           <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4 mb-4">
             {error || 'Proyecto no encontrado'}
           </div>
-            <button
-  type="button"
-  onClick={() => router.push('/proyecto-ciudadano/proyectos')}
-  className="text-green-700 hover:underline cursor-pointer relative z-10"
->
-  ← Volver a proyectos
-</button>
+          <button
+            type="button"
+            onClick={() => router.push('/proyecto-ciudadano/proyectos')}
+            className="text-green-700 hover:underline cursor-pointer relative z-10"
+          >
+            ← Volver a proyectos
+          </button>
         </div>
       </main>
     );
@@ -626,19 +647,32 @@ export default function ProjectDetailPage() {
         })}`
       : 'No especificado';
 
+  const uiMessageClasses =
+    uiMessageType === 'success'
+      ? 'bg-green-100 border-green-400 text-green-800'
+      : uiMessageType === 'error'
+      ? 'bg-red-100 border-red-400 text-red-700'
+      : 'bg-amber-100 border-amber-400 text-amber-800';
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
           <button
-  type="button"
-  onClick={() => router.push('/proyecto-ciudadano/proyectos')}
-  className="text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
->
-  ← Volver a proyectos
-</button>
+            type="button"
+            onClick={() => router.push('/proyecto-ciudadano/proyectos')}
+            className="text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
+          >
+            ← Volver a proyectos
+          </button>
         </div>
+
+        {uiMessage && (
+          <div className={`border rounded-xl p-4 mb-4 text-sm ${uiMessageClasses}`}>
+            {uiMessage}
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm mb-6">
           <div className="flex flex-wrap gap-2 mb-4">
@@ -670,14 +704,16 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <div className={`mb-4 rounded-xl p-4 border ${
-            eligibleForFinalReview
-              ? 'bg-green-50 border-green-300'
-              : 'bg-amber-50 border-amber-300'
-          }`}>
-            <p className={`text-sm font-semibold ${
-              eligibleForFinalReview ? 'text-green-800' : 'text-amber-800'
-            }`}>
+          <div
+            className={`mb-4 rounded-xl p-4 border ${
+              eligibleForFinalReview ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'
+            }`}
+          >
+            <p
+              className={`text-sm font-semibold ${
+                eligibleForFinalReview ? 'text-green-800' : 'text-amber-800'
+              }`}
+            >
               {eligibleForFinalReview
                 ? '✅ Este proyecto ya es elegible para evaluación final.'
                 : `⏳ A este proyecto le faltan ${supportsRemaining} apoyos para entrar a evaluación final.`}
@@ -697,9 +733,7 @@ export default function ProjectDetailPage() {
           <div className="mb-4">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">Líder del proyecto</h2>
             <p className="text-slate-800">{project.leader?.alias || project.leader?.full_name || 'Anónimo'}</p>
-            {project.leader?.email && (
-              <p className="text-sm text-slate-500">{project.leader.email}</p>
-            )}
+            {project.leader?.email && <p className="text-sm text-slate-500">{project.leader.email}</p>}
           </div>
 
           {project.pdf_url && (
@@ -716,16 +750,12 @@ export default function ProjectDetailPage() {
           )}
 
           <div className="mt-4 text-xs text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-300">
-            <strong>📊 Evaluación del proyecto:</strong> Para entrar a evaluación final, este proyecto necesita al menos <strong>{minSupportsRequired} apoyos válidos</strong>.
-            La nota final combina <strong>{EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano</strong> y <strong>{EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto</strong>.
-            La calidad se evalúa por impacto comunitario, claridad del problema y la solución, viabilidad técnica y presupuestal, y sostenibilidad del beneficio.
+            <strong>📊 Evaluación del proyecto:</strong> Para entrar a evaluación final, este proyecto necesita al menos <strong>{minSupportsRequired} apoyos válidos</strong>. La nota final combina <strong>{EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano</strong> y <strong>{EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto</strong>. La calidad se evalúa por impacto comunitario, claridad del problema y la solución, viabilidad técnica y presupuestal, y sostenibilidad del beneficio.
           </div>
 
           {project.status === 'active' && (
             <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-              <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
-              El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-              No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado.
+              <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto. El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores. No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado.
             </div>
           )}
 
@@ -735,9 +765,7 @@ export default function ProjectDetailPage() {
                 onClick={handleSupport}
                 disabled={supportLoading || supporting}
                 className={`w-full py-3 rounded-xl font-semibold transition ${
-                  supporting
-                    ? 'bg-green-100 text-green-700 cursor-default'
-                    : 'bg-green-700 text-white hover:bg-green-800'
+                  supporting ? 'bg-green-100 text-green-700 cursor-default' : 'bg-green-700 text-white hover:bg-green-800'
                 }`}
               >
                 {supportLoading
@@ -761,9 +789,7 @@ export default function ProjectDetailPage() {
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-4">Foro de discusión</h2>
-          <p className="text-sm text-slate-600 mb-4">
-            Participa con ideas y preguntas sobre este proyecto.
-          </p>
+          <p className="text-sm text-slate-600 mb-4">Participa con ideas y preguntas sobre este proyecto.</p>
 
           <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
             {forumPosts.length === 0 ? (
