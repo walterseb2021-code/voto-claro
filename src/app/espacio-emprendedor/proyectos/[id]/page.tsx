@@ -914,7 +914,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
               </div>
 
               {canUseConversation ? (
-                 <div className="flex items-end gap-3">
+                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
   <textarea
     value={newMessage}
     onChange={(e) => setNewMessage(e.target.value)}
@@ -924,13 +924,13 @@ export default function EspacioEmprendedorProjectDetailPage() {
         : 'Escribe tu mensaje para el emprendedor...'
     }
     rows={3}
-    className="flex-1 min-w-0 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
+    className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
   />
   <button
     type="button"
     onClick={handleSendMessage}
     disabled={sendingMessage || !newMessage.trim()}
-    className="shrink-0 w-[120px] sm:w-[150px] rounded-xl bg-green-700 text-white font-semibold hover:bg-green-800 disabled:opacity-50 text-sm leading-tight px-3 py-3"
+    className="w-full sm:w-[150px] rounded-xl bg-green-700 text-white font-semibold hover:bg-green-800 disabled:opacity-50 text-sm leading-tight px-3 py-3"
   >
     {sendingMessage ? (
       <>
