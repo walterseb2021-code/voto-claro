@@ -386,12 +386,8 @@ export default function ProyectosActivosPage() {
   }, [clearPageContext]);
 
   const handleGoBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      router.back();
-      return;
-    }
-    router.push('/proyecto-ciudadano');
-  };
+  router.push('/proyecto-ciudadano');
+};
 
   const handleOpenDetails = (projectId: string) => {
     window.location.href = `/proyecto-ciudadano/proyectos/${projectId}`;
