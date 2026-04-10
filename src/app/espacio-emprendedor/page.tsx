@@ -864,23 +864,35 @@ const proyectosConContactos = (data || []).map((p) => ({
                   <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded-lg mb-3">
                     Para publicar proyectos, debes ser afiliado a Alianza para el Progreso.
                   </p>
-                  <div className="flex gap-3">
+                      <div className="flex items-stretch gap-3">
                     <input
-                      type="text"
-                      placeholder="DNI (8 dígitos)"
-                      value={dni}
-                      onChange={(e) => setDni(e.target.value)}
-                      className="flex-1 border-2 border-slate-300 rounded-xl px-3 py-2 text-sm"
-                      maxLength={8}
+                    type="text"
+                    placeholder="DNI (8 dígitos)"
+                    value={dni}
+                    onChange={(e) => setDni(e.target.value)}
+                    className="flex-1 min-w-0 border-2 border-slate-300 rounded-xl px-3 py-3 text-sm focus:border-green-500 focus:outline-none"
+                    maxLength={8}
                     />
-                    <button
-                      onClick={handleVerificarDNI}
-                      disabled={verificando}
-                      className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-50 vc-btn-wave vc-btn-pulse"
-                    >
-                      {verificando ? 'Verificando...' : 'Verificar DNI'}
-                    </button>
-                  </div>
+
+  <button
+    type="button"
+    onClick={handleVerificarDNI}
+    disabled={verificando}
+    className="shrink-0 w-[110px] sm:w-[130px] rounded-xl bg-green-700 text-white text-sm font-semibold hover:bg-green-800 disabled:opacity-50 vc-btn-wave vc-btn-pulse leading-tight px-3 py-3"
+  >
+    {verificando ? (
+      <>
+        <span className="block">Verificando</span>
+        <span className="block">DNI...</span>
+      </>
+    ) : (
+      <>
+        <span className="block">Verificar</span>
+        <span className="block">DNI</span>
+      </>
+    )}
+  </button>
+</div>
                   <p className="text-xs text-slate-500 mt-2">
                     ¿No estás afiliado? <a href="https://www.jne.gob.pe" target="_blank" rel="noopener noreferrer" className="text-green-700 underline">Afíliate aquí</a>
                   </p>

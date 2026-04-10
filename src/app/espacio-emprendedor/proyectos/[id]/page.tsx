@@ -914,26 +914,37 @@ export default function EspacioEmprendedorProjectDetailPage() {
               </div>
 
               {canUseConversation ? (
-                <div className="flex gap-3 items-start">
-                  <textarea
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder={
-                      esPropietario
-                        ? 'Escribe tu respuesta al inversionista...'
-                        : 'Escribe tu mensaje para el emprendedor...'
-                    }
-                    rows={2}
-                    className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={sendingMessage || !newMessage.trim()}
-                    className="bg-green-700 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50 whitespace-nowrap text-sm"
-                  >
-                    {sendingMessage ? 'Enviando...' : 'Enviar mensaje'}
-                  </button>
-                </div>
+                 <div className="flex items-end gap-3">
+  <textarea
+    value={newMessage}
+    onChange={(e) => setNewMessage(e.target.value)}
+    placeholder={
+      esPropietario
+        ? 'Escribe tu respuesta al inversionista...'
+        : 'Escribe tu mensaje para el emprendedor...'
+    }
+    rows={3}
+    className="flex-1 min-w-0 border-2 border-slate-300 rounded-xl px-4 py-3 focus:border-green-500 focus:outline-none resize-none text-sm"
+  />
+  <button
+    type="button"
+    onClick={handleSendMessage}
+    disabled={sendingMessage || !newMessage.trim()}
+    className="shrink-0 w-[120px] sm:w-[150px] rounded-xl bg-green-700 text-white font-semibold hover:bg-green-800 disabled:opacity-50 text-sm leading-tight px-3 py-3"
+  >
+    {sendingMessage ? (
+      <>
+        <span className="block">Enviando</span>
+        <span className="block">...</span>
+      </>
+    ) : (
+      <>
+        <span className="block">Enviar</span>
+        <span className="block">mensaje</span>
+      </>
+    )}
+  </button>
+</div>
               ) : null}
             </>
           )}
