@@ -385,10 +385,7 @@ export default function ProyectosActivosPage() {
     };
   }, [clearPageContext]);
 
-  const handleGoBack = () => {
-  router.push('/proyecto-ciudadano');
-};
-
+  
   const handleOpenDetails = (projectId: string) => {
     window.location.href = `/proyecto-ciudadano/proyectos/${projectId}`;
   };
@@ -400,12 +397,14 @@ export default function ProyectosActivosPage() {
           <h1 className="text-2xl font-bold text-slate-900">Proyectos Ciudadanos Activos</h1>
 
           <button
-            type="button"
-            onClick={handleGoBack}
-            className="self-start text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
-          >
-            ← Volver
-          </button>
+  type="button"
+  onClick={() => {
+    window.location.href = '/proyecto-ciudadano';
+  }}
+  className="self-start text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
+>
+  ← Volver
+</button>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
