@@ -490,7 +490,7 @@ export default function TopicForumPage() {
           className="mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold"
           value={forumAliasDraft}
           onChange={(e) => setForumAliasDraft(e.target.value)}
-          placeholder="Ej: VozCiudadana"
+          placeholder="Ej: Voz Ciudadana"
           maxLength={20}
         />
         <div className="mt-1 text-xs text-slate-600">

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
@@ -249,12 +248,15 @@ export default function ComentariosPage() {
   const [latestOfficialWinnerLoading, setLatestOfficialWinnerLoading] = useState(false);
   const [latestOfficialWinnerError, setLatestOfficialWinnerError] = useState<string | null>(null);
 
-  const [archivedTopicsPublic, setArchivedTopicsPublic] = useState<ArchivedTopicPublicItem[]>([]);
+    const [archivedTopicsPublic, setArchivedTopicsPublic] = useState<ArchivedTopicPublicItem[]>([]);
   const [archivedTopicsPublicLoading, setArchivedTopicsPublicLoading] = useState(false);
   const [archivedTopicsPublicError, setArchivedTopicsPublicError] = useState<string | null>(null);
+  const [selectedArchivedTopicId, setSelectedArchivedTopicId] = useState<string>("");
+
   const [forumTopics, setForumTopics] = useState<ArchivedTopicPublicItem[]>([]);
   const [forumTopicsLoading, setForumTopicsLoading] = useState(false);
   const [forumTopicsError, setForumTopicsError] = useState<string | null>(null);
+  const [selectedForumTopicId, setSelectedForumTopicId] = useState<string>("");
   const [founderQuestionsPublic, setFounderQuestionsPublic] = useState<FounderQuestionPublicRow[]>(
     []
   );
@@ -1048,6 +1050,25 @@ if (!alias) {
       votes: videoVoteCounts[top.id] ?? 0,
     };
   }, [publicVideos, videoVoteCounts]);
+    const selectedArchivedTopic = useMemo(() => {
+    return archivedTopicsPublic.find((item) => item.id === selectedArchivedTopicId) ?? null;
+  }, [archivedTopicsPublic, selectedArchivedTopicId]);
+
+  const selectedForumTopic = useMemo(() => {
+    return forumTopics.find((item) => item.id === selectedForumTopicId) ?? null;
+  }, [forumTopics, selectedForumTopicId]);
+
+  useEffect(() => {
+    if (!selectedArchivedTopicId && archivedTopicsPublic.length > 0) {
+      setSelectedArchivedTopicId(archivedTopicsPublic[0].id);
+    }
+  }, [archivedTopicsPublic, selectedArchivedTopicId]);
+
+  useEffect(() => {
+    if (!selectedForumTopicId && forumTopics.length > 0) {
+      setSelectedForumTopicId(forumTopics[0].id);
+    }
+  }, [forumTopics, selectedForumTopicId]);
 
   async function onSubmit(e: React.FormEvent) {
   e.preventDefault();
@@ -1703,9 +1724,9 @@ const status =
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          <Link href="/" className={btn}>
-            🏠 Inicio
-          </Link>
+            <button type="button" onClick={() => router.push("/")} className={btn}>
+  🏠 Inicio
+</button>
           <button type="button" onClick={goBack} className={btn}>
             ← Volver
           </button>
@@ -1781,7 +1802,7 @@ const status =
     className={input}
     value={forumAlias}
     onChange={(e) => setForumAlias(e.target.value)}
-    placeholder="Ej: VozCiudadana"
+    placeholder="Ej: Voz Ciudadana"
     maxLength={20}
   />
   <div className="mt-1 text-xs text-slate-600">
@@ -2645,49 +2666,63 @@ const status =
             </div>
           ) : null}
 
-          <div className="mt-4 space-y-4">
-            {archivedTopicsPublic.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-2xl border-2 border-red-600 bg-green-50/50 p-4"
+                      {archivedTopicsPublic.length > 0 ? (
+            <div className="mt-4">
+              <div className={label}>Selecciona una semana cerrada</div>
+              <select
+                className={select}
+                value={selectedArchivedTopicId}
+                onChange={(e) => setSelectedArchivedTopicId(e.target.value)}
               >
+                {archivedTopicsPublic.map((item, index) => (
+                  <option key={item.id} value={item.id}>
+                    {`Semana ${index + 1} - ${item.topic}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {selectedArchivedTopic ? (
+            <div className="mt-4">
+              <div className="rounded-2xl border-2 border-red-600 bg-green-50/50 p-4">
                 <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
-                  Semana cerrada
+                  Semana cerrada seleccionada
                 </div>
                 <div className="mt-1 text-base font-extrabold text-slate-900">
-                  {item.topic}
+                  {selectedArchivedTopic.topic}
                 </div>
 
-                {item.question ? (
+                {selectedArchivedTopic.question ? (
                   <div className="mt-2 text-sm font-semibold text-slate-800 leading-relaxed">
-                    {item.question}
+                    {selectedArchivedTopic.question}
                   </div>
                 ) : null}
 
                 <div className="mt-3 text-sm font-extrabold text-slate-900">
-                  Votos oficiales: {item.winnerVotes}
+                  Votos oficiales: {selectedArchivedTopic.winnerVotes}
                 </div>
 
-                {item.winnerPublishedAt ? (
+                {selectedArchivedTopic.winnerPublishedAt ? (
                   <div className="mt-1 text-xs font-semibold text-slate-600">
-                    Publicado: {new Date(item.winnerPublishedAt).toLocaleString()}
+                    Publicado: {new Date(selectedArchivedTopic.winnerPublishedAt).toLocaleString()}
                   </div>
                 ) : null}
 
-                {item.video ? (
+                {selectedArchivedTopic.video ? (
                   <div className="mt-4 rounded-2xl border-2 border-red-200 bg-white/90 p-4">
                     <div className="text-sm font-extrabold text-slate-900">
-                      {item.video.title || "Participación ciudadana destacada"}
+                      {selectedArchivedTopic.video.title || "Participación ciudadana destacada"}
                     </div>
                     <div className="mt-1 text-sm font-semibold text-slate-700">
-                      Grupo: {item.video.group_code}
+                      Grupo: {selectedArchivedTopic.video.group_code}
                     </div>
                     <div className="mt-1 text-sm font-semibold text-slate-700">
-                      Plataforma: {item.video.platform}
+                      Plataforma: {selectedArchivedTopic.video.platform}
                     </div>
 
                     <a
-                      href={item.video.video_url}
+                      href={selectedArchivedTopic.video.video_url}
                       target="_blank"
                       rel="noreferrer"
                       className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
@@ -2701,8 +2736,8 @@ const status =
                   </div>
                 )}
               </div>
-            ))}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
@@ -2801,41 +2836,56 @@ const status =
     </div>
   ) : null}
 
-  <div className="mt-4 space-y-4">
-    {forumTopics.map((item) => (
-      <div
-        key={item.id}
-        className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+       {forumTopics.length > 0 ? (
+    <div className="mt-4">
+      <div className={label}>Selecciona un foro semanal</div>
+      <select
+        className={select}
+        value={selectedForumTopicId}
+        onChange={(e) => setSelectedForumTopicId(e.target.value)}
       >
+        {forumTopics.map((item, index) => (
+          <option key={item.id} value={item.id}>
+            {`Semana ${index + 1} - ${item.topic}`}
+          </option>
+        ))}
+      </select>
+    </div>
+  ) : null}
+
+  {selectedForumTopic ? (
+    <div className="mt-4">
+      <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4">
         <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
           Tema abierto al foro
         </div>
 
         <div className="mt-1 text-base md:text-lg font-extrabold text-slate-900">
-          {item.topic}
+          {selectedForumTopic.topic}
         </div>
 
-        {item.question ? (
+        {selectedForumTopic.question ? (
           <div className="mt-2 text-sm font-semibold text-slate-800 leading-relaxed">
-            {item.question}
+            {selectedForumTopic.question}
           </div>
         ) : null}
 
-        {item.winnerPublishedAt ? (
+        {selectedForumTopic.winnerPublishedAt ? (
           <div className="mt-2 text-xs font-semibold text-slate-600">
-            Semana cerrada: {new Date(item.winnerPublishedAt).toLocaleString()}
+            Semana cerrada: {new Date(selectedForumTopic.winnerPublishedAt).toLocaleString()}
           </div>
         ) : null}
 
-        <Link
-          href={`/comentarios/foro/${item.id}`}
+        <button
+          type="button"
+          onClick={() => router.push(`/comentarios/foro/${selectedForumTopic.id}`)}
           className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
         >
           💬 Entrar al foro
-        </Link>
+        </button>
       </div>
-    ))}
-  </div>
+    </div>
+  ) : null}
 </section>
       {showScrollTop ? (
         <button
