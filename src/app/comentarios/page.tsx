@@ -1327,8 +1327,8 @@ async function voteForVideo(videoId: string) {
     return;
   }
 
-  if (!weeklyTopicId) {
-    setErrMsg("No se encontró un tema semanal activo.");
+     if (!votingTopicId) {
+    setErrMsg("No se encontró un tema en votación.");
     return;
   }
 
@@ -1344,14 +1344,13 @@ async function voteForVideo(videoId: string) {
     const accessParticipantId = await ensureCommentAccessParticipant();
 
     // 2️⃣ Verificar si ya votó en este tema
-    const { data: existingVote, error: existingVoteError } = await supabase
+        const { data: existingVote, error: existingVoteError } = await supabase
       .from("weekly_video_votes")
       .select("id")
-      .eq("weekly_topic_id", weeklyTopicId)
+      .eq("weekly_topic_id", votingTopicId)
       .eq("access_participant_id", accessParticipantId)
       .limit(1)
       .maybeSingle();
-
     if (existingVoteError) throw new Error(existingVoteError.message);
 
     if (existingVote) {
@@ -1360,8 +1359,8 @@ async function voteForVideo(videoId: string) {
     }
 
     // 3️⃣ Registrar el voto
-    const payload = {
-      weekly_topic_id: weeklyTopicId,
+          const payload = {
+      weekly_topic_id: votingTopicId,
       weekly_video_entry_id: videoId,
       device_id: deviceId,
       access_participant_id: accessParticipantId,

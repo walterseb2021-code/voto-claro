@@ -40,7 +40,8 @@ export default function TopicForumPage() {
   const [comments, setComments] = useState<ForumCommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [deviceId, setDeviceId] = useState<string | null>(null);
+    const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [participant, setParticipant] = useState<any>(null);
   const [hasAccess, setHasAccess] = useState(false);
   const [forumAlias, setForumAlias] = useState<string>("");
   const [forumAliasDraft, setForumAliasDraft] = useState<string>("");
@@ -66,26 +67,151 @@ export default function TopicForumPage() {
   return id;
 }
 
-   async function checkForumAccess(currentDeviceId: string) {
+      async function checkForumAccess(currentDeviceId: string) {
   try {
-    const { data, error } = await supabase
+    const { data: participantData, error: participantError } = await supabase
+      .from("project_participants")
+      .select("*")
+      .eq("device_id", currentDeviceId)
+      .maybeSingle();
+
+    if (participantError) throw new Error(participantError.message);
+
+    setParticipant(participantData ?? null);
+    setHasAccess(!!participantData);
+
+    if (!participantData) {
+      setForumAlias("");
+      setForumAliasDraft("");
+      return;
+    }
+
+    const { data: commentAccessData, error: commentAccessError } = await supabase
       .from("comment_access_participants")
       .select("id, forum_alias")
       .eq("device_id", currentDeviceId)
       .limit(1)
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (commentAccessError) throw new Error(commentAccessError.message);
 
-    setHasAccess(!!data);
-    setForumAlias(data?.forum_alias ?? "");
-    setForumAliasDraft(data?.forum_alias ?? "");
+    setForumAlias(commentAccessData?.forum_alias ?? participantData.alias ?? "");
+    setForumAliasDraft(commentAccessData?.forum_alias ?? participantData.alias ?? "");
   } catch {
+    setParticipant(null);
     setHasAccess(false);
     setForumAlias("");
     setForumAliasDraft("");
   }
 }
+  async function ensureCommentAccessParticipant() {
+    if (!deviceId) {
+      throw new Error("No se pudo identificar tu dispositivo.");
+    }
+
+    if (!participant?.id) {
+      throw new Error("Primero debes registrarte como participante.");
+    }
+
+    const { data: existingByDevice, error: existingByDeviceError } = await supabase
+      .from("comment_access_participants")
+      .select("id")
+      .eq("device_id", deviceId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingByDeviceError) {
+      throw new Error(existingByDeviceError.message);
+    }
+
+    if (existingByDevice?.id) {
+      return existingByDevice.id as string;
+    }
+
+    const participantEmail = (participant.email ?? "").trim();
+    const participantPhone = (participant.phone ?? "").trim();
+
+    if (participantEmail) {
+      const { data: existingByEmail, error: existingByEmailError } = await supabase
+        .from("comment_access_participants")
+        .select("id")
+        .eq("email", participantEmail)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingByEmailError) {
+        throw new Error(existingByEmailError.message);
+      }
+
+      if (existingByEmail?.id) {
+        const { error: updateError } = await supabase
+          .from("comment_access_participants")
+          .update({
+            device_id: deviceId,
+            forum_alias: participant.alias ?? null,
+            group_code: "GENERAL",
+          })
+          .eq("id", existingByEmail.id);
+
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
+
+        return existingByEmail.id as string;
+      }
+    }
+
+    if (participantPhone) {
+      const { data: existingByPhone, error: existingByPhoneError } = await supabase
+        .from("comment_access_participants")
+        .select("id")
+        .eq("celular", participantPhone)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingByPhoneError) {
+        throw new Error(existingByPhoneError.message);
+      }
+
+      if (existingByPhone?.id) {
+        const { error: updateError } = await supabase
+          .from("comment_access_participants")
+          .update({
+            device_id: deviceId,
+            forum_alias: participant.alias ?? null,
+            group_code: "GENERAL",
+          })
+          .eq("id", existingByPhone.id);
+
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
+
+        return existingByPhone.id as string;
+      }
+    }
+
+    const payload: any = {
+      device_id: deviceId,
+      group_code: "GENERAL",
+      forum_alias: participant.alias ?? null,
+    };
+
+    if (participantEmail) payload.email = participantEmail;
+    if (participantPhone) payload.celular = participantPhone;
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("comment_access_participants")
+      .insert(payload)
+      .select("id")
+      .single();
+
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+
+    return inserted.id as string;
+  }
   async function loadForum() {
     if (!topicId) {
       setErrorMsg("No se encontró el tema del foro.");
@@ -219,22 +345,10 @@ export default function TopicForumPage() {
 
   try {
     // 1️⃣ Obtener participant ID
-    const { data: participantRow, error: participantError } = await supabase
-      .from("comment_access_participants")
-      .select("id")
-      .eq("device_id", deviceId)
-      .limit(1)
-      .maybeSingle();
-
-    if (participantError) throw new Error(participantError.message);
-    if (!participantRow?.id) {
-      setErrorMsg("No se encontró tu acceso verificado.");
-      return;
-    }
-
+          const accessParticipantId = await ensureCommentAccessParticipant();
     // 2️⃣ Verificar si el usuario puede comentar usando la función SQL
-    const canCommentResult: any = await supabase
-      .rpc('can_user_comment', { p_user_id: participantRow.id })
+          const canCommentResult: any = await supabase
+      .rpc('can_user_comment', { p_user_id: accessParticipantId })
       .maybeSingle();
 
     if (canCommentResult.error) throw new Error(canCommentResult.error.message);
@@ -245,9 +359,9 @@ export default function TopicForumPage() {
     }
 
     // 3️⃣ Preparar payload y enviar comentario
-    const payload = {
+         const payload = {
       weekly_topic_id: topicId,
-      access_participant_id: participantRow.id,
+      access_participant_id: accessParticipantId,
       device_id: deviceId,
       group_code: "GENERAL",
       message: text,
@@ -310,24 +424,12 @@ export default function TopicForumPage() {
   setSavingForumAlias(true);
 
   try {
-    const { data: participantRow, error: participantError } = await supabase
-      .from("comment_access_participants")
-      .select("id")
-      .eq("device_id", deviceId)
-      .limit(1)
-      .maybeSingle();
-
-    if (participantError) throw new Error(participantError.message);
-
-    if (!participantRow?.id) {
-      setErrorMsg("No se encontró tu acceso verificado.");
-      return;
-    }
+          const accessParticipantId = await ensureCommentAccessParticipant();
 
     const { error } = await supabase
       .from("comment_access_participants")
       .update({ forum_alias: alias })
-      .eq("id", participantRow.id);
+      .eq("id", accessParticipantId);
 
     if (error) throw new Error(error.message);
 
@@ -478,9 +580,9 @@ export default function TopicForumPage() {
     </div>
   ) : null}
 
-  {!hasAccess ? (
+    {!hasAccess ? (
     <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4 text-sm font-semibold text-slate-700">
-      Para participar en el foro, primero debes registrar tu correo o celular en la sección principal de comentarios.
+      Para participar en el foro, primero debes registrarte como participante o iniciar sesión con tu código de acceso en Comentarios Ciudadanos.
     </div>
   ) : !forumAlias ? (
     <form onSubmit={saveForumAlias} className="grid gap-4 mt-4">
