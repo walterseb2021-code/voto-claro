@@ -225,9 +225,12 @@ export default function ComentariosPage() {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("");
 
-  const [sending, setSending] = useState(false);
+    const [sending, setSending] = useState(false);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [codigoAcceso, setCodigoAcceso] = useState("");
+  const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
+  const [loginCodigoError, setLoginCodigoError] = useState("");
 
   const [showPublic, setShowPublic] = useState(false);
   const [showPublicVideos, setShowPublicVideos] = useState(false);
@@ -361,6 +364,57 @@ export default function ComentariosPage() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId]);
+      const handleLoginConCodigo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginCodigoLoading(true);
+    setLoginCodigoError("");
+
+    const codigo = codigoAcceso.trim().toUpperCase();
+
+    if (!codigo) {
+      setLoginCodigoError("Ingresa tu código de acceso");
+      setLoginCodigoLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("project_participants")
+        .select("*")
+        .eq("codigo_acceso", codigo)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+
+      if (!data) {
+        setLoginCodigoError("Código de acceso no válido");
+        setLoginCodigoLoading(false);
+        return;
+      }
+
+      if (!deviceId) {
+        setLoginCodigoError("No se pudo identificar tu dispositivo.");
+        setLoginCodigoLoading(false);
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from("project_participants")
+        .update({ device_id: deviceId })
+        .eq("id", data.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      await loadParticipant(deviceId);
+      setCodigoAcceso("");
+      setLoginCodigoError("✅ Sesión iniciada correctamente");
+      setTimeout(() => setLoginCodigoError(""), 3000);
+    } catch (err: any) {
+      setLoginCodigoError(err?.message || "Error al iniciar sesión");
+    } finally {
+      setLoginCodigoLoading(false);
+    }
+  };
       async function ensureCommentAccessParticipant() {
     if (!deviceId) {
       throw new Error("No se pudo identificar tu dispositivo.");
@@ -1730,7 +1784,7 @@ const status =
           </div>
         ) : null}
 
-                {!checkingData && !hasData ? (
+                      {!checkingData && !hasData ? (
           <div className="mt-4 grid gap-4">
             <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
               Puedes explorar esta ventana libremente, pero para comentar, votar, subir videos o participar activamente en los foros debes registrarte como participante.
@@ -1747,14 +1801,47 @@ const status =
               >
                 Registrarme para participar
               </button>
+            </div>
 
-              <button
-                type="button"
-                className={btn}
-                onClick={() => deviceId && loadParticipant(deviceId)}
-              >
-                🔄 Ya me registré (verificar)
-              </button>
+            <div className="rounded-2xl border-2 border-blue-600 bg-white p-4">
+              <h3 className="text-base font-extrabold text-slate-900 mb-2">
+                🔑 Iniciar sesión con código
+              </h3>
+              <p className="text-sm font-semibold text-slate-700 mb-3">
+                Si ya tienes tu código de acceso, ingrésalo aquí para participar en Comentarios Ciudadanos.
+              </p>
+
+              {loginCodigoError ? (
+                <div
+                  className="mb-3 rounded-xl p-3 text-sm font-semibold"
+                  style={{
+                    backgroundColor: loginCodigoError.includes("✅") ? "#f0fdf4" : "#fee2e2",
+                    border: loginCodigoError.includes("✅") ? "1px solid #bbf7d0" : "1px solid #fecaca",
+                    color: loginCodigoError.includes("✅") ? "#166534" : "#dc2626",
+                  }}
+                >
+                  {loginCodigoError}
+                </div>
+              ) : null}
+
+              <form onSubmit={handleLoginConCodigo} className="grid gap-3">
+                <input
+                  type="text"
+                  value={codigoAcceso}
+                  onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
+                  placeholder="Ej: EMP-2026-3A7F"
+                  className={input}
+                  disabled={loginCodigoLoading}
+                />
+
+                <button
+                  type="submit"
+                  className={btn + " w-full"}
+                  disabled={loginCodigoLoading}
+                >
+                  {loginCodigoLoading ? "Verificando..." : "Iniciar sesión con código"}
+                </button>
+              </form>
             </div>
           </div>
         ) : null}
@@ -1938,8 +2025,8 @@ const status =
           </form>
         ) : (
           !checkingData && (
-            <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
-              Primero activa tu acceso verificado para poder comentar en este tema.
+                        <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
+              Primero regístrate o inicia sesión con tu código de acceso para poder comentar en este tema.
             </div>
           )
         )}

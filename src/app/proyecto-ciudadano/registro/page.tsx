@@ -334,12 +334,18 @@ function RegistroForm() {
               </p>
             </div>
 
-            <Link
-              href={returnTo === 'espacio-emprendedor' ? '/espacio-emprendedor?registered=true' : '/proyecto-ciudadano?registered=true'}
-              className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
-            >
-              Continuar
-            </Link>
+             <Link
+  href={
+    returnTo === 'espacio-emprendedor'
+      ? '/espacio-emprendedor?registered=true'
+      : returnTo === 'comentarios'
+      ? '/comentarios?registered=true'
+      : '/proyecto-ciudadano?registered=true'
+  }
+  className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
+>
+  Continuar
+</Link>
           </div>
         </div>
       </main>
@@ -352,11 +358,17 @@ function RegistroForm() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Registro de participante</h1>
           <Link
-            href={returnTo === 'espacio-emprendedor' ? '/espacio-emprendedor' : '/proyecto-ciudadano'}
-            className="text-sm text-slate-600 hover:underline"
-          >
-            ← Volver
-          </Link>
+  href={
+    returnTo === 'espacio-emprendedor'
+      ? '/espacio-emprendedor'
+      : returnTo === 'comentarios'
+      ? '/comentarios'
+      : '/proyecto-ciudadano'
+  }
+  className="text-sm text-slate-600 hover:underline"
+>
+  ← Volver
+</Link>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
