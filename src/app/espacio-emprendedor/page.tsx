@@ -1,5 +1,4 @@
 'use client';
-  import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
@@ -783,9 +782,13 @@ const proyectosConContactos = (data || []).map((p) => ({
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-green-600">{project.contactos || 0} contactos</p>
-                    <Link href={`/espacio-emprendedor/proyectos/${project.id}`} className="text-xs text-green-700 hover:underline">
-                      Ver proyecto →
-                    </Link>
+                     <button
+  type="button"
+  onClick={() => router.push(`/espacio-emprendedor/proyectos/${project.id}`)}
+  className="text-xs text-green-700 hover:underline"
+>
+  Ver proyecto →
+</button>
                   </div>
                 </div>
               ))
@@ -801,12 +804,13 @@ const proyectosConContactos = (data || []).map((p) => ({
               <p className="text-slate-600 mb-4">
                 Para acceder al Espacio Emprendedor, primero debes registrarte como participante.
               </p>
-              <Link
-                href="/proyecto-ciudadano/registro?returnTo=espacio-emprendedor"
-                className={btnPrimary}
-              >
-                Registrarme ahora
-              </Link>
+                <button
+  type="button"
+  onClick={() => router.push('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor')}
+  className={btnPrimary}
+>
+  Registrarme ahora
+</button>
             </div>
 
             {/* Inicio de sesión con código */}
@@ -893,12 +897,13 @@ const proyectosConContactos = (data || []).map((p) => ({
                     <p className="text-sm text-green-700 bg-green-50 p-2 rounded-lg mb-3">
                       ✅ DNI verificado. ¡Bienvenido, emprendedor!
                     </p>
-                    <Link
-                      href="/espacio-emprendedor/nuevo-proyecto"
-                      className="inline-block bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800 vc-btn-wave vc-btn-pulse"
-                    >
-                      + Publicar nuevo proyecto
-                    </Link>
+                      <button
+  type="button"
+  onClick={() => router.push('/espacio-emprendedor/nuevo-proyecto')}
+  className="inline-block bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800 vc-btn-wave vc-btn-pulse"
+>
+  + Publicar nuevo proyecto
+</button>
                   </div>
 
                   {/* Mis proyectos */}
@@ -922,12 +927,13 @@ const proyectosConContactos = (data || []).map((p) => ({
                                   👁️ {proyecto.views || 0} vistas • 📩 {proyecto.contactos || 0} contactos
                                 </p>
                               </div>
-                              <Link
-                                href={`/espacio-emprendedor/proyectos/${proyecto.id}`}
-                                className="text-sm text-green-700 hover:underline"
-                              >
-                                Ver detalles →
-                              </Link>
+                                <button
+  type="button"
+  onClick={() => router.push(`/espacio-emprendedor/proyectos/${proyecto.id}`)}
+  className="text-sm text-green-700 hover:underline"
+>
+  Ver detalles →
+</button>
                             </div>
                           </div>
                         ))}
@@ -985,18 +991,20 @@ const proyectosConContactos = (data || []).map((p) => ({
                 Explora proyectos, contacta emprendedores y configura tus preferencias para recibir notificaciones.
               </p>
               <div className="flex flex-col gap-3">
-                <Link
-                  href="/espacio-emprendedor/explorar"
-                  className={btnSecondary + " text-center"}
-                >
-                  🔍 Explorar proyectos
-                </Link>
-                <Link
-                  href="/espacio-emprendedor/perfil-inversionista"
-                  className={btnOutline}
-                >
-                  ⚙️ Configurar mi perfil
-                </Link>
+                  <button
+  type="button"
+  onClick={() => router.push('/espacio-emprendedor/explorar')}
+  className={btnSecondary + " text-center"}
+>
+  🔍 Explorar proyectos
+</button>
+                  <button
+  type="button"
+  onClick={() => router.push('/espacio-emprendedor/perfil-inversionista')}
+  className={btnOutline}
+>
+  ⚙️ Configurar mi perfil
+</button>
               </div>
             </div>
           </div>

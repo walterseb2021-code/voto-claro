@@ -1,5 +1,4 @@
 ﻿'use client';
-import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
@@ -452,9 +451,13 @@ export default function ProyectoCiudadanoPage() {
             >
               🔄 Recargar
             </button>
-            <Link href="/" className={btnPrimary}>
-              ← Volver al inicio
-            </Link>
+              <button
+  type="button"
+  onClick={() => router.push('/')}
+  className={btnPrimary}
+>
+  ← Volver al inicio
+</button>
           </div>
         </div>
 
@@ -573,12 +576,13 @@ export default function ProyectoCiudadanoPage() {
               <p className="text-slate-600 mb-4">
                 Completa tu perfil para poder presentar proyectos o apoyar iniciativas ciudadanas.
               </p>
-              <Link
-                href="/proyecto-ciudadano/registro"
-                className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 vc-btn-wave vc-btn-pulse"
-              >
-                Registrarme ahora
-              </Link>
+               <button
+  type="button"
+  onClick={() => router.push('/proyecto-ciudadano/registro')}
+  className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 vc-btn-wave vc-btn-pulse"
+>
+  Registrarme ahora
+</button>
             </div>
 
             {/* Inicio de sesión con código */}
