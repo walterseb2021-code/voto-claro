@@ -362,62 +362,77 @@ export default function EspacioEmprendedorProjectDetailPage() {
     loadData();
   }, [projectId, destinatarioParam]);
 
-       useEffect(() => {
-    if (!projectId || !project) return;
+         useEffect(() => {
+  if (!projectId || !project) return;
 
-    setRealtimeStatus('Conectando...');
+  setRealtimeStatus('Conectando...');
 
-    const channel = supabase
-      .channel(`proyecto-mensajes-${projectId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'espacio_mensajes',
-          filter: `proyecto_id=eq.${projectId}`,
-        },
-        async (payload) => {
-          if (!project) return;
+  const channel = supabase
+    .channel(`proyecto-mensajes-${projectId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'espacio_mensajes',
+        filter: `proyecto_id=eq.${projectId}`,
+      },
+      async (payload) => {
+        if (!project) return;
 
-          const nuevo = payload.new as any;
+        const nuevo = payload.new as any;
 
-          await cargarResumenHilos(project, participant, esPropietario);
+        await cargarResumenHilos(project, participant, esPropietario);
 
-          if (esPropietario) {
-            const investorIdDelMensaje =
-              nuevo?.sender_type === 'inversionista'
-                ? nuevo?.sender_participant_id
-                : nuevo?.destinatario_participant_id;
+        if (esPropietario) {
+          const investorIdDelMensaje =
+            nuevo?.sender_type === 'inversionista'
+              ? nuevo?.sender_participant_id
+              : nuevo?.destinatario_participant_id;
 
-            if (investorIdDelMensaje && investorIdDelMensaje === selectedInvestorId) {
-              await cargarMensajesThread(project, investorIdDelMensaje, true, participant);
-            }
-          } else if (participant?.id) {
-            const threadActual = buildThreadKey(projectId, participant.id);
-            if (nuevo?.thread_key === threadActual) {
-              await cargarMensajesThread(project, participant.id, false, participant);
-            }
+          if (investorIdDelMensaje && investorIdDelMensaje === selectedInvestorId) {
+            await cargarMensajesThread(project, investorIdDelMensaje, true, participant);
           }
-
-          setSuccessMsg('📨 Nuevo mensaje recibido');
-          setTimeout(() => setSuccessMsg(null), 3000);
+        } else if (participant?.id) {
+          const threadActual = buildThreadKey(projectId, participant.id);
+          if (nuevo?.thread_key === threadActual) {
+            await cargarMensajesThread(project, participant.id, false, participant);
+          }
         }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          setRealtimeStatus('✅ Conectado');
-        } else if (status === 'CHANNEL_ERROR') {
-          setRealtimeStatus('❌ Error de conexión');
-        } else {
-          setRealtimeStatus(status);
-        }
-      });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [projectId, project, participant, esPropietario, destinatarioParam, selectedInvestorId]);
+        setSuccessMsg('📨 Nuevo mensaje recibido');
+        setTimeout(() => setSuccessMsg(null), 3000);
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        setRealtimeStatus('✅ Conectado');
+      } else if (status === 'CHANNEL_ERROR') {
+        setRealtimeStatus('❌ Error de conexión');
+      } else {
+        setRealtimeStatus(status);
+      }
+    });
+
+  const intervalId = window.setInterval(async () => {
+    if (!project || !participant) return;
+
+    await cargarResumenHilos(project, participant, esPropietario);
+
+    if (esPropietario) {
+      if (selectedInvestorId) {
+        await cargarMensajesThread(project, selectedInvestorId, true, participant);
+      }
+    } else if (participant?.id) {
+      await cargarMensajesThread(project, participant.id, false, participant);
+    }
+  }, 2000);
+
+  return () => {
+    window.clearInterval(intervalId);
+    supabase.removeChannel(channel);
+  };
+}, [projectId, project, participant, esPropietario, destinatarioParam, selectedInvestorId]);
 
   useEffect(() => {
     if (loading) return;
