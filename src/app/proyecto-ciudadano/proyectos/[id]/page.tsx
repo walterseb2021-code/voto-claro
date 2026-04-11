@@ -812,22 +812,22 @@ export default function ProjectDetailPage() {
           </div>
 
           {participant ? (
-            <div className="flex gap-2">
-              <textarea
-                value={newPost}
-                onChange={(e) => setNewPost(e.target.value)}
-                placeholder="Escribe tu comentario o pregunta..."
-                rows={2}
-                className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-              />
-              <button
-                onClick={handlePost}
-                disabled={sendingPost || !newPost.trim()}
-                className="bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50"
-              >
-                {sendingPost ? 'Enviando...' : 'Publicar'}
-              </button>
-            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+  <textarea
+    value={newPost}
+    onChange={(e) => setNewPost(e.target.value)}
+    placeholder="Escribe tu comentario o pregunta..."
+    rows={2}
+    className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+  />
+  <button
+    onClick={handlePost}
+    disabled={sendingPost || !newPost.trim()}
+    className="w-full sm:w-auto bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50"
+  >
+    {sendingPost ? 'Enviando...' : 'Publicar'}
+  </button>
+</div>
           ) : (
             <p className="text-sm text-slate-500 text-center">
               <Link href="/proyecto-ciudadano/registro" className="text-green-700 underline">
