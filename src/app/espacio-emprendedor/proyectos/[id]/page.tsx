@@ -362,7 +362,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
     loadData();
   }, [projectId, destinatarioParam]);
 
-  useEffect(() => {
+       useEffect(() => {
     if (!projectId || !project) return;
 
     setRealtimeStatus('Conectando...');
@@ -377,9 +377,29 @@ export default function EspacioEmprendedorProjectDetailPage() {
           table: 'espacio_mensajes',
           filter: `proyecto_id=eq.${projectId}`,
         },
-        async () => {
+        async (payload) => {
           if (!project) return;
+
+          const nuevo = payload.new as any;
+
           await cargarResumenHilos(project, participant, esPropietario);
+
+          if (esPropietario) {
+            const investorIdDelMensaje =
+              nuevo?.sender_type === 'inversionista'
+                ? nuevo?.sender_participant_id
+                : nuevo?.destinatario_participant_id;
+
+            if (investorIdDelMensaje && investorIdDelMensaje === selectedInvestorId) {
+              await cargarMensajesThread(project, investorIdDelMensaje, true, participant);
+            }
+          } else if (participant?.id) {
+            const threadActual = buildThreadKey(projectId, participant.id);
+            if (nuevo?.thread_key === threadActual) {
+              await cargarMensajesThread(project, participant.id, false, participant);
+            }
+          }
+
           setSuccessMsg('📨 Nuevo mensaje recibido');
           setTimeout(() => setSuccessMsg(null), 3000);
         }
@@ -397,7 +417,7 @@ export default function EspacioEmprendedorProjectDetailPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [projectId, project, participant, esPropietario, destinatarioParam]);
+  }, [projectId, project, participant, esPropietario, destinatarioParam, selectedInvestorId]);
 
   useEffect(() => {
     if (loading) return;
