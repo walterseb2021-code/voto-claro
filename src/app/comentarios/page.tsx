@@ -271,14 +271,11 @@ export default function ComentariosPage() {
 
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  const [checkingData, setCheckingData] = useState(true);
+    const [checkingData, setCheckingData] = useState(true);
   const [hasData, setHasData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [participant, setParticipant] = useState<any>(null);
 
-  const [email, setEmail] = useState("");
-  const [celular, setCelular] = useState("");
-  const [forumAlias, setForumAlias] = useState("");
-  const [savingData, setSavingData] = useState(false);
   const [videoPlatform, setVideoPlatform] = useState("YOUTUBE");
   const [videoUrl, setVideoUrl] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -329,145 +326,149 @@ export default function ComentariosPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  async function checkIfHasData(currentDeviceId: string) {
+     async function loadParticipant(currentDeviceId: string) {
     setCheckingData(true);
     setDataError(null);
 
     try {
       const { data, error } = await supabase
-        .from("comment_access_participants")
-        .select("device_id")
+        .from("project_participants")
+        .select("*")
         .eq("device_id", currentDeviceId)
-        .limit(1);
+        .maybeSingle();
 
       if (error) throw new Error(error.message);
 
-      setHasData(!!(data && data.length > 0));
+      setParticipant(data ?? null);
+      setHasData(!!data);
+
+      if (data?.alias) {
+        setGroupCode(data.alias);
+      }
     } catch (e: any) {
+      setParticipant(null);
       setHasData(false);
       setDataError(e?.message ?? String(e));
     } finally {
       setCheckingData(false);
     }
   }
-     async function loadMyParticipantData(currentDeviceId: string) {
-  try {
-    const { data, error } = await supabase
+
+  useEffect(() => {
+    if (!deviceId) return;
+
+    void loadParticipant(deviceId);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId]);
+      async function ensureCommentAccessParticipant() {
+    if (!deviceId) {
+      throw new Error("No se pudo identificar tu dispositivo.");
+    }
+
+    if (!participant?.id) {
+      throw new Error("Primero debes registrarte como participante.");
+    }
+
+    const { data: existingByDevice, error: existingByDeviceError } = await supabase
       .from("comment_access_participants")
-      .select("email, celular, forum_alias, group_code")
-      .eq("device_id", currentDeviceId)
+      .select("id")
+      .eq("device_id", deviceId)
       .limit(1)
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (existingByDeviceError) {
+      throw new Error(existingByDeviceError.message);
+    }
 
-    if (!data) return;
+    if (existingByDevice?.id) {
+      return existingByDevice.id as string;
+    }
 
-    setEmail(data.email ?? "");
-    setCelular(data.celular ?? "");
-    setForumAlias(data.forum_alias ?? "");
-    setGroupCode(data.group_code ?? "");
-  } catch {
-    // silencio
-  }
-}
-     useEffect(() => {
-  if (!deviceId) return;
+    const participantEmail = (participant.email ?? "").trim();
+    const participantPhone = (participant.phone ?? "").trim();
 
-  void checkIfHasData(deviceId);
-  void loadMyParticipantData(deviceId);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [deviceId]);
-
-   async function saveMyData() {
-  setOkMsg(null);
-  setErrMsg(null);
-  setDataError(null);
-
-  if (!deviceId) {
-    setErrMsg("No se pudo identificar tu dispositivo. Recarga la página.");
-    return;
-  }
-
-  const em = email.trim();
-  const ce = celular.trim();
-   const alias = forumAlias.trim();
-
-if (!alias) {
-  setErrMsg("Debes elegir un alias ciudadano.");
-  return;
-}
-  if (!em && !ce) {
-    setErrMsg("Escribe al menos un correo o un celular.");
-    return;
-  }
-
-  setSavingData(true);
-
-  try {
-    let participant: any = null;
-
-    if (em) {
-      const { data } = await supabase
+    if (participantEmail) {
+      const { data: existingByEmail, error: existingByEmailError } = await supabase
         .from("comment_access_participants")
-        .select("*")
-        .eq("email", em)
+        .select("id")
+        .eq("email", participantEmail)
         .limit(1)
         .maybeSingle();
 
-      if (data) participant = data;
+      if (existingByEmailError) {
+        throw new Error(existingByEmailError.message);
+      }
+
+      if (existingByEmail?.id) {
+        const { error: updateError } = await supabase
+          .from("comment_access_participants")
+          .update({
+            device_id: deviceId,
+            forum_alias: participant.alias ?? null,
+            group_code: groupCode?.trim() || "GENERAL",
+          })
+          .eq("id", existingByEmail.id);
+
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
+
+        return existingByEmail.id as string;
+      }
     }
 
-    if (!participant && ce) {
-      const { data } = await supabase
+    if (participantPhone) {
+      const { data: existingByPhone, error: existingByPhoneError } = await supabase
         .from("comment_access_participants")
-        .select("*")
-        .eq("celular", ce)
+        .select("id")
+        .eq("celular", participantPhone)
         .limit(1)
         .maybeSingle();
 
-      if (data) participant = data;
+      if (existingByPhoneError) {
+        throw new Error(existingByPhoneError.message);
+      }
+
+      if (existingByPhone?.id) {
+        const { error: updateError } = await supabase
+          .from("comment_access_participants")
+          .update({
+            device_id: deviceId,
+            forum_alias: participant.alias ?? null,
+            group_code: groupCode?.trim() || "GENERAL",
+          })
+          .eq("id", existingByPhone.id);
+
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
+
+        return existingByPhone.id as string;
+      }
     }
 
-    if (participant) {
-      const { error } = await supabase
-        .from("comment_access_participants")
-         .update({
-          device_id: deviceId,
-          group_code: groupCode?.trim() || "GENERAL",
-          forum_alias: alias,
-         })
-        .eq("id", participant.id);
+    const payload: any = {
+      device_id: deviceId,
+      group_code: groupCode?.trim() || "GENERAL",
+      forum_alias: participant.alias ?? null,
+    };
 
-      if (error) throw new Error(error.message);
-    } else {
-      const payload: any = {
-        device_id: deviceId,
-        group_code: groupCode?.trim() || "GENERAL",
-        forum_alias: alias,
-      };
+    if (participantEmail) payload.email = participantEmail;
+    if (participantPhone) payload.celular = participantPhone;
 
-      if (em) payload.email = em;
-      if (ce) payload.celular = ce;
+    const { data: inserted, error: insertError } = await supabase
+      .from("comment_access_participants")
+      .insert(payload)
+      .select("id")
+      .single();
 
-      const { error } = await supabase
-        .from("comment_access_participants")
-        .insert(payload);
-
-      if (error) throw new Error(error.message);
+    if (insertError) {
+      throw new Error(insertError.message);
     }
 
-    setHasData(true);
-    setOkMsg("Listo. Tus datos fueron guardados. Ya puedes comentar.");
-
-  } catch (e: any) {
-    setErrMsg(e?.message ?? String(e));
-  } finally {
-    setSavingData(false);
+    return inserted.id as string;
   }
-}
-
   async function loadPublicReviewed() {
     setPublicLoading(true);
     setPublicError(null);
@@ -1080,8 +1081,8 @@ if (!alias) {
     return;
   }
 
-  if (!hasData) {
-    setErrMsg("Para comentar, primero debes registrar tu correo o celular.");
+    if (!hasData) {
+    setErrMsg("Para comentar, primero debes registrarte como participante.");
     return;
   }
 
@@ -1107,21 +1108,7 @@ if (!alias) {
   setSending(true);
 
   try {
-    const { data: participantRow, error: participantError } = await supabase
-      .from("comment_access_participants")
-      .select("id")
-      .eq("device_id", deviceId)
-      .limit(1)
-      .maybeSingle();
-
-    if (participantError) throw new Error(participantError.message);
-
-    if (!participantRow?.id) {
-      setErrMsg("No se encontró tu acceso verificado.");
-      return;
-    }
-
-    const accessParticipantId = participantRow.id;
+    const accessParticipantId = await ensureCommentAccessParticipant();
 
     const { count, error: countError } = await supabase
       .from("user_comments")
@@ -1182,8 +1169,8 @@ if (!alias) {
     return;
   }
 
-  if (!hasData) {
-    setErrMsg("Para participar con video, primero debes registrar tu correo o celular.");
+    if (!hasData) {
+    setErrMsg("Para participar con video, primero debes registrarte como participante.");
     return;
   }
 
@@ -1210,24 +1197,14 @@ if (!alias) {
     return;
   }
 
-  const { data: participantRow, error: participantRowError } = await supabase
-    .from("comment_access_participants")
-    .select("id")
-    .eq("device_id", deviceId)
-    .limit(1)
-    .maybeSingle();
+    let accessParticipantId = "";
 
-  if (participantRowError) {
-    setErrMsg(participantRowError.message);
+  try {
+    accessParticipantId = await ensureCommentAccessParticipant();
+  } catch (e: any) {
+    setErrMsg(e?.message ?? String(e));
     return;
   }
-
-  if (!participantRow?.id) {
-    setErrMsg("No se encontró tu acceso verificado. Vuelve a guardar tus datos.");
-    return;
-  }
-
-  const accessParticipantId = participantRow.id;
 
   const { data: existingVideo, error: existingVideoError } = await supabase
     .from("weekly_video_entries")
@@ -1286,8 +1263,8 @@ async function voteForVideo(videoId: string) {
     return;
   }
 
-  if (!hasData) {
-    setErrMsg("Para votar, primero debes registrar tu correo o celular.");
+    if (!hasData) {
+    setErrMsg("Para votar, primero debes registrarte como participante.");
     return;
   }
 
@@ -1310,21 +1287,7 @@ async function voteForVideo(videoId: string) {
 
   try {
     // 1️⃣ Buscar el participante verificado real
-    const { data: participantRow, error: participantError } = await supabase
-      .from("comment_access_participants")
-      .select("id")
-      .eq("device_id", deviceId)
-      .limit(1)
-      .maybeSingle();
-
-    if (participantError) throw new Error(participantError.message);
-
-    if (!participantRow?.id) {
-      setErrMsg("No se encontró tu acceso verificado.");
-      return;
-    }
-
-    const accessParticipantId = participantRow.id;
+    const accessParticipantId = await ensureCommentAccessParticipant();
 
     // 2️⃣ Verificar si ya votó en este tema
     const { data: existingVote, error: existingVoteError } = await supabase
@@ -1767,81 +1730,54 @@ const status =
           </div>
         ) : null}
 
-        {!checkingData && !hasData ? (
+                {!checkingData && !hasData ? (
           <div className="mt-4 grid gap-4">
             <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
-              Para poder comentar, registra por lo menos un correo o un celular.
+              Puedes explorar esta ventana libremente, pero para comentar, votar, subir videos o participar activamente en los foros debes registrarte como participante.
               <div className="mt-1 text-xs text-slate-600">
-                Si ya dejaste tus datos en otra sección, toca “Ya dejé mis datos” para verificar.
+                El registro es único para todo el app y también sirve para Proyecto Ciudadano, Espacio Emprendedor y Reto Ciudadano.
               </div>
             </div>
 
-            <div>
-              <div className={label}>Correo (opcional si pones celular)</div>
-              <input
-                className={input}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="correo@dominio.com"
-              />
-            </div>
-
-               <div>
-  <div className={label}>Celular (opcional si pones correo)</div>
-  <input
-    className={input}
-    value={celular}
-    onChange={(e) => setCelular(e.target.value)}
-    placeholder="999888777"
-  />
-</div>
-
-<div>
-  <div className={label}>Alias ciudadano</div>
-  <input
-    className={input}
-    value={forumAlias}
-    onChange={(e) => setForumAlias(e.target.value)}
-    placeholder="Ej: Voz Ciudadana"
-    maxLength={20}
-  />
-  <div className="mt-1 text-xs text-slate-600">
-    Entre 3 y 20 caracteres. Solo letras, números y guion bajo.
-  </div>
-</div>
-
             <div className="flex gap-2 flex-wrap">
-              <button type="button" className={btn} onClick={saveMyData} disabled={savingData}>
-                {savingData ? "Guardando..." : "Guardar mis datos"}
+              <button
+                type="button"
+                className={btn}
+                onClick={() => router.push("/proyecto-ciudadano/registro?returnTo=comentarios")}
+              >
+                Registrarme para participar
               </button>
 
               <button
                 type="button"
                 className={btn}
-                onClick={() => deviceId && checkIfHasData(deviceId)}
-                disabled={savingData}
+                onClick={() => deviceId && loadParticipant(deviceId)}
               >
-                🔄 Ya dejé mis datos (verificar)
+                🔄 Ya me registré (verificar)
               </button>
             </div>
           </div>
         ) : null}
 
-          {!checkingData && hasData ? (
-  <div className="mt-4 rounded-2xl border-2 border-green-700 bg-green-50 p-4">
-    <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
+        {!checkingData && hasData ? (
+          <div className="mt-4 rounded-2xl border-2 border-green-700 bg-green-50 p-4">
+            <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
 
-    <div className="mt-1 text-sm font-semibold text-slate-800 leading-relaxed">
-      Ya puedes comentar en el tema activo y participar en las próximas
-      dinámicas de esta sección.
-    </div>
+            <div className="mt-1 text-sm font-semibold text-slate-800 leading-relaxed">
+              Ya puedes comentar en el tema activo, votar, subir videos y participar en las dinámicas de esta sección.
+            </div>
 
-    <div className="mt-2 text-sm font-semibold text-slate-800">
-      Alias ciudadano: <span className="font-extrabold">{forumAlias}</span>
-    </div>
+            <div className="mt-2 text-sm font-semibold text-slate-800">
+              Participante: <span className="font-extrabold">{participant?.full_name || "Participante activo"}</span>
+            </div>
 
-  </div>
-) : null}
+            {participant?.alias ? (
+              <div className="mt-1 text-sm font-semibold text-slate-800">
+                Alias: <span className="font-extrabold">{participant.alias}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       {/* BLOQUE 2: Tema de la semana */}
