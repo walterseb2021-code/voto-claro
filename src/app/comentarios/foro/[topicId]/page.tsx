@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
@@ -538,9 +537,13 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          <Link href="/comentarios" className={btn}>
-            ← Volver a comentarios
-          </Link>
+            <button
+  type="button"
+  onClick={() => router.push("/comentarios")}
+  className={btn}
+>
+  ← Volver a comentarios
+</button>
           <button type="button" onClick={goBack} className={btn}>
             ← Atrás
           </button>
