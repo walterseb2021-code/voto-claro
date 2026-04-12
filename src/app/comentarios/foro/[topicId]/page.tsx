@@ -57,7 +57,7 @@ export default function TopicForumPage() {
       router.push("/comentarios");
     }
   }
-   function getOrCreateDeviceId() {
+  function getOrCreateDeviceId() {
   if (typeof window === "undefined") return null;
   const key = "vc_device_id";
   const existing = window.localStorage.getItem(key);
@@ -67,6 +67,20 @@ export default function TopicForumPage() {
   return id;
 }
 
+function toSafeForumAlias(input: string | null | undefined) {
+  const base = (input || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9_]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (base.length >= 3) return base.slice(0, 20);
+
+  return `Usuario_${Math.random().toString(36).slice(2, 8)}`;
+}
+   
       async function checkForumAccess(currentDeviceId: string) {
   try {
     const { data: participantData, error: participantError } = await supabase
@@ -95,8 +109,8 @@ export default function TopicForumPage() {
 
     if (commentAccessError) throw new Error(commentAccessError.message);
 
-    setForumAlias(commentAccessData?.forum_alias ?? participantData.alias ?? "");
-    setForumAliasDraft(commentAccessData?.forum_alias ?? participantData.alias ?? "");
+    setForumAlias(commentAccessData?.forum_alias ?? toSafeForumAlias(participantData.alias) ?? "");
+setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participantData.alias) ?? "");
   } catch {
     setParticipant(null);
     setHasAccess(false);
@@ -146,9 +160,9 @@ export default function TopicForumPage() {
       if (existingByEmail?.id) {
         const { error: updateError } = await supabase
           .from("comment_access_participants")
-          .update({
+                    .update({
             device_id: deviceId,
-            forum_alias: participant.alias ?? null,
+            forum_alias: toSafeForumAlias(participant.alias),
             group_code: "GENERAL",
           })
           .eq("id", existingByEmail.id);
@@ -176,9 +190,9 @@ export default function TopicForumPage() {
       if (existingByPhone?.id) {
         const { error: updateError } = await supabase
           .from("comment_access_participants")
-          .update({
+                    .update({
             device_id: deviceId,
-            forum_alias: participant.alias ?? null,
+            forum_alias: toSafeForumAlias(participant.alias),
             group_code: "GENERAL",
           })
           .eq("id", existingByPhone.id);
@@ -191,10 +205,10 @@ export default function TopicForumPage() {
       }
     }
 
-    const payload: any = {
+        const payload: any = {
       device_id: deviceId,
       group_code: "GENERAL",
-      forum_alias: participant.alias ?? null,
+      forum_alias: toSafeForumAlias(participant.alias),
     };
 
     if (participantEmail) payload.email = participantEmail;
@@ -331,7 +345,7 @@ export default function TopicForumPage() {
   }
 
   if (!hasAccess) {
-    setErrorMsg("Primero debes registrar tu correo o celular en la sección principal.");
+    setErrorMsg("Primero debes registrarte como participante o iniciar sesión con tu código de acceso en Comentarios Ciudadanos.");
     return;
   }
 
@@ -410,11 +424,11 @@ export default function TopicForumPage() {
   }
 
   if (!hasAccess) {
-    setErrorMsg("Primero debes registrar tu correo o celular.");
+    setErrorMsg("Primero debes registrarte como participante o iniciar sesión con tu código de acceso en Comentarios Ciudadanos.");
     return;
   }
 
-  const alias = forumAliasDraft.trim();
+    const alias = toSafeForumAlias(forumAliasDraft.trim());
 
   if (!alias) {
     setErrorMsg("Escribe un alias para participar en el foro.");
