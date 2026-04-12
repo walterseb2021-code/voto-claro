@@ -132,6 +132,20 @@ function getOrCreateDeviceId() {
   return id;
 }
 
+function toSafeForumAlias(input: string | null | undefined) {
+  const base = (input || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9_]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (base.length >= 3) return base.slice(0, 20);
+
+  return `Usuario_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function normalizeText(s: string) {
   return s
     .toLowerCase()
@@ -457,9 +471,9 @@ export default function ComentariosPage() {
       if (existingByEmail?.id) {
         const { error: updateError } = await supabase
           .from("comment_access_participants")
-          .update({
+                       .update({
             device_id: deviceId,
-            forum_alias: participant.alias ?? null,
+            forum_alias: toSafeForumAlias(participant.alias),
             group_code: groupCode?.trim() || "GENERAL",
           })
           .eq("id", existingByEmail.id);
@@ -487,9 +501,9 @@ export default function ComentariosPage() {
       if (existingByPhone?.id) {
         const { error: updateError } = await supabase
           .from("comment_access_participants")
-          .update({
+                      .update({
             device_id: deviceId,
-            forum_alias: participant.alias ?? null,
+            forum_alias: toSafeForumAlias(participant.alias),
             group_code: groupCode?.trim() || "GENERAL",
           })
           .eq("id", existingByPhone.id);
@@ -502,10 +516,10 @@ export default function ComentariosPage() {
       }
     }
 
-    const payload: any = {
+          const payload: any = {
       device_id: deviceId,
       group_code: groupCode?.trim() || "GENERAL",
-      forum_alias: participant.alias ?? null,
+      forum_alias: toSafeForumAlias(participant.alias),
     };
 
     if (participantEmail) payload.email = participantEmail;
@@ -1484,11 +1498,11 @@ async function voteForVideo(videoId: string) {
     }
 
     if (!checkingData && !hasData) {
-      visibleParts.push("Se muestra el formulario para guardar correo o celular y habilitar comentarios.");
+            visibleParts.push("Se muestra acceso de solo lectura y opciones para registrarse o iniciar sesión con código.");
     }
 
     if (!checkingData && hasData) {
-      visibleParts.push("El acceso verificado ya está habilitado para comentar.");
+       visibleParts.push("La sesión del participante está activa y ya puede comentar, votar y subir videos.");
     }
 
     if (weeklyTopic) {
@@ -1579,9 +1593,9 @@ async function voteForVideo(videoId: string) {
   ? "foros-abiertos"
   : "comentario-semanal";
 
-const availableActions =
+   const availableActions =
   !checkingData && !hasData
-    ? ["Guardar mis datos", "Verificar acceso"]
+    ? ["Registrarme para participar", "Iniciar sesión con código"]
     : [
         "Enviar comentario",
         "Enviar video",
@@ -1594,7 +1608,7 @@ const availableActions =
 
 const summary =
   !checkingData && !hasData
-    ? "Pantalla de acceso verificado para habilitar comentarios y participación."
+    ? "Pantalla de comentarios ciudadanos en modo observador, con opciones para registrarse o iniciar sesión con código."
     : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
     ? "Pantalla de comentarios ciudadanos con acceso al bloque de pregunta al fundador."
     : votingVideos.length > 0
@@ -1749,16 +1763,15 @@ const status =
         </div>
       </div>
 
-      {/* BLOQUE 1: Acceso verificado */}
+      {/* BLOQUE 1:Acceso de participación */}
       <section className={card}>
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
-          Acceso verificado
+           Acceso de participación
         </h2>
-        <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Para comentar en esta sección, primero debes registrar por lo menos un
-          correo o un celular. Tus datos no se muestran públicamente.
+                  <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          Para participar activamente en esta sección debes registrarte como participante
+          o iniciar sesión con tu código de acceso. Si solo quieres observar, puedes hacerlo libremente.
         </p>
-
         {okMsg ? (
           <div className="mt-4 rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
             {okMsg}
@@ -1779,7 +1792,7 @@ const status =
 
         {checkingData ? (
           <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
-            Verificando si ya registraste tus datos…
+              Verificando si ya tienes una sesión activa como participante…
           </div>
         ) : null}
 
@@ -2175,8 +2188,8 @@ const status =
           </form>
         ) : (
           !checkingData && (
-            <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
-              Primero activa tu acceso verificado para participar con video.
+                        <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
+              Primero regístrate o inicia sesión con tu código de acceso para participar con video.
             </div>
           )
         )}
