@@ -1493,16 +1493,22 @@ async function voteForVideo(videoId: string) {
       useEffect(() => {
     const visibleParts: string[] = [];
 
-    if (checkingData) {
-      visibleParts.push("Se está verificando si el usuario ya tiene acceso registrado.");
+        if (checkingData) {
+      visibleParts.push("Se está verificando si el ciudadano ya tiene una sesión activa como participante.");
     }
 
     if (!checkingData && !hasData) {
-            visibleParts.push("Se muestra acceso de solo lectura y opciones para registrarse o iniciar sesión con código.");
+      visibleParts.push("El ciudadano está en modo observador.");
+      visibleParts.push("Para participar primero debe registrarse una sola vez en la ficha general del app.");
+      visibleParts.push("Después del registro, el sistema entrega un código de acceso único.");
+      visibleParts.push("Ese mismo código sirve para entrar también en Proyecto Ciudadano, Espacio Emprendedor, Comentarios Ciudadanos y Reto Ciudadano.");
+      visibleParts.push("Sin registro activo, aquí solo puede observar el contenido público.");
     }
 
     if (!checkingData && hasData) {
-       visibleParts.push("La sesión del participante está activa y ya puede comentar, votar y subir videos.");
+      visibleParts.push("La sesión del participante está activa.");
+      visibleParts.push("El ciudadano ya puede comentar, subir video, votar y entrar a los foros abiertos.");
+      visibleParts.push("El registro del participante es único para todo el app.");
     }
 
     if (weeklyTopic) {
@@ -1653,68 +1659,68 @@ async function voteForVideo(videoId: string) {
           ];
 
     const summary =
-      !checkingData && !hasData
-        ? "Pantalla de comentarios ciudadanos en modo observador, con opciones para registrarse o iniciar sesión con código."
-        : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-        ? "Pantalla de comentarios ciudadanos con acceso al bloque de pregunta al fundador."
-        : votingVideos.length > 0
-        ? "Pantalla de comentarios ciudadanos con votación activa de videos de la semana anterior."
-        : "Pantalla de comentarios ciudadanos con tema semanal, videos, votación, fundador, historial público y foros abiertos.";
+  !checkingData && !hasData
+    ? "Comentarios Ciudadanos en modo observador. Aquí el ciudadano puede ver el contenido público, registrarse por primera vez o iniciar sesión con su código único de acceso."
+    : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+    ? "Comentarios Ciudadanos con acceso al bloque de pregunta al fundador y participación activa habilitada."
+    : votingVideos.length > 0
+    ? "Comentarios Ciudadanos con tema semanal activo y votación abierta de los videos aprobados de la semana anterior."
+    : "Comentarios Ciudadanos con tema semanal, comentarios, videos, historial, foros abiertos y participación activa.";
 
-    const suggestedPrompts =
+          const suggestedPrompts =
       !checkingData && !hasData
         ? [
             {
               id: "cc-1",
               label: "¿Qué puedo hacer aquí?",
-              question: "¿Qué puedo hacer en esta pantalla si todavía no me registro?",
+              question: "¿Qué puedo hacer en Comentarios Ciudadanos si todavía no me he registrado?",
             },
             {
               id: "cc-2",
-              label: "¿Cómo participo?",
-              question: "¿Qué debo hacer para participar en Comentarios Ciudadanos?",
+              label: "¿Cómo participo de verdad?",
+              question: "¿Qué debo hacer exactamente para participar en Comentarios Ciudadanos, desde el registro hasta el uso del código?",
             },
             {
               id: "cc-3",
-              label: "¿Sirve mi mismo código?",
-              question: "¿Puedo entrar aquí con el mismo código que uso en otras ventanas del app?",
+              label: "¿Sirve el mismo código?",
+              question: "¿El mismo código que me entregan al registrarme sirve también para entrar a las otras ventanas del app?",
             },
             {
               id: "cc-4",
-              label: "¿Qué puedo ver sin registrarme?",
-              question: "¿Qué contenido puedo ver en esta pantalla aunque todavía no esté registrado?",
+              label: "¿Qué puedo ver sin registro?",
+              question: "¿Qué contenido puedo ver en esta pantalla aunque todavía no tenga una sesión activa?",
             },
           ]
         : [
             {
               id: "cc-5",
               label: "¿Cuál es el tema activo?",
-              question: "¿Cuál es el tema activo de esta semana y cómo debería enfocar mi participación?",
+              question: "¿Cuál es el tema activo de esta semana y cómo conviene enfocar mi participación?",
             },
             {
               id: "cc-6",
               label: "¿Cómo funciona comentar?",
-              question: "¿Cómo funciona el bloque de comentario ciudadano y cuántos comentarios puedo enviar?",
+              question: "¿Cómo funciona el bloque de comentario ciudadano, cuántos comentarios puedo enviar y qué tipo de comentario sí se publica?",
             },
             {
               id: "cc-7",
               label: "¿Cómo funciona el video?",
-              question: "¿Cómo participo con un video en esta pantalla y qué reglas debo seguir?",
+              question: "¿Cómo participo con un video en esta pantalla, cuántos videos puedo enviar y qué reglas debo seguir?",
             },
             {
               id: "cc-8",
               label: "¿Cómo funciona la votación?",
-              question: "¿Cómo funciona la votación de la semana anterior y qué significa que un video esté en votación?",
+              question: "¿Cómo funciona la votación de la semana anterior, cuántas veces puedo votar y qué significa que un video ya esté en votación?",
             },
             {
               id: "cc-9",
               label: "¿Qué es pregunta al fundador?",
-              question: "¿Qué significa el bloque de pregunta al fundador y quién puede usarlo?",
+              question: "¿Qué significa el bloque de pregunta al fundador, quién puede usarlo y cuándo aparece?",
             },
             {
               id: "cc-10",
               label: "¿Cómo funcionan los foros?",
-              question: "¿Qué diferencia hay entre comentar el tema semanal y participar en los foros abiertos?",
+              question: "¿Qué diferencia hay entre comentar el tema semanal y participar en los foros abiertos de debate ciudadano?",
             },
           ];
 

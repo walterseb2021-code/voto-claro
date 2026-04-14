@@ -561,15 +561,15 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       "comentarios-del-foro",
     ].filter(Boolean) as string[];
 
-    const summary = loading
-      ? "Pantalla del foro ciudadano en proceso de carga."
+         const summary = loading
+      ? "Foro ciudadano en proceso de carga."
       : errorMsg
-      ? "Pantalla del foro ciudadano con un error visible."
+      ? "Foro ciudadano con un error visible."
       : !hasAccess
-      ? "Pantalla del foro ciudadano en modo observador, con acceso restringido para comentar."
+      ? "Foro ciudadano en modo observador, con acceso restringido para comentar."
       : !forumAlias
-      ? "Pantalla del foro ciudadano lista para configurar alias antes de participar."
-      : "Pantalla del foro ciudadano con comentarios abiertos sobre un tema semanal archivado.";
+      ? "Foro ciudadano listo para configurar alias antes de participar."
+      : "Foro ciudadano con comentarios abiertos sobre un tema semanal archivado.";
 
     const visibleParts: string[] = [];
     visibleParts.push(`Vista activa: ${activeViewTitle}.`);
@@ -619,22 +619,22 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       ? ["Guardar alias", "Volver a comentarios"]
       : ["Publicar comentario", "Volver a comentarios"];
 
-    const suggestedPrompts = !hasAccess
+          const suggestedPrompts = !hasAccess
       ? [
           {
             id: "foro-1",
             label: "¿De qué trata este foro?",
-            question: "¿De qué trata este foro y qué tema se está debatiendo aquí?",
+            question: "¿De qué trata este foro, qué tema se debate aquí y qué tipo de aportes se esperan?",
           },
           {
             id: "foro-2",
-            label: "¿Cómo participo?",
-            question: "¿Qué debo hacer para poder participar en este foro ciudadano?",
+            label: "¿Cómo entro a participar?",
+            question: "¿Qué debo hacer exactamente para poder participar en este foro ciudadano?",
           },
           {
             id: "foro-3",
             label: "¿Puedo solo leer?",
-            question: "¿Puedo solo leer este foro aunque todavía no esté registrado?",
+            question: "¿Puedo leer este foro aunque todavía no tenga una sesión activa como participante?",
           },
         ]
       : !forumAlias
@@ -642,16 +642,16 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
           {
             id: "foro-4",
             label: "¿Para qué sirve el alias?",
-            question: "¿Para qué sirve el alias del foro y cómo aparecerá cuando comente?",
+            question: "¿Para qué sirve el alias del foro y cómo aparecerá cuando publique un comentario?",
           },
           {
             id: "foro-5",
-            label: "¿Qué reglas tiene?",
-            question: "¿Qué reglas debo tener en cuenta antes de comentar en este foro?",
+            label: "¿Qué reglas debo seguir?",
+            question: "¿Qué reglas debo tener en cuenta antes de comentar en este foro ciudadano?",
           },
           {
             id: "foro-6",
-            label: "¿Cómo destaco aquí?",
+            label: "¿Cómo puedo destacar?",
             question: "¿Qué tipo de aportes ayudan más a destacar en este foro ciudadano?",
           },
         ]
@@ -659,22 +659,22 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
           {
             id: "foro-7",
             label: "¿Qué se debate aquí?",
-            question: "¿Qué se debate en este foro y cómo debería enfocar mi comentario?",
+            question: "¿Qué se debate en este foro y cómo conviene enfocar mi comentario?",
           },
           {
             id: "foro-8",
             label: "¿Qué reglas debo seguir?",
-            question: "¿Qué reglas debo seguir para que mi comentario sea válido en este foro?",
+            question: "¿Qué reglas debo seguir para que mi comentario sea válido y útil en este foro?",
           },
           {
             id: "foro-9",
-            label: "¿Cómo destacar en el foro?",
-            question: "¿Qué tipo de aporte ciudadano puede ayudarme a destacar en este foro?",
+            label: "¿Cómo aportar mejor?",
+            question: "¿Qué tipo de aporte ciudadano puede ayudarme a participar mejor y destacar en este foro?",
           },
           {
             id: "foro-10",
             label: "¿Cómo se eligen los mejores?",
-            question: "¿Cómo se eligen los mejores participantes trimestrales de los foros ciudadanos?",
+            question: "¿Cómo se eligen los participantes más destacados de los foros ciudadanos al final de cada ciclo?",
           },
         ];
 
