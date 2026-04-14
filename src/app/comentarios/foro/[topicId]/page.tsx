@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type ArchivedTopicRow = {
   id: string;
@@ -28,6 +29,7 @@ export default function TopicForumPage() {
   const router = useRouter();
   const params = useParams();
   const topicId = String(params?.topicId ?? "");
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -516,6 +518,215 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
+     useEffect(() => {
+    const commentsCount = comments.length;
+    const latestComment = comments[0] ?? null;
+
+    const activeSection = loading
+      ? "cargando-foro"
+      : errorMsg
+      ? "error-foro"
+      : !hasAccess
+      ? "acceso-foro"
+      : !forumAlias
+      ? "configuracion-alias"
+      : "comentarios-foro";
+
+    const activeViewId = loading
+      ? "forum-loading"
+      : errorMsg
+      ? "forum-error"
+      : !hasAccess
+      ? "forum-access-required"
+      : !forumAlias
+      ? "forum-alias-setup"
+      : "forum-active";
+
+    const activeViewTitle = loading
+      ? "Cargando foro"
+      : errorMsg
+      ? "Error del foro"
+      : !hasAccess
+      ? "Acceso requerido al foro"
+      : !forumAlias
+      ? "Configuración de alias del foro"
+      : "Foro ciudadano activo";
+
+    const visibleSections = [
+      "cabecera-foro",
+      topic ? "tema-archivado" : null,
+      !hasAccess ? "acceso-foro" : null,
+      hasAccess && !forumAlias ? "alias-foro" : null,
+      hasAccess && !!forumAlias ? "formulario-comentario-foro" : null,
+      "comentarios-del-foro",
+    ].filter(Boolean) as string[];
+
+    const summary = loading
+      ? "Pantalla del foro ciudadano en proceso de carga."
+      : errorMsg
+      ? "Pantalla del foro ciudadano con un error visible."
+      : !hasAccess
+      ? "Pantalla del foro ciudadano en modo observador, con acceso restringido para comentar."
+      : !forumAlias
+      ? "Pantalla del foro ciudadano lista para configurar alias antes de participar."
+      : "Pantalla del foro ciudadano con comentarios abiertos sobre un tema semanal archivado.";
+
+    const visibleParts: string[] = [];
+    visibleParts.push(`Vista activa: ${activeViewTitle}.`);
+
+    if (topic?.topic) {
+      visibleParts.push(`Tema del foro visible: ${topic.topic}.`);
+    }
+
+    if (topic?.question) {
+      visibleParts.push(`Pregunta guía visible: ${topic.question}.`);
+    }
+
+    if (!hasAccess && !loading) {
+      visibleParts.push("El usuario aún no tiene acceso habilitado para participar en este foro.");
+    }
+
+    if (hasAccess && !forumAlias) {
+      visibleParts.push("El usuario tiene acceso, pero aún debe confirmar o guardar un alias del foro.");
+    }
+
+    if (hasAccess && forumAlias) {
+      visibleParts.push(`Alias visible del foro: ${forumAlias}.`);
+      visibleParts.push("El formulario de comentario del foro está habilitado.");
+    }
+
+    visibleParts.push(`Comentarios visibles en el foro: ${commentsCount}.`);
+
+    if (latestComment?.forum_alias) {
+      visibleParts.push(`Último comentario visible de ${latestComment.forum_alias}.`);
+    }
+
+    if (latestComment?.message) {
+      visibleParts.push(`Contenido visible del último comentario: ${latestComment.message}`);
+    }
+
+    if (forumOkMsg) {
+      visibleParts.push(`Mensaje de éxito visible: ${forumOkMsg}`);
+    }
+
+    if (errorMsg) {
+      visibleParts.push(`Mensaje de error visible: ${errorMsg}`);
+    }
+
+    const availableActions = !hasAccess
+      ? ["Volver a comentarios", "Registrarse o iniciar sesión en Comentarios Ciudadanos"]
+      : !forumAlias
+      ? ["Guardar alias", "Volver a comentarios"]
+      : ["Publicar comentario", "Volver a comentarios"];
+
+    const suggestedPrompts = !hasAccess
+      ? [
+          {
+            id: "foro-1",
+            label: "¿De qué trata este foro?",
+            question: "¿De qué trata este foro y qué tema se está debatiendo aquí?",
+          },
+          {
+            id: "foro-2",
+            label: "¿Cómo participo?",
+            question: "¿Qué debo hacer para poder participar en este foro ciudadano?",
+          },
+          {
+            id: "foro-3",
+            label: "¿Puedo solo leer?",
+            question: "¿Puedo solo leer este foro aunque todavía no esté registrado?",
+          },
+        ]
+      : !forumAlias
+      ? [
+          {
+            id: "foro-4",
+            label: "¿Para qué sirve el alias?",
+            question: "¿Para qué sirve el alias del foro y cómo aparecerá cuando comente?",
+          },
+          {
+            id: "foro-5",
+            label: "¿Qué reglas tiene?",
+            question: "¿Qué reglas debo tener en cuenta antes de comentar en este foro?",
+          },
+          {
+            id: "foro-6",
+            label: "¿Cómo destaco aquí?",
+            question: "¿Qué tipo de aportes ayudan más a destacar en este foro ciudadano?",
+          },
+        ]
+      : [
+          {
+            id: "foro-7",
+            label: "¿Qué se debate aquí?",
+            question: "¿Qué se debate en este foro y cómo debería enfocar mi comentario?",
+          },
+          {
+            id: "foro-8",
+            label: "¿Qué reglas debo seguir?",
+            question: "¿Qué reglas debo seguir para que mi comentario sea válido en este foro?",
+          },
+          {
+            id: "foro-9",
+            label: "¿Cómo destacar en el foro?",
+            question: "¿Qué tipo de aporte ciudadano puede ayudarme a destacar en este foro?",
+          },
+          {
+            id: "foro-10",
+            label: "¿Cómo se eligen los mejores?",
+            question: "¿Cómo se eligen los mejores participantes trimestrales de los foros ciudadanos?",
+          },
+        ];
+
+    const status = loading ? "loading" : errorMsg ? "error" : "ready";
+
+    setPageContext({
+      pageId: "comentarios-foro-ciudadano",
+      pageTitle: topic?.topic ? `Foro: ${topic.topic}` : "Foro ciudadano abierto",
+      route: `/comentarios/foro/${topicId}`,
+      summary,
+      speakableSummary: summary,
+      activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ["Comentarios Ciudadanos", "Foro ciudadano", topic?.topic || "Tema archivado"],
+      visibleSections,
+      suggestedPrompts,
+      visibleText: visibleParts.join("\n"),
+      availableActions,
+      selectedItemId: topic?.id || undefined,
+      selectedItemTitle: topic?.topic || undefined,
+      status,
+      dynamicData: {
+        topicId,
+        topicTitle: topic?.topic || "",
+        topicQuestion: topic?.question || "",
+        hasAccess,
+        forumAlias,
+        commentsCount,
+        latestCommentAlias: latestComment?.forum_alias || "",
+        latestCommentMessage: latestComment?.message || "",
+        aliasPending: hasAccess && !forumAlias,
+        commentFormVisible: hasAccess && !!forumAlias,
+      },
+    });
+  }, [
+    setPageContext,
+    topicId,
+    loading,
+    errorMsg,
+    hasAccess,
+    forumAlias,
+    comments,
+    forumOkMsg,
+    topic,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-3xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
   const card = "mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-5 shadow-sm";

@@ -1577,104 +1577,217 @@ async function voteForVideo(videoId: string) {
       visibleParts.push(`Error visible en foros abiertos: ${forumTopicsError}`);
     }
 
-        const activeSection = checkingData
-  ? "verificando-acceso"
-  : !hasData
-  ? "registro-acceso"
-  : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-  ? "pregunta-al-fundador"
-  : votingVideos.length > 0
-  ? "votacion-semanal"
-  : showPublicVideos
-  ? "videos-aprobados"
-  : showPublic
-  ? "comentarios-publicados"
-  : forumTopics.length > 0
-  ? "foros-abiertos"
-  : "comentario-semanal";
+            const activeSection = checkingData
+      ? "verificando-acceso"
+      : !hasData
+      ? "registro-acceso"
+      : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+      ? "pregunta-al-fundador"
+      : votingVideos.length > 0
+      ? "votacion-semanal"
+      : showPublicVideos
+      ? "videos-aprobados"
+      : showPublic
+      ? "comentarios-publicados"
+      : forumTopics.length > 0
+      ? "foros-abiertos"
+      : "comentario-semanal";
 
-   const availableActions =
-  !checkingData && !hasData
-    ? ["Registrarme para participar", "Iniciar sesión con código"]
-    : [
-        "Enviar comentario",
-        "Enviar video",
-        "Ver comentarios publicados",
-        "Ver videos aprobados",
-        "Votar por un video",
-        "Entrar al foro",
-        "Revisar preguntas al fundador",
-      ];
+    const activeViewId = checkingData
+      ? "comments-loading-access"
+      : !hasData
+      ? "comments-read-only"
+      : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+      ? "comments-founder-question"
+      : votingVideos.length > 0
+      ? "comments-weekly-voting"
+      : showPublicVideos
+      ? "comments-approved-videos"
+      : showPublic
+      ? "comments-approved-comments"
+      : forumTopics.length > 0
+      ? "comments-open-forums"
+      : "comments-main";
 
-const summary =
-  !checkingData && !hasData
-    ? "Pantalla de comentarios ciudadanos en modo observador, con opciones para registrarse o iniciar sesión con código."
-    : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-    ? "Pantalla de comentarios ciudadanos con acceso al bloque de pregunta al fundador."
-    : votingVideos.length > 0
-    ? "Pantalla de comentarios ciudadanos con votación activa de videos de la semana anterior."
-    : "Pantalla de comentarios ciudadanos con tema semanal, videos, votación, fundador e historial público.";
+    const activeViewTitle = checkingData
+      ? "Verificación de acceso"
+      : !hasData
+      ? "Modo observador"
+      : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+      ? "Pregunta al fundador"
+      : votingVideos.length > 0
+      ? "Votación semanal"
+      : showPublicVideos
+      ? "Videos aprobados"
+      : showPublic
+      ? "Comentarios publicados"
+      : forumTopics.length > 0
+      ? "Foros abiertos"
+      : "Comentarios ciudadanos";
 
-const status =
-  checkingData ||
-  publicLoading ||
-  publicVideosLoading ||
-  latestOfficialWinnerLoading ||
-  founderQuestionsPublicLoading ||
-  commentAwardsPublicLoading ||
-  forumTopicsLoading
-    ? "loading"
-    : errMsg ||
-      dataError ||
-      publicError ||
-      publicVideosError ||
-      latestOfficialWinnerError ||
-      founderQuestionsPublicError ||
-      commentAwardsPublicError ||
-      forumTopicsError ||
-      winnerQuestionError
-    ? "error"
-    : "ready";
+    const visibleSections = [
+      "acceso-de-participacion",
+      "tema-de-la-semana",
+      "comentario-semanal",
+      "comentarios-aprobados",
+      "yo-politico-semanal",
+      "videos-aprobados",
+      "votacion-semanal",
+      "pregunta-al-fundador",
+      "ganador-trimestral",
+      "historial-publico",
+      "foros-abiertos",
+    ];
 
-    setPageContext({
+    const availableActions =
+      !checkingData && !hasData
+        ? ["Registrarme para participar", "Iniciar sesión con código", "Explorar contenido público"]
+        : [
+            "Enviar comentario",
+            "Enviar video",
+            "Ver comentarios publicados",
+            "Ver videos aprobados",
+            "Votar por un video",
+            "Entrar al foro",
+            "Revisar preguntas al fundador",
+          ];
+
+    const summary =
+      !checkingData && !hasData
+        ? "Pantalla de comentarios ciudadanos en modo observador, con opciones para registrarse o iniciar sesión con código."
+        : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+        ? "Pantalla de comentarios ciudadanos con acceso al bloque de pregunta al fundador."
+        : votingVideos.length > 0
+        ? "Pantalla de comentarios ciudadanos con votación activa de videos de la semana anterior."
+        : "Pantalla de comentarios ciudadanos con tema semanal, videos, votación, fundador, historial público y foros abiertos.";
+
+    const suggestedPrompts =
+      !checkingData && !hasData
+        ? [
+            {
+              id: "cc-1",
+              label: "¿Qué puedo hacer aquí?",
+              question: "¿Qué puedo hacer en esta pantalla si todavía no me registro?",
+            },
+            {
+              id: "cc-2",
+              label: "¿Cómo participo?",
+              question: "¿Qué debo hacer para participar en Comentarios Ciudadanos?",
+            },
+            {
+              id: "cc-3",
+              label: "¿Sirve mi mismo código?",
+              question: "¿Puedo entrar aquí con el mismo código que uso en otras ventanas del app?",
+            },
+            {
+              id: "cc-4",
+              label: "¿Qué puedo ver sin registrarme?",
+              question: "¿Qué contenido puedo ver en esta pantalla aunque todavía no esté registrado?",
+            },
+          ]
+        : [
+            {
+              id: "cc-5",
+              label: "¿Cuál es el tema activo?",
+              question: "¿Cuál es el tema activo de esta semana y cómo debería enfocar mi participación?",
+            },
+            {
+              id: "cc-6",
+              label: "¿Cómo funciona comentar?",
+              question: "¿Cómo funciona el bloque de comentario ciudadano y cuántos comentarios puedo enviar?",
+            },
+            {
+              id: "cc-7",
+              label: "¿Cómo funciona el video?",
+              question: "¿Cómo participo con un video en esta pantalla y qué reglas debo seguir?",
+            },
+            {
+              id: "cc-8",
+              label: "¿Cómo funciona la votación?",
+              question: "¿Cómo funciona la votación de la semana anterior y qué significa que un video esté en votación?",
+            },
+            {
+              id: "cc-9",
+              label: "¿Qué es pregunta al fundador?",
+              question: "¿Qué significa el bloque de pregunta al fundador y quién puede usarlo?",
+            },
+            {
+              id: "cc-10",
+              label: "¿Cómo funcionan los foros?",
+              question: "¿Qué diferencia hay entre comentar el tema semanal y participar en los foros abiertos?",
+            },
+          ];
+
+    const status =
+      checkingData ||
+      publicLoading ||
+      publicVideosLoading ||
+      latestOfficialWinnerLoading ||
+      founderQuestionsPublicLoading ||
+      commentAwardsPublicLoading ||
+      forumTopicsLoading
+        ? "loading"
+        : errMsg ||
+          dataError ||
+          publicError ||
+          publicVideosError ||
+          latestOfficialWinnerError ||
+          founderQuestionsPublicError ||
+          commentAwardsPublicError ||
+          forumTopicsError ||
+          winnerQuestionError
+        ? "error"
+        : "ready";
+
+          setPageContext({
       pageId: "comentario-ciudadano",
-      pageTitle: "Comentario ciudadano",
+      pageTitle: "Comentarios Ciudadanos",
       route: "/comentarios",
       summary,
+      speakableSummary: summary,
       activeSection,
+      activeViewId,
+      activeViewTitle,
+      breadcrumb: ["Comentarios Ciudadanos", activeViewTitle],
+      visibleSections,
+      suggestedPrompts,
       visibleText: visibleParts.join("\n"),
       availableActions,
       selectedItemTitle: latestOfficialWinner?.topic || weeklyTopic || undefined,
       status,
-        dynamicData: {
-  accesoVerificado: hasData,
-  checkingData,
-  weeklyTopic,
-  weeklyQuestion,
-  weeklyTopicId,
-  votingTopicId,
-  timeFilter,
-  comentariosPublicadosCount: publicItems.length,
-  videosAprobadosCount: publicVideos.length,
-  videosEnVotacionCount: votingVideos.length,
-  preguntasFundadorCount: founderQuestionsPublic.length,
-  premiosTrimestralesCount: commentAwardsPublic.length,
-  forosAbiertosCount: forumTopics.length,
-  showPublic,
-  showPublicVideos,
-  yaVotoVideo: !!myVotedVideoId,
-  myVotedVideoId,
-  ganadorOficialVisible: !!latestOfficialWinner,
-  latestOfficialWinnerTopic: latestOfficialWinner?.topic ?? null,
-  puedePreguntarFundador: isOfficialWinnerUser,
-  yaEnvioPreguntaFundador: !!myWinnerQuestion,
-  winnerQuestionPending:
-    !!myWinnerQuestion &&
-    !myWinnerQuestion.founder_answer_text &&
-    !myWinnerQuestion.founder_answer_video_url,
-  formularioAccesoVisible: !checkingData && !hasData,
-  votacionSemanalVisible: votingVideos.length > 0,
-},
+      dynamicData: {
+        accesoVerificado: hasData,
+        checkingData,
+        weeklyTopic,
+        weeklyQuestion,
+        weeklyTopicId,
+        votingTopicId,
+        timeFilter,
+        comentariosPublicadosCount: publicItems.length,
+        videosAprobadosCount: publicVideos.length,
+        videosEnVotacionCount: votingVideos.length,
+        preguntasFundadorCount: founderQuestionsPublic.length,
+        premiosTrimestralesCount: commentAwardsPublic.length,
+        forosAbiertosCount: forumTopics.length,
+        showPublic,
+        showPublicVideos,
+        yaVotoVideo: !!myVotedVideoId,
+        myVotedVideoId,
+        ganadorOficialVisible: !!latestOfficialWinner,
+        latestOfficialWinnerTopic: latestOfficialWinner?.topic ?? null,
+        puedePreguntarFundador: isOfficialWinnerUser,
+        yaEnvioPreguntaFundador: !!myWinnerQuestion,
+        winnerQuestionPending:
+          !!myWinnerQuestion &&
+          !myWinnerQuestion.founder_answer_text &&
+          !myWinnerQuestion.founder_answer_video_url,
+        formularioAccesoVisible: !checkingData && !hasData,
+        votacionSemanalVisible: votingVideos.length > 0,
+        historialSemanalVisible: archivedTopicsPublic.length > 0,
+        historialForosVisible: forumTopics.length > 0,
+        participanteNombre: participant?.full_name ?? "",
+        participanteAlias: participant?.alias ?? "",
+      },
     });
      }, [
   setPageContext,
@@ -1711,7 +1824,10 @@ const status =
   latestOfficialWinnerLoading,
   founderQuestionsPublicLoading,
   commentAwardsPublicLoading,
-  forumTopicsLoading,
+     forumTopicsLoading,
+  participant?.full_name,
+  participant?.alias,
+  archivedTopicsPublic.length,
 ]);
 
   useEffect(() => {
