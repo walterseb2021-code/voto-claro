@@ -248,6 +248,13 @@ function buildDynamicPageContextText(pageContext: {
   const puedePreguntarFundador = Boolean(data.puedePreguntarFundador);
   const weeklyTopic = String(data.weeklyTopic || "").trim();
   const weeklyQuestion = String(data.weeklyQuestion || "").trim();
+      const registroUnicoApp = Boolean(data.registroUnicoApp);
+const codigoUnicoPorParticipante = Boolean(data.codigoUnicoPorParticipante);
+const mismoCodigoEnTodoElApp = Boolean(data.mismoCodigoEnTodoElApp);
+const requiereRegistroPrevioAntesDeUsarCodigo = Boolean(data.requiereRegistroPrevioAntesDeUsarCodigo);
+const formularioAccesoVisible = Boolean(data.formularioAccesoVisible);
+const votacionSemanalVisible = Boolean(data.votacionSemanalVisible);
+const historialForosVisible = Boolean(data.historialForosVisible);
 
     const asksHelp =
     !q ||
@@ -694,22 +701,68 @@ function buildDynamicPageContextText(pageContext: {
     : "Si quieres, pregúntame algo concreto sobre el registro, el nivel 1, el nivel 2, la ruleta o la lista de ganadores.")
 );
   }
-  if (pageId === "comentario-ciudadano") {
-         if (asksHelp) {
+         if (pageId === "comentario-ciudadano") {
+    const asksSingleCode =
+      q.includes("mismo codigo") ||
+      q.includes("mismo código") ||
+      q.includes("sirve el mismo codigo") ||
+      q.includes("sirve el mismo código") ||
+      q.includes("otro codigo") ||
+      q.includes("otro código") ||
+      q.includes("varios codigos") ||
+      q.includes("varios códigos") ||
+      q.includes("multiples codigos") ||
+      q.includes("múltiples códigos") ||
+      q.includes("codigo unico") ||
+      q.includes("código único");
+
+    const asksParticipationFlow =
+      q.includes("como participo") ||
+      q.includes("cómo participo") ||
+      q.includes("que debo hacer exactamente") ||
+      q.includes("qué debo hacer exactamente") ||
+      q.includes("como entro a participar") ||
+      q.includes("cómo entro a participar") ||
+      q.includes("desde el registro") ||
+      q.includes("uso del codigo") ||
+      q.includes("uso del código");
+
+    if (asksHelp || asksParticipationFlow) {
+      if (checkingData) {
+        return "Ahora mismo la pantalla todavía está verificando si ya existe una sesión activa de participante.";
+      }
+
       if (!accesoVerificado) {
         return (
-          "Para participar aquí, primero debes habilitar tu acceso.\n\n" +
-          "En esta pantalla se ve que todavía necesitas guardar por lo menos un correo o un celular.\n\n" +
-          "Después de eso ya podrás comentar y participar en las dinámicas disponibles."
+          "Para participar activamente en Comentarios Ciudadanos, el flujo correcto es este:\n\n" +
+          "1. Registrarte una sola vez en la ficha general del app.\n" +
+          "2. Obtener tu código de acceso único.\n" +
+          "3. Usar ese mismo código cuando necesites entrar a esta u otras ventanas del app.\n\n" +
+          "Mientras no tengas ese registro activo, aquí solo puedes observar el contenido público."
         );
       }
 
       return (
-        "Aquí ya puedes participar.\n\n" +
-        "En esta pantalla puedes comentar sobre el tema de la semana, revisar comentarios publicados, ver videos aprobados, votar cuando haya videos en votación y entrar a foros abiertos.\n\n" +
-        "Si quieres, pregúntame algo más específico como:\n" +
-        "“¿qué tema está activo?”, “¿hay videos para votar?” o “¿puedo entrar al foro?”."
+        "Aquí ya tienes participación activa habilitada.\n\n" +
+        "En esta pantalla puedes comentar sobre el tema de la semana, enviar un video, votar cuando haya una votación abierta y entrar a los foros ciudadanos.\n\n" +
+        "Tu registro sigue siendo el mismo registro único del app."
       );
+    }
+
+    if (asksSingleCode) {
+      if (
+        registroUnicoApp &&
+        codigoUnicoPorParticipante &&
+        mismoCodigoEnTodoElApp &&
+        requiereRegistroPrevioAntesDeUsarCodigo
+      ) {
+        return (
+          "Sí. El código de acceso es único por participante y el mismo código sirve para entrar a las diferentes ventanas del app.\n\n" +
+          "No corresponde manejar múltiples códigos para una misma persona dentro del flujo normal."
+        );
+      }
+
+      return "Esta pantalla no muestra suficiente información para confirmar el comportamiento del código de acceso.";
     }
 
     if (asksActions) {
@@ -727,12 +780,12 @@ function buildDynamicPageContextText(pageContext: {
 
       if (!accesoVerificado) {
         return (
-          "Todavía no aparece acceso verificado para comentar.\n\n" +
-          "Primero debes guardar por lo menos un correo o un celular para habilitar tu participación."
+          "Todavía no aparece una sesión activa de participante en esta pantalla.\n\n" +
+          "Para comentar, votar, subir video o participar en los foros, primero debes haberte registrado una sola vez en la ficha general del app y luego usar tu código si hace falta."
         );
       }
 
-      return "Sí. En esta pantalla tu acceso ya aparece habilitado para comentar.";
+      return "Sí. En esta pantalla tu acceso ya aparece habilitado para comentar, votar, subir video y participar en foros.";
     }
 
     if (asksWeeklyTopic) {
@@ -747,19 +800,21 @@ function buildDynamicPageContextText(pageContext: {
     }
 
     if (asksVideosVoting) {
-      if (videosEnVotacionCount > 0) {
+      if (videosEnVotacionCount > 0 || votacionSemanalVisible) {
         return (
           `Ahora mismo detecto ${videosEnVotacionCount} video(s) en votación.\n\n` +
+          "Eso significa que esos videos ya pasaron la etapa de envío y revisión, y ahora están en la etapa donde los participantes pueden votar una sola vez por tema semanal.\n\n" +
           (yaVotoVideo
             ? "Además, esta pantalla indica que ya registraste tu voto."
-            : "Todavía puedes revisar los videos y votar si no lo has hecho.")
+            : "Si tu acceso está habilitado y todavía no votaste, puedes revisar los videos y emitir un solo voto en este tema.")
         );
       }
 
       if (videosAprobadosCount > 0 || showPublicVideos) {
         return (
           `Ahora mismo detecto ${videosAprobadosCount} video(s) aprobado(s)` +
-          (showPublicVideos ? " visibles en pantalla." : ".")
+          (showPublicVideos ? " visibles en pantalla.\n\n" : ".\n\n") +
+          "Un video aprobado ya pasó la revisión. Solo entra a votación cuando pertenece a un tema que ya cerró su etapa de envío y fue puesto en estado de votación."
         );
       }
 
@@ -772,7 +827,7 @@ function buildDynamicPageContextText(pageContext: {
       }
 
       return (
-        `Sí, hay un ganador oficial visible.` +
+        "Sí, hay un ganador oficial visible." +
         (pageContext.selectedItemTitle ? `\n\nTema relacionado: ${pageContext.selectedItemTitle}.` : "")
       );
     }
@@ -781,7 +836,7 @@ function buildDynamicPageContextText(pageContext: {
       if (puedePreguntarFundador) {
         return (
           "Sí. Esta pantalla indica que puedes usar el formulario de pregunta al fundador.\n\n" +
-          "Recuerda que solo permite una pregunta y luego no se puede editar."
+          "Solo está habilitado para el ganador semanal oficial, permite una sola pregunta y después no se puede editar."
         );
       }
 
@@ -793,8 +848,11 @@ function buildDynamicPageContextText(pageContext: {
     }
 
     if (asksForum) {
-      if (forosAbiertosCount > 0) {
-        return `Sí. Ahora mismo detecto ${forosAbiertosCount} foro(s) abierto(s) de debate ciudadano.`;
+      if (forosAbiertosCount > 0 || historialForosVisible) {
+        return (
+          `Sí. Ahora mismo detecto ${forosAbiertosCount} foro(s) abierto(s) de debate ciudadano.\n\n` +
+          "Los foros abiertos corresponden a temas semanales ya cerrados, donde el ciudadano puede seguir debatiendo más a fondo."
+        );
       }
 
       return "No detecto foros abiertos visibles en este momento.";
@@ -807,8 +865,8 @@ function buildDynamicPageContextText(pageContext: {
 
       if (!accesoVerificado) {
         return (
-          "Tu estado actual en esta pantalla es de acceso pendiente.\n\n" +
-          "Antes de comentar, necesitas registrar tus datos de acceso."
+          "Tu estado actual en esta pantalla es de modo observador.\n\n" +
+          "Todavía puedes ver contenido público, pero para participar activamente primero debes completar el registro único del app."
         );
       }
 
@@ -817,7 +875,8 @@ function buildDynamicPageContextText(pageContext: {
         `Tema activo: ${weeklyTopic || "No visible"}.\n` +
         `Comentarios publicados detectados: ${comentariosPublicadosCount}.\n` +
         `Videos aprobados detectados: ${videosAprobadosCount}.\n` +
-        `Videos en votación detectados: ${videosEnVotacionCount}.`
+        `Videos en votación detectados: ${videosEnVotacionCount}.\n` +
+        `Foros abiertos detectados: ${forosAbiertosCount}.`
       );
     }
 
@@ -826,12 +885,12 @@ function buildDynamicPageContextText(pageContext: {
     }
 
     return (
-  "Estoy respondiendo según lo que esta pantalla muestra ahora mismo.\n\n" +
-  (pageContext.summary ? `${pageContext.summary}\n\n` : "") +
-  (actions.length
-    ? `Desde aquí puedes hacer cosas como estas:\n- ${actions.join("\n- ")}`
-    : "Si quieres, pregúntame algo concreto sobre acceso, comentarios, videos, votación, fundador o foros.")
-);
+      "Estoy respondiendo según el estado real de Comentarios Ciudadanos.\n\n" +
+      (pageContext.summary ? `${pageContext.summary}\n\n` : "") +
+      (actions.length
+        ? `Desde aquí puedes hacer cosas como estas:\n- ${actions.join("\n- ")}`
+        : "Pregúntame algo concreto sobre registro único, código de acceso, comentarios, videos, votación, fundador o foros.")
+    );
   }
 
        if (asksHelp) {

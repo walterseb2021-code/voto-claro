@@ -1497,13 +1497,14 @@ async function voteForVideo(videoId: string) {
       visibleParts.push("Se está verificando si el ciudadano ya tiene una sesión activa como participante.");
     }
 
-    if (!checkingData && !hasData) {
-      visibleParts.push("El ciudadano está en modo observador.");
-      visibleParts.push("Para participar primero debe registrarse una sola vez en la ficha general del app.");
-      visibleParts.push("Después del registro, el sistema entrega un código de acceso único.");
-      visibleParts.push("Ese mismo código sirve para entrar también en Proyecto Ciudadano, Espacio Emprendedor, Comentarios Ciudadanos y Reto Ciudadano.");
-      visibleParts.push("Sin registro activo, aquí solo puede observar el contenido público.");
-    }
+     if (!checkingData && !hasData) {
+  visibleParts.push("El ciudadano está en modo observador.");
+  visibleParts.push("Para participar activamente en esta ventana primero debe registrarse una sola vez en la ficha general del app.");
+  visibleParts.push("Después de registrarse, el sistema le entrega un código de acceso único.");
+  visibleParts.push("No existen múltiples códigos para la misma persona dentro del flujo normal del app.");
+  visibleParts.push("Ese mismo código sirve también para ingresar a Proyecto Ciudadano, Espacio Emprendedor, Comentarios Ciudadanos y Reto Ciudadano.");
+  visibleParts.push("En esta pantalla, sin registro activo, solo puede observar contenido público.");
+}
 
     if (!checkingData && hasData) {
       visibleParts.push("La sesión del participante está activa.");
@@ -1645,27 +1646,31 @@ async function voteForVideo(videoId: string) {
       "foros-abiertos",
     ];
 
-    const availableActions =
-      !checkingData && !hasData
-        ? ["Registrarme para participar", "Iniciar sesión con código", "Explorar contenido público"]
-        : [
-            "Enviar comentario",
-            "Enviar video",
-            "Ver comentarios publicados",
-            "Ver videos aprobados",
-            "Votar por un video",
-            "Entrar al foro",
-            "Revisar preguntas al fundador",
-          ];
-
-    const summary =
+       const availableActions =
   !checkingData && !hasData
-    ? "Comentarios Ciudadanos en modo observador. Aquí el ciudadano puede ver el contenido público, registrarse por primera vez o iniciar sesión con su código único de acceso."
+    ? [
+        "Registrarme una sola vez en la ficha general",
+        "Ingresar con mi código si ya me registré antes",
+        "Explorar contenido público",
+      ]
+    : [
+        "Enviar comentario",
+        "Enviar video",
+        "Ver comentarios publicados",
+        "Ver videos aprobados",
+        "Votar por un video",
+        "Entrar al foro",
+        "Revisar preguntas al fundador",
+      ];
+
+const summary =
+  !checkingData && !hasData
+    ? "Modo observador. Aquí el ciudadano puede ver contenido público. Para participar activamente debe registrarse una sola vez en la ficha general del app, recibir su código único y luego usar ese mismo código cuando lo necesite en otras ventanas."
     : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-    ? "Comentarios Ciudadanos con acceso al bloque de pregunta al fundador y participación activa habilitada."
+    ? "Participación activa habilitada con acceso al bloque de pregunta al fundador."
     : votingVideos.length > 0
-    ? "Comentarios Ciudadanos con tema semanal activo y votación abierta de los videos aprobados de la semana anterior."
-    : "Comentarios Ciudadanos con tema semanal, comentarios, videos, historial, foros abiertos y participación activa.";
+    ? "Tema semanal activo y votación abierta de los videos aprobados de la semana anterior."
+    : "Tema semanal, comentarios, videos, historial, foros abiertos y participación activa habilitada.";
 
           const suggestedPrompts =
       !checkingData && !hasData
@@ -1754,7 +1759,10 @@ async function voteForVideo(videoId: string) {
       activeSection,
       activeViewId,
       activeViewTitle,
-      breadcrumb: ["Comentarios Ciudadanos", activeViewTitle],
+      breadcrumb:
+  activeViewTitle && activeViewTitle !== "Comentarios ciudadanos"
+    ? ["Comentarios Ciudadanos", activeViewTitle]
+    : ["Comentarios Ciudadanos"],
       visibleSections,
       suggestedPrompts,
       visibleText: visibleParts.join("\n"),
@@ -1791,8 +1799,15 @@ async function voteForVideo(videoId: string) {
         votacionSemanalVisible: votingVideos.length > 0,
         historialSemanalVisible: archivedTopicsPublic.length > 0,
         historialForosVisible: forumTopics.length > 0,
-        participanteNombre: participant?.full_name ?? "",
+                participanteNombre: participant?.full_name ?? "",
         participanteAlias: participant?.alias ?? "",
+        registroUnicoApp: true,
+        codigoUnicoPorParticipante: true,
+        mismoCodigoEnTodoElApp: true,
+        requiereRegistroPrevioAntesDeUsarCodigo: true,
+        maxComentariosPorTema: 3,
+        maxVideosPorTema: 1,
+        maxVotosPorTema: 1,
       },
     });
      }, [

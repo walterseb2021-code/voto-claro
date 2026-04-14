@@ -566,7 +566,7 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       : errorMsg
       ? "Foro ciudadano con un error visible."
       : !hasAccess
-      ? "Foro ciudadano en modo observador, con acceso restringido para comentar."
+? "Foro ciudadano en modo observador. El usuario puede leer el debate, pero para participar primero debe haber completado el registro único del app y luego usar su mismo código de acceso si hace falta."
       : !forumAlias
       ? "Foro ciudadano listo para configurar alias antes de participar."
       : "Foro ciudadano con comentarios abiertos sobre un tema semanal archivado.";
@@ -582,9 +582,11 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       visibleParts.push(`Pregunta guía visible: ${topic.question}.`);
     }
 
-    if (!hasAccess && !loading) {
-      visibleParts.push("El usuario aún no tiene acceso habilitado para participar en este foro.");
-    }
+      if (!hasAccess && !loading) {
+  visibleParts.push("El usuario aún no tiene acceso habilitado para participar en este foro.");
+  visibleParts.push("Para comentar aquí, primero debe registrarse una sola vez en la ficha general del app.");
+  visibleParts.push("Después puede usar su mismo código de acceso para entrar también a esta sección.");
+}
 
     if (hasAccess && !forumAlias) {
       visibleParts.push("El usuario tiene acceso, pero aún debe confirmar o guardar un alias del foro.");
@@ -613,11 +615,15 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       visibleParts.push(`Mensaje de error visible: ${errorMsg}`);
     }
 
-    const availableActions = !hasAccess
-      ? ["Volver a comentarios", "Registrarse o iniciar sesión en Comentarios Ciudadanos"]
-      : !forumAlias
-      ? ["Guardar alias", "Volver a comentarios"]
-      : ["Publicar comentario", "Volver a comentarios"];
+      const availableActions = !hasAccess
+  ? [
+      "Volver a comentarios",
+      "Registrarme una sola vez en la ficha general si aún no tengo registro",
+      "Ingresar con mi código si ya me registré antes",
+    ]
+  : !forumAlias
+  ? ["Guardar alias", "Volver a comentarios"]
+  : ["Publicar comentario", "Volver a comentarios"];
 
           const suggestedPrompts = !hasAccess
       ? [
