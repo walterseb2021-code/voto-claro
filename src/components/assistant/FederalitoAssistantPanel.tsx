@@ -798,27 +798,27 @@ function buildDynamicPageContextText(pageContext: {
       q.includes("uso del codigo") ||
       q.includes("uso del código");
 
-    if (asksHelp || asksParticipationFlow) {
-      if (checkingData) {
-        return "Ahora mismo la pantalla todavía está verificando si ya existe una sesión activa de participante.";
-      }
+      if ((asksHelp || asksParticipationFlow) && !asksCommentBlock && !asksFounderFull && !asksCommentVsForum && !asksCommentVsOpenForums) {
+  if (checkingData) {
+    return "Ahora mismo la pantalla todavía está verificando si ya existe una sesión activa de participante.";
+  }
 
-      if (!accesoVerificado) {
-        return (
-          "Para participar activamente en Comentarios Ciudadanos, el flujo correcto es este:\n\n" +
-          "1. Registrarte una sola vez en la ficha general del app.\n" +
-          "2. Obtener tu código de acceso único.\n" +
-          "3. Usar ese mismo código cuando necesites entrar a esta u otras ventanas del app.\n\n" +
-          "Mientras no tengas ese registro activo, aquí solo puedes observar el contenido público."
-        );
-      }
+  if (!accesoVerificado) {
+    return (
+      "Para participar activamente en Comentarios Ciudadanos, el flujo correcto es este:\n\n" +
+      "1. Registrarte una sola vez en la ficha general del app.\n" +
+      "2. Obtener tu código de acceso único.\n" +
+      "3. Usar ese mismo código cuando necesites entrar a esta u otras ventanas del app.\n\n" +
+      "Mientras no tengas ese registro activo, aquí solo puedes observar el contenido público."
+    );
+  }
 
-      return (
-        "Aquí ya tienes participación activa habilitada.\n\n" +
-        "En esta pantalla puedes comentar sobre el tema de la semana, enviar un video, votar cuando haya una votación abierta y entrar a los foros ciudadanos.\n\n" +
-        "Tu registro sigue siendo el mismo registro único del app."
-      );
-    }
+  return (
+    "Aquí ya tienes participación activa habilitada.\n\n" +
+    "En esta pantalla puedes comentar sobre el tema de la semana, enviar un video, votar cuando haya una votación abierta y entrar a los foros ciudadanos.\n\n" +
+    "Tu registro sigue siendo el mismo registro único del app."
+  );
+}
 
     if (asksSingleCode) {
       if (
