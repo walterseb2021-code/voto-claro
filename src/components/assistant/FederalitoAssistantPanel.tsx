@@ -333,11 +333,11 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("publicar") ||
     q.includes("destacados");
 
-  const asksCommentAccess =
+    const asksCommentAccess =
     q.includes("puedo comentar") ||
     q.includes("ya puedo comentar") ||
-    q.includes("comentario") ||
-    q.includes("comentar") ||
+    q.includes("tengo acceso para comentar") ||
+    q.includes("ya tengo acceso") ||
     q.includes("acceso") ||
     q.includes("registrar mis datos") ||
     q.includes("correo") ||
@@ -405,6 +405,36 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("qué diferencia hay entre comentar y participar en el foro") ||
     q.includes("que diferencia hay entre el tema semanal y el foro") ||
     q.includes("qué diferencia hay entre el tema semanal y el foro");
+      const asksCommentBlock =
+    q.includes("bloque de comentario ciudadano") ||
+    q.includes("como funciona el bloque de comentario") ||
+    q.includes("cómo funciona el bloque de comentario") ||
+    q.includes("cuantos comentarios puedo enviar") ||
+    q.includes("cuántos comentarios puedo enviar") ||
+    q.includes("que tipo de comentario") ||
+    q.includes("qué tipo de comentario") ||
+    q.includes("que comentario si se publica") ||
+    q.includes("qué comentario sí se publica") ||
+    q.includes("como conviene comentar") ||
+    q.includes("cómo conviene comentar");
+
+  const asksFounderFull =
+    q.includes("que significa el bloque de pregunta al fundador") ||
+    q.includes("qué significa el bloque de pregunta al fundador") ||
+    q.includes("quien puede usarlo") ||
+    q.includes("quién puede usarlo") ||
+    q.includes("cuando aparece") ||
+    q.includes("cuándo aparece") ||
+    q.includes("para que sirve la pregunta al fundador") ||
+    q.includes("para qué sirve la pregunta al fundador");
+
+  const asksCommentVsOpenForums =
+    q.includes("foros abiertos de debate ciudadano") ||
+    q.includes("diferencia entre comentar el tema semanal y participar en los foros") ||
+    q.includes("qué diferencia hay entre comentar el tema semanal y participar en los foros") ||
+    q.includes("que diferencia hay entre comentar el tema semanal y participar en los foros") ||
+    q.includes("diferencia entre comentar el tema semanal y los foros abiertos") ||
+    q.includes("diferencia entre comentario semanal y foros abiertos");
     if (pageId === "intencion-de-voto") {
     const asksVote =
       q.includes("votar") ||
@@ -813,7 +843,45 @@ function buildDynamicPageContextText(pageContext: {
 
       return "Según esta pantalla, ahora mismo puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
     }
+          if (asksCommentVsForum || asksCommentVsOpenForums) {
+      return (
+        "Comentar el tema semanal sirve para responder directamente al tema activo y a la pregunta guía de la semana dentro de Comentarios Ciudadanos.\n\n" +
+        "En cambio, los foros abiertos de debate ciudadano sirven para profundizar un tema que ya quedó abierto al debate y continuar la conversación con más intercambio de argumentos entre participantes.\n\n" +
+        "En el comentario semanal prima la respuesta al tema actual; en los foros abiertos prima el debate más amplio y sostenido sobre un tema ya abierto."
+      );
+    }
 
+    if (asksCommentBlock) {
+      return (
+        "El bloque de Comentario Ciudadano sirve para que expreses tu propuesta, opinión o aporte sobre el tema semanal activo.\n\n" +
+        "En esta dinámica puedes enviar hasta tres comentarios sobre el tema de la semana. Conviene que el comentario sea claro, directo y realmente conectado con la pregunta guía visible.\n\n" +
+        "Lo que sí conviene publicar aquí es un aporte útil, entendible y relacionado con el tema semanal, no un texto fuera de tema o sin contenido ciudadano."
+      );
+    }
+
+    if (asksFounderFull) {
+      if (puedePreguntarFundador) {
+        return (
+          "El bloque de Pregunta al fundador es un espacio especial que aparece para el ganador semanal oficial.\n\n" +
+          "No lo usa cualquier participante: solo puede usarlo quien quedó como ganador oficial de la semana.\n\n" +
+          "Cuando aparece, permite hacer una sola pregunta al fundador y, después de enviarla, ya no se puede editar."
+        );
+      }
+
+      if (preguntasFundadorCount > 0) {
+        return (
+          "El bloque de Pregunta al fundador corresponde a preguntas públicas ya registradas para ese espacio especial.\n\n" +
+          "Ese bloque no está pensado para todos los participantes, sino para el ganador semanal oficial cuando esa opción se habilita.\n\n" +
+          "Si ahora solo ves preguntas públicas, significa que el espacio ya muestra preguntas registradas, aunque no necesariamente el formulario activo para hacer una nueva."
+        );
+      }
+
+      return (
+        "El bloque de Pregunta al fundador es un espacio especial que no está abierto para cualquier participante.\n\n" +
+        "Normalmente se habilita para el ganador semanal oficial, cuando esa etapa aparece en la dinámica de la pantalla.\n\n" +
+        "Ahora mismo no detecto preguntas públicas ni formulario visible de ese bloque."
+      );
+    }
     if (asksCommentAccess) {
       if (checkingData) {
         return "Todavía se está verificando si tu acceso ya está habilitado.";
