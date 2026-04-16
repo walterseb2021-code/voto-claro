@@ -2019,7 +2019,78 @@ function prettyCitationsText(input: string) {
   s = s.replace(/\bp\.\s*(\d+)\b/gi, "página $1");
   return s;
 }
+ function looksTruncatedContextAnswer(input: string) {
+  const s = String(input || "").trim();
+  if (!s) return true;
 
+  const lower = normalizeLite(s);
+
+  // finales sospechosos muy típicos de corte
+  const badEndings = [
+    "lo que significa.",
+    "lo.",
+    "la.",
+    "los.",
+    "las.",
+    "que.",
+    "como.",
+    "cómo.",
+    "cuando.",
+    "cuándo.",
+    "donde.",
+    "dónde.",
+    "quien.",
+    "quién.",
+    "ya han sido.",
+    "ya fue.",
+    "ya han.",
+    "ya se.",
+    "para.",
+    "porque.",
+    "por que.",
+    "sin que.",
+    "aunque.",
+    "mientras.",
+    "dentro de comentarios ciudadanos, lo.",
+    "en modo observador, lo.",
+  ].map(normalizeLite);
+
+  if (badEndings.some((ending) => lower.endsWith(ending))) {
+    return true;
+  }
+
+  // si termina con conector o frase claramente abierta
+  if (
+    /\b(lo|la|los|las|que|como|cuando|donde|quien|porque|para|mientras|aunque)\.$/i.test(s)
+  ) {
+    return true;
+  }
+
+  // frases demasiado cortas para preguntas compuestas
+  const wordCount = s.split(/\s+/).filter(Boolean).length;
+  if (wordCount <= 8) {
+    const compoundQuestionSignals = [
+      "quien puede",
+      "quién puede",
+      "cuando aparece",
+      "cuándo aparece",
+      "que diferencia",
+      "qué diferencia",
+      "cuantos comentarios",
+      "cuántos comentarios",
+      "que tipo de comentario",
+      "qué tipo de comentario",
+    ];
+
+    // este helper solo evalúa la respuesta; el filtro fino se hace afuera con la pregunta
+    // pero igual sirve para descartar respuestas anormalmente pobres
+    if (compoundQuestionSignals.some((x) => lower.includes(x))) {
+      return true;
+    }
+  }
+
+  return false;
+}
 // ✅ Helpers: follow-ups y contexto
 function looksLikeFollowUp(q: string) {
   const t = normalize(q).trim();
@@ -4068,12 +4139,36 @@ if (String(pathname || "").startsWith("/como-funciona")) {
           }),
         });
 
-        const payload = await safeReadJson(res);
+                const payload = await safeReadJson(res);
         contextAnswer = sanitizeAssistantTextForUi(
           String((payload as any)?.answer ?? "").trim()
         );
 
-        if (res.ok && contextAnswer) {
+        const questionLooksCompound =
+          (() => {
+            const qn = normalizeLite(rawQ);
+            return (
+              qn.includes("quien puede") ||
+              qn.includes("quién puede") ||
+              qn.includes("cuando aparece") ||
+              qn.includes("cuándo aparece") ||
+              qn.includes("que diferencia") ||
+              qn.includes("qué diferencia") ||
+              qn.includes("cuantos comentarios") ||
+              qn.includes("cuántos comentarios") ||
+              qn.includes("que tipo de comentario") ||
+              qn.includes("qué tipo de comentario") ||
+              qn.includes("como funciona el bloque") ||
+              qn.includes("cómo funciona el bloque")
+            );
+          })();
+
+        const shouldRejectContextAnswer =
+          !contextAnswer ||
+          looksTruncatedContextAnswer(contextAnswer) ||
+          (questionLooksCompound && contextAnswer.split(/\s+/).filter(Boolean).length < 18);
+
+        if (res.ok && contextAnswer && !shouldRejectContextAnswer) {
           pushAssistant(contextAnswer);
           await maybeSpeak(contextAnswer);
           return;
