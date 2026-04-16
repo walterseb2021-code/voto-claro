@@ -246,15 +246,26 @@ function buildDynamicPageContextText(pageContext: {
   const yaVotoVideo = Boolean(data.yaVotoVideo);
   const ganadorOficialVisible = Boolean(data.ganadorOficialVisible);
   const puedePreguntarFundador = Boolean(data.puedePreguntarFundador);
-  const weeklyTopic = String(data.weeklyTopic || "").trim();
+     const weeklyTopic = String(data.weeklyTopic || "").trim();
   const weeklyQuestion = String(data.weeklyQuestion || "").trim();
-      const registroUnicoApp = Boolean(data.registroUnicoApp);
-const codigoUnicoPorParticipante = Boolean(data.codigoUnicoPorParticipante);
-const mismoCodigoEnTodoElApp = Boolean(data.mismoCodigoEnTodoElApp);
-const requiereRegistroPrevioAntesDeUsarCodigo = Boolean(data.requiereRegistroPrevioAntesDeUsarCodigo);
-const formularioAccesoVisible = Boolean(data.formularioAccesoVisible);
-const votacionSemanalVisible = Boolean(data.votacionSemanalVisible);
-const historialForosVisible = Boolean(data.historialForosVisible);
+  const registroUnicoApp = Boolean(data.registroUnicoApp);
+  const codigoUnicoPorParticipante = Boolean(data.codigoUnicoPorParticipante);
+  const mismoCodigoEnTodoElApp = Boolean(data.mismoCodigoEnTodoElApp);
+  const requiereRegistroPrevioAntesDeUsarCodigo = Boolean(data.requiereRegistroPrevioAntesDeUsarCodigo);
+  const formularioAccesoVisible = Boolean(data.formularioAccesoVisible);
+  const votacionSemanalVisible = Boolean(data.votacionSemanalVisible);
+  const historialForosVisible = Boolean(data.historialForosVisible);
+
+  const foroHasAccess = Boolean(
+    data.hasAccess ?? data.foroHasAccess ?? data.accesoForoHabilitado
+  );
+  const foroLoading = Boolean(data.loading ?? data.foroLoading);
+  const forumAlias = String(data.forumAlias || data.alias || "").trim();
+  const forumTopicTitle = String(
+    data.topicTitle || data.forumTopicTitle || pageContext.selectedItemTitle || ""
+  ).trim();
+  const forumQuestion = String(data.topicQuestion || data.forumQuestion || "").trim();
+  const forumCommentsCount = Number(data.commentsCount || data.forumCommentsCount || 0);
 
     const asksHelp =
     !q ||
@@ -359,11 +370,41 @@ const historialForosVisible = Boolean(data.historialForosVisible);
     q.includes("pregunta al fundador") ||
     q.includes("preguntas al fundador");
 
-  const asksForum =
+       const asksForum =
     q.includes("foro") ||
     q.includes("foros") ||
     q.includes("debate") ||
     q.includes("foro abierto");
+
+  const asksForumParticipation =
+    q.includes("como participo en el foro") ||
+    q.includes("cómo participo en el foro") ||
+    q.includes("como comentar en el foro") ||
+    q.includes("cómo comentar en el foro") ||
+    q.includes("puedo comentar en el foro") ||
+    q.includes("ya puedo comentar en el foro") ||
+    q.includes("necesito codigo para el foro") ||
+    q.includes("necesito código para el foro") ||
+    q.includes("necesito registrarme para el foro");
+
+  const asksForumTopic =
+    q.includes("de que trata este foro") ||
+    q.includes("de qué trata este foro") ||
+    q.includes("cual es el tema de este foro") ||
+    q.includes("cuál es el tema de este foro") ||
+    q.includes("que se debate aqui") ||
+    q.includes("qué se debate aquí") ||
+    q.includes("que se discute aqui") ||
+    q.includes("qué se discute aquí");
+
+  const asksCommentVsForum =
+    q.includes("diferencia entre comentar y foro") ||
+    q.includes("diferencia entre comentario y foro") ||
+    q.includes("diferencia entre el comentario semanal y el foro") ||
+    q.includes("que diferencia hay entre comentar y participar en el foro") ||
+    q.includes("qué diferencia hay entre comentar y participar en el foro") ||
+    q.includes("que diferencia hay entre el tema semanal y el foro") ||
+    q.includes("qué diferencia hay entre el tema semanal y el foro");
     if (pageId === "intencion-de-voto") {
     const asksVote =
       q.includes("votar") ||
@@ -892,7 +933,126 @@ const historialForosVisible = Boolean(data.historialForosVisible);
         : "Pregúntame algo concreto sobre registro único, código de acceso, comentarios, videos, votación, fundador o foros.")
     );
   }
+          if (pageId === "comentarios-foro-ciudadano") {
+    if (asksHelp) {
+      if (foroLoading) {
+        return "Ahora mismo el foro todavía está cargando su estado de acceso y participación.";
+      }
 
+      if (!foroHasAccess) {
+        return (
+          "Ahora mismo estás viendo este foro en modo observador.\n\n" +
+          "Puedes leer el debate abierto, pero para participar activamente primero debes haber completado el registro único del app y luego usar tu mismo código si hace falta.\n\n" +
+          "Después de habilitar el acceso, aquí podrás definir tu alias del foro y publicar tu aporte."
+        );
+      }
+
+      if (!forumAlias) {
+        return (
+          "Tu acceso al foro ya aparece habilitado, pero todavía falta definir el alias con el que participarás en este debate.\n\n" +
+          "Después de guardar ese alias ya podrás comentar dentro del foro abierto."
+        );
+      }
+
+      return (
+        "Aquí ya puedes participar activamente en este foro ciudadano.\n\n" +
+        "Esta subventana sirve para debatir con más profundidad un tema ya abierto, aportar argumentos y comentar dentro del hilo visible."
+      );
+    }
+
+    if (asksCommentVsForum) {
+      return (
+        "El comentario semanal responde al tema activo de la semana dentro de Comentarios Ciudadanos.\n\n" +
+        "En cambio, el foro ciudadano sirve para profundizar y debatir más a fondo un tema que ya quedó abierto como espacio de discusión.\n\n" +
+        "En el comentario semanal prima la respuesta al tema actual; en el foro prima el intercambio de argumentos y debate entre participantes."
+      );
+    }
+
+    if (asksForumParticipation || asksCommentAccess) {
+      if (foroLoading) {
+        return "Todavía se está verificando si tu acceso al foro ya está habilitado.";
+      }
+
+      if (!foroHasAccess) {
+        return (
+          "Todavía no aparece acceso habilitado para participar en este foro.\n\n" +
+          "Primero debes haberte registrado una sola vez en la ficha general del app y luego usar tu mismo código de acceso si esta sección lo solicita."
+        );
+      }
+
+      if (!forumAlias) {
+        return (
+          "Tu acceso al foro ya aparece habilitado, pero antes de comentar todavía debes guardar tu alias visible para este debate."
+        );
+      }
+
+      return "Sí. En este momento ya puedes comentar activamente dentro de este foro ciudadano.";
+    }
+
+    if (asksForumTopic || asksWeeklyTopic || asksForum) {
+      if (!forumTopicTitle && !forumQuestion) {
+        return (
+          pageContext.summary ||
+          "No detecté suficiente detalle visible para describir con precisión el tema de este foro."
+        );
+      }
+
+      return (
+        `Foro abierto: ${forumTopicTitle || "Tema visible en foro"}\n\n` +
+        (forumQuestion ? `Pregunta guía del debate: ${forumQuestion}\n\n` : "") +
+        (forumCommentsCount > 0
+          ? `Comentarios visibles detectados en este foro: ${forumCommentsCount}.`
+          : "Este espacio está orientado al debate y al aporte de argumentos sobre el tema abierto.")
+      ).trim();
+    }
+
+    if (asksActions) {
+      if (!actions.length) {
+        return "En este momento no detecté acciones claras en esta pantalla del foro.";
+      }
+
+      return "Según este foro, ahora mismo puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
+    }
+
+    if (asksStatus) {
+      if (foroLoading) {
+        return "El foro está verificando tu acceso antes de habilitar la participación.";
+      }
+
+      if (!foroHasAccess) {
+        return (
+          "Tu estado actual en este foro es de modo observador.\n\n" +
+          "Puedes leer el debate, pero todavía no aparece participación activa habilitada."
+        );
+      }
+
+      if (!forumAlias) {
+        return (
+          "Tu estado actual en este foro es de acceso habilitado, pero con alias pendiente.\n\n" +
+          "Después de guardar el alias ya podrás comentar en el debate."
+        );
+      }
+
+      return (
+        "Tu estado actual en este foro es de participación habilitada.\n\n" +
+        (forumTopicTitle ? `Tema del foro: ${forumTopicTitle}.\n` : "") +
+        `Alias visible: ${forumAlias || "No visible"}.\n` +
+        `Comentarios detectados: ${forumCommentsCount}.`
+      );
+    }
+
+    if (asksScreen) {
+      return contextText || "No detecté contenido visible suficiente en este foro.";
+    }
+
+    return (
+      "Estoy respondiendo según el estado real de este foro ciudadano.\n\n" +
+      (pageContext.summary ? `${pageContext.summary}\n\n` : "") +
+      (actions.length
+        ? `Desde aquí puedes hacer cosas como estas:\n- ${actions.join("\n- ")}`
+        : "Pregúntame algo concreto sobre el tema del foro, acceso, alias, participación o debate visible.")
+    );
+  }
        if (asksHelp) {
   if (!participantLogueado) {
     return "Aquí puedes registrarte ahora o iniciar sesión con tu código.";
@@ -1326,7 +1486,80 @@ function pickBestVoice(all: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynt
   scored.sort((a, b) => b.score - a.score);
   return scored[0]?.v ?? null;
 }
+ function replaceCountWithArticle(
+  text: string,
+  words: string[],
+  article: "un" | "una"
+) {
+  let out = text;
 
+  for (const word of words) {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`\\b1\\s+(${escaped})\\b`, "gi");
+    out = out.replace(re, `${article} $1`);
+  }
+
+  return out;
+}
+
+function humanizeCountPhrasesForSpeech(input: string) {
+  let s = String(input || "");
+
+  s = replaceCountWithArticle(
+    s,
+    [
+      "imagen",
+      "pregunta",
+      "respuesta",
+      "acción",
+      "accion",
+      "opción",
+      "opcion",
+      "ventana",
+      "página",
+      "pagina",
+      "ruta",
+      "regla",
+      "lista",
+      "persona",
+      "sesión",
+      "sesion",
+      "fase",
+      "etapa",
+      "idea",
+      "prueba",
+      "ficha",
+    ],
+    "una"
+  );
+
+  s = replaceCountWithArticle(
+    s,
+    [
+      "comentario",
+      "foro",
+      "video",
+      "bloque",
+      "tema",
+      "resultado",
+      "proyecto",
+      "mensaje",
+      "registro",
+      "código",
+      "codigo",
+      "paso",
+      "nivel",
+      "dato",
+      "campo",
+      "voto",
+      "ganador",
+      "error",
+    ],
+    "un"
+  );
+
+  return s;
+}
 function humanizeForSpeech(input: string) {
   // ✅ Limpieza global ANTES de cualquier replace
    let s = cleanForSpeech(sanitizeAssistantTextForVoice(String(input ?? ""))).normalize("NFC");
@@ -1362,8 +1595,10 @@ function humanizeForSpeech(input: string) {
   // ✅ Suavizar pausa SOLO para "debe + infinitivo"
   s = s.replace(/\b(debe)\s+(?=[a-záéíóúñ]{3,}ir)\b/gi, "$1 ");
 
-  s = s.replace(/\(p\.\s*(\d+)\)/gi, "(página $1)");
+    s = s.replace(/\(p\.\s*(\d+)\)/gi, "(página $1)");
   s = s.replace(/\bp\.\s*(\d+)\b/gi, "página $1");
+
+  s = humanizeCountPhrasesForSpeech(s);
 
   return s;
 }

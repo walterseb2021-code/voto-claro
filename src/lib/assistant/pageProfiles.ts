@@ -390,9 +390,9 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
   "comentario-ciudadano": {
     pageId: "comentario-ciudadano",
     purpose:
-      "Responder preguntas sobre la ventana actual de comentarios, filtros, resultados visibles y acciones disponibles.",
+      "Responder desde la pantalla principal de Comentarios Ciudadanos usando el estado real de acceso, tema semanal, comentario, videos, votación, pregunta al fundador, historial y foros abiertos.",
     responseStyle:
-      "Conversacional, claro y muy pegado a lo visible en la pantalla actual.",
+      "Conversacional, claro, útil y muy contextual. Debe responder desde el bloque visible y no reducir todo a un resumen general de comentarios.",
     priorityFields: [
       "pageTitle",
       "route",
@@ -402,9 +402,12 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
       "activeViewTitle",
       "selectedTopic",
       "selectedComment",
+      "selectedItemTitle",
       "visibleText",
       "availableActions",
+      "visibleActions",
       "status",
+      "resultsSummary",
       "speakableSummary",
       "dynamicData",
     ],
@@ -415,9 +418,48 @@ export const PAGE_PROFILES: Record<string, PageProfile> = {
       "No puedo leer esa parte",
     ],
     preferredActions: [
-      "resumir lo visible",
-      "explicar el comentario o tema activo",
-      "orientar sobre la siguiente acción dentro de la misma ventana",
+      "explicar el flujo real de participación con registro único y código único",
+      "resumir el bloque visible de comentarios, videos, votación, pregunta al fundador o foros",
+      "explicar el tema activo y la acción disponible ahora",
+      "distinguir entre comentar, enviar video, votar y entrar a foros",
+    ],
+  },
+
+  "comentarios-foro-ciudadano": {
+    pageId: "comentarios-foro-ciudadano",
+    purpose:
+      "Responder desde la subventana del foro ciudadano usando el tema archivado visible, el estado de acceso, el alias, los comentarios abiertos y las acciones disponibles dentro del foro.",
+    responseStyle:
+      "Muy contextual, claro y útil. Debe responder desde el foro abierto actual y distinguir entre leer el foro, participar en él y volver a Comentarios Ciudadanos.",
+    priorityFields: [
+      "pageTitle",
+      "route",
+      "summary",
+      "activeSection",
+      "activeViewId",
+      "activeViewTitle",
+      "selectedTopic",
+      "selectedComment",
+      "selectedItemTitle",
+      "visibleText",
+      "availableActions",
+      "visibleActions",
+      "status",
+      "resultsSummary",
+      "speakableSummary",
+      "dynamicData",
+    ],
+    doNotSay: [
+      "No tengo acceso",
+      "Como asistente",
+      "No puedo leer esa parte",
+      "Según la estructura",
+    ],
+    preferredActions: [
+      "explicar de qué trata el foro abierto actual",
+      "decir si el usuario está en modo observador o ya puede comentar",
+      "distinguir entre leer el foro y participar activamente",
+      "orientar sobre qué tipo de aporte conviene hacer en ese foro",
     ],
   },
 
@@ -503,6 +545,8 @@ const PATH_PREFIX_ALIASES: Array<[string, string]> = [
   ["/proyecto-ciudadano/proyectos", "proyecto-ciudadano-proyectos"],
   ["/proyecto-ciudadano/nuevo-proyecto", "proyecto-ciudadano-nuevo-proyecto"],
   ["/proyecto-ciudadano/registro", "proyecto-ciudadano-registro"],
+
+  ["/comentarios/foro/", "comentarios-foro-ciudadano"],
 ];
 
 const PATH_ALIASES: Record<string, string> = {
@@ -521,6 +565,8 @@ export function normalizePageId(value?: string | null): string | null {
 
   if (cleaned === "comentarios") return "comentario-ciudadano";
   if (cleaned === "comentario-ciudadano") return "comentario-ciudadano";
+  if (cleaned === "comentarios-foro") return "comentarios-foro-ciudadano";
+  if (cleaned === "comentarios-foro-ciudadano") return "comentarios-foro-ciudadano";
 
   return cleaned;
 }

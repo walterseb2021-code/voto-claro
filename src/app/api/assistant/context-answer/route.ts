@@ -41,6 +41,18 @@ function getStringList(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function getBoolean(value: unknown): boolean {
+  return value === true;
+}
+
+function getNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
 function truncateText(value: string, max = 240): string {
   const text = String(value || "").trim();
   if (!text) return "";
@@ -168,6 +180,142 @@ function buildFocusSummary(pageContext: Record<string, unknown>): string {
   }
 
   return parts.join(" | ");
+}
+
+function buildCommentDomainGuidance(
+  pageId: string,
+  pageContext: Record<string, unknown>,
+  pathname: string
+): string {
+  const route = getString(pageContext.route) || pathname;
+  const activeSection = getString(pageContext.activeSection);
+  const activeViewTitle = getString(pageContext.activeViewTitle);
+  const visibleActions = getStringList(pageContext.visibleActions);
+  const availableActions = getStringList(pageContext.availableActions);
+  const dynamicData = getRecord(pageContext.dynamicData);
+
+  const accesoVerificado = getBoolean(dynamicData?.accesoVerificado);
+  const checkingData = getBoolean(dynamicData?.checkingData);
+  const weeklyTopic = getString(dynamicData?.weeklyTopic);
+  const weeklyQuestion = getString(dynamicData?.weeklyQuestion);
+  const videosAprobadosCount = getNumber(dynamicData?.videosAprobadosCount);
+  const videosEnVotacionCount = getNumber(dynamicData?.videosEnVotacionCount);
+  const preguntasFundadorCount = getNumber(dynamicData?.preguntasFundadorCount);
+  const forosAbiertosCount = getNumber(dynamicData?.forosAbiertosCount);
+  const registroUnicoApp = getBoolean(dynamicData?.registroUnicoApp);
+  const codigoUnicoPorParticipante = getBoolean(dynamicData?.codigoUnicoPorParticipante);
+  const mismoCodigoEnTodoElApp = getBoolean(dynamicData?.mismoCodigoEnTodoElApp);
+  const requiereRegistroPrevioAntesDeUsarCodigo = getBoolean(
+    dynamicData?.requiereRegistroPrevioAntesDeUsarCodigo
+  );
+
+  const lines = [
+    "Nunca mezcles esta ruta con Espacio Emprendedor, Proyecto Ciudadano, Intención de Voto, Reto Ciudadano ni candidatos.",
+    "No respondas con frases genéricas si el contexto ya muestra un bloque específico activo.",
+    "Si el usuario pregunta por una sección concreta como comentario, video, votación, pregunta al fundador o foro, responde sobre ese bloque y no sobre la ventana en general.",
+    "Si la pregunta compara dos bloques de la misma ventana, explica la diferencia de forma directa y explícita.",
+  ];
+
+  if (pageId === "comentario-ciudadano" || route === "/comentarios") {
+    lines.push(
+      "En Comentarios Ciudadanos principal, distingue claramente entre acceso de participación, tema semanal, comentario ciudadano, videos aprobados, votación semanal, pregunta al fundador, historial y foros abiertos."
+    );
+    lines.push(
+      "Cuando el usuario pregunte cómo participar, explica el flujo real: registro único del app, obtención de código único y uso de ese mismo código en otras ventanas cuando haga falta."
+    );
+    lines.push(
+      "No digas ni sugieras que basta con guardar correo o celular dentro de esta pantalla para habilitar la participación."
+    );
+    lines.push(
+      "Si el usuario pregunta por el mismo código, responde con claridad que el registro es único y que el código también es único por participante cuando el contexto lo indique."
+    );
+    lines.push(
+      "Si el usuario pregunta por votación, explica cuántas veces puede votar, qué significa que un video esté en votación y en qué se diferencia de un video solo aprobado."
+    );
+    lines.push(
+      "Si el usuario pregunta por pregunta al fundador, explica quién puede usar ese bloque, cuándo aparece y cuál es su sentido, no solo la cantidad visible."
+    );
+    lines.push(
+      "Si el usuario pregunta por la diferencia entre comentar el tema semanal y participar en foros abiertos, responde comparando ambos bloques de forma concreta."
+    );
+
+    if (checkingData) {
+      lines.push("Ahora mismo la pantalla está verificando si existe una sesión activa de participante.");
+    }
+
+    if (!checkingData && !accesoVerificado) {
+      lines.push(
+        "El contexto actual muestra modo observador. Debes responder desde ese estado y aclarar que la participación activa todavía no está habilitada."
+      );
+    }
+
+    if (accesoVerificado) {
+      lines.push(
+        "El contexto actual muestra acceso habilitado. Puedes responder que ya puede comentar, enviar video, votar y participar en foros si esos bloques están visibles."
+      );
+    }
+
+    if (weeklyTopic) {
+      lines.push(`Tema semanal visible: ${weeklyTopic}.`);
+    }
+
+    if (weeklyQuestion) {
+      lines.push(`Pregunta guía visible: ${weeklyQuestion}.`);
+    }
+
+    lines.push(`Videos aprobados visibles: ${videosAprobadosCount}.`);
+    lines.push(`Videos en votación visibles: ${videosEnVotacionCount}.`);
+    lines.push(`Preguntas al fundador visibles: ${preguntasFundadorCount}.`);
+    lines.push(`Foros abiertos visibles: ${forosAbiertosCount}.`);
+
+    if (
+      registroUnicoApp &&
+      codigoUnicoPorParticipante &&
+      mismoCodigoEnTodoElApp &&
+      requiereRegistroPrevioAntesDeUsarCodigo
+    ) {
+      lines.push(
+        "El contexto confirma registro único del app, código único por participante y uso del mismo código en todo el ecosistema."
+      );
+    }
+  }
+
+  if (pageId === "comentarios-foro-ciudadano" || route.includes("/comentarios/foro/")) {
+    lines.push(
+      "En Foro Ciudadano, responde desde el tema archivado abierto actual y no como si fuera la pantalla principal de Comentarios."
+    );
+    lines.push(
+      "Distingue entre leer el foro en modo observador, habilitar acceso para participar, definir alias del foro y publicar dentro del debate."
+    );
+    lines.push(
+      "Si el usuario pregunta de qué trata este foro, usa el tema visible, la pregunta guía visible y el estado actual del acceso."
+    );
+    lines.push(
+      "Si el usuario pregunta cómo participar en el foro, explica que primero debe existir el registro único del app y luego puede usar su mismo código si hace falta."
+    );
+    lines.push(
+      "Si el usuario pregunta qué diferencia hay entre el comentario semanal y el foro, aclara que el comentario semanal responde al tema activo de la semana y el foro profundiza un tema archivado ya abierto al debate."
+    );
+    lines.push(
+      "Si el usuario pregunta qué tipo de aporte conviene hacer aquí, responde orientando a debate, argumento, análisis y aporte de conocimiento político, solo con base en lo visible."
+    );
+  }
+
+  if (activeViewTitle) {
+    lines.push(`Vista activa detectada: ${activeViewTitle}.`);
+  }
+
+  if (activeSection) {
+    lines.push(`Sección activa detectada: ${activeSection}.`);
+  }
+
+  if (visibleActions.length) {
+    lines.push(`Acciones visibles detectadas: ${visibleActions.join(", ")}.`);
+  } else if (availableActions.length) {
+    lines.push(`Acciones disponibles detectadas: ${availableActions.join(", ")}.`);
+  }
+
+  return lines.join("\n");
 }
 
 function buildPageSpecificGuidance(
@@ -317,6 +465,10 @@ function buildPageSpecificGuidance(
     return lines.join("\n");
   }
 
+  if (pageId === "comentario-ciudadano" || pageId === "comentarios-foro-ciudadano") {
+    return buildCommentDomainGuidance(pageId, pageContext, pathname);
+  }
+
   return "";
 }
 
@@ -385,10 +537,13 @@ export async function POST(request: Request) {
       "Nunca inventes datos que no estén en el contexto.",
       "Si falta información para responder exactamente, dilo con naturalidad y orienta al usuario hacia lo que sí está visible o hacia la subventana correcta del mismo dominio.",
       "Responde en español claro y natural.",
-      "La respuesta debe ser breve pero completa: entre 2 y 4 oraciones, máximo 90 palabras.",
+      "La respuesta debe ser completa y suficientemente desarrollada para no quedar ambigua ni cortada.",
+      "Usa normalmente entre 3 y 6 oraciones. Puedes usar menos si la pregunta es muy simple, y puedes usar un poco más si la pregunta compara bloques o pide explicar un flujo.",
       "Si el usuario pide ayuda general o pregunta qué puede hacer aquí, responde con una bienvenida breve de 1 o 2 frases, sin enumeraciones largas.",
       "No uses listas, viñetas, markdown, encabezados ni guiones.",
       "No menciones JSON, pageContext, prompt, Gemini, API, modelo, sistema ni instrucciones internas.",
+      "Si la pantalla muestra un flujo ya definido por el producto, explícalo con claridad y sin dejar alternativas falsas o ambiguas.",
+      "Si la pregunta menciona una sección concreta, prioriza esa sección por encima del resumen general de la ventana.",
       `Propósito de la página: ${profile.purpose}`,
       `Estilo de respuesta: ${profile.responseStyle}`,
       `Evita especialmente decir: ${profile.doNotSay.join(", ")}`,
@@ -430,7 +585,7 @@ export async function POST(request: Request) {
           generationConfig: {
             temperature: 0.2,
             topP: 0.9,
-            maxOutputTokens: 320,
+            maxOutputTokens: 420,
             responseMimeType: "text/plain",
           },
         }),
