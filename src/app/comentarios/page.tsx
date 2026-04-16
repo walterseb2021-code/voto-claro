@@ -248,6 +248,7 @@ export default function ComentariosPage() {
 
   const [showPublic, setShowPublic] = useState(false);
   const [showPublicVideos, setShowPublicVideos] = useState(false);
+  const [showVotingVideos, setShowVotingVideos] = useState(false);
   const [publicItems, setPublicItems] = useState<CommentRow[]>([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
@@ -1498,20 +1499,14 @@ async function voteForVideo(videoId: string) {
     }
 
      if (!checkingData && !hasData) {
-  visibleParts.push("El ciudadano está en modo observador.");
-  visibleParts.push("Para participar activamente en esta ventana primero debe registrarse una sola vez en la ficha general del app.");
-  visibleParts.push("Después de registrarse, el sistema le entrega un código de acceso único.");
-  visibleParts.push("No existen múltiples códigos para la misma persona dentro del flujo normal del app.");
-  visibleParts.push("Ese mismo código sirve también para ingresar a Proyecto Ciudadano, Espacio Emprendedor, Comentarios Ciudadanos y Reto Ciudadano.");
-  visibleParts.push("En esta pantalla, sin registro activo, solo puede observar contenido público.");
+  visibleParts.push("Modo observador activo.");
+  visibleParts.push("Registro único del app y código único visibles en esta pantalla.");
 }
 
     if (!checkingData && hasData) {
-      visibleParts.push("La sesión del participante está activa.");
-      visibleParts.push("El ciudadano ya puede comentar, subir video, votar y entrar a los foros abiertos.");
-      visibleParts.push("El registro del participante es único para todo el app.");
-    }
-
+  visibleParts.push("Participación activa habilitada.");
+  visibleParts.push("Puede comentar, enviar video, votar y entrar a foros.");
+}
     if (weeklyTopic) {
       visibleParts.push(`Tema semanal visible: ${weeklyTopic}.`);
     }
@@ -1663,14 +1658,14 @@ async function voteForVideo(videoId: string) {
         "Revisar preguntas al fundador",
       ];
 
-const summary =
+       const summary =
   !checkingData && !hasData
-    ? "Modo observador. Aquí el ciudadano puede ver contenido público. Para participar activamente debe registrarse una sola vez en la ficha general del app, recibir su código único y luego usar ese mismo código cuando lo necesite en otras ventanas."
+    ? "Modo observador con contenido público visible."
     : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-    ? "Participación activa habilitada con acceso al bloque de pregunta al fundador."
+    ? "Participación activa con bloque de pregunta al fundador."
     : votingVideos.length > 0
-    ? "Tema semanal activo y votación abierta de los videos aprobados de la semana anterior."
-    : "Tema semanal, comentarios, videos, historial, foros abiertos y participación activa habilitada.";
+    ? "Votación semanal abierta."
+    : "Participación activa en comentarios ciudadanos.";
 
           const suggestedPrompts =
       !checkingData && !hasData
@@ -1905,10 +1900,9 @@ const summary =
         <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
            Acceso de participación
         </h2>
-                  <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-          Para participar activamente en esta sección debes registrarte como participante
-          o iniciar sesión con tu código de acceso. Si solo quieres observar, puedes hacerlo libremente.
-        </p>
+          <p className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+           Puedes explorar esta ventana libremente. Para participar activamente, primero debes registrarte una sola vez y luego usar tu código de acceso.
+          </p>
         {okMsg ? (
           <div className="mt-4 rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
             {okMsg}
@@ -1936,10 +1930,7 @@ const summary =
                       {!checkingData && !hasData ? (
           <div className="mt-4 grid gap-4">
             <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
-              Puedes explorar esta ventana libremente, pero para comentar, votar, subir videos o participar activamente en los foros debes registrarte como participante.
-              <div className="mt-1 text-xs text-slate-600">
-                El registro es único para todo el app y también sirve para Proyecto Ciudadano, Espacio Emprendedor y Reto Ciudadano.
-              </div>
+              El registro es único para todo el app y el mismo código sirve también para Proyecto Ciudadano, Espacio Emprendedor, Comentarios Ciudadanos y Reto Ciudadano.
             </div>
 
             <div className="flex gap-2 flex-wrap">
@@ -2174,9 +2165,9 @@ const summary =
           </form>
         ) : (
           !checkingData && (
-                        <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
-              Primero regístrate o inicia sesión con tu código de acceso para poder comentar en este tema.
-            </div>
+          <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
+          Primero debes haberte registrado una sola vez en la ficha general del app. Si ya lo hiciste antes, ingresa con tu código de acceso para comentar en este tema.
+          </div>
           )
         )}
       </section>
@@ -2325,8 +2316,8 @@ const summary =
           </form>
         ) : (
           !checkingData && (
-                        <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
-              Primero regístrate o inicia sesión con tu código de acceso para participar con video.
+            <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-4 text-sm font-semibold text-slate-700">
+            Primero debes haberte registrado una sola vez en la ficha general del app. Si ya lo hiciste antes, ingresa con tu código de acceso para participar con video.
             </div>
           )
         )}
@@ -2474,7 +2465,7 @@ const summary =
           ) : null}
         </div>
       </section>
-          <section className={card}>
+       <section className={card}>
   <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
     Votación de la semana anterior
   </h2>
@@ -2482,68 +2473,80 @@ const summary =
     Aquí se votan los videos aprobados del tema que ya cerró su etapa de envío y ahora está en votación.
   </p>
 
-  {votingVideos.length === 0 ? (
-    <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4 text-sm font-semibold text-slate-700">
-      Aún no hay videos en votación esta semana.
-    </div>
-  ) : (
-    <div className="mt-4 space-y-4">
-     {votingVideos.map((v) => (
-  <div
-    key={v.id}
-    className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
-  >
-    <div className="text-xs font-extrabold text-slate-900">
-      {new Date(v.created_at).toLocaleString()}
-    </div>
+  <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
+    <button
+      type="button"
+      className={btn + " w-full"}
+      onClick={() => setShowVotingVideos((v) => !v)}
+    >
+      {showVotingVideos ? "▲ Ocultar videos en votación" : "▼ Ver videos en votación"}
+    </button>
 
-    <div className="mt-2 text-sm font-semibold text-slate-900">
-      Plataforma: {v.platform}
-    </div>
+    {showVotingVideos ? (
+      votingVideos.length === 0 ? (
+        <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4 text-sm font-semibold text-slate-700">
+          Aún no hay videos en votación esta semana.
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          {votingVideos.map((v) => (
+            <div
+              key={v.id}
+              className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+            >
+              <div className="text-xs font-extrabold text-slate-900">
+                {new Date(v.created_at).toLocaleString()}
+              </div>
 
-    {v.title ? (
-      <div className="mt-1 text-sm font-semibold text-slate-800">
-        {v.title}
-      </div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">
+                Plataforma: {v.platform}
+              </div>
+
+              {v.title ? (
+                <div className="mt-1 text-sm font-semibold text-slate-800">
+                  {v.title}
+                </div>
+              ) : null}
+
+              <div className="mt-2 text-xs text-slate-600 break-all">
+                {v.video_url}
+              </div>
+
+              <div className="mt-2 text-sm font-bold text-slate-900">
+                Votos: {videoVoteCounts[v.id] ?? 0}
+              </div>
+
+              <div className="mt-3 flex gap-2 flex-wrap">
+                <a
+                  href={v.video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
+                >
+                  ▶ Ver video
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => voteForVideo(v.id)}
+                  disabled={!!myVotedVideoId || votingVideoId === v.id}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed vc-btn-wave vc-btn-pulse"
+                >
+                  {votingVideoId === v.id
+                    ? "Votando..."
+                    : myVotedVideoId === v.id
+                    ? "✅ Tu voto"
+                    : myVotedVideoId
+                    ? "Voto cerrado"
+                    : "🗳 Votar"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )
     ) : null}
-
-    <div className="mt-2 text-xs text-slate-600 break-all">
-      {v.video_url}
-    </div>
-
-    <div className="mt-2 text-sm font-bold text-slate-900">
-      Votos: {videoVoteCounts[v.id] ?? 0}
-    </div>
-
-    <div className="mt-3 flex gap-2 flex-wrap">
-      <a
-        href={v.video_url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold hover:bg-green-900 transition shadow-sm vc-btn-wave vc-btn-pulse"
-      >
-        ▶ Ver video
-      </a>
-
-      <button
-        type="button"
-        onClick={() => voteForVideo(v.id)}
-        disabled={!!myVotedVideoId || votingVideoId === v.id}
-        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 border-2 border-red-600 bg-slate-800 text-white text-xs font-extrabold hover:bg-slate-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed vc-btn-wave vc-btn-pulse"
-      >
-        {votingVideoId === v.id
-          ? "Votando..."
-          : myVotedVideoId === v.id
-          ? "✅ Tu voto"
-          : myVotedVideoId
-          ? "Voto cerrado"
-          : "🗳 Votar"}
-      </button>
-    </div>
   </div>
-))}
-    </div>
-  )}
 </section>
       {/* BLOQUE 7: Pregunta al fundador */}
       <section className={card}>
