@@ -1492,237 +1492,317 @@ async function voteForVideo(videoId: string) {
     }
   }
       useEffect(() => {
-    const visibleParts: string[] = [];
+     const viewMode = checkingData
+  ? "access-checking"
+  : !hasData
+  ? "observer"
+  : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+  ? "founder-question"
+  : votingVideos.length > 0
+  ? "weekly-voting"
+  : forumTopics.length > 0 && !showPublic && !showPublicVideos
+  ? "forums-overview"
+  : "active-comment";
 
-        if (checkingData) {
-      visibleParts.push("Se está verificando si el ciudadano ya tiene una sesión activa como participante.");
-    }
+const visibleParts: string[] = [];
+visibleParts.push(
+  viewMode === "access-checking"
+    ? "Vista activa: verificación de acceso."
+    : viewMode === "observer"
+    ? "Vista activa: modo observador."
+    : viewMode === "founder-question"
+    ? "Vista activa: pregunta al fundador."
+    : viewMode === "weekly-voting"
+    ? "Vista activa: votación semanal."
+    : viewMode === "forums-overview"
+    ? "Vista activa: foros abiertos."
+    : "Vista activa: comentario semanal activo."
+);
 
-     if (!checkingData && !hasData) {
-  visibleParts.push("Modo observador activo.");
+if (viewMode === "access-checking") {
+  visibleParts.push("La pantalla está verificando si existe una sesión activa de participante.");
+}
+
+if (viewMode === "observer") {
+  if (weeklyTopic) {
+    visibleParts.push(`Tema semanal visible: ${weeklyTopic}.`);
+  }
+  if (weeklyQuestion) {
+    visibleParts.push(`Pregunta guía visible: ${weeklyQuestion}.`);
+  }
+  visibleParts.push("El usuario está en modo observador.");
   visibleParts.push("Registro único del app y código único visibles en esta pantalla.");
+  visibleParts.push(`Comentarios públicos visibles: ${publicItems.length}.`);
+  visibleParts.push(`Videos aprobados visibles: ${publicVideos.length}.`);
 }
 
-    if (!checkingData && hasData) {
-  visibleParts.push("Participación activa habilitada.");
-  visibleParts.push("Puede comentar, enviar video, votar y entrar a foros.");
+if (viewMode === "active-comment") {
+  if (weeklyTopic) {
+    visibleParts.push(`Tema semanal visible: ${weeklyTopic}.`);
+  }
+  if (weeklyQuestion) {
+    visibleParts.push(`Pregunta guía visible: ${weeklyQuestion}.`);
+  }
+  visibleParts.push("La participación activa está habilitada.");
+  visibleParts.push(`Comentarios publicados visibles: ${publicItems.length}.`);
+  visibleParts.push(`Videos aprobados visibles: ${publicVideos.length}.`);
 }
-    if (weeklyTopic) {
-      visibleParts.push(`Tema semanal visible: ${weeklyTopic}.`);
-    }
 
-    if (weeklyQuestion) {
-      visibleParts.push(`Pregunta guía visible: ${weeklyQuestion}.`);
-    }
+if (viewMode === "weekly-voting") {
+  if (weeklyTopic) {
+    visibleParts.push(`Tema relacionado visible: ${weeklyTopic}.`);
+  }
+  visibleParts.push(`Videos en votación visibles: ${votingVideos.length}.`);
+  visibleParts.push(
+    myVotedVideoId
+      ? "La pantalla indica que el voto del usuario ya fue registrado."
+      : "La pantalla indica que el usuario todavía puede votar en esta fase."
+  );
+}
 
-    if (latestOfficialWinner?.topic) {
-      visibleParts.push(`Último ganador oficial visible del tema: ${latestOfficialWinner.topic}.`);
-    }
+if (viewMode === "founder-question") {
+  visibleParts.push(
+    isOfficialWinnerUser
+      ? "El formulario de pregunta al fundador aparece habilitado."
+      : "Solo aparecen preguntas públicas al fundador en esta pantalla."
+  );
+  visibleParts.push(`Preguntas públicas al fundador visibles: ${founderQuestionsPublic.length}.`);
+  visibleParts.push(
+    latestOfficialWinner
+      ? `Ganador oficial visible del tema: ${latestOfficialWinner.topic}.`
+      : "No hay ganador oficial visible en esta pantalla."
+  );
+}
 
-    if (showPublic) {
-      visibleParts.push(`Comentarios publicados visibles: ${publicItems.length}.`);
-    }
+if (viewMode === "forums-overview") {
+  visibleParts.push(`Foros abiertos visibles: ${forumTopics.length}.`);
+  visibleParts.push(`Temas archivados visibles: ${archivedTopicsPublic.length}.`);
+}
 
-    if (showPublicVideos) {
-      visibleParts.push(`Videos aprobados visibles: ${publicVideos.length}.`);
-    }
+if (okMsg) {
+  visibleParts.push(`Mensaje de éxito visible: ${okMsg}`);
+}
 
-    if (votingVideos.length > 0) {
-      visibleParts.push(`Videos en votación visibles: ${votingVideos.length}.`);
-    }
+if (errMsg) {
+  visibleParts.push(`Mensaje de error visible: ${errMsg}`);
+}
 
-    if (founderQuestionsPublic.length > 0) {
-      visibleParts.push(`Preguntas públicas al fundador visibles: ${founderQuestionsPublic.length}.`);
-    }
+if (dataError) {
+  visibleParts.push(`Error de verificación visible: ${dataError}`);
+}
 
-    if (commentAwardsPublic.length > 0) {
-      visibleParts.push(`Ganadores trimestrales visibles: ${commentAwardsPublic.length}.`);
-    }
+if (publicError) {
+  visibleParts.push(`Error visible en comentarios publicados: ${publicError}`);
+}
 
-    if (forumTopics.length > 0) {
-      visibleParts.push(`Foros abiertos visibles: ${forumTopics.length}.`);
-    }
+if (publicVideosError) {
+  visibleParts.push(`Error visible en videos aprobados: ${publicVideosError}`);
+}
 
-    if (okMsg) {
-      visibleParts.push(`Mensaje de éxito visible: ${okMsg}`);
-    }
+if (latestOfficialWinnerError) {
+  visibleParts.push(`Error visible en ganador oficial: ${latestOfficialWinnerError}`);
+}
 
-    if (errMsg) {
-      visibleParts.push(`Mensaje de error visible: ${errMsg}`);
-    }
+if (founderQuestionsPublicError) {
+  visibleParts.push(`Error visible en preguntas al fundador: ${founderQuestionsPublicError}`);
+}
 
-    if (dataError) {
-      visibleParts.push(`Error de verificación visible: ${dataError}`);
-    }
+if (commentAwardsPublicError) {
+  visibleParts.push(`Error visible en premios trimestrales: ${commentAwardsPublicError}`);
+}
 
-    if (publicError) {
-      visibleParts.push(`Error visible en comentarios publicados: ${publicError}`);
-    }
+if (forumTopicsError) {
+  visibleParts.push(`Error visible en foros abiertos: ${forumTopicsError}`);
+}
+    
+const activeSection =
+  viewMode === "access-checking"
+    ? "verificando-acceso"
+    : viewMode === "observer"
+    ? "comentarios-observador"
+    : viewMode === "founder-question"
+    ? "comentarios-pregunta-fundador"
+    : viewMode === "weekly-voting"
+    ? "comentarios-votacion-semanal"
+    : viewMode === "forums-overview"
+    ? "comentarios-foros-abiertos"
+    : "comentarios-tema-semanal";
 
-    if (publicVideosError) {
-      visibleParts.push(`Error visible en videos aprobados: ${publicVideosError}`);
-    }
+const activeViewId =
+  viewMode === "access-checking"
+    ? "comments-loading-access"
+    : viewMode === "observer"
+    ? "comments-observer"
+    : viewMode === "founder-question"
+    ? "comments-founder-question"
+    : viewMode === "weekly-voting"
+    ? "comments-weekly-voting"
+    : viewMode === "forums-overview"
+    ? "comments-open-forums"
+    : "comments-active-comment";
 
-    if (latestOfficialWinnerError) {
-      visibleParts.push(`Error visible en ganador oficial: ${latestOfficialWinnerError}`);
-    }
+const activeViewTitle =
+  viewMode === "access-checking"
+    ? "Verificación de acceso"
+    : viewMode === "observer"
+    ? "Modo observador"
+    : viewMode === "founder-question"
+    ? "Pregunta al fundador"
+    : viewMode === "weekly-voting"
+    ? "Votación semanal"
+    : viewMode === "forums-overview"
+    ? "Foros abiertos"
+    : "Comentario semanal activo";
 
-    if (founderQuestionsPublicError) {
-      visibleParts.push(`Error visible en preguntas al fundador: ${founderQuestionsPublicError}`);
-    }
+const visibleSections =
+  viewMode === "observer"
+    ? ["acceso-de-participacion", "tema-de-la-semana", "comentarios-aprobados", "videos-aprobados"]
+    : viewMode === "founder-question"
+    ? ["tema-de-la-semana", "pregunta-al-fundador", "ganador-trimestral"]
+    : viewMode === "weekly-voting"
+    ? ["tema-de-la-semana", "votacion-semanal", "videos-aprobados"]
+    : viewMode === "forums-overview"
+    ? ["tema-de-la-semana", "foros-abiertos", "historial-publico"]
+    : ["tema-de-la-semana", "comentario-semanal", "yo-politico-semanal", "comentarios-aprobados", "videos-aprobados"];
 
-    if (commentAwardsPublicError) {
-      visibleParts.push(`Error visible en premios trimestrales: ${commentAwardsPublicError}`);
-    }
-
-    if (forumTopicsError) {
-      visibleParts.push(`Error visible en foros abiertos: ${forumTopicsError}`);
-    }
-
-            const activeSection = checkingData
-      ? "verificando-acceso"
-      : !hasData
-      ? "registro-acceso"
-      : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-      ? "pregunta-al-fundador"
-      : votingVideos.length > 0
-      ? "votacion-semanal"
-      : showPublicVideos
-      ? "videos-aprobados"
-      : showPublic
-      ? "comentarios-publicados"
-      : forumTopics.length > 0
-      ? "foros-abiertos"
-      : "comentario-semanal";
-
-    const activeViewId = checkingData
-      ? "comments-loading-access"
-      : !hasData
-      ? "comments-read-only"
-      : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-      ? "comments-founder-question"
-      : votingVideos.length > 0
-      ? "comments-weekly-voting"
-      : showPublicVideos
-      ? "comments-approved-videos"
-      : showPublic
-      ? "comments-approved-comments"
-      : forumTopics.length > 0
-      ? "comments-open-forums"
-      : "comments-main";
-
-    const activeViewTitle = checkingData
-      ? "Verificación de acceso"
-      : !hasData
-      ? "Modo observador"
-      : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
-      ? "Pregunta al fundador"
-      : votingVideos.length > 0
-      ? "Votación semanal"
-      : showPublicVideos
-      ? "Videos aprobados"
-      : showPublic
-      ? "Comentarios publicados"
-      : forumTopics.length > 0
-      ? "Foros abiertos"
-      : "Comentarios ciudadanos";
-
-    const visibleSections = [
-      "acceso-de-participacion",
-      "tema-de-la-semana",
-      "comentario-semanal",
-      "comentarios-aprobados",
-      "yo-politico-semanal",
-      "videos-aprobados",
-      "votacion-semanal",
-      "pregunta-al-fundador",
-      "ganador-trimestral",
-      "historial-publico",
-      "foros-abiertos",
-    ];
-
-       const availableActions =
-  !checkingData && !hasData
+const availableActions =
+  viewMode === "access-checking"
+    ? ["Esperar verificación de acceso"]
+    : viewMode === "observer"
     ? [
         "Registrarme una sola vez en la ficha general",
         "Ingresar con mi código si ya me registré antes",
         "Explorar contenido público",
+      ]
+    : viewMode === "founder-question"
+    ? [
+        "Revisar preguntas al fundador",
+        "Enviar pregunta al fundador",
+        "Volver al tema semanal",
+      ]
+    : viewMode === "weekly-voting"
+    ? [
+        "Ver videos en votación",
+        "Votar por un video",
+        "Revisar videos aprobados",
+      ]
+    : viewMode === "forums-overview"
+    ? [
+        "Entrar al foro",
+        "Explorar foros abiertos",
+        "Volver al tema semanal",
       ]
     : [
         "Enviar comentario",
         "Enviar video",
         "Ver comentarios publicados",
         "Ver videos aprobados",
-        "Votar por un video",
         "Entrar al foro",
-        "Revisar preguntas al fundador",
       ];
 
-       const summary =
-  !checkingData && !hasData
+const summary =
+  viewMode === "access-checking"
+    ? "Verificación de acceso en curso."
+    : viewMode === "observer"
     ? "Modo observador con contenido público visible."
-    : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+    : viewMode === "founder-question"
     ? "Participación activa con bloque de pregunta al fundador."
-    : votingVideos.length > 0
+    : viewMode === "weekly-voting"
     ? "Votación semanal abierta."
-    : "Participación activa en comentarios ciudadanos.";
+    : viewMode === "forums-overview"
+    ? "Foros abiertos de debate ciudadano visibles."
+    : "Tema semanal activo con participación habilitada.";
 
-          const suggestedPrompts =
-      !checkingData && !hasData
-        ? [
-            {
-              id: "cc-1",
-              label: "¿Qué puedo hacer aquí?",
-              question: "¿Qué puedo hacer en Comentarios Ciudadanos si todavía no me he registrado?",
-            },
-            {
-              id: "cc-2",
-              label: "¿Cómo participo de verdad?",
-              question: "¿Qué debo hacer exactamente para participar en Comentarios Ciudadanos, desde el registro hasta el uso del código?",
-            },
-            {
-              id: "cc-3",
-              label: "¿Sirve el mismo código?",
-              question: "¿El mismo código que me entregan al registrarme sirve también para entrar a las otras ventanas del app?",
-            },
-            {
-              id: "cc-4",
-              label: "¿Qué puedo ver sin registro?",
-              question: "¿Qué contenido puedo ver en esta pantalla aunque todavía no tenga una sesión activa?",
-            },
-          ]
-        : [
-            {
-              id: "cc-5",
-              label: "¿Cuál es el tema activo?",
-              question: "¿Cuál es el tema activo de esta semana y cómo conviene enfocar mi participación?",
-            },
-            {
-              id: "cc-6",
-              label: "¿Cómo funciona comentar?",
-              question: "¿Cómo funciona el bloque de comentario ciudadano, cuántos comentarios puedo enviar y qué tipo de comentario sí se publica?",
-            },
-            {
-              id: "cc-7",
-              label: "¿Cómo funciona el video?",
-              question: "¿Cómo participo con un video en esta pantalla, cuántos videos puedo enviar y qué reglas debo seguir?",
-            },
-            {
-              id: "cc-8",
-              label: "¿Cómo funciona la votación?",
-              question: "¿Cómo funciona la votación de la semana anterior, cuántas veces puedo votar y qué significa que un video ya esté en votación?",
-            },
-            {
-              id: "cc-9",
-              label: "¿Qué es pregunta al fundador?",
-              question: "¿Qué significa el bloque de pregunta al fundador, quién puede usarlo y cuándo aparece?",
-            },
-            {
-              id: "cc-10",
-              label: "¿Cómo funcionan los foros?",
-              question: "¿Qué diferencia hay entre comentar el tema semanal y participar en los foros abiertos de debate ciudadano?",
-            },
-          ];
+const suggestedPrompts =
+  viewMode === "observer"
+    ? [
+        {
+          id: "cc-1",
+          label: "¿Qué puedo hacer aquí?",
+          question: "¿Qué puedo hacer en Comentarios Ciudadanos si todavía no me he registrado?",
+        },
+        {
+          id: "cc-2",
+          label: "¿Cómo participo de verdad?",
+          question: "¿Qué debo hacer exactamente para participar en Comentarios Ciudadanos, desde el registro hasta el uso del código?",
+        },
+        {
+          id: "cc-3",
+          label: "¿Sirve el mismo código?",
+          question: "¿El mismo código que me entregan al registrarme sirve también para entrar a las otras ventanas del app?",
+        },
+      ]
+    : viewMode === "founder-question"
+    ? [
+        {
+          id: "cc-f-1",
+          label: "¿Qué es este bloque?",
+          question: "¿Qué significa el bloque de pregunta al fundador, quién puede usarlo y cuándo aparece?",
+        },
+        {
+          id: "cc-f-2",
+          label: "¿Quién puede usarlo?",
+          question: "¿Quién puede usar el bloque de pregunta al fundador según esta pantalla?",
+        },
+        {
+          id: "cc-f-3",
+          label: "¿Ya hay preguntas visibles?",
+          question: "¿Qué preguntas públicas al fundador están visibles en esta pantalla?",
+        },
+      ]
+    : viewMode === "weekly-voting"
+    ? [
+        {
+          id: "cc-v-1",
+          label: "¿Cómo funciona la votación?",
+          question: "¿Cómo funciona la votación de la semana anterior, cuántas veces puedo votar y qué significa que un video ya esté en votación?",
+        },
+        {
+          id: "cc-v-2",
+          label: "¿Ya voté?",
+          question: "¿Ya registré mi voto en esta pantalla y qué opciones tengo ahora?",
+        },
+        {
+          id: "cc-v-3",
+          label: "¿Qué es un video en votación?",
+          question: "¿Qué significa exactamente que un video ya esté en votación en esta pantalla?",
+        },
+      ]
+    : viewMode === "forums-overview"
+    ? [
+        {
+          id: "cc-fo-1",
+          label: "¿Qué son los foros?",
+          question: "¿Qué son los foros abiertos de debate ciudadano en esta pantalla?",
+        },
+        {
+          id: "cc-fo-2",
+          label: "¿Qué diferencia hay?",
+          question: "¿Qué diferencia hay entre comentar el tema semanal y participar en los foros abiertos de debate ciudadano?",
+        },
+        {
+          id: "cc-fo-3",
+          label: "¿Qué puedo hacer en foros?",
+          question: "¿Qué puedo hacer en los foros abiertos que aparecen en esta pantalla?",
+        },
+      ]
+    : [
+        {
+          id: "cc-5",
+          label: "¿Cuál es el tema activo?",
+          question: "¿Cuál es el tema activo de esta semana y cómo conviene enfocar mi participación?",
+        },
+        {
+          id: "cc-6",
+          label: "¿Cómo funciona comentar?",
+          question: "¿Cómo funciona el bloque de comentario ciudadano, cuántos comentarios puedo enviar y qué tipo de comentario sí se publica?",
+        },
+        {
+          id: "cc-7",
+          label: "¿Cómo funciona el video?",
+          question: "¿Cómo participo con un video en esta pantalla, cuántos videos puedo enviar y qué reglas debo seguir?",
+        },
+      ];
 
     const status =
       checkingData ||
@@ -1754,19 +1834,29 @@ async function voteForVideo(videoId: string) {
       activeSection,
       activeViewId,
       activeViewTitle,
-      breadcrumb:
-  activeViewTitle && activeViewTitle !== "Comentarios ciudadanos"
-    ? ["Comentarios Ciudadanos", activeViewTitle]
-    : ["Comentarios Ciudadanos"],
+      breadcrumb: ["Comentarios Ciudadanos", activeViewTitle],
       visibleSections,
       suggestedPrompts,
       visibleText: visibleParts.join("\n"),
       availableActions,
-      selectedItemTitle: latestOfficialWinner?.topic || weeklyTopic || undefined,
+      selectedItemTitle:
+  viewMode === "founder-question"
+    ? latestOfficialWinner?.topic || weeklyTopic || undefined
+    : viewMode === "weekly-voting"
+    ? weeklyTopic || latestOfficialWinner?.topic || undefined
+    : viewMode === "forums-overview"
+    ? selectedForumTopic?.topic || forumTopics[0]?.topic || weeklyTopic || undefined
+    : weeklyTopic || latestOfficialWinner?.topic || undefined,
       status,
       dynamicData: {
         accesoVerificado: hasData,
         checkingData,
+        viewMode,
+commentBlockVisible: viewMode === "active-comment",
+weeklyVotingVisible: viewMode === "weekly-voting",
+founderQuestionVisible: viewMode === "founder-question",
+forumsOverviewVisible: viewMode === "forums-overview",
+observerVisible: viewMode === "observer",
         weeklyTopic,
         weeklyQuestion,
         weeklyTopicId,
