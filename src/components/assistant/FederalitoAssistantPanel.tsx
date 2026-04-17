@@ -364,11 +364,16 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("que opciones tengo ahora") ||
     q.includes("qué opciones tengo ahora");
 
-  const asksVotingVideoMeaning =
-    q.includes("que significa que un video ya este en votacion") ||
-    q.includes("qué significa que un video ya esté en votación") ||
-    q.includes("video ya esta en votacion") ||
-    q.includes("video ya está en votación");
+   const asksVotingVideoMeaning =
+  q.includes("que significa que un video ya este en votacion") ||
+  q.includes("qué significa que un video ya esté en votación") ||
+  q.includes("video ya esta en votacion") ||
+  q.includes("video ya está en votación") ||
+  (
+    (q.includes("que significa exactamente") || q.includes("qué significa exactamente")) &&
+    q.includes("video") &&
+    (q.includes("votacion") || q.includes("votación"))
+  );
 
   const asksWinner =
     q.includes("ganador") ||
@@ -880,13 +885,13 @@ const asksCommentVsOpenForums =
       return "Esta pantalla no muestra suficiente información para confirmar el comportamiento del código de acceso.";
     }
 
-    if (asksActions) {
-      if (!actions.length) {
-        return "En este momento no detecté acciones claras en esta pantalla.";
-      }
+    if (asksActions && !asksOpenForumsActions) {
+  if (!actions.length) {
+    return "En este momento no detecté acciones claras en esta pantalla.";
+  }
 
-      return "Según esta pantalla, ahora mismo puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
-    }
+  return "Según esta pantalla, ahora mismo puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
+}
          
     if (asksOpenForumsDefinition) {
   if (!(forosAbiertosCount > 0 || historialForosVisible)) {
