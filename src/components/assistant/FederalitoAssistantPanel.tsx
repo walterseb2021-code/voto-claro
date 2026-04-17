@@ -268,25 +268,18 @@ function buildDynamicPageContextText(pageContext: {
   const forumCommentsCount = Number(data.commentsCount || data.forumCommentsCount || 0);
 
     const asksHelp =
-    !q ||
-    q.length < 2 ||
-    q.includes("ayuda") ||
-    q.includes("que hago") ||
-    q.includes("qué hago") ||
-    q.includes("como funciona") ||
-    q.includes("cómo funciona") ||
-    q.includes("que puedo hacer") ||
-    q.includes("qué puedo hacer") ||
-    q.includes("como puedo participar") ||
-    q.includes("cómo puedo participar") ||
-    q.includes("como participo") ||
-    q.includes("cómo participo") ||
-    q.includes("como entro") ||
-    q.includes("cómo entro") ||
-    q.includes("que tengo que hacer") ||
-    q.includes("qué tengo que hacer") ||
-    q.includes("como empiezo") ||
-    q.includes("cómo empiezo");
+  !q ||
+  q.length < 2 ||
+  q === "ayuda" ||
+  q === "help" ||
+  q.includes("que hago aqui") ||
+  q.includes("qué hago aquí") ||
+  q.includes("como empiezo aqui") ||
+  q.includes("cómo empiezo aquí") ||
+  q.includes("explicame esta ventana") ||
+  q.includes("explícame esta ventana") ||
+  q.includes("ayudame con esta pantalla") ||
+  q.includes("ayúdame con esta pantalla");
 
   const asksActions =
     q.includes("acciones") ||
@@ -296,14 +289,14 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("sigue") ||
     q.includes("siguiente paso");
 
-  const asksScreen =
-    q.includes("que hay") ||
-    q.includes("qué hay") ||
-    q.includes("que veo") ||
-    q.includes("qué veo") ||
-    q.includes("pantalla") ||
-    q.includes("ventana") ||
-    q.includes("contenido");
+    const asksScreen =
+  q.includes("que hay") ||
+  q.includes("qué hay") ||
+  q.includes("que veo") ||
+  q.includes("qué veo") ||
+  q.includes("pantalla") ||
+  q.includes("ventana") ||
+  q.includes("contenido");
 
   const asksStatus =
     q.includes("estado") ||
@@ -819,15 +812,15 @@ const asksCommentVsOpenForums =
 
       const asksParticipationFlow =
   (
-    q.includes("como participo") ||
-    q.includes("cómo participo") ||
     q.includes("que debo hacer exactamente") ||
     q.includes("qué debo hacer exactamente") ||
     q.includes("como entro a participar") ||
     q.includes("cómo entro a participar") ||
     q.includes("desde el registro") ||
     q.includes("uso del codigo") ||
-    q.includes("uso del código")
+    q.includes("uso del código") ||
+    q.includes("como participo en comentarios ciudadanos") ||
+    q.includes("cómo participo en comentarios ciudadanos")
   ) &&
   !asksVideoSubmission &&
   !asksWeeklyVotingFlow &&
@@ -836,6 +829,16 @@ const asksCommentVsOpenForums =
   !asksForumParticipation &&
   !asksCommentBlock &&
   !asksFounderFull &&
+  !asksCommentVsForum &&
+  !asksCommentVsOpenForums;
+  const asksCommentScreen =
+  asksScreen &&
+  !asksVideoSubmission &&
+  !asksWeeklyVotingFlow &&
+  !asksVotingVideoMeaning &&
+  !asksCommentBlock &&
+  !asksFounderFull &&
+  !asksFounder &&
   !asksCommentVsForum &&
   !asksCommentVsOpenForums;
 
@@ -1083,9 +1086,9 @@ if (asksOpenForumsActions) {
       );
     }
 
-    if (asksScreen) {
-      return contextText || "No detecté contenido visible suficiente en esta pantalla.";
-    }
+    if (asksCommentScreen) {
+  return contextText || "No detecté contenido visible suficiente en esta pantalla.";
+}
 
     return (
       "Estoy respondiendo según el estado real de Comentarios Ciudadanos.\n\n" +
