@@ -1492,20 +1492,23 @@ async function voteForVideo(videoId: string) {
     }
   }
       useEffect(() => {
-     const viewMode = checkingData
+     const founderBlockFocused =
+  winnerQuestionLoading || isOfficialWinnerUser || !!myWinnerQuestion;
+
+const votingBlockFocused =
+  showVotingVideos || votingVideoId !== null;
+
+const viewMode = checkingData
   ? "access-checking"
   : !hasData
   ? "observer"
-  : winnerQuestionLoading || isOfficialWinnerUser || myWinnerQuestion
+  : founderBlockFocused
   ? "founder-question"
-  : votingVideos.length > 0
+  : votingBlockFocused
   ? "weekly-voting"
-  : forumTopics.length > 0 && !showPublic && !showPublicVideos
-  ? "forums-overview"
   : "active-comment";
-
 const visibleParts: string[] = [];
-visibleParts.push(
+ visibleParts.push(
   viewMode === "access-checking"
     ? "Vista activa: verificación de acceso."
     : viewMode === "observer"
@@ -1514,8 +1517,6 @@ visibleParts.push(
     ? "Vista activa: pregunta al fundador."
     : viewMode === "weekly-voting"
     ? "Vista activa: votación semanal."
-    : viewMode === "forums-overview"
-    ? "Vista activa: foros abiertos."
     : "Vista activa: comentario semanal activo."
 );
 
@@ -1574,8 +1575,11 @@ if (viewMode === "founder-question") {
   );
 }
 
-if (viewMode === "forums-overview") {
+if (forumTopics.length > 0) {
   visibleParts.push(`Foros abiertos visibles: ${forumTopics.length}.`);
+}
+
+if (archivedTopicsPublic.length > 0) {
   visibleParts.push(`Temas archivados visibles: ${archivedTopicsPublic.length}.`);
 }
 
@@ -1615,7 +1619,7 @@ if (forumTopicsError) {
   visibleParts.push(`Error visible en foros abiertos: ${forumTopicsError}`);
 }
     
-const activeSection =
+ const activeSection =
   viewMode === "access-checking"
     ? "verificando-acceso"
     : viewMode === "observer"
@@ -1624,11 +1628,9 @@ const activeSection =
     ? "comentarios-pregunta-fundador"
     : viewMode === "weekly-voting"
     ? "comentarios-votacion-semanal"
-    : viewMode === "forums-overview"
-    ? "comentarios-foros-abiertos"
     : "comentarios-tema-semanal";
 
-const activeViewId =
+  const activeViewId =
   viewMode === "access-checking"
     ? "comments-loading-access"
     : viewMode === "observer"
@@ -1637,11 +1639,9 @@ const activeViewId =
     ? "comments-founder-question"
     : viewMode === "weekly-voting"
     ? "comments-weekly-voting"
-    : viewMode === "forums-overview"
-    ? "comments-open-forums"
     : "comments-active-comment";
 
-const activeViewTitle =
+   const activeViewTitle =
   viewMode === "access-checking"
     ? "Verificación de acceso"
     : viewMode === "observer"
@@ -1650,22 +1650,24 @@ const activeViewTitle =
     ? "Pregunta al fundador"
     : viewMode === "weekly-voting"
     ? "Votación semanal"
-    : viewMode === "forums-overview"
-    ? "Foros abiertos"
     : "Comentario semanal activo";
-
-const visibleSections =
+  const visibleSections =
   viewMode === "observer"
     ? ["acceso-de-participacion", "tema-de-la-semana", "comentarios-aprobados", "videos-aprobados"]
     : viewMode === "founder-question"
     ? ["tema-de-la-semana", "pregunta-al-fundador", "ganador-trimestral"]
     : viewMode === "weekly-voting"
     ? ["tema-de-la-semana", "votacion-semanal", "videos-aprobados"]
-    : viewMode === "forums-overview"
-    ? ["tema-de-la-semana", "foros-abiertos", "historial-publico"]
-    : ["tema-de-la-semana", "comentario-semanal", "yo-politico-semanal", "comentarios-aprobados", "videos-aprobados"];
-
-const availableActions =
+    : [
+        "tema-de-la-semana",
+        "comentario-semanal",
+        "yo-politico-semanal",
+        "comentarios-aprobados",
+        "videos-aprobados",
+        "pregunta-al-fundador",
+        "foros-abiertos",
+      ];
+  const availableActions =
   viewMode === "access-checking"
     ? ["Esperar verificación de acceso"]
     : viewMode === "observer"
@@ -1686,21 +1688,17 @@ const availableActions =
         "Votar por un video",
         "Revisar videos aprobados",
       ]
-    : viewMode === "forums-overview"
-    ? [
-        "Entrar al foro",
-        "Explorar foros abiertos",
-        "Volver al tema semanal",
-      ]
     : [
         "Enviar comentario",
         "Enviar video",
         "Ver comentarios publicados",
         "Ver videos aprobados",
+        "Ver videos en votación",
+        "Revisar preguntas al fundador",
         "Entrar al foro",
       ];
 
-const summary =
+  const summary =
   viewMode === "access-checking"
     ? "Verificación de acceso en curso."
     : viewMode === "observer"
@@ -1709,8 +1707,6 @@ const summary =
     ? "Participación activa con bloque de pregunta al fundador."
     : viewMode === "weekly-voting"
     ? "Votación semanal abierta."
-    : viewMode === "forums-overview"
-    ? "Foros abiertos de debate ciudadano visibles."
     : "Tema semanal activo con participación habilitada.";
 
 const suggestedPrompts =
@@ -1768,24 +1764,7 @@ const suggestedPrompts =
           question: "¿Qué significa exactamente que un video ya esté en votación en esta pantalla?",
         },
       ]
-    : viewMode === "forums-overview"
-    ? [
-        {
-          id: "cc-fo-1",
-          label: "¿Qué son los foros?",
-          question: "¿Qué son los foros abiertos de debate ciudadano en esta pantalla?",
-        },
-        {
-          id: "cc-fo-2",
-          label: "¿Qué diferencia hay?",
-          question: "¿Qué diferencia hay entre comentar el tema semanal y participar en los foros abiertos de debate ciudadano?",
-        },
-        {
-          id: "cc-fo-3",
-          label: "¿Qué puedo hacer en foros?",
-          question: "¿Qué puedo hacer en los foros abiertos que aparecen en esta pantalla?",
-        },
-      ]
+    
     : [
         {
           id: "cc-5",
@@ -1839,24 +1818,22 @@ const suggestedPrompts =
       suggestedPrompts,
       visibleText: visibleParts.join("\n"),
       availableActions,
-      selectedItemTitle:
+        selectedItemTitle:
   viewMode === "founder-question"
     ? latestOfficialWinner?.topic || weeklyTopic || undefined
     : viewMode === "weekly-voting"
     ? weeklyTopic || latestOfficialWinner?.topic || undefined
-    : viewMode === "forums-overview"
-    ? selectedForumTopic?.topic || forumTopics[0]?.topic || weeklyTopic || undefined
     : weeklyTopic || latestOfficialWinner?.topic || undefined,
       status,
       dynamicData: {
         accesoVerificado: hasData,
         checkingData,
         viewMode,
-commentBlockVisible: viewMode === "active-comment",
-weeklyVotingVisible: viewMode === "weekly-voting",
-founderQuestionVisible: viewMode === "founder-question",
-forumsOverviewVisible: viewMode === "forums-overview",
-observerVisible: viewMode === "observer",
+        commentBlockVisible: viewMode === "active-comment",
+        weeklyVotingVisible: viewMode === "weekly-voting",
+        founderQuestionVisible: viewMode === "founder-question",
+        forumsOverviewVisible: forumTopics.length > 0,
+        observerVisible: viewMode === "observer",
         weeklyTopic,
         weeklyQuestion,
         weeklyTopicId,

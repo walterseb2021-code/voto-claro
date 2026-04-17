@@ -350,14 +350,32 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("tema activo") ||
     q.includes("tema semanal");
 
-  const asksVideosVoting =
-    q.includes("video") ||
-    q.includes("videos") ||
-    q.includes("votar") ||
-    q.includes("votacion") ||
-    q.includes("votación") ||
+    const asksVideoSubmission =
+    q.includes("como participo con un video") ||
+    q.includes("cómo participo con un video") ||
+    q.includes("cuantos videos puedo enviar") ||
+    q.includes("cuántos videos puedo enviar") ||
+    q.includes("reglas debo seguir") ||
+    q.includes("enviar video") ||
+    q.includes("subir video") ||
     q.includes("yo politico") ||
     q.includes("yo político");
+
+  const asksWeeklyVotingFlow =
+    q.includes("como funciona la votacion") ||
+    q.includes("cómo funciona la votación") ||
+    q.includes("cuantas veces puedo votar") ||
+    q.includes("cuántas veces puedo votar") ||
+    q.includes("ya registre mi voto") ||
+    q.includes("ya registré mi voto") ||
+    q.includes("que opciones tengo ahora") ||
+    q.includes("qué opciones tengo ahora");
+
+  const asksVotingVideoMeaning =
+    q.includes("que significa que un video ya este en votacion") ||
+    q.includes("qué significa que un video ya esté en votación") ||
+    q.includes("video ya esta en votacion") ||
+    q.includes("video ya está en votación");
 
   const asksWinner =
     q.includes("ganador") ||
@@ -908,26 +926,37 @@ function buildDynamicPageContextText(pageContext: {
       ).trim();
     }
 
-    if (asksVideosVoting) {
-      if (videosEnVotacionCount > 0 || votacionSemanalVisible) {
-        return (
-          `Ahora mismo detecto ${videosEnVotacionCount} video(s) en votación.\n\n` +
-          "Eso significa que esos videos ya pasaron la etapa de envío y revisión, y ahora están en la etapa donde los participantes pueden votar una sola vez por tema semanal.\n\n" +
-          (yaVotoVideo
-            ? "Además, esta pantalla indica que ya registraste tu voto."
-            : "Si tu acceso está habilitado y todavía no votaste, puedes revisar los videos y emitir un solo voto en este tema.")
-        );
+         if (asksVideoSubmission) {
+      return (
+        "Para participar con un video en esta pantalla, primero debes tener acceso activo como participante.\n\n" +
+        "En la dinámica semanal puedes enviar un solo video por tema. Ese video debe responder al tema activo, mantener respeto y pasar primero por revisión antes de publicarse.\n\n" +
+        "Después de ser aprobado, recién podría entrar a una etapa de votación si corresponde al ciclo visible."
+      );
+    }
+
+    if (asksWeeklyVotingFlow) {
+      if (!(videosEnVotacionCount > 0 || votacionSemanalVisible)) {
+        return "Ahora mismo no detecto una votación semanal abierta en esta pantalla.";
       }
 
-      if (videosAprobadosCount > 0 || showPublicVideos) {
-        return (
-          `Ahora mismo detecto ${videosAprobadosCount} video(s) aprobado(s)` +
-          (showPublicVideos ? " visibles en pantalla.\n\n" : ".\n\n") +
-          "Un video aprobado ya pasó la revisión. Solo entra a votación cuando pertenece a un tema que ya cerró su etapa de envío y fue puesto en estado de votación."
-        );
+      return (
+        "La votación de la semana anterior funciona sobre videos que ya pasaron la etapa de envío y revisión.\n\n" +
+        `Ahora mismo detecto ${videosEnVotacionCount} video(s) en votación. En esta fase cada participante puede votar una sola vez por tema semanal.\n\n` +
+        (yaVotoVideo
+          ? "La pantalla indica que tu voto ya fue registrado, así que ya no podrías emitir otro en este mismo tema."
+          : "Si tu acceso está habilitado y todavía no votaste, puedes revisar los videos en votación y elegir uno.")
+      );
+    }
+
+    if (asksVotingVideoMeaning) {
+      if (!(videosEnVotacionCount > 0 || votacionSemanalVisible)) {
+        return "Ahora mismo no detecto videos en votación visibles en esta pantalla.";
       }
 
-      return "Ahora mismo no detecto videos visibles para votar en esta pantalla.";
+      return (
+        "Que un video ya esté en votación significa que ese video ya superó la etapa de envío y revisión, y ahora pasó a la fase donde los participantes pueden votar por él.\n\n" +
+        `En esta pantalla detecto ${videosEnVotacionCount} video(s) en esa fase.`
+      );
     }
 
     if (asksWinner) {
@@ -941,19 +970,25 @@ function buildDynamicPageContextText(pageContext: {
       );
     }
 
-    if (asksFounder) {
+         if (asksFounder) {
       if (puedePreguntarFundador) {
         return (
-          "Sí. Esta pantalla indica que puedes usar el formulario de pregunta al fundador.\n\n" +
-          "Solo está habilitado para el ganador semanal oficial, permite una sola pregunta y después no se puede editar."
+          "El bloque de pregunta al fundador solo puede usarlo el ganador semanal oficial cuando esa opción aparece habilitada en esta pantalla.\n\n" +
+          "Permite enviar una sola pregunta y, después de registrarla, ya no se puede editar."
         );
       }
 
       if (preguntasFundadorCount > 0) {
-        return `Ahora mismo detecto ${preguntasFundadorCount} pregunta(s) pública(s) al fundador.`;
+        return (
+          "En esta pantalla sí hay preguntas públicas al fundador visibles, pero eso no significa que cualquier participante pueda usar el formulario.\n\n" +
+          "Ese uso está reservado para el ganador semanal oficial cuando esa opción se habilita."
+        );
       }
 
-      return "No detecto preguntas públicas al fundador visibles en este momento.";
+      return (
+        "Ahora mismo no detecto formulario activo de pregunta al fundador para uso general.\n\n" +
+        "Ese bloque normalmente se reserva para el ganador semanal oficial."
+      );
     }
 
     if (asksForum) {
@@ -1056,7 +1091,19 @@ function buildDynamicPageContextText(pageContext: {
 
       return "Sí. En este momento ya puedes comentar activamente dentro de este foro ciudadano.";
     }
+         const asksForumVsMain =
+      q.includes("diferencia entre esta pantalla de foro y la pantalla principal") ||
+      q.includes("diferencia entre este foro y comentarios ciudadanos") ||
+      q.includes("que diferencia hay entre esta pantalla de foro y la principal") ||
+      q.includes("qué diferencia hay entre esta pantalla de foro y la principal");
 
+    if (asksForumVsMain) {
+      return (
+        "La pantalla principal de Comentarios Ciudadanos se centra en el tema semanal activo, el comentario ciudadano, el video semanal, la votación y otros bloques generales.\n\n" +
+        "En cambio, esta pantalla de foro está dedicada a un tema archivado que quedó abierto al debate más amplio entre participantes.\n\n" +
+        "Aquí el foco principal es discutir a fondo ese tema concreto dentro del foro."
+      );
+    }
     if (asksForumTopic || asksWeeklyTopic || asksForum) {
       if (!forumTopicTitle && !forumQuestion) {
         return (
@@ -2358,7 +2405,54 @@ function hasProfanity(rawQ: string) {
 
   return bad.some((w) => w && t.includes(w));
 }
+  function shouldForceLocalComentarioAnswer(
+  rawQ: string,
+  pageContext: {
+    pageId?: string;
+    dynamicData?: Record<string, unknown>;
+  } | null
+) {
+  if (!pageContext) return false;
+  if (String(pageContext.pageId || "") !== "comentario-ciudadano") return false;
 
+  const q = normalizeLite(rawQ);
+
+  return (
+    q.includes("que puedo hacer en comentarios ciudadanos si todavia no me he registrado") ||
+    q.includes("qué puedo hacer en comentarios ciudadanos si todavía no me he registrado") ||
+    q.includes("que debo hacer exactamente para participar en comentarios ciudadanos") ||
+    q.includes("qué debo hacer exactamente para participar en comentarios ciudadanos") ||
+    q.includes("el mismo codigo") ||
+    q.includes("el mismo código") ||
+    q.includes("como funciona el bloque de comentario ciudadano") ||
+    q.includes("cómo funciona el bloque de comentario ciudadano") ||
+    q.includes("cuantos comentarios puedo enviar") ||
+    q.includes("cuántos comentarios puedo enviar") ||
+    q.includes("que tipo de comentario") ||
+    q.includes("qué tipo de comentario") ||
+    q.includes("como participo con un video") ||
+    q.includes("cómo participo con un video") ||
+    q.includes("cuantos videos puedo enviar") ||
+    q.includes("cuántos videos puedo enviar") ||
+    q.includes("reglas debo seguir") ||
+    q.includes("como funciona la votacion de la semana anterior") ||
+    q.includes("cómo funciona la votación de la semana anterior") ||
+    q.includes("que significa exactamente que un video ya este en votacion") ||
+    q.includes("qué significa exactamente que un video ya esté en votación") ||
+    q.includes("ya registre mi voto") ||
+    q.includes("ya registré mi voto") ||
+    q.includes("que significa el bloque de pregunta al fundador") ||
+    q.includes("qué significa el bloque de pregunta al fundador") ||
+    q.includes("quien puede usar el bloque de pregunta al fundador") ||
+    q.includes("quién puede usar el bloque de pregunta al fundador") ||
+    q.includes("que son los foros abiertos") ||
+    q.includes("qué son los foros abiertos") ||
+    q.includes("que puedo hacer en los foros abiertos") ||
+    q.includes("qué puedo hacer en los foros abiertos") ||
+    q.includes("que diferencia hay entre comentar el tema semanal y participar en los foros") ||
+    q.includes("qué diferencia hay entre comentar el tema semanal y participar en los foros")
+  );
+}
 function detectIntent(rawQ: string) {
   const t = normalizeLite(rawQ);
 
@@ -4125,6 +4219,17 @@ if (String(pathname || "").startsWith("/como-funciona")) {
       isProyectoCiudadanoPage;
 
     if (isDynamicContextPage && pageContext) {
+            if (ctxNow === "COMENTARIO" && shouldForceLocalComentarioAnswer(rawQ, pageContext as any)) {
+        const localAnswer = sanitizeAssistantTextForUi(
+          answerFromDynamicPageContext(rawQ, pageContext as any)
+        );
+
+        if (localAnswer) {
+          pushAssistant(localAnswer);
+          await maybeSpeak(localAnswer);
+          return;
+        }
+      }
       let contextAnswer = "";
 
       try {
