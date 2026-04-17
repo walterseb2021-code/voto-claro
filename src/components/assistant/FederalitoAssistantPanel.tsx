@@ -446,13 +446,25 @@ function buildDynamicPageContextText(pageContext: {
     q.includes("para que sirve la pregunta al fundador") ||
     q.includes("para qué sirve la pregunta al fundador");
 
-  const asksCommentVsOpenForums =
-    q.includes("foros abiertos de debate ciudadano") ||
-    q.includes("diferencia entre comentar el tema semanal y participar en los foros") ||
-    q.includes("qué diferencia hay entre comentar el tema semanal y participar en los foros") ||
-    q.includes("que diferencia hay entre comentar el tema semanal y participar en los foros") ||
-    q.includes("diferencia entre comentar el tema semanal y los foros abiertos") ||
-    q.includes("diferencia entre comentario semanal y foros abiertos");
+    const asksOpenForumsDefinition =
+  q.includes("que son los foros abiertos") ||
+  q.includes("qué son los foros abiertos") ||
+  q.includes("que son los foros abiertos de debate ciudadano") ||
+  q.includes("qué son los foros abiertos de debate ciudadano");
+
+const asksOpenForumsActions =
+  q.includes("que puedo hacer en los foros abiertos") ||
+  q.includes("qué puedo hacer en los foros abiertos") ||
+  q.includes("que puedo hacer en los foros abiertos que aparecen en esta pantalla") ||
+  q.includes("qué puedo hacer en los foros abiertos que aparecen en esta pantalla");
+
+const asksCommentVsOpenForums =
+  q.includes("diferencia entre comentar el tema semanal y participar en los foros") ||
+  q.includes("qué diferencia hay entre comentar el tema semanal y participar en los foros") ||
+  q.includes("que diferencia hay entre comentar el tema semanal y participar en los foros") ||
+  q.includes("diferencia entre comentar el tema semanal y los foros abiertos") ||
+  q.includes("diferencia entre comentario semanal y foros abiertos");
+
     if (pageId === "intencion-de-voto") {
     const asksVote =
       q.includes("votar") ||
@@ -805,18 +817,29 @@ function buildDynamicPageContextText(pageContext: {
       q.includes("codigo unico") ||
       q.includes("código único");
 
-    const asksParticipationFlow =
-      q.includes("como participo") ||
-      q.includes("cómo participo") ||
-      q.includes("que debo hacer exactamente") ||
-      q.includes("qué debo hacer exactamente") ||
-      q.includes("como entro a participar") ||
-      q.includes("cómo entro a participar") ||
-      q.includes("desde el registro") ||
-      q.includes("uso del codigo") ||
-      q.includes("uso del código");
+      const asksParticipationFlow =
+  (
+    q.includes("como participo") ||
+    q.includes("cómo participo") ||
+    q.includes("que debo hacer exactamente") ||
+    q.includes("qué debo hacer exactamente") ||
+    q.includes("como entro a participar") ||
+    q.includes("cómo entro a participar") ||
+    q.includes("desde el registro") ||
+    q.includes("uso del codigo") ||
+    q.includes("uso del código")
+  ) &&
+  !asksVideoSubmission &&
+  !asksWeeklyVotingFlow &&
+  !asksVotingVideoMeaning &&
+  !asksForum &&
+  !asksForumParticipation &&
+  !asksCommentBlock &&
+  !asksFounderFull &&
+  !asksCommentVsForum &&
+  !asksCommentVsOpenForums;
 
-      if ((asksHelp || asksParticipationFlow) && !asksCommentBlock && !asksFounderFull && !asksCommentVsForum && !asksCommentVsOpenForums) {
+     if (asksHelp || asksParticipationFlow) {
   if (checkingData) {
     return "Ahora mismo la pantalla todavía está verificando si ya existe una sesión activa de participante.";
   }
@@ -861,6 +884,36 @@ function buildDynamicPageContextText(pageContext: {
 
       return "Según esta pantalla, ahora mismo puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
     }
+         
+    if (asksOpenForumsDefinition) {
+  if (!(forosAbiertosCount > 0 || historialForosVisible)) {
+    return "Ahora mismo no detecto foros abiertos visibles en esta pantalla.";
+  }
+
+  return (
+    `En esta pantalla detecto ${forosAbiertosCount === 1 ? "un foro abierto" : `${forosAbiertosCount} foros abiertos`} de debate ciudadano.\n\n` +
+    "Los foros abiertos son espacios donde un tema semanal ya cerrado sigue disponible para un debate más amplio entre participantes.\n\n" +
+    "A diferencia del comentario semanal, aquí el foco es profundizar la discusión sobre un tema que ya quedó abierto al debate."
+  );
+}
+
+if (asksOpenForumsActions) {
+  if (!(forosAbiertosCount > 0 || historialForosVisible)) {
+    return "Ahora mismo no detecto foros abiertos visibles en esta pantalla.";
+  }
+
+  if (!accesoVerificado) {
+    return (
+      "En los foros abiertos que ves en esta pantalla puedes explorar el debate público y leer los temas abiertos.\n\n" +
+      "Para participar activamente y comentar, primero necesitas completar el registro único del app y usar tu código de acceso."
+    );
+  }
+
+  return (
+    "En los foros abiertos que ves en esta pantalla puedes entrar al debate de un tema ya abierto, leer los aportes visibles y participar activamente si tu acceso está habilitado.\n\n" +
+    "Estos foros sirven para profundizar la conversación más allá del comentario semanal."
+  );
+}
           if (asksCommentVsForum || asksCommentVsOpenForums) {
       return (
         "Comentar el tema semanal sirve para responder directamente al tema activo y a la pregunta guía de la semana dentro de Comentarios Ciudadanos.\n\n" +
@@ -940,12 +993,14 @@ function buildDynamicPageContextText(pageContext: {
       }
 
       return (
-        "La votación de la semana anterior funciona sobre videos que ya pasaron la etapa de envío y revisión.\n\n" +
-        `Ahora mismo detecto ${videosEnVotacionCount} video(s) en votación. En esta fase cada participante puede votar una sola vez por tema semanal.\n\n` +
-        (yaVotoVideo
-          ? "La pantalla indica que tu voto ya fue registrado, así que ya no podrías emitir otro en este mismo tema."
-          : "Si tu acceso está habilitado y todavía no votaste, puedes revisar los videos en votación y elegir uno.")
-      );
+  "La votación de la semana anterior funciona sobre videos que ya pasaron la etapa de envío y revisión.\n\n" +
+  `Ahora mismo detecto ${
+    videosEnVotacionCount === 1 ? "un video en votación" : `${videosEnVotacionCount} videos en votación`
+  }. En esta fase cada participante puede votar una sola vez por tema semanal.\n\n` +
+  (yaVotoVideo
+    ? "La pantalla indica que tu voto ya fue registrado, así que ya no podrías emitir otro en este mismo tema."
+    : "Si tu acceso está habilitado y todavía no votaste, puedes revisar los videos en votación y elegir uno.")
+);
     }
 
     if (asksVotingVideoMeaning) {
@@ -954,9 +1009,11 @@ function buildDynamicPageContextText(pageContext: {
       }
 
       return (
-        "Que un video ya esté en votación significa que ese video ya superó la etapa de envío y revisión, y ahora pasó a la fase donde los participantes pueden votar por él.\n\n" +
-        `En esta pantalla detecto ${videosEnVotacionCount} video(s) en esa fase.`
-      );
+  "Que un video ya esté en votación significa que ese video ya superó la etapa de envío y revisión, y ahora pasó a la fase donde los participantes pueden votar por él.\n\n" +
+  `En esta pantalla detecto ${
+    videosEnVotacionCount === 1 ? "un video en esa fase" : `${videosEnVotacionCount} videos en esa fase`
+  }.`
+);
     }
 
     if (asksWinner) {
@@ -991,16 +1048,18 @@ function buildDynamicPageContextText(pageContext: {
       );
     }
 
-    if (asksForum) {
-      if (forosAbiertosCount > 0 || historialForosVisible) {
-        return (
-          `Sí. Ahora mismo detecto ${forosAbiertosCount} foro(s) abierto(s) de debate ciudadano.\n\n` +
-          "Los foros abiertos corresponden a temas semanales ya cerrados, donde el ciudadano puede seguir debatiendo más a fondo."
-        );
-      }
+      if (asksForum) {
+  if (forosAbiertosCount > 0 || historialForosVisible) {
+    return (
+      `Sí. Ahora mismo detecto ${
+        forosAbiertosCount === 1 ? "un foro abierto" : `${forosAbiertosCount} foros abiertos`
+      } de debate ciudadano.\n\n` +
+      "Los foros abiertos corresponden a temas semanales ya cerrados, donde el ciudadano puede seguir debatiendo más a fondo."
+    );
+  }
 
-      return "No detecto foros abiertos visibles en este momento.";
-    }
+  return "No detecto foros abiertos visibles en este momento.";
+}
 
     if (asksStatus) {
       if (checkingData) {
@@ -1092,10 +1151,12 @@ function buildDynamicPageContextText(pageContext: {
       return "Sí. En este momento ya puedes comentar activamente dentro de este foro ciudadano.";
     }
          const asksForumVsMain =
-      q.includes("diferencia entre esta pantalla de foro y la pantalla principal") ||
-      q.includes("diferencia entre este foro y comentarios ciudadanos") ||
-      q.includes("que diferencia hay entre esta pantalla de foro y la principal") ||
-      q.includes("qué diferencia hay entre esta pantalla de foro y la principal");
+  q.includes("diferencia entre esta pantalla de foro y la pantalla principal") ||
+  q.includes("diferencia entre este foro y comentarios ciudadanos") ||
+  q.includes("que diferencia hay entre esta pantalla de foro y la principal") ||
+  q.includes("qué diferencia hay entre esta pantalla de foro y la principal") ||
+  q.includes("que diferencia hay entre esta pantalla de foro y la pantalla principal de comentarios ciudadanos") ||
+  q.includes("qué diferencia hay entre esta pantalla de foro y la pantalla principal de comentarios ciudadanos");
 
     if (asksForumVsMain) {
       return (
