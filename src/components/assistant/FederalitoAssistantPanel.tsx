@@ -1165,6 +1165,27 @@ if (asksOpenForumsActions) {
   q.includes("qué diferencia hay entre esta pantalla de foro y la principal") ||
   q.includes("que diferencia hay entre esta pantalla de foro y la pantalla principal de comentarios ciudadanos") ||
   q.includes("qué diferencia hay entre esta pantalla de foro y la pantalla principal de comentarios ciudadanos");
+     const asksForumCommentRules =
+  q.includes("que reglas debo seguir para que mi comentario sea valido y util en este foro") ||
+  q.includes("qué reglas debo seguir para que mi comentario sea válido y útil en este foro") ||
+  q.includes("que reglas debo seguir") ||
+  q.includes("qué reglas debo seguir") ||
+  q.includes("comentario valido") ||
+  q.includes("comentario válido") ||
+  q.includes("comentario util") ||
+  q.includes("comentario útil") ||
+  q.includes("como conviene enfocar mi comentario") ||
+  q.includes("cómo conviene enfocar mi comentario");
+
+const asksForumContributionQuality =
+  q.includes("que tipo de aporte ciudadano puede ayudarme a participar mejor y destacar en este foro") ||
+  q.includes("qué tipo de aporte ciudadano puede ayudarme a participar mejor y destacar en este foro") ||
+  q.includes("que tipo de aporte ciudadano") ||
+  q.includes("qué tipo de aporte ciudadano") ||
+  q.includes("como participar mejor y destacar en este foro") ||
+  q.includes("cómo participar mejor y destacar en este foro") ||
+  q.includes("como destacar en este foro") ||
+  q.includes("cómo destacar en este foro");
 
     if (asksForumVsMain) {
       return (
@@ -1173,7 +1194,26 @@ if (asksOpenForumsActions) {
         "Aquí el foco principal es discutir a fondo ese tema concreto dentro del foro."
       );
     }
-    if (asksForumTopic || asksWeeklyTopic || asksForum) {
+       if (asksForumCommentRules) {
+  return (
+    "Para que tu comentario sea válido y útil en este foro, conviene que responda de manera clara al tema abierto y a la pregunta guía visible.\n\n" +
+    "Lo más importante es aportar una idea, argumento o propuesta concreta relacionada con el debate, evitando salirte del tema o escribir algo vacío.\n\n" +
+    "En esta subventana el valor del comentario está en ayudar a profundizar la discusión con un aporte entendible y conectado con el problema debatido."
+  );
+}
+
+if (asksForumContributionQuality) {
+  return (
+    "El tipo de aporte ciudadano que más ayuda en este foro es uno que aporte una propuesta concreta, una observación útil o un argumento bien explicado sobre el tema debatido.\n\n" +
+    "Para participar mejor y destacar, conviene escribir con claridad, mantenerte dentro de la pregunta guía y sumar una idea que haga avanzar la discusión, no solo una frase general.\n\n" +
+    "Aquí destaca más un aporte útil, razonado y directamente relacionado con el problema público que se está debatiendo."
+  );
+}
+      if (
+  asksForumTopic ||
+  asksWeeklyTopic ||
+  (asksForum && !asksForumCommentRules && !asksForumContributionQuality && !asksForumVsMain)
+) {
       if (!forumTopicTitle && !forumQuestion) {
         return (
           pageContext.summary ||
