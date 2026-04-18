@@ -1708,6 +1708,24 @@ if (forumTopicsError) {
     : viewMode === "weekly-voting"
     ? "Votación semanal abierta."
     : "Tema semanal activo con participación habilitada.";
+    const speakableSummary =
+  viewMode === "access-checking"
+    ? "Estamos en Comentarios Ciudadanos y esta pantalla está verificando si ya existe una sesión activa de participante."
+    : viewMode === "observer"
+    ? `Estamos en Comentarios Ciudadanos. Aquí puedes ver el tema semanal${
+        weeklyTopic ? `, que ahora es ${weeklyTopic}` : ""
+      }, revisar contenido público y conocer cómo participar con tu registro y código de acceso.`
+    : viewMode === "founder-question"
+    ? `Estamos en Comentarios Ciudadanos, en el bloque de pregunta al fundador${
+        latestOfficialWinner?.topic ? ` del tema ${latestOfficialWinner.topic}` : ""
+      }. Aquí puedes revisar preguntas públicas y, si corresponde, registrar la pregunta del ganador oficial.`
+    : viewMode === "weekly-voting"
+    ? `Estamos en Comentarios Ciudadanos, en la etapa de votación semanal${
+        weeklyTopic ? ` relacionada con ${weeklyTopic}` : ""
+      }. Aquí puedes revisar los videos en votación y emitir tu voto si todavía está habilitado.`
+    : `Estamos en Comentarios Ciudadanos${
+        weeklyTopic ? `, en el tema semanal ${weeklyTopic}` : ""
+      }. Aquí puedes comentar, participar con video, revisar contenido publicado y entrar a los foros abiertos.`;
 
 const suggestedPrompts =
   viewMode === "observer"
@@ -1809,7 +1827,7 @@ const suggestedPrompts =
       pageTitle: "Comentarios Ciudadanos",
       route: "/comentarios",
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,

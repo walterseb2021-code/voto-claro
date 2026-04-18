@@ -449,60 +449,118 @@ const proyectosConContactos = (data || []).map((p) => ({
     const lastMessageProject =
       latestReceived?.proyecto_titulo || '';
 
-    const activeSection = !participant
-      ? 'registro-o-login'
-      : !afiliado
-      ? 'verificacion-dni'
-      : 'panel-emprendedor';
+    const entrepreneurViewMode = !participant
+  ? 'guest-access'
+  : !afiliado
+  ? verificando
+    ? 'dni-verification-checking'
+    : 'dni-verification'
+  : cargandoMensajes
+  ? 'entrepreneur-dashboard-loading'
+  : mensajesRecibidos.length > 0
+  ? 'entrepreneur-dashboard-messages'
+  : misProyectos.length > 0
+  ? 'entrepreneur-dashboard-projects'
+  : 'entrepreneur-dashboard-empty';
 
-    const activeViewId = !participant
-      ? 'guest-access'
-      : !afiliado
-      ? 'dni-verification'
-      : 'entrepreneur-dashboard';
+const activeSection = !participant
+  ? 'registro-o-login'
+  : !afiliado
+  ? 'verificacion-dni'
+  : 'panel-emprendedor';
 
-    const activeViewTitle = !participant
-      ? 'Acceso al Espacio Emprendedor'
-      : !afiliado
-      ? 'Verificación de afiliación'
-      : 'Panel del emprendedor';
+const activeViewId =
+  entrepreneurViewMode === 'guest-access'
+    ? 'guest-access'
+    : entrepreneurViewMode === 'dni-verification-checking'
+    ? 'dni-verification-checking'
+    : entrepreneurViewMode === 'dni-verification'
+    ? 'dni-verification'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
+    ? 'entrepreneur-dashboard-loading'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
+    ? 'entrepreneur-dashboard-messages'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
+    ? 'entrepreneur-dashboard-projects'
+    : 'entrepreneur-dashboard-empty';
 
-    const visibleSections = [
-      'bienvenida',
-      'proyectos-mas-contactados',
-      activeSection,
-      'bloque-inversionista',
-      participant && afiliado ? 'mis-proyectos' : null,
-      participant && afiliado ? 'mensajes-recibidos' : null,
-    ].filter(Boolean) as string[];
+const activeViewTitle =
+  entrepreneurViewMode === 'guest-access'
+    ? 'Acceso al Espacio Emprendedor'
+    : entrepreneurViewMode === 'dni-verification-checking'
+    ? 'Verificando afiliación'
+    : entrepreneurViewMode === 'dni-verification'
+    ? 'Verificación de afiliación'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
+    ? 'Cargando panel del emprendedor'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
+    ? 'Panel del emprendedor con mensajes'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
+    ? 'Panel del emprendedor con proyectos'
+    : 'Panel del emprendedor';
 
-    const availableActions = !participant
-      ? [
-          'Registrarme ahora',
-          'Iniciar sesión con código',
-          'Explorar proyectos',
-          'Configurar mi perfil',
-        ]
-      : !afiliado
-      ? [
-          'Verificar DNI',
-          'Afiliarme en JNE',
-          'Explorar proyectos',
-          'Configurar mi perfil',
-        ]
-      : [
-          'Publicar nuevo proyecto',
-          'Ver detalles de proyecto',
-          'Responder mensajes',
-          'Explorar proyectos',
-          'Configurar mi perfil',
-        ];
+const visibleSections = [
+  'bienvenida',
+  'proyectos-mas-contactados',
+  activeSection,
+  'bloque-inversionista',
+  participant && afiliado ? 'mis-proyectos' : null,
+  participant && afiliado ? 'mensajes-recibidos' : null,
+].filter(Boolean) as string[];
 
-    const summary = !participant
-      ? 'Pantalla de acceso al Espacio Emprendedor para registro o ingreso con código.'
-      : !afiliado
-      ? 'Pantalla de verificación de afiliación para habilitar publicación de proyectos.'
-      : 'Panel del emprendedor con proyectos propios, mensajes recibidos y accesos para explorar o invertir.';
+const availableActions = !participant
+  ? [
+      'Registrarme ahora',
+      'Iniciar sesión con código',
+      'Explorar proyectos',
+      'Configurar mi perfil',
+    ]
+  : !afiliado
+  ? [
+      'Verificar DNI',
+      'Afiliarme en JNE',
+      'Explorar proyectos',
+      'Configurar mi perfil',
+    ]
+  : [
+      'Publicar nuevo proyecto',
+      'Ver detalles de proyecto',
+      'Responder mensajes',
+      'Explorar proyectos',
+      'Configurar mi perfil',
+    ];
+
+const summary =
+  entrepreneurViewMode === 'guest-access'
+    ? 'Acceso al Espacio Emprendedor con registro e inicio de sesión por código.'
+    : entrepreneurViewMode === 'dni-verification-checking'
+    ? 'Verificación de afiliación en curso.'
+    : entrepreneurViewMode === 'dni-verification'
+    ? 'Verificación de afiliación pendiente para habilitar la publicación de proyectos.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
+    ? 'Panel emprendedor cargando proyectos y mensajes.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
+    ? 'Panel emprendedor con proyectos propios y mensajes recibidos.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
+    ? 'Panel emprendedor con proyectos propios visibles.'
+    : 'Panel emprendedor listo para publicar el primer proyecto.';
+
+const speakableSummary =
+  entrepreneurViewMode === 'guest-access'
+    ? 'Estamos en Espacio Emprendedor. Desde aquí puedes registrarte, ingresar con tu código y explorar proyectos antes de publicar el tuyo.'
+    : entrepreneurViewMode === 'dni-verification-checking'
+    ? 'Estamos en Espacio Emprendedor y ahora se está verificando tu afiliación con DNI para habilitar la publicación de proyectos.'
+    : entrepreneurViewMode === 'dni-verification'
+    ? 'Estamos en Espacio Emprendedor. Ya entraste como participante, pero todavía falta verificar tu afiliación con DNI para poder publicar proyectos.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
+    ? 'Estamos en tu panel del Espacio Emprendedor. Ya tienes acceso como emprendedor y la pantalla está cargando tus proyectos y tus mensajes.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
+    ? `Estamos en tu panel del Espacio Emprendedor. Aquí puedes revisar tus proyectos y los mensajes recibidos${
+        lastMessageProject ? `, incluido el último movimiento sobre ${lastMessageProject}` : ''
+      }.`
+    : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
+    ? 'Estamos en tu panel del Espacio Emprendedor. Aquí puedes revisar tus proyectos publicados y publicar uno nuevo.'
+    : 'Estamos en tu panel del Espacio Emprendedor. Ya tienes acceso como emprendedor y desde aquí puedes publicar tu primer proyecto.';
 
     const visibleParts: string[] = [];
     visibleParts.push(`Vista activa: ${activeViewTitle}.`);
@@ -567,7 +625,7 @@ const proyectosConContactos = (data || []).map((p) => ({
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor',
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,

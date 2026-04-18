@@ -203,31 +203,45 @@ export default function ProyectoCiudadanoPage() {
     const participantAlias = participant?.alias || '';
     const participantCode = participant?.codigo_acceso || '';
 
-    const activeSection =
-      loading || checking
-        ? 'principal-cargando'
-        : !participant
-        ? 'principal-sin-registro'
-        : 'principal-participante-activo';
-
-    const activeViewId =
-      loading || checking
-        ? 'loading'
-        : !participant
-        ? 'guest-home'
-        : 'participant-home';
-
-    const activeViewTitle =
-      loading || checking
-        ? 'Cargando Proyecto Ciudadano'
-        : !participant
-        ? 'Acceso y registro a Proyecto Ciudadano'
-        : 'Panel principal del participante';
-
-    const winnersVisible = winners.slice(0, 3);
-    const winnersTitles = winnersVisible.map((winner) => winner?.name).filter(Boolean);
-    const hasWinners = winnersVisible.length > 0;
     const hasLoginCodeText = codigoAcceso.trim().length > 0;
+
+const participantHomeViewMode =
+  loading || checking
+    ? 'loading'
+    : !participantReady
+    ? hasLoginCodeText
+      ? 'guest-home-code-entry'
+      : 'guest-home'
+    : 'participant-home';
+
+const activeSection =
+  loading || checking
+    ? 'principal-cargando'
+    : !participant
+    ? 'principal-sin-registro'
+    : 'principal-participante-activo';
+
+const activeViewId =
+  participantHomeViewMode === 'loading'
+    ? 'loading'
+    : participantHomeViewMode === 'guest-home-code-entry'
+    ? 'guest-home-code-entry'
+    : participantHomeViewMode === 'guest-home'
+    ? 'guest-home'
+    : 'participant-home';
+
+const activeViewTitle =
+  participantHomeViewMode === 'loading'
+    ? 'Cargando Proyecto Ciudadano'
+    : participantHomeViewMode === 'guest-home-code-entry'
+    ? 'Ingreso con código en Proyecto Ciudadano'
+    : participantHomeViewMode === 'guest-home'
+    ? 'Acceso y registro a Proyecto Ciudadano'
+    : 'Panel principal del participante';
+
+const winnersVisible = winners.slice(0, 3);
+const winnersTitles = winnersVisible.map((winner) => winner?.name).filter(Boolean);
+const hasWinners = winnersVisible.length > 0;
 
     const visibleParts: string[] = [];
 
@@ -292,11 +306,24 @@ export default function ProyectoCiudadanoPage() {
     ].filter(Boolean) as string[];
 
     const summary =
-      loading || checking
-        ? 'Pantalla principal de Proyecto Ciudadano cargando estado del participante y contenido visible.'
-        : !participantReady
-        ? 'Pantalla principal de Proyecto Ciudadano con acceso para registrarse o iniciar sesión con código, reglas de participación visibles y formato oficial descargable.'
-        : 'Pantalla principal de Proyecto Ciudadano con participante identificado, reglas de evaluación visibles, formato oficial descargable y acciones para presentar proyectos o ver proyectos activos.';
+  participantHomeViewMode === 'loading'
+    ? 'Proyecto Ciudadano cargando estado del participante y contenido visible.'
+    : participantHomeViewMode === 'guest-home-code-entry'
+    ? 'Proyecto Ciudadano con ingreso por código en curso.'
+    : participantHomeViewMode === 'guest-home'
+    ? 'Proyecto Ciudadano con acceso para registrarse o iniciar sesión con código, reglas visibles y formato oficial descargable.'
+    : 'Proyecto Ciudadano con participante identificado, reglas visibles, formato oficial descargable y acciones para presentar o revisar proyectos.';
+
+const speakableSummary =
+  participantHomeViewMode === 'loading'
+    ? 'Estamos entrando a Proyecto Ciudadano y la pantalla está cargando tu estado de participante junto con la información principal de esta convocatoria.'
+    : participantHomeViewMode === 'guest-home-code-entry'
+    ? 'Estamos en Proyecto Ciudadano. Ahora mismo tienes escrito un código de acceso para iniciar sesión y continuar con tu participación.'
+    : participantHomeViewMode === 'guest-home'
+    ? 'Estamos en Proyecto Ciudadano. Desde aquí puedes registrarte, ingresar con tu código, revisar las reglas de evaluación y descargar el formato oficial del proyecto.'
+    : `Estamos en Proyecto Ciudadano${
+        participantName ? `, con tu registro activo como ${participantName}` : ''
+      }. Desde aquí puedes presentar un proyecto, revisar las reglas de evaluación y consultar proyectos activos.`;
 
     const suggestedPrompts = !participantReady
       ? [
@@ -359,7 +386,7 @@ export default function ProyectoCiudadanoPage() {
       pageTitle: 'Proyecto Ciudadano',
       route: '/proyecto-ciudadano',
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,
