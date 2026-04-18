@@ -4874,8 +4874,6 @@ function sendQuick(q: string) {
   const p = String(pathname || "");
   const pageId = String((pageContext as any)?.pageId || "");
   const activeViewId = String((pageContext as any)?.activeViewId || "");
-  const activeSection = String((pageContext as any)?.activeSection || "");
-  const selectedItemTitle = String((pageContext as any)?.selectedItemTitle || "");
 
   if (
     p.startsWith("/comentarios") ||
@@ -4884,11 +4882,15 @@ function sendQuick(q: string) {
     p.startsWith("/intencion-de-voto") ||
     p.startsWith("/reto-ciudadano")
   ) {
-    return [p, pageId, activeViewId, activeSection, selectedItemTitle].join("::");
+    return [p, pageId, activeViewId].join("::");
   }
 
   return p;
-}, [pathname, pageContext]);
+}, [
+  pathname,
+  (pageContext as any)?.pageId,
+  (pageContext as any)?.activeViewId,
+]);
   useEffect(() => {
   const scope = assistantScopeKey;
   const greeting = getDefaultAssistantGreeting(String(pathname || ""));
