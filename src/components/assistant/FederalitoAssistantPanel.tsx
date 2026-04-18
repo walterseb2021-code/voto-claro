@@ -3595,7 +3595,9 @@ function safeResetFabPos() {
   const [userInteracted, setUserInteracted] = useState(false);
   const pendingGuideSpeakRef = useRef<string | null>(null);
   const pendingGuidePathRef = useRef<string | null>(null);
-
+  const autoGuideTimerRef = useRef<number | null>(null);
+const lastAssistantScopeRef = useRef<string>("");
+const lastGuideSpokenKeyRef = useRef<string>("");
     const [msgs, setMsgs] = useState<Msg[]>(() => [
     {
       role: "system",
@@ -3730,10 +3732,38 @@ const text = cleanForChat(raw);
     if (action === "OPEN" || action === "SAY_AND_OPEN") setOpen(true);
         if (action === "CLOSE") setOpen(false);
 
-        if (text) {
-  setMsgs((prev) => [...prev, { role: "assistant", content: text }]);
+       if (text) {
+  setMsgs((prev) => {
+    const next = [...prev];
 
-  // ✅ SOLO guarda para 🔊 Leer si hay texto real
+    if (next.length > 1 && next[next.length - 1]?.role === "assistant") {
+      const last = String(next[next.length - 1]?.content || "");
+      const normalizedLast = normalizeLite(last);
+      const normalizedText = normalizeLite(text);
+
+      const looksLikeGuide =
+        normalizedLast.includes("pantalla de inicio de voto claro") ||
+        normalizedLast.includes("estás en servicios al ciudadano") ||
+        normalizedLast.includes("estás en reflexionar antes de votar") ||
+        normalizedLast.includes("estás en un cambio con valentía") ||
+        normalizedLast.includes("estás en cómo funciona voto claro") ||
+        normalizedLast.includes("modo observador") ||
+        normalizedLast.includes("verificación de acceso") ||
+        normalizedLast.includes("comentarios ciudadanos") ||
+        normalizedLast.includes("espacio emprendedor") ||
+        normalizedLast.includes("proyecto ciudadano") ||
+        normalizedLast.includes("reto ciudadano") ||
+        normalizedLast.includes("intención de voto");
+
+      if (looksLikeGuide || normalizedLast === normalizedText) {
+        next[next.length - 1] = { role: "assistant", content: text };
+        return next;
+      }
+    }
+
+    return [...next, { role: "assistant", content: text }];
+  });
+
   setPageReadText(text);
   setPageReadAt(Date.now());
   pageReadPathRef.current = String(pathname || "");
@@ -3797,7 +3827,7 @@ useEffect(() => {
 // Regla PRO:
 // - Se lee 1 vez por sesión por cada ruta
 // - Inicio (/) NO vuelve a narrar al regresar
- useEffect(() => {
+   useEffect(() => {
   if (!mounted) return;
 
   const p = String(pathname || "");
@@ -3817,14 +3847,9 @@ useEffect(() => {
     String((pageContext as any)?.selectedItemTitle || ""),
   ].join("::");
 
-  const key = `votoclaro_autoguide_seen:${isContextualDomain ? contextualViewKey : isHome ? "/" : p}`;
-
-  try {
-    const seen = sessionStorage.getItem(key) === "1";
-    if (seen) return;
-    sessionStorage.setItem(key, "1");
-  } catch {
-  }
+  const key = `votoclaro_autoguide_seen:${
+    isContextualDomain ? contextualViewKey : isHome ? "/" : p
+  }`;
 
   let text = "";
 
@@ -3863,13 +3888,47 @@ useEffect(() => {
 
   if (!text) return;
 
-  setTimeout(() => {
+  if (lastGuideSpokenKeyRef.current === key) return;
+
+  try {
+    const seen = sessionStorage.getItem(key) === "1";
+    if (seen) {
+      lastGuideSpokenKeyRef.current = key;
+      return;
+    }
+  } catch {}
+
+  if (autoGuideTimerRef.current) {
+    window.clearTimeout(autoGuideTimerRef.current);
+    autoGuideTimerRef.current = null;
+  }
+
+  autoGuideTimerRef.current = window.setTimeout(() => {
+    try {
+      sessionStorage.setItem(key, "1");
+    } catch {}
+
+    lastGuideSpokenKeyRef.current = key;
+
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
+
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
         detail: { action: "SAY", text, speak: true },
       })
     );
-  }, 0);
+
+    autoGuideTimerRef.current = null;
+  }, 250);
+
+  return () => {
+    if (autoGuideTimerRef.current) {
+      window.clearTimeout(autoGuideTimerRef.current);
+      autoGuideTimerRef.current = null;
+    }
+  };
 }, [mounted, pathname, pageContext]);
 
 
@@ -4811,21 +4870,64 @@ function sendQuick(q: string) {
 
   const fabLabel = useMemo(() => (open ? "Cerrar Asistente" : "Abrir Asistente"), [open]);
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
-     useEffect(() => {
-    const greeting = getDefaultAssistantGreeting(String(pathname || ""));
+  const assistantScopeKey = useMemo(() => {
+  const p = String(pathname || "");
+  const pageId = String((pageContext as any)?.pageId || "");
+  const activeViewId = String((pageContext as any)?.activeViewId || "");
+  const activeSection = String((pageContext as any)?.activeSection || "");
+  const selectedItemTitle = String((pageContext as any)?.selectedItemTitle || "");
 
-    setMsgs((prev) => {
-      if (!prev.length) {
-        return [{ role: "system", content: greeting }];
-      }
+  if (
+    p.startsWith("/comentarios") ||
+    p.startsWith("/espacio-emprendedor") ||
+    p.startsWith("/proyecto-ciudadano") ||
+    p.startsWith("/intencion-de-voto") ||
+    p.startsWith("/reto-ciudadano")
+  ) {
+    return [p, pageId, activeViewId, activeSection, selectedItemTitle].join("::");
+  }
 
-      if (prev.length === 1 && prev[0]?.role === "system") {
-        return [{ role: "system", content: greeting }];
-      }
+  return p;
+}, [pathname, pageContext]);
+  useEffect(() => {
+  const scope = assistantScopeKey;
+  const greeting = getDefaultAssistantGreeting(String(pathname || ""));
 
-      return prev;
-    });
-  }, [pathname]);
+  if (!scope) return;
+
+  if (lastAssistantScopeRef.current === scope) return;
+  lastAssistantScopeRef.current = scope;
+
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {}
+
+  try {
+    recognitionRef.current?.stop?.();
+  } catch {}
+
+  pendingGuideSpeakRef.current = null;
+  pendingGuidePathRef.current = null;
+
+  if (autoGuideTimerRef.current) {
+    window.clearTimeout(autoGuideTimerRef.current);
+    autoGuideTimerRef.current = null;
+  }
+
+  setListening(false);
+  setBusy(false);
+  setDraft("");
+  setRefAxisId(null);
+  setRefWaitingNumber(false);
+
+  setMsgs([
+    {
+      role: "system",
+      content: greeting,
+    },
+  ]);
+}, [assistantScopeKey, pathname]);
+   
     const suggestedPrompts = useMemo<SuggestedPrompt[]>(() => {
     const raw = (pageContext as any)?.suggestedPrompts;
     if (!Array.isArray(raw)) return [];
