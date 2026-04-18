@@ -2562,6 +2562,37 @@ function hasProfanity(rawQ: string) {
     q.includes("qué diferencia hay entre comentar el tema semanal y participar en los foros")
   );
 }
+function shouldForceLocalComentarioForumAnswer(
+  rawQ: string,
+  pageContext: {
+    pageId?: string;
+    dynamicData?: Record<string, unknown>;
+  } | null
+) {
+  if (!pageContext) return false;
+  if (String(pageContext.pageId || "") !== "comentarios-foro-ciudadano") return false;
+
+  const q = normalizeLite(rawQ);
+
+  return (
+    q.includes("que reglas debo seguir para que mi comentario sea valido y util en este foro") ||
+    q.includes("qué reglas debo seguir para que mi comentario sea válido y útil en este foro") ||
+    q.includes("que reglas debo seguir") ||
+    q.includes("qué reglas debo seguir") ||
+    q.includes("comentario valido") ||
+    q.includes("comentario válido") ||
+    q.includes("comentario util") ||
+    q.includes("comentario útil") ||
+    q.includes("que tipo de aporte ciudadano puede ayudarme a participar mejor y destacar en este foro") ||
+    q.includes("qué tipo de aporte ciudadano puede ayudarme a participar mejor y destacar en este foro") ||
+    q.includes("que tipo de aporte ciudadano") ||
+    q.includes("qué tipo de aporte ciudadano") ||
+    q.includes("como destacar en este foro") ||
+    q.includes("cómo destacar en este foro") ||
+    q.includes("que diferencia hay entre esta pantalla de foro y la pantalla principal de comentarios ciudadanos") ||
+    q.includes("qué diferencia hay entre esta pantalla de foro y la pantalla principal de comentarios ciudadanos")
+  );
+}
 function detectIntent(rawQ: string) {
   const t = normalizeLite(rawQ);
 
@@ -4328,17 +4359,23 @@ if (String(pathname || "").startsWith("/como-funciona")) {
       isProyectoCiudadanoPage;
 
     if (isDynamicContextPage && pageContext) {
-            if (ctxNow === "COMENTARIO" && shouldForceLocalComentarioAnswer(rawQ, pageContext as any)) {
-        const localAnswer = sanitizeAssistantTextForUi(
-          answerFromDynamicPageContext(rawQ, pageContext as any)
-        );
+        if (
+  ctxNow === "COMENTARIO" &&
+  (
+    shouldForceLocalComentarioAnswer(rawQ, pageContext as any) ||
+    shouldForceLocalComentarioForumAnswer(rawQ, pageContext as any)
+  )
+) {
+  const localAnswer = sanitizeAssistantTextForUi(
+    answerFromDynamicPageContext(rawQ, pageContext as any)
+  );
 
-        if (localAnswer) {
-          pushAssistant(localAnswer);
-          await maybeSpeak(localAnswer);
-          return;
-        }
-      }
+  if (localAnswer) {
+    pushAssistant(localAnswer);
+    await maybeSpeak(localAnswer);
+    return;
+  }
+}
       let contextAnswer = "";
 
       try {
