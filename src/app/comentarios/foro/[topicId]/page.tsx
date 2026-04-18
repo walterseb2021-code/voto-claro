@@ -533,14 +533,14 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       : "comentarios-foro";
 
     const activeViewId = loading
-      ? "forum-loading"
+      ? `forum-loading-${topicId || "unknown"}`
       : errorMsg
-      ? "forum-error"
+      ? `forum-error-${topicId || "unknown"}`
       : !hasAccess
-      ? "forum-access-required"
+      ? `forum-access-required-${topicId || "unknown"}`
       : !forumAlias
-      ? "forum-alias-setup"
-      : "forum-active";
+      ? `forum-alias-setup-${topicId || "unknown"}`
+      : `forum-active-${topicId || "unknown"}`;
 
     const activeViewTitle = loading
       ? "Cargando foro"
@@ -550,6 +550,8 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       ? "Acceso requerido al foro"
       : !forumAlias
       ? "Configuración de alias del foro"
+      : topic?.topic
+      ? `Foro activo: ${topic.topic}`
       : "Foro ciudadano activo";
 
     const visibleSections = [
@@ -561,15 +563,31 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       "comentarios-del-foro",
     ].filter(Boolean) as string[];
 
-         const summary = loading
+    const summary = loading
       ? "Foro ciudadano en proceso de carga."
       : errorMsg
       ? "Foro ciudadano con un error visible."
       : !hasAccess
-? "Foro ciudadano en modo observador. El usuario puede leer el debate, pero para participar primero debe haber completado el registro único del app y luego usar su mismo código de acceso si hace falta."
+      ? "Foro ciudadano en modo observador. El usuario puede leer el debate, pero para participar primero debe haber completado el registro único del app y luego usar su mismo código de acceso si hace falta."
       : !forumAlias
       ? "Foro ciudadano listo para configurar alias antes de participar."
       : "Foro ciudadano con comentarios abiertos sobre un tema semanal archivado.";
+
+    const speakableSummary = loading
+      ? "Estamos entrando a un foro ciudadano y la pantalla está cargando el tema junto con los comentarios publicados."
+      : errorMsg
+      ? "Estamos en un foro ciudadano, pero esta pantalla muestra un error y no se pudo cargar correctamente el contenido."
+      : !hasAccess
+      ? `Estamos en un foro ciudadano abierto${
+          topic?.topic ? ` sobre ${topic.topic}` : ""
+        }. Aquí puedes leer el debate, pero para comentar primero debes haberte registrado una sola vez en la ficha general del app y luego usar tu mismo código de acceso.`
+      : !forumAlias
+      ? `Estamos en un foro ciudadano abierto${
+          topic?.topic ? ` sobre ${topic.topic}` : ""
+        }. Ya tienes acceso para participar, pero antes debes confirmar tu alias del foro para que tus comentarios aparezcan publicados con ese nombre.`
+      : `Estamos en un foro ciudadano abierto${
+          topic?.topic ? ` sobre ${topic.topic}` : ""
+        }. Aquí puedes leer el debate, publicar tu comentario y aportar ideas útiles sobre este tema ya archivado.`;
 
     const visibleParts: string[] = [];
     visibleParts.push(`Vista activa: ${activeViewTitle}.`);
@@ -691,7 +709,7 @@ setForumAliasDraft(commentAccessData?.forum_alias ?? toSafeForumAlias(participan
       pageTitle: topic?.topic ? `Foro: ${topic.topic}` : "Foro ciudadano abierto",
       route: `/comentarios/foro/${topicId}`,
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,
