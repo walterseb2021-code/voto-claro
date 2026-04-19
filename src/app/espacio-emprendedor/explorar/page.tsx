@@ -248,21 +248,41 @@ const goToPath = (path: string) => {
     ].filter(Boolean) as string[];
 
     const summary = loading
-      ? 'Pantalla de exploración de proyectos emprendedores cargando resultados.'
-      : error
-      ? 'Pantalla de exploración de proyectos con error de carga.'
-      : filteredProjects.length === 0
-      ? 'Pantalla de exploración sin resultados visibles para los filtros actuales.'
-      : 'Pantalla de exploración de proyectos emprendedores con filtros y tarjetas de proyectos visibles.';
+  ? 'Pantalla de exploración de proyectos emprendedores cargando resultados.'
+  : error
+  ? 'Pantalla de exploración de proyectos con error de carga.'
+  : filteredProjects.length === 0
+  ? 'Pantalla de exploración sin resultados visibles para los filtros actuales.'
+  : 'Pantalla de exploración de proyectos emprendedores con filtros y tarjetas de proyectos visibles.';
 
-    const status = loading ? 'loading' : error ? 'error' : 'ready';
+   const speakableSummary = loading
+  ? 'Estamos en Explorar proyectos del Espacio Emprendedor y la pantalla está cargando los proyectos disponibles.'
+  : error
+  ? 'Estamos en Explorar proyectos del Espacio Emprendedor, pero esta pantalla muestra un error al cargar los resultados.'
+  : filteredProjects.length === 0
+  ? `Estamos en Explorar proyectos del Espacio Emprendedor. Ahora mismo no hay resultados visibles para los filtros actuales${
+      hasCategoryFilter ? ` en la categoría ${selectedCategory}` : ''
+    }${
+      hasDepartmentFilter ? ` y el departamento ${selectedDepartment}` : ''
+    }${
+      hasSearchFilter ? ` con la búsqueda ${normalizedSearch}` : ''
+    }.`
+  : `Estamos en Explorar proyectos del Espacio Emprendedor. Aquí puedes revisar proyectos disponibles${
+      hasCategoryFilter ? ` filtrados por la categoría ${selectedCategory}` : ''
+    }${
+      hasDepartmentFilter ? ` en el departamento ${selectedDepartment}` : ''
+    }${
+      hasSearchFilter ? ` y con la búsqueda ${normalizedSearch}` : ''
+    }.`;
+
+     const status = loading ? 'loading' : error ? 'error' : 'ready';
 
           setPageContext({
       pageId: 'espacio-emprendedor-explorar',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/explorar',
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,

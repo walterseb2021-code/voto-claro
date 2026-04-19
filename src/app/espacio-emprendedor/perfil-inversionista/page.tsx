@@ -299,19 +299,27 @@ export default function PerfilInversionistaPage() {
     ];
 
     const summary = loading
-      ? 'Pantalla del perfil inversionista cargando datos.'
-      : error
-      ? 'Pantalla del perfil inversionista con error visible.'
-      : 'Pantalla para configurar preferencias del inversionista y recibir proyectos compatibles.';
+  ? 'Pantalla del perfil inversionista cargando datos.'
+  : error
+  ? 'Pantalla del perfil inversionista con error visible.'
+  : 'Pantalla para configurar preferencias del inversionista y recibir proyectos compatibles.';
 
-    const status = loading ? 'loading' : error ? 'error' : 'ready';
+const speakableSummary = loading
+  ? 'Estamos en el perfil inversionista del Espacio Emprendedor y la pantalla está cargando tus datos.'
+  : error
+  ? 'Estamos en el perfil inversionista del Espacio Emprendedor, pero esta pantalla muestra un error.'
+  : `Estamos en tu perfil inversionista del Espacio Emprendedor. Aquí puedes configurar${
+      companyValue ? ` la empresa u organización ${companyValue}, ` : ' '
+    }tu rango de inversión, las categorías, los departamentos de interés y las notificaciones por correo.`;
+
+const status = loading ? 'loading' : error ? 'error' : 'ready';
 
             setPageContext({
       pageId: 'espacio-emprendedor-perfil-inversionista',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/perfil-inversionista',
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,

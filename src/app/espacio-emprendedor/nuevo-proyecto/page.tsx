@@ -380,22 +380,32 @@ export default function NuevoProyectoEmprendedorPage() {
       'Volver',
     ];
 
-    const summary = loading
-      ? 'Pantalla para publicar nuevo proyecto cargando datos del emprendedor.'
-      : success
-      ? 'Pantalla de publicación de proyecto con confirmación exitosa.'
-      : error
-      ? 'Pantalla para publicar nuevo proyecto con error visible.'
-      : 'Formulario para publicar un nuevo proyecto emprendedor con datos, ubicación, inversión y PDF.';
+     const summary = loading
+  ? 'Pantalla para publicar nuevo proyecto cargando datos del emprendedor.'
+  : success
+  ? 'Pantalla de publicación de proyecto con confirmación exitosa.'
+  : error
+  ? 'Pantalla para publicar nuevo proyecto con error visible.'
+  : 'Formulario para publicar un nuevo proyecto emprendedor con datos, ubicación, inversión y PDF.';
 
-    const status = loading ? 'loading' : error ? 'error' : 'ready';
+const speakableSummary = loading
+  ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor y la pantalla está cargando tus datos como emprendedor.'
+  : success
+  ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor y el proyecto ya fue enviado correctamente.'
+  : error
+  ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor, pero esta pantalla muestra un error.'
+  : `Estamos en Publicar nuevo proyecto del Espacio Emprendedor. Aquí puedes completar${
+      hasTitle ? ` el proyecto ${titleValue}, ` : ' '
+    }la categoría, la ubicación, el resumen ejecutivo, el rango de inversión y subir el PDF del proyecto.`;
+
+const status = loading ? 'loading' : error ? 'error' : 'ready';
 
            setPageContext({
       pageId: 'espacio-emprendedor-nuevo-proyecto',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/nuevo-proyecto',
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,

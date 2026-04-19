@@ -553,20 +553,39 @@ export default function EspacioEmprendedorProjectDetailPage() {
     ].filter(Boolean) as string[];
 
     const summary =
-      viewMode === "public-only"
-        ? "Detalle público del proyecto. La conversación privada está protegida."
-        : viewMode === "thread-list"
-        ? "Detalle del proyecto con lista de hilos privados por inversionista."
-        : esPropietario
-        ? "Detalle del proyecto con hilo privado abierto para un inversionista específico."
-        : "Detalle del proyecto con hilo privado del inversionista actual.";
+  viewMode === "public-only"
+    ? "Detalle público del proyecto. La conversación privada está protegida."
+    : viewMode === "thread-list"
+    ? "Detalle del proyecto con lista de hilos privados por inversionista."
+    : esPropietario
+    ? "Detalle del proyecto con hilo privado abierto para un inversionista específico."
+    : "Detalle del proyecto con hilo privado del inversionista actual.";
+
+const speakableSummary =
+  viewMode === "public-only"
+    ? `Estamos en el detalle de un proyecto del Espacio Emprendedor${
+        project?.title ? ` llamado ${project.title}` : ""
+      }. Aquí puedes revisar la información pública del proyecto, pero la conversación privada está protegida.`
+    : viewMode === "thread-list"
+    ? `Estamos en el detalle del proyecto${
+        project?.title ? ` ${project.title}` : ""
+      }. Aquí el emprendedor puede revisar la lista de hilos privados abiertos por inversionistas interesados.`
+    : esPropietario
+    ? `Estamos en el detalle del proyecto${
+        project?.title ? ` ${project.title}` : ""
+      }, dentro de un hilo privado abierto con${
+        selectedInvestorName ? ` ${selectedInvestorName}` : " un inversionista"
+      }.`
+    : `Estamos en el detalle del proyecto${
+        project?.title ? ` ${project.title}` : ""
+      }. Aquí estás viendo tu hilo privado con el emprendedor.`;
 
             setPageContext({
       pageId: "espacio-emprendedor-proyecto-detalle",
       pageTitle: "Espacio Emprendedor",
       route: `/espacio-emprendedor/proyectos/${projectId}`,
       summary,
-      speakableSummary: summary,
+      speakableSummary,
       activeSection,
       activeViewId,
       activeViewTitle,
