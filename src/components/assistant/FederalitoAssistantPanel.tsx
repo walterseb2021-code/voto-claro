@@ -32,6 +32,7 @@ type GuideEventDetail = {
   action?: "SAY" | "OPEN" | "CLOSE" | "SAY_AND_OPEN";
   text?: string;
   speak?: boolean;
+  seenKey?: string;
 };
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
@@ -1875,8 +1876,6 @@ for (const v of voices) {
 }
 
 try {
-  window.speechSynthesis.cancel();
-
   const u = new SpeechSynthesisUtterance(msg);
 
   // idioma
@@ -2101,8 +2100,10 @@ async function speakTextChunked(
   const parts = splitForSpeech(text, 220);
   if (!parts.length) return null;
 
-  // ✅ Cancelar UNA sola vez por lectura completa (evita pausas largas entre partes)
-  
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {}
+
   let last: { ok: boolean; usedLang: "es-PE" | "qu" | "fallback-es"; reason?: string } | null = null;
 
   for (const part of parts) {
@@ -2113,7 +2114,6 @@ async function speakTextChunked(
 
   return last;
 }
-
 
 type AiAnswerResponse = {
   ok: boolean;
@@ -3158,17 +3158,19 @@ export default function FederalitoAssistantPanel() {
   }, []);
 
   // ✅ Al cambiar de ventana, cortar cualquier narración en curso
-        useEffect(() => {
-    try {
-      window.speechSynthesis?.cancel();
-    } catch {}
+      useEffect(() => {
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {}
 
-    pendingGuideSpeakRef.current = null;
-    pendingGuidePathRef.current = null;
-    pageReadPathRef.current = String(pathname || "");
-    setPageReadText("");
-    setPageReadAt(0);
-  }, [pathname]);
+  pendingGuideSpeakRef.current = null;
+  pendingGuidePathRef.current = null;
+  pendingGuideSeenKeyRef.current = null;
+  autoGuidePendingKeyRef.current = "";
+  pageReadPathRef.current = String(pathname || "");
+  setPageReadText("");
+  setPageReadAt(0);
+}, [pathname]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -3595,9 +3597,11 @@ function safeResetFabPos() {
   const [userInteracted, setUserInteracted] = useState(false);
   const pendingGuideSpeakRef = useRef<string | null>(null);
   const pendingGuidePathRef = useRef<string | null>(null);
+  const pendingGuideSeenKeyRef = useRef<string | null>(null);
   const autoGuideTimerRef = useRef<number | null>(null);
-const lastAssistantScopeRef = useRef<string>("");
-const lastGuideSpokenKeyRef = useRef<string>("");
+  const autoGuidePendingKeyRef = useRef<string>("");
+  const lastAssistantScopeRef = useRef<string>("");
+  const lastGuideSpokenKeyRef = useRef<string>("");
     const [msgs, setMsgs] = useState<Msg[]>(() => [
     {
       role: "system",
@@ -3719,60 +3723,62 @@ useEffect(() => {
   }, []);
 
 // ✅ Listener primero (para no perder eventos)
-useEffect(() => {
+    useEffect(() => {
   async function onGuide(ev: Event) {
     const e = ev as CustomEvent<GuideEventDetail>;
     const action = e.detail?.action ?? "SAY";
 
     const raw = String(e.detail?.text ?? "");
-const text = cleanForChat(raw);
-
+    const text = cleanForChat(raw);
     const speak = !!e.detail?.speak;
+    const seenKey = String(e.detail?.seenKey || "").trim();
 
     if (action === "OPEN" || action === "SAY_AND_OPEN") setOpen(true);
-        if (action === "CLOSE") setOpen(false);
+    if (action === "CLOSE") setOpen(false);
 
-       if (text) {
-  setMsgs((prev) => {
-    const next = [...prev];
+    if (text) {
+      setMsgs((prev) => {
+        const next = [...prev];
 
-    if (next.length > 1 && next[next.length - 1]?.role === "assistant") {
-      const last = String(next[next.length - 1]?.content || "");
-      const normalizedLast = normalizeLite(last);
-      const normalizedText = normalizeLite(text);
+        if (next.length > 1 && next[next.length - 1]?.role === "assistant") {
+          const last = String(next[next.length - 1]?.content || "");
+          const normalizedLast = normalizeLite(last);
+          const normalizedText = normalizeLite(text);
 
-      const looksLikeGuide =
-        normalizedLast.includes("pantalla de inicio de voto claro") ||
-        normalizedLast.includes("estás en servicios al ciudadano") ||
-        normalizedLast.includes("estás en reflexionar antes de votar") ||
-        normalizedLast.includes("estás en un cambio con valentía") ||
-        normalizedLast.includes("estás en cómo funciona voto claro") ||
-        normalizedLast.includes("modo observador") ||
-        normalizedLast.includes("verificación de acceso") ||
-        normalizedLast.includes("comentarios ciudadanos") ||
-        normalizedLast.includes("espacio emprendedor") ||
-        normalizedLast.includes("proyecto ciudadano") ||
-        normalizedLast.includes("reto ciudadano") ||
-        normalizedLast.includes("intención de voto");
+          const looksLikeGuide =
+            normalizedLast.includes("pantalla de inicio de voto claro") ||
+            normalizedLast.includes("estás en servicios al ciudadano") ||
+            normalizedLast.includes("estás en reflexionar antes de votar") ||
+            normalizedLast.includes("estás en un cambio con valentía") ||
+            normalizedLast.includes("estás en cómo funciona voto claro") ||
+            normalizedLast.includes("modo observador") ||
+            normalizedLast.includes("verificación de acceso") ||
+            normalizedLast.includes("comentarios ciudadanos") ||
+            normalizedLast.includes("espacio emprendedor") ||
+            normalizedLast.includes("proyecto ciudadano") ||
+            normalizedLast.includes("reto ciudadano") ||
+            normalizedLast.includes("intención de voto");
 
-      if (looksLikeGuide || normalizedLast === normalizedText) {
-        next[next.length - 1] = { role: "assistant", content: text };
-        return next;
-      }
+          if (looksLikeGuide || normalizedLast === normalizedText) {
+            next[next.length - 1] = { role: "assistant", content: text };
+            return next;
+          }
+        }
+
+        return [...next, { role: "assistant", content: text }];
+      });
+
+      setPageReadText(text);
+      setPageReadAt(Date.now());
+      pageReadPathRef.current = String(pathname || "");
     }
 
-    return [...next, { role: "assistant", content: text }];
-  });
-
-  setPageReadText(text);
-  setPageReadAt(Date.now());
-  pageReadPathRef.current = String(pathname || "");
-}
     if (!text || !speak) return;
 
-        if (voiceMode !== "ON") {
+    if (voiceMode !== "ON") {
       pendingGuideSpeakRef.current = text;
       pendingGuidePathRef.current = String(pathname || "");
+      pendingGuideSeenKeyRef.current = seenKey || null;
       setMsgs((prev) => [
         ...prev,
         { role: "assistant", content: "Tip: activa “Voz: ON” para que pueda hablar en voz alta." },
@@ -3783,26 +3789,39 @@ const text = cleanForChat(raw);
     if (!userInteracted) {
       pendingGuideSpeakRef.current = text;
       pendingGuidePathRef.current = String(pathname || "");
+      pendingGuideSeenKeyRef.current = seenKey || null;
       return;
     }
 
-    // 👇 AQUÍ va el debug, JUSTO antes de hablar:
     debugUnicode("GUIDE_TEXT", text);
 
-    await speakTextChunked(text, voiceLang);
+    const spoken = await speakTextChunked(text, voiceLang);
+
+    if (spoken?.ok && seenKey) {
+      try {
+        sessionStorage.setItem(seenKey, "1");
+      } catch {}
+      lastGuideSpokenKeyRef.current = seenKey;
+    }
+
     pendingGuideSpeakRef.current = null;
+    pendingGuidePathRef.current = null;
+    pendingGuideSeenKeyRef.current = null;
+    autoGuidePendingKeyRef.current = "";
   }
 
   window.addEventListener("votoclaro:guide", onGuide as any);
-  return () => window.removeEventListener("votoclaro:guide", onGuide as any);
-}, [voiceMode, voiceLang, userInteracted]);
-
+  return () => {
+    window.removeEventListener("votoclaro:guide", onGuide as any);
+  };
+}, [voiceMode, voiceLang, userInteracted, pathname]);
 
 // ✅ Si había un mensaje pendiente, hablar apenas sea posible
-useEffect(() => {
+   useEffect(() => {
   async function flushPending() {
     const pending = pendingGuideSpeakRef.current;
     const pendingPath = pendingGuidePathRef.current;
+    const pendingSeenKey = pendingGuideSeenKeyRef.current;
     const currentPath = String(pathname || "");
 
     if (!pending) return;
@@ -3812,12 +3831,24 @@ useEffect(() => {
     if (pendingPath && pendingPath !== currentPath) {
       pendingGuideSpeakRef.current = null;
       pendingGuidePathRef.current = null;
+      pendingGuideSeenKeyRef.current = null;
+      autoGuidePendingKeyRef.current = "";
       return;
+    }
+
+    const spoken = await speakTextChunked(pending, voiceLang);
+
+    if (spoken?.ok && pendingSeenKey) {
+      try {
+        sessionStorage.setItem(pendingSeenKey, "1");
+      } catch {}
+      lastGuideSpokenKeyRef.current = pendingSeenKey;
     }
 
     pendingGuideSpeakRef.current = null;
     pendingGuidePathRef.current = null;
-    await speakTextChunked(pending, voiceLang);
+    pendingGuideSeenKeyRef.current = null;
+    autoGuidePendingKeyRef.current = "";
   }
 
   flushPending();
@@ -3887,8 +3918,8 @@ useEffect(() => {
   }
 
   if (!text) return;
-
   if (lastGuideSpokenKeyRef.current === key) return;
+  if (autoGuidePendingKeyRef.current === key) return;
 
   try {
     const seen = sessionStorage.getItem(key) === "1";
@@ -3903,20 +3934,16 @@ useEffect(() => {
     autoGuideTimerRef.current = null;
   }
 
+  autoGuidePendingKeyRef.current = key;
+
   autoGuideTimerRef.current = window.setTimeout(() => {
-    try {
-      sessionStorage.setItem(key, "1");
-    } catch {}
-
-    lastGuideSpokenKeyRef.current = key;
-
     try {
       window.speechSynthesis?.cancel();
     } catch {}
 
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
-        detail: { action: "SAY", text, speak: true },
+        detail: { action: "SAY", text, speak: true, seenKey: key },
       })
     );
 
@@ -3930,7 +3957,6 @@ useEffect(() => {
     }
   };
 }, [mounted, pathname, pageContext]);
-
 
 useEffect(() => {
   function onPageRead(ev: Event) {
