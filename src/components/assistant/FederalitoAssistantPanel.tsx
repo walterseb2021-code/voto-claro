@@ -4891,14 +4891,14 @@ function sendQuick(q: string) {
   (pageContext as any)?.pageId,
   (pageContext as any)?.activeViewId,
 ]);
-  useEffect(() => {
-  const scope = assistantScopeKey;
-  const greeting = getDefaultAssistantGreeting(String(pathname || ""));
+   useEffect(() => {
+  const currentPath = String(pathname || "");
+  const greeting = getDefaultAssistantGreeting(currentPath);
 
-  if (!scope) return;
+  if (!currentPath) return;
 
-  if (lastAssistantScopeRef.current === scope) return;
-  lastAssistantScopeRef.current = scope;
+  if (lastAssistantScopeRef.current === currentPath) return;
+  lastAssistantScopeRef.current = currentPath;
 
   try {
     window.speechSynthesis?.cancel();
@@ -4928,7 +4928,7 @@ function sendQuick(q: string) {
       content: greeting,
     },
   ]);
-}, [assistantScopeKey, pathname]);
+}, [pathname]);
    
     const suggestedPrompts = useMemo<SuggestedPrompt[]>(() => {
     const raw = (pageContext as any)?.suggestedPrompts;
