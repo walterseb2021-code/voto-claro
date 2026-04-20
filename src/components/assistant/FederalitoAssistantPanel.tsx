@@ -3158,7 +3158,7 @@ export default function FederalitoAssistantPanel() {
   }, []);
 
   // ✅ Al cambiar de ventana, cortar cualquier narración en curso
-      useEffect(() => {
+    useEffect(() => {
   try {
     window.speechSynthesis?.cancel();
   } catch {}
@@ -3170,6 +3170,15 @@ export default function FederalitoAssistantPanel() {
   pageReadPathRef.current = String(pathname || "");
   setPageReadText("");
   setPageReadAt(0);
+
+  try {
+    const sel = window.getSelection?.();
+    sel?.removeAllRanges?.();
+  } catch {}
+
+  try {
+    (document.activeElement as HTMLElement | null)?.blur?.();
+  } catch {}
 }, [pathname]);
 
   useEffect(() => {
@@ -3602,6 +3611,8 @@ function safeResetFabPos() {
   const autoGuidePendingKeyRef = useRef<string>("");
   const lastAssistantScopeRef = useRef<string>("");
   const lastGuideSpokenKeyRef = useRef<string>("");
+  const lastGuideDispatchRef = useRef<string>("");
+  const lastGuideDispatchAtRef = useRef<number>(0);
     const [msgs, setMsgs] = useState<Msg[]>(() => [
     {
       role: "system",
@@ -3724,14 +3735,27 @@ useEffect(() => {
 
 // ✅ Listener primero (para no perder eventos)
     useEffect(() => {
-  async function onGuide(ev: Event) {
-    const e = ev as CustomEvent<GuideEventDetail>;
-    const action = e.detail?.action ?? "SAY";
+   async function onGuide(ev: Event) {
+  const e = ev as CustomEvent<GuideEventDetail>;
+  const action = e.detail?.action ?? "SAY";
 
-    const raw = String(e.detail?.text ?? "");
-    const text = cleanForChat(raw);
-    const speak = !!e.detail?.speak;
-    const seenKey = String(e.detail?.seenKey || "").trim();
+  const raw = String(e.detail?.text ?? "");
+  const text = cleanForChat(raw);
+  const speak = !!e.detail?.speak;
+  const seenKey = String(e.detail?.seenKey || "").trim();
+
+  const dedupeKey = `${String(pathname || "")}::${seenKey || text}`;
+  const now = Date.now();
+
+  if (
+    lastGuideDispatchRef.current === dedupeKey &&
+    now - lastGuideDispatchAtRef.current < 1500
+  ) {
+    return;
+  }
+
+  lastGuideDispatchRef.current = dedupeKey;
+  lastGuideDispatchAtRef.current = now;
 
     if (action === "OPEN" || action === "SAY_AND_OPEN") setOpen(true);
     if (action === "CLOSE") setOpen(false);
@@ -3766,11 +3790,7 @@ useEffect(() => {
         }
 
         return [...next, { role: "assistant", content: text }];
-      });
-
-      setPageReadText(text);
-      setPageReadAt(Date.now());
-      pageReadPathRef.current = String(pathname || "");
+      });      
     }
 
     if (!text || !speak) return;
@@ -3858,7 +3878,7 @@ useEffect(() => {
 // Regla PRO:
 // - Se lee 1 vez por sesión por cada ruta
 // - Inicio (/) NO vuelve a narrar al regresar
-   useEffect(() => {
+  useEffect(() => {
   if (!mounted) return;
 
   const p = String(pathname || "");
@@ -3870,12 +3890,17 @@ useEffect(() => {
     p.startsWith("/reto-ciudadano") ||
     p.startsWith("/comentarios");
 
+  const pageStatus = String((pageContext as any)?.status || "").trim();
+
+  if (isContextualDomain) {
+    if (!pageContext) return;
+    if (pageStatus && pageStatus !== "ready") return;
+  }
+
   const contextualViewKey = [
     p,
     String((pageContext as any)?.pageId || ""),
     String((pageContext as any)?.activeViewId || ""),
-    String((pageContext as any)?.activeSection || ""),
-    String((pageContext as any)?.selectedItemTitle || ""),
   ].join("::");
 
   const key = `votoclaro_autoguide_seen:${
@@ -3957,7 +3982,6 @@ useEffect(() => {
     }
   };
 }, [mounted, pathname, pageContext]);
-
 useEffect(() => {
   function onPageRead(ev: Event) {
     const e = ev as CustomEvent<{ text?: string }>;
