@@ -171,13 +171,21 @@ const goToPath = (path: string) => {
       ? 'explorar-sin-resultados'
       : 'explorar-resultados';
 
-    const activeViewId = loading
-      ? 'loading-results'
-      : error
-      ? 'error-results'
-      : filteredProjects.length === 0
-      ? 'empty-results'
-      : 'project-results';
+     const resultsFingerprint = [
+  hasCategoryFilter ? `cat:${selectedCategory}` : 'cat:all',
+  hasDepartmentFilter ? `dep:${selectedDepartment}` : 'dep:all',
+  hasSearchFilter ? `q:${normalizedSearch}` : 'q:none',
+  `count:${filteredProjects.length}`,
+  filteredProjects[0]?.id ? `first:${filteredProjects[0].id}` : 'first:none',
+].join('|');
+
+const activeViewId = loading
+  ? 'loading-results'
+  : error
+  ? 'error-results'
+  : filteredProjects.length === 0
+  ? `empty-results|${resultsFingerprint}`
+  : `project-results|${resultsFingerprint}`;
 
     const activeViewTitle = loading
       ? 'Explorar proyectos cargando'
@@ -319,27 +327,29 @@ const goToPath = (path: string) => {
       visibleText: visibleParts.join('\n'),
       availableActions,
       selectedCategory: hasCategoryFilter ? selectedCategory : undefined,
-      selectedItemTitle: filteredProjects[0]?.title || undefined,
+      selectedItemTitle: undefined,
       status,
       dynamicData: {
-        participantLogueado: !!participant,
-        projectsCount: projects.length,
-        filteredProjectsCount: filteredProjects.length,
-        visibleProjectTitles: visibleTitles,
-        selectedCategory,
-        selectedDepartment,
-        searchTerm: normalizedSearch,
-        hasCategoryFilter,
-        hasDepartmentFilter,
-        hasSearchFilter,
-        hasActiveFilters,
-        emptyResults: !loading && !error && filteredProjects.length === 0,
-        firstProjectTitle: filteredProjects[0]?.title || '',
-        canOpenProjectDetail: filteredProjects.length > 0,
-        canFilterByCategory: true,
-        canFilterByDepartment: true,
-        canSearchProjects: true,
-      },
+  participantLogueado: !!participant,
+  projectsCount: projects.length,
+  filteredProjectsCount: filteredProjects.length,
+  visibleProjectTitles: visibleTitles,
+  selectedCategory,
+  selectedDepartment,
+  searchTerm: normalizedSearch,
+  hasCategoryFilter,
+  hasDepartmentFilter,
+  hasSearchFilter,
+  hasActiveFilters,
+  emptyResults: !loading && !error && filteredProjects.length === 0,
+  firstProjectId: filteredProjects[0]?.id || '',
+  firstProjectTitle: filteredProjects[0]?.title || '',
+  exploreResultsFingerprint: resultsFingerprint,
+  canOpenProjectDetail: filteredProjects.length > 0,
+  canFilterByCategory: true,
+  canFilterByDepartment: true,
+  canSearchProjects: true,
+},
     });
   }, [
     setPageContext,

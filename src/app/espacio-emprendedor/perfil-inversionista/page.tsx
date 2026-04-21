@@ -210,17 +210,25 @@ export default function PerfilInversionistaPage() {
       ? 'perfil-inversionista-error'
       : 'perfil-inversionista-formulario';
 
-    const activeViewId = loading
-      ? 'loading-profile'
-      : error
-      ? 'error-profile'
-      : 'investor-profile-form';
+     const activeViewId = loading
+  ? 'loading-profile'
+  : error
+  ? 'error-profile'
+  : saving
+  ? 'saving-profile'
+  : message
+  ? 'saved-profile'
+  : 'investor-profile-form';
 
-    const activeViewTitle = loading
-      ? 'Perfil inversionista cargando'
-      : error
-      ? 'Perfil inversionista con error'
-      : 'Formulario del perfil inversionista';
+const activeViewTitle = loading
+  ? 'Perfil inversionista cargando'
+  : error
+  ? 'Perfil inversionista con error'
+  : saving
+  ? 'Guardando perfil inversionista'
+  : message
+  ? 'Perfil inversionista guardado'
+  : 'Formulario del perfil inversionista';
 
     if (loading) {
       visibleParts.push('La pantalla está cargando el perfil del inversionista.');

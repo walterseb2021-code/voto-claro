@@ -112,6 +112,61 @@ function getDefaultAssistantGreeting(pathname: string) {
 
   return "Hola, soy el asistente de VOTO CLARO. Puedo ayudarte a entender la pantalla actual y sus acciones visibles.";
 }
+ function buildAssistantScopeKey(
+  pathname: string,
+  pageContext: {
+    pageId?: string;
+    activeViewId?: string;
+    status?: string;
+    dynamicData?: Record<string, unknown>;
+  } | null
+) {
+  const p = String(pathname || "");
+  const pageId = String(pageContext?.pageId || "");
+  const activeViewId = String(pageContext?.activeViewId || "");
+  const status = String(pageContext?.status || "");
+  const data = (pageContext?.dynamicData || {}) as Record<string, unknown>;
+
+  const selectedThreadKey = String(data.selectedThreadKey || "").trim();
+  const selectedInvestorId = String(data.selectedInvestorId || "").trim();
+  const filteredProjectsCount = String(data.filteredProjectsCount ?? "").trim();
+  const selectedCategory = String(data.selectedCategory || "").trim();
+  const selectedDepartment = String(data.selectedDepartment || "").trim();
+  const searchTerm = String(data.searchTerm || "").trim();
+  const savingProfile = String(Boolean(data.savingProfile));
+  const saveMessageVisible = String(data.saveMessageVisible || "").trim();
+  const emptyResults = String(Boolean(data.emptyResults));
+
+  return [
+    p,
+    pageId,
+    activeViewId,
+    selectedThreadKey,
+    selectedInvestorId,
+    filteredProjectsCount,
+    selectedCategory,
+    selectedDepartment,
+    searchTerm,
+    savingProfile,
+    saveMessageVisible,
+    emptyResults,
+    status,
+  ].join("::");
+}
+
+function buildAutoguideSeenKey(
+  pathname: string,
+  pageContext: {
+    pageId?: string;
+    activeViewId?: string;
+    status?: string;
+    dynamicData?: Record<string, unknown>;
+  } | null
+) {
+  const scopeKey = buildAssistantScopeKey(pathname, pageContext);
+  return `votoclaro_autoguide_seen:${scopeKey}`;
+}
+
  function stringifyContextValue(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v.trim();
@@ -3635,7 +3690,21 @@ function safeResetFabPos() {
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+   const assistantScopeKey = useMemo(() => {
+  const p = String(pathname || "");
 
+  if (
+    p.startsWith("/comentarios") ||
+    p.startsWith("/espacio-emprendedor") ||
+    p.startsWith("/proyecto-ciudadano") ||
+    p.startsWith("/intencion-de-voto") ||
+    p.startsWith("/reto-ciudadano")
+  ) {
+    return buildAssistantScopeKey(pathname, pageContext as any);
+  }
+
+  return p;
+}, [pathname, pageContext]);
   useEffect(() => {
     if (!mounted) return;
     if (!hydratedPrefsRef.current) return;
@@ -3878,7 +3947,7 @@ useEffect(() => {
 // Regla PRO:
 // - Se lee 1 vez por sesión por cada ruta
 // - Inicio (/) NO vuelve a narrar al regresar
-  useEffect(() => {
+   useEffect(() => {
   if (!mounted) return;
 
   const p = String(pathname || "");
@@ -3890,22 +3959,17 @@ useEffect(() => {
     p.startsWith("/reto-ciudadano") ||
     p.startsWith("/comentarios");
 
-  const pageStatus = String((pageContext as any)?.status || "").trim();
+  const ctx = pageContext as any;
+  const pageStatus = String(ctx?.status || "").trim();
 
   if (isContextualDomain) {
-    if (!pageContext) return;
-    if (pageStatus && pageStatus !== "ready") return;
+    if (!ctx) return;
+    if (pageStatus !== "ready") return;
   }
 
-  const contextualViewKey = [
-    p,
-    String((pageContext as any)?.pageId || ""),
-    String((pageContext as any)?.activeViewId || ""),
-  ].join("::");
-
-  const key = `votoclaro_autoguide_seen:${
-    isContextualDomain ? contextualViewKey : isHome ? "/" : p
-  }`;
+  const key = isContextualDomain
+    ? buildAutoguideSeenKey(pathname, ctx)
+    : `votoclaro_autoguide_seen:${isHome ? "/" : p}`;
 
   let text = "";
 
@@ -3930,12 +3994,12 @@ useEffect(() => {
     text =
       "Estás en Cómo funciona VOTO CLARO. " +
       "Aquí tienes la guía de uso: flujo recomendado, qué hace el Asistente, límites técnicos y política de uso.";
-  } else if (isContextualDomain && pageContext) {
+  } else if (isContextualDomain && ctx) {
     text = String(
-      (pageContext as any)?.speakableSummary ||
-      (pageContext as any)?.summary ||
-      (pageContext as any)?.activeViewTitle ||
-      (pageContext as any)?.pageTitle ||
+      ctx?.speakableSummary ||
+      ctx?.summary ||
+      ctx?.activeViewTitle ||
+      ctx?.pageTitle ||
       ""
     ).trim();
   } else {
@@ -3973,7 +4037,7 @@ useEffect(() => {
     );
 
     autoGuideTimerRef.current = null;
-  }, 250);
+  }, 350);
 
   return () => {
     if (autoGuideTimerRef.current) {
@@ -3981,7 +4045,8 @@ useEffect(() => {
       autoGuideTimerRef.current = null;
     }
   };
-}, [mounted, pathname, pageContext]);
+}, [mounted, pathname, assistantScopeKey, pageContext]);
+
 useEffect(() => {
   function onPageRead(ev: Event) {
     const e = ev as CustomEvent<{ text?: string }>;
@@ -4005,20 +4070,24 @@ setMsgs((prev) => [
 }, []);
 
   useEffect(() => {
-    if (!open) return;
+  if (!open) return;
 
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+  const el = listRef.current;
+  if (el) el.scrollTop = el.scrollHeight;
 
-    // foco al input al abrir
-    const raf = requestAnimationFrame(() => {
-      try {
+  const raf = requestAnimationFrame(() => {
+    try {
+      const active = document.activeElement as HTMLElement | null;
+      const tag = String(active?.tagName || "").toLowerCase();
+
+      if (!active || tag === "body") {
         inputRef.current?.focus?.();
-      } catch {}
-    });
+      }
+    } catch {}
+  });
 
-    return () => cancelAnimationFrame(raf);
-  }, [open, msgs]);
+  return () => cancelAnimationFrame(raf);
+}, [open, msgs.length]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -4920,35 +4989,15 @@ function sendQuick(q: string) {
 
   const fabLabel = useMemo(() => (open ? "Cerrar Asistente" : "Abrir Asistente"), [open]);
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
-  const assistantScopeKey = useMemo(() => {
-  const p = String(pathname || "");
-  const pageId = String((pageContext as any)?.pageId || "");
-  const activeViewId = String((pageContext as any)?.activeViewId || "");
-
-  if (
-    p.startsWith("/comentarios") ||
-    p.startsWith("/espacio-emprendedor") ||
-    p.startsWith("/proyecto-ciudadano") ||
-    p.startsWith("/intencion-de-voto") ||
-    p.startsWith("/reto-ciudadano")
-  ) {
-    return [p, pageId, activeViewId].join("::");
-  }
-
-  return p;
-}, [
-  pathname,
-  (pageContext as any)?.pageId,
-  (pageContext as any)?.activeViewId,
-]);
-   useEffect(() => {
+   
+    useEffect(() => {
   const currentPath = String(pathname || "");
   const greeting = getDefaultAssistantGreeting(currentPath);
 
   if (!currentPath) return;
 
-  if (lastAssistantScopeRef.current === currentPath) return;
-  lastAssistantScopeRef.current = currentPath;
+  if (lastAssistantScopeRef.current === assistantScopeKey) return;
+  lastAssistantScopeRef.current = assistantScopeKey;
 
   try {
     window.speechSynthesis?.cancel();
@@ -4960,6 +5009,8 @@ function sendQuick(q: string) {
 
   pendingGuideSpeakRef.current = null;
   pendingGuidePathRef.current = null;
+  pendingGuideSeenKeyRef.current = null;
+  autoGuidePendingKeyRef.current = "";
 
   if (autoGuideTimerRef.current) {
     window.clearTimeout(autoGuideTimerRef.current);
@@ -4978,7 +5029,7 @@ function sendQuick(q: string) {
       content: greeting,
     },
   ]);
-}, [pathname]);
+}, [pathname, assistantScopeKey]);
    
     const suggestedPrompts = useMemo<SuggestedPrompt[]>(() => {
     const raw = (pageContext as any)?.suggestedPrompts;

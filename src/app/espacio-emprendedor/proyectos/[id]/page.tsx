@@ -481,12 +481,20 @@ export default function EspacioEmprendedorProjectDetailPage() {
         ? "thread-list"
         : "thread-detail";
 
-    const activeViewId =
-      viewMode === "public-only"
-        ? "public-detail"
-        : viewMode === "thread-list"
-        ? "thread-list"
-        : "thread-detail";
+    const currentThreadKey =
+  viewMode === "thread-detail"
+    ? buildThreadKey(
+        projectId,
+        esPropietario ? selectedInvestorId : participant?.id
+      )
+    : "";
+
+const activeViewId =
+  viewMode === "public-only"
+    ? "public-detail"
+    : viewMode === "thread-list"
+    ? "thread-list"
+    : `thread-detail:${currentThreadKey || "unknown-thread"}`;
 
     const activeViewTitle =
       viewMode === "public-only"
@@ -646,8 +654,13 @@ const speakableSummary =
             ],
       visibleText: visibleParts.join("\n"),
       availableActions,
-      selectedItemTitle: project.title,
-      status: "ready",
+      selectedItemTitle:
+  viewMode === "thread-detail"
+    ? selectedInvestorName
+      ? `${project.title} · hilo con ${selectedInvestorName}`
+      : `${project.title} · hilo privado`
+    : project.title,
+      status: loading ? "loading" : error ? "error" : "ready",
       dynamicData: {
         userRole,
         viewMode,
