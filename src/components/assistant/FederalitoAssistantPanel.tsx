@@ -112,7 +112,27 @@ function getDefaultAssistantGreeting(pathname: string) {
 
   return "Hola, soy el asistente de VOTO CLARO. Puedo ayudarte a entender la pantalla actual y sus acciones visibles.";
 }
- function buildAssistantScopeKey(
+   function buildAssistantScopeKey(
+  pathname: string,
+  pageContext: {
+    pageId?: string;
+    activeViewId?: string;
+  } | null
+) {
+  const p = String(pathname || "");
+  const pageId = String(pageContext?.pageId || "");
+  const rawActiveViewId = String(pageContext?.activeViewId || "").trim();
+
+  // Para el scope conversacional usamos una identidad más estable.
+  // Si activeViewId trae fingerprints con "|" (como explorar), los quitamos.
+  // Si trae ":" (como thread-detail:threadKey), lo conservamos porque sí distingue un hilo real.
+  const normalizedActiveViewId = rawActiveViewId.includes("|")
+    ? rawActiveViewId.split("|")[0]
+    : rawActiveViewId;
+
+  return [p, pageId, normalizedActiveViewId].join("::");
+}
+function buildAutoguideIdentity(
   pathname: string,
   pageContext: {
     pageId?: string;
@@ -154,7 +174,7 @@ function getDefaultAssistantGreeting(pathname: string) {
   ].join("::");
 }
 
-function buildAutoguideSeenKey(
+  function buildAutoguideSeenKey(
   pathname: string,
   pageContext: {
     pageId?: string;
@@ -163,8 +183,8 @@ function buildAutoguideSeenKey(
     dynamicData?: Record<string, unknown>;
   } | null
 ) {
-  const scopeKey = buildAssistantScopeKey(pathname, pageContext);
-  return `votoclaro_autoguide_seen:${scopeKey}`;
+  const identity = buildAutoguideIdentity(pathname, pageContext);
+  return `votoclaro_autoguide_seen:${identity}`;
 }
 
  function stringifyContextValue(v: unknown): string {
@@ -3690,7 +3710,7 @@ function safeResetFabPos() {
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-   const assistantScopeKey = useMemo(() => {
+    const assistantScopeKey = useMemo(() => {
   const p = String(pathname || "");
 
   if (
@@ -3704,7 +3724,12 @@ function safeResetFabPos() {
   }
 
   return p;
-}, [pathname, pageContext]);
+}, [
+  pathname,
+  (pageContext as any)?.pageId,
+  (pageContext as any)?.activeViewId,
+]);
+
   useEffect(() => {
     if (!mounted) return;
     if (!hydratedPrefsRef.current) return;
