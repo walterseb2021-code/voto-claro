@@ -4029,7 +4029,7 @@ useEffect(() => {
 
   autoGuidePendingKeyRef.current = key;
 
-  autoGuideTimerRef.current = window.setTimeout(() => {
+    autoGuideTimerRef.current = window.setTimeout(() => {
     try {
       window.speechSynthesis?.cancel();
     } catch {}
@@ -4041,7 +4041,7 @@ useEffect(() => {
     );
 
     autoGuideTimerRef.current = null;
-  }, 350);
+  }, 900);
 
   return () => {
     if (autoGuideTimerRef.current) {
