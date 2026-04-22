@@ -116,21 +116,11 @@ function getDefaultAssistantGreeting(pathname: string) {
   pathname: string,
   pageContext: {
     pageId?: string;
-    activeViewId?: string;
   } | null
 ) {
   const p = String(pathname || "");
   const pageId = String(pageContext?.pageId || "");
-  const rawActiveViewId = String(pageContext?.activeViewId || "").trim();
-
-  // Para el scope conversacional usamos una identidad más estable.
-  // Si activeViewId trae fingerprints con "|" (como explorar), los quitamos.
-  // Si trae ":" (como thread-detail:threadKey), lo conservamos porque sí distingue un hilo real.
-  const normalizedActiveViewId = rawActiveViewId.includes("|")
-    ? rawActiveViewId.split("|")[0]
-    : rawActiveViewId;
-
-  return [p, pageId, normalizedActiveViewId].join("::");
+  return [p, pageId].join("::");
 }
 function buildAutoguideIdentity(
   pathname: string,
@@ -3703,11 +3693,9 @@ function safeResetFabPos() {
   }
 
   return p;
-}, 
-[
+}, [
   pathname,
   (pageContext as any)?.pageId,
-  (pageContext as any)?.activeViewId,
 ]);
   const autoguideStatus = useMemo(() => {
   return String((pageContext as any)?.status || "");
