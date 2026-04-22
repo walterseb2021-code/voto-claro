@@ -3703,12 +3703,111 @@ function safeResetFabPos() {
   }
 
   return p;
-}, [
+}, 
+[
   pathname,
   (pageContext as any)?.pageId,
   (pageContext as any)?.activeViewId,
 ]);
+  const autoguideStatus = useMemo(() => {
+  return String((pageContext as any)?.status || "");
+}, [pageContext]);
 
+const autoguideKey = useMemo(() => {
+  const p = String(pathname || "");
+  const ctx = (pageContext as any) || null;
+  const isHome = p === "/";
+  const isContextualDomain =
+    p.startsWith("/comentarios") ||
+    p.startsWith("/espacio-emprendedor") ||
+    p.startsWith("/proyecto-ciudadano") ||
+    p.startsWith("/intencion-de-voto") ||
+    p.startsWith("/reto-ciudadano");
+
+  if (isContextualDomain) {
+    return buildAutoguideSeenKey(pathname, ctx);
+  }
+
+  return `votoclaro_autoguide_seen:${isHome ? "/" : p}`;
+}, [pathname, pageContext]);
+
+  const autoguideText = useMemo(() => {
+  const p = String(pathname || "");
+  const ctx = (pageContext as any) || null;
+  const isHome = p === "/" || p.startsWith("/#");
+  const isContextualDomain =
+    p.startsWith("/espacio-emprendedor") ||
+    p.startsWith("/proyecto-ciudadano") ||
+    p.startsWith("/intencion-de-voto") ||
+    p.startsWith("/reto-ciudadano") ||
+    p.startsWith("/comentarios");
+
+  if (isHome) {
+    return (
+      "Esta es la pantalla de inicio de VOTO CLARO. " +
+      "Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. " +
+      "Empieza buscando un candidato por su nombre."
+    ).trim();
+  }
+
+  if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")) {
+    return (
+      "Estás en Servicios al ciudadano. " +
+      "Aquí encontrarás enlaces oficiales para consultar local de votación, miembro de mesa, multas y otros trámites electorales."
+    ).trim();
+  }
+
+  if (p.startsWith("/reflexion")) {
+    return (
+      "Estás en Reflexionar antes de votar. " +
+      "Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación y seguridad."
+    ).trim();
+  }
+
+  if (p.startsWith("/cambio-con-valentia")) {
+    return (
+      "Estás en Un cambio con valentía. " +
+      "Esta ventana muestra una propuesta política y te dirige a su sitio oficial para más información."
+    ).trim();
+  }
+
+  if (p.startsWith("/como-funciona")) {
+    return (
+      "Estás en Cómo funciona VOTO CLARO. " +
+      "Aquí tienes la guía de uso: flujo recomendado, qué hace el Asistente, límites técnicos y política de uso."
+    ).trim();
+  }
+
+  if (isContextualDomain && ctx) {
+    return String(
+      ctx?.speakableSummary ||
+      ctx?.summary ||
+      ctx?.activeViewTitle ||
+      ctx?.pageTitle ||
+      ""
+    ).trim();
+  }
+
+  return "";
+}, [pathname, pageContext]);
+
+const autoguideReady = useMemo(() => {
+  if (!mounted) return false;
+
+  const p = String(pathname || "");
+  const isHome = p === "/";
+  const isContextualDomain =
+    p.startsWith("/comentarios") ||
+    p.startsWith("/espacio-emprendedor") ||
+    p.startsWith("/proyecto-ciudadano") ||
+    p.startsWith("/intencion-de-voto") ||
+    p.startsWith("/reto-ciudadano");
+
+  if (isHome) return true;
+  if (isContextualDomain) return autoguideStatus === "ready";
+
+  return true;
+}, [mounted, pathname, autoguideStatus]);
   useEffect(() => {
     if (!mounted) return;
     if (!hydratedPrefsRef.current) return;
@@ -3951,85 +4050,33 @@ useEffect(() => {
 // Regla PRO:
 // - Se lee 1 vez por sesión por cada ruta
 // - Inicio (/) NO vuelve a narrar al regresar
-   useEffect(() => {
-  if (!mounted) return;
+    useEffect(() => {
+  if (!autoguideReady) return;
 
   const p = String(pathname || "");
-  const isHome = p === "/" || p.startsWith("/#");
-  const isContextualDomain =
-    p.startsWith("/espacio-emprendedor") ||
-    p.startsWith("/proyecto-ciudadano") ||
-    p.startsWith("/intencion-de-voto") ||
-    p.startsWith("/reto-ciudadano") ||
-    p.startsWith("/comentarios");
+  const key = String(autoguideKey || "").trim();
+  const text = String(autoguideText || "").trim();
 
-  const ctx = pageContext as any;
-  const pageStatus = String(ctx?.status || "").trim();
+  if (!key || !text) return;
 
-  if (isContextualDomain) {
-    if (!ctx) return;
-    if (pageStatus !== "ready") return;
-  }
-
-  const key = isContextualDomain
-    ? buildAutoguideSeenKey(pathname, ctx)
-    : `votoclaro_autoguide_seen:${isHome ? "/" : p}`;
-
-  let text = "";
-
-  if (isHome) {
-    text =
-      "Esta es la pantalla de inicio de VOTO CLARO. " +
-      "Aquí puedes buscar candidatos, aprender cómo usar la app y acceder a servicios al ciudadano, reflexión electoral y otras secciones. " +
-      "Empieza buscando un candidato por su nombre.";
-  } else if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")) {
-    text =
-      "Estás en Servicios al ciudadano. " +
-      "Aquí encontrarás enlaces oficiales para consultar local de votación, miembro de mesa, multas y otros trámites electorales.";
-  } else if (p.startsWith("/reflexion")) {
-    text =
-      "Estás en Reflexionar antes de votar. " +
-      "Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación y seguridad.";
-  } else if (p.startsWith("/cambio-con-valentia")) {
-    text =
-      "Estás en Un cambio con valentía. " +
-      "Esta ventana muestra una propuesta política y te dirige a su sitio oficial para más información.";
-  } else if (p.startsWith("/como-funciona")) {
-    text =
-      "Estás en Cómo funciona VOTO CLARO. " +
-      "Aquí tienes la guía de uso: flujo recomendado, qué hace el Asistente, límites técnicos y política de uso.";
-  } else if (isContextualDomain && ctx) {
-    text = String(
-      ctx?.speakableSummary ||
-      ctx?.summary ||
-      ctx?.activeViewTitle ||
-      ctx?.pageTitle ||
-      ""
-    ).trim();
-  } else {
-    return;
-  }
-
-  if (!text) return;
-  if (lastGuideSpokenKeyRef.current === key) return;
   if (autoGuidePendingKeyRef.current === key) return;
+  if (lastGuideSpokenKeyRef.current === key) return;
 
   try {
-    const seen = sessionStorage.getItem(key) === "1";
-    if (seen) {
+    if (sessionStorage.getItem(key) === "1") {
       lastGuideSpokenKeyRef.current = key;
       return;
     }
   } catch {}
+
+  autoGuidePendingKeyRef.current = key;
 
   if (autoGuideTimerRef.current) {
     window.clearTimeout(autoGuideTimerRef.current);
     autoGuideTimerRef.current = null;
   }
 
-  autoGuidePendingKeyRef.current = key;
-
-    autoGuideTimerRef.current = window.setTimeout(() => {
+  autoGuideTimerRef.current = window.setTimeout(() => {
     try {
       window.speechSynthesis?.cancel();
     } catch {}
@@ -4048,9 +4095,12 @@ useEffect(() => {
       window.clearTimeout(autoGuideTimerRef.current);
       autoGuideTimerRef.current = null;
     }
-  };
-}, [mounted, pathname, assistantScopeKey, pageContext]);
 
+    if (autoGuidePendingKeyRef.current === key) {
+      autoGuidePendingKeyRef.current = "";
+    }
+  };
+}, [autoguideReady, autoguideKey, autoguideText, pathname]);
 useEffect(() => {
   function onPageRead(ev: Event) {
     const e = ev as CustomEvent<{ text?: string }>;
