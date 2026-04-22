@@ -179,12 +179,13 @@ function buildAutoguideIdentity(
   pageContext: {
     pageId?: string;
     activeViewId?: string;
-    status?: string;
-    dynamicData?: Record<string, unknown>;
   } | null
 ) {
-  const identity = buildAutoguideIdentity(pathname, pageContext);
-  return `votoclaro_autoguide_seen:${identity}`;
+  const p = String(pathname || "");
+  const pageId = String(pageContext?.pageId || "");
+  const activeViewId = String(pageContext?.activeViewId || "").trim();
+
+  return `votoclaro_autoguide_seen:${[p, pageId, activeViewId].join("::")}`;
 }
 
  function stringifyContextValue(v: unknown): string {
