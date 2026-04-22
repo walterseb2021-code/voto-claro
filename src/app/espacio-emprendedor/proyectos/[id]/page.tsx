@@ -434,10 +434,10 @@ export default function EspacioEmprendedorProjectDetailPage() {
   };
 }, [projectId, project, participant, esPropietario, destinatarioParam, selectedInvestorId]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (loading) return;
 
-            if (error || !project) {
+    if (error || !project) {
       setPageContext({
         pageId: "espacio-emprendedor-proyecto-detalle",
         pageTitle: "Espacio Emprendedor",
@@ -465,7 +465,8 @@ export default function EspacioEmprendedorProjectDetailPage() {
       });
       return;
     }
-         const latestMessage = messages.length ? messages[messages.length - 1] : null;
+
+    const latestMessage = messages.length ? messages[messages.length - 1] : null;
     const latestThread = threads.length ? threads[0] : null;
 
     const canSendMessage = Boolean(
@@ -482,19 +483,19 @@ export default function EspacioEmprendedorProjectDetailPage() {
         : "thread-detail";
 
     const currentThreadKey =
-  viewMode === "thread-detail"
-    ? buildThreadKey(
-        projectId,
-        esPropietario ? selectedInvestorId : participant?.id
-      )
-    : "";
+      viewMode === "thread-detail"
+        ? buildThreadKey(
+            projectId,
+            esPropietario ? selectedInvestorId : participant?.id
+          )
+        : "";
 
-const activeViewId =
-  viewMode === "public-only"
-    ? "public-detail"
-    : viewMode === "thread-list"
-    ? "thread-list"
-    : `thread-detail:${currentThreadKey || "unknown-thread"}`;
+    const activeViewId =
+      viewMode === "public-only"
+        ? "public-detail"
+        : viewMode === "thread-list"
+        ? "thread-list"
+        : `thread-detail:${currentThreadKey || "unknown-thread"}`;
 
     const activeViewTitle =
       viewMode === "public-only"
@@ -561,34 +562,34 @@ const activeViewId =
     ].filter(Boolean) as string[];
 
     const summary =
-  viewMode === "public-only"
-    ? "Detalle público del proyecto. La conversación privada está protegida."
-    : viewMode === "thread-list"
-    ? "Detalle del proyecto con lista de hilos privados por inversionista."
-    : esPropietario
-    ? "Detalle del proyecto con hilo privado abierto para un inversionista específico."
-    : "Detalle del proyecto con hilo privado del inversionista actual.";
+      viewMode === "public-only"
+        ? "Detalle público del proyecto. La conversación privada está protegida."
+        : viewMode === "thread-list"
+        ? "Detalle del proyecto con lista de hilos privados por inversionista."
+        : esPropietario
+        ? "Detalle del proyecto con hilo privado abierto para un inversionista específico."
+        : "Detalle del proyecto con hilo privado del inversionista actual.";
 
-const speakableSummary =
-  viewMode === "public-only"
-    ? `Estamos en el detalle de un proyecto del Espacio Emprendedor${
-        project?.title ? ` llamado ${project.title}` : ""
-      }. Aquí puedes revisar la información pública del proyecto, pero la conversación privada está protegida.`
-    : viewMode === "thread-list"
-    ? `Estamos en el detalle del proyecto${
-        project?.title ? ` ${project.title}` : ""
-      }. Aquí el emprendedor puede revisar la lista de hilos privados abiertos por inversionistas interesados.`
-    : esPropietario
-    ? `Estamos en el detalle del proyecto${
-        project?.title ? ` ${project.title}` : ""
-      }, dentro de un hilo privado abierto con${
-        selectedInvestorName ? ` ${selectedInvestorName}` : " un inversionista"
-      }.`
-    : `Estamos en el detalle del proyecto${
-        project?.title ? ` ${project.title}` : ""
-      }. Aquí estás viendo tu hilo privado con el emprendedor.`;
+    const speakableSummary =
+      viewMode === "public-only"
+        ? `Estamos en el detalle de un proyecto del Espacio Emprendedor${
+            project?.title ? ` llamado ${project.title}` : ""
+          }. Aquí puedes revisar la información pública del proyecto, pero la conversación privada está protegida.`
+        : viewMode === "thread-list"
+        ? `Estamos en el detalle del proyecto${
+            project?.title ? ` ${project.title}` : ""
+          }. Aquí el emprendedor puede revisar la lista de hilos privados abiertos por inversionistas interesados.`
+        : esPropietario
+        ? `Estamos en el detalle del proyecto${
+            project?.title ? ` ${project.title}` : ""
+          }, dentro de un hilo privado abierto con${
+            selectedInvestorName ? ` ${selectedInvestorName}` : " un inversionista"
+          }.`
+        : `Estamos en el detalle del proyecto${
+            project?.title ? ` ${project.title}` : ""
+          }. Aquí estás viendo tu hilo privado con el emprendedor.`;
 
-            setPageContext({
+    setPageContext({
       pageId: "espacio-emprendedor-proyecto-detalle",
       pageTitle: "Espacio Emprendedor",
       route: `/espacio-emprendedor/proyectos/${projectId}`,
@@ -655,11 +656,11 @@ const speakableSummary =
       visibleText: visibleParts.join("\n"),
       availableActions,
       selectedItemTitle:
-  viewMode === "thread-detail"
-    ? selectedInvestorName
-      ? `${project.title} · hilo con ${selectedInvestorName}`
-      : `${project.title} · hilo privado`
-    : project.title,
+        viewMode === "thread-detail"
+          ? selectedInvestorName
+            ? `${project.title} · hilo con ${selectedInvestorName}`
+            : `${project.title} · hilo privado`
+          : project.title,
       status: loading ? "loading" : error ? "error" : "ready",
       dynamicData: {
         userRole,
@@ -667,14 +668,15 @@ const speakableSummary =
         privacyMode: "private-threads",
         participantLogueado: !!participant,
         afiliadoVerificado: !!afiliadoId,
-        esPropietario,
-        projectId: project.id,
+        ownerParticipantId: ownerParticipantId || "",
+        projectId,
         projectTitle: project.title,
-        ownerName: project.owner?.nombres_completos || "",
-        threadCount: threads.length,
-        threadListVisible: viewMode === "thread-list",
-        threadDetailVisible: viewMode === "thread-detail",
-        selectedThreadKey: selectedInvestorId ? buildThreadKey(projectId, selectedInvestorId) : "",
+        selectedThreadKey:
+          viewMode === "thread-detail"
+            ? currentThreadKey
+            : esPropietario
+            ? buildThreadKey(projectId, selectedInvestorId)
+            : "",
         selectedInvestorId: selectedInvestorId || "",
         selectedInvestorName: selectedInvestorName || "",
         latestThreadInvestorName: latestThread?.investorName || "",
@@ -700,13 +702,8 @@ const speakableSummary =
         })),
       },
     });
-
-    return () => {
-      clearPageContext();
-    };
   }, [
     setPageContext,
-    clearPageContext,
     loading,
     error,
     project,
@@ -714,12 +711,18 @@ const speakableSummary =
     participant,
     afiliadoId,
     esPropietario,
+    ownerParticipantId,
     threads,
     selectedInvestorId,
     selectedInvestorName,
     messages,
     realtimeStatus,
   ]);
+    useEffect(() => {
+    return () => {
+      clearPageContext();
+    };
+  }, [clearPageContext]);
 
   const openThreadAsOwner = async (investorId: string, investorName: string) => {
     setSelectedInvestorId(investorId);
