@@ -3233,29 +3233,7 @@ export default function FederalitoAssistantPanel() {
   }, []);
 
   // ✅ Al cambiar de ventana, cortar cualquier narración en curso
-    useEffect(() => {
-  try {
-    window.speechSynthesis?.cancel();
-  } catch {}
-
-  pendingGuideSpeakRef.current = null;
-  pendingGuidePathRef.current = null;
-  pendingGuideSeenKeyRef.current = null;
-  autoGuidePendingKeyRef.current = "";
-  pageReadPathRef.current = String(pathname || "");
-  setPageReadText("");
-  setPageReadAt(0);
-
-  try {
-    const sel = window.getSelection?.();
-    sel?.removeAllRanges?.();
-  } catch {}
-
-  try {
-    (document.activeElement as HTMLElement | null)?.blur?.();
-  } catch {}
-}, [pathname]);
-
+   
   useEffect(() => {
     if (!mounted) return;
 
