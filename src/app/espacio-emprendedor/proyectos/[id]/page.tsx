@@ -718,6 +718,72 @@ export default function EspacioEmprendedorProjectDetailPage() {
     messages,
     realtimeStatus,
   ]);
+       useEffect(() => {
+    if (loading) return;
+    if (error || !project) return;
+
+    const viewMode =
+      !participant
+        ? "public-only"
+        : esPropietario && !selectedInvestorId
+        ? "thread-list"
+        : "thread-detail";
+
+    const speakableSummary =
+      viewMode === "public-only"
+        ? `Estamos en el detalle de un proyecto del Espacio Emprendedor${
+            project?.title ? ` llamado ${project.title}` : ""
+          }. Aquí puedes revisar la información pública del proyecto, pero la conversación privada está protegida.`
+        : viewMode === "thread-list"
+        ? `Estamos en el detalle del proyecto${
+            project?.title ? ` ${project.title}` : ""
+          }. Aquí el emprendedor puede revisar la lista de hilos privados abiertos por inversionistas interesados.`
+        : esPropietario
+        ? `Estamos en el detalle del proyecto${
+            project?.title ? ` ${project.title}` : ""
+          }, dentro de un hilo privado abierto con${
+            selectedInvestorName ? ` ${selectedInvestorName}` : " un inversionista"
+          }.`
+        : `Estamos en el detalle del proyecto${
+            project?.title ? ` ${project.title}` : ""
+          }. Aquí estás viendo tu hilo privado con el emprendedor.`;
+
+    const seenKey = `votoclaro_autoguide_seen:ee-project-detail:${projectId}:${viewMode}:${
+      selectedInvestorId || "default"
+    }`;
+
+    try {
+      if (sessionStorage.getItem(seenKey) === "1") {
+        return;
+      }
+    } catch {}
+
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("votoclaro:guide", {
+          detail: {
+            action: "SAY",
+            text: speakableSummary,
+            speak: true,
+            seenKey,
+          },
+        })
+      );
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    loading,
+    error,
+    project,
+    projectId,
+    participant,
+    esPropietario,
+    selectedInvestorId,
+    selectedInvestorName,
+  ]);
     useEffect(() => {
     return () => {
       clearPageContext();
