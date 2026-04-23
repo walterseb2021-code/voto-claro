@@ -164,18 +164,23 @@ function buildAutoguideIdentity(
   ].join("::");
 }
 
-  function buildAutoguideSeenKey(
+   function buildAutoguideSeenKey(
   pathname: string,
   pageContext: {
     pageId?: string;
     activeViewId?: string;
+    dynamicData?: Record<string, unknown>;
   } | null
 ) {
   const p = String(pathname || "");
   const pageId = String(pageContext?.pageId || "");
   const activeViewId = String(pageContext?.activeViewId || "").trim();
+  const data = (pageContext?.dynamicData || {}) as Record<string, unknown>;
 
-  return `votoclaro_autoguide_seen:${[p, pageId, activeViewId].join("::")}`;
+  const returnTo = String(data.returnTo || data.normalizedReturnTo || "").trim();
+  const destinationLabel = String(data.destinationLabel || "").trim();
+
+  return `votoclaro_autoguide_seen:${[p, pageId, activeViewId, returnTo, destinationLabel].join("::")}`;
 }
 
  function stringifyContextValue(v: unknown): string {
@@ -267,16 +272,23 @@ function buildDynamicPageContextText(pageContext: {
   const actions = pageContext.availableActions || [];
   const data = pageContext.dynamicData || {};
   const pageId = String(pageContext.pageId || "");
-    const retoMode = String(data.mode || "").trim();
-  const premioAutorizado = Boolean(data.premioAutorizado);
-  const retoAlias = String(data.alias || "").trim();
-  const retoNivel1Passed = Boolean(data.nivel1Passed);
-  const retoNivel1Good = Number(data.nivel1Good || 0);
-  const retoNivel2Passed = Boolean(data.nivel2Passed);
-  const retoNivel2Good = Number(data.nivel2Good || 0);
-  const retoPartyId = String(data.partyId || "").trim();
-  const retoPartyIdsCount = Number(data.partyIdsCount || 0);
-  const listaGanadoresVisible = Boolean(data.listaGanadoresVisible);
+  const retoMode = String(data.mode || "").trim();
+const premioAutorizado =
+  Boolean(data.premioAutorizado) || Boolean(data.puedeJugarConPremio);
+const retoAlias = String(
+  data.alias || data.participanteAlias || data.participanteNombre || ""
+).trim();
+const retoNivel1Passed = Boolean(data.nivel1Passed);
+const retoNivel1Good = Number(data.nivel1Good || 0);
+const retoNivel2Passed = Boolean(data.nivel2Passed);
+const retoNivel2Good = Number(data.nivel2Good || 0);
+const retoPartyId = String(data.partyId || "").trim();
+const retoPartyIdsCount = Number(data.partyIdsCount || 0);
+const listaGanadoresVisible = Boolean(data.listaGanadoresVisible);
+const retoCheckingData = Boolean(data.checkingData);
+const retoAccesoVerificado = Boolean(data.accesoVerificado);
+const premioCheckLoading = Boolean(data.premioCheckLoading);
+const premioCheckError = String(data.premioCheckError || "").trim();
 
     const rondaActiva = Boolean(data.rondaActiva);
   const nombreRonda = String(data.nombreRonda || "").trim();
@@ -689,7 +701,11 @@ const asksCommentVsOpenForums =
     : "Si quieres, pregúntame algo más concreto sobre tu voto, la ronda activa, tu selección o las preguntas posteriores.")
 );
   }
-       if (pageId === "reto-ciudadano") {
+     if (
+  pageId === "reto-ciudadano" ||
+  pageId === "reto-ciudadano-principal" ||
+  pageId === "reto-ciudadano-camino"
+) {
     const asksMode =
       q.includes("modo") ||
       q.includes("con premio") ||
@@ -759,37 +775,66 @@ const asksCommentVsOpenForums =
       );
     }
 
-    if (asksMode) {
-      if (!retoMode) {
-        return "No detecto claramente el modo actual del reto en esta pantalla.";
-      }
+      if (asksMode) {
+  if (!retoMode) {
+    return "No detecto claramente el modo actual del reto en esta pantalla.";
+  }
 
-      if (retoMode === "con_premio") {
-        return (
-          "El modo actual visible es: con premio.\n\n" +
-          (premioAutorizado
-            ? "El registro para premio ya aparece validado."
-            : "Todavía se requiere completar el registro para jugar por premio.")
-        );
-      }
-
-      return "El modo actual visible es: sin premio.";
+  if (retoMode === "con_premio") {
+    if (premioCheckLoading) {
+      return "El modo actual visible es con premio y la validación de elegibilidad todavía está en proceso.";
     }
 
-    if (asksRegister) {
-      if (retoMode !== "con_premio") {
-        return "En modo sin premio no detecto que necesites registro obligatorio para jugar.";
-      }
-
-      if (premioAutorizado) {
-        return (
-          `Sí. El registro para premio ya aparece validado.` +
-          (retoAlias ? `\n\nAlias visible: ${retoAlias}.` : "")
-        );
-      }
-
-      return "Todavía falta completar el registro obligatorio para participar con premio.";
+    if (premioCheckError) {
+      return (
+        "El modo actual visible es con premio, pero ahora mismo hay una observación o bloqueo visible para esa modalidad.\n\n" +
+        `Detalle visible: ${premioCheckError}`
+      );
     }
+
+    return (
+      "El modo actual visible es: con premio.\n\n" +
+      (premioAutorizado
+        ? "El acceso para premio ya aparece habilitado."
+        : "Todavía falta registrarte o iniciar sesión desde la ventana principal de Reto Ciudadano.")
+    );
+  }
+
+  return "El modo actual visible es: sin premio.";
+}
+
+     if (asksRegister) {
+  if (retoCheckingData) {
+    return "Ahora mismo el sistema está verificando si ya existe una sesión activa de participante para Reto Ciudadano.";
+  }
+
+  if (retoMode !== "con_premio") {
+    return "En modo sin premio no detecto que necesites registro obligatorio para jugar.";
+  }
+
+  if (!retoAccesoVerificado) {
+    return (
+      "Para jugar con premio en Reto Ciudadano, primero debes registrarte o iniciar sesión desde la ventana principal del módulo.\n\n" +
+      "Después de eso podrás entrar al juego con premio."
+    );
+  }
+
+  if (premioAutorizado) {
+    return (
+      "Sí. El acceso para premio ya aparece habilitado." +
+      (retoAlias ? `\n\nParticipante visible: ${retoAlias}.` : "")
+    );
+  }
+
+  if (premioCheckError) {
+    return (
+      "Tu sesión general ya existe, pero la modalidad con premio no aparece habilitada en este momento.\n\n" +
+      `Detalle visible: ${premioCheckError}`
+    );
+  }
+
+  return "La pantalla muestra una sesión activa, pero la modalidad con premio todavía no aparece habilitada.";
+}
 
     if (asksLevel1) {
       return retoNivel1Passed
@@ -846,7 +891,44 @@ const asksCommentVsOpenForums =
         ? "Sí. En esta pantalla está visible la lista pública de ganadores del reto."
         : "No detecto la lista de ganadores visible en este momento.";
     }
+     if (pageId === "reto-ciudadano-camino") {
+  const caminoShowQuestion = Boolean(data.showQuestion);
+  const caminoWon = Boolean(data.won);
+  const caminoGameOver = Boolean(data.gameOver);
+  const caminoSteps = Number(data.steps || 0);
+  const caminoPosition = Number(data.position || 0);
 
+  if (asksHelp) {
+    if (caminoShowQuestion) {
+      return "Ahora mismo estás en Camino Ciudadano con una pregunta activa. Debes responderla para continuar avanzando.";
+    }
+
+    if (caminoWon) {
+      return "Ya llegaste a la meta en Camino Ciudadano.";
+    }
+
+    if (caminoGameOver) {
+      return "La partida actual de Camino Ciudadano terminó sin llegar a la meta.";
+    }
+
+    return (
+      "Estás en Camino Ciudadano.\n\n" +
+      "Aquí avanzas por casillas, respondes preguntas y buscas llegar a la meta."
+    );
+  }
+
+  if (asksProgress) {
+    return (
+      `Tu avance visible en Camino Ciudadano muestra posición ${caminoPosition} y ${caminoSteps} pasos registrados.` +
+      (caminoWon ? "\n\nLa meta ya fue alcanzada." : "") +
+      (caminoGameOver ? "\n\nLa partida actual aparece terminada." : "")
+    );
+  }
+
+  if (asksLevel1 || asksLevel2 || asksLevel3) {
+    return "Camino Ciudadano no usa los niveles 1, 2 y 3 del reto principal. Esta subventana funciona como un juego distinto dentro de Reto Ciudadano.";
+  }
+}
     if (asksActions) {
       if (!actions.length) {
         return "En este momento no detecté acciones claras en esta pantalla.";

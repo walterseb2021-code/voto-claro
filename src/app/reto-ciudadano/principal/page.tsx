@@ -2001,21 +2001,101 @@ export default function RetoCiudadanoPrincipalPage() {
     ? "loading"
     : "ready";
 
-    setPageContext({
-      pageId: "reto-ciudadano-principal",
-      pageTitle: "Reto ciudadano — reto principal",
-      route: "/reto-ciudadano/principal",
-      summary,
-      activeSection,
-      visibleText: visibleParts.join("\n"),
-      availableActions,
-            selectedItemTitle:
-        participant?.alias ||
-        participant?.full_name ||
-        partyId ||
-        (mode === "con_premio"
-          ? "Modo con premio"
-          : "Modo sin premio"),
+         setPageContext({
+  pageId: "reto-ciudadano-principal",
+  pageTitle: "Reto ciudadano — reto principal",
+  route: "/reto-ciudadano/principal",
+  summary,
+  speakableSummary:
+    mode === "con_premio" && !hasData
+      ? "Estás en el reto principal de Reto Ciudadano. Para jugar con premio, primero debes registrarte o iniciar sesión desde la ventana principal de Reto Ciudadano."
+      : !nivel1Passed
+      ? "Estás en el reto principal de Reto Ciudadano. Ahora mismo corresponde comenzar el nivel 1 de conocimiento general."
+      : !nivel2Passed
+      ? "Estás en el reto principal de Reto Ciudadano. Ya pasaste al nivel 2 y ahora debes responder preguntas del partido seleccionado."
+      : "Estás en el reto principal de Reto Ciudadano. Ya llegaste al nivel 3 y puedes girar la ruleta.",
+  activeSection,
+  visibleText: visibleParts.join("\n"),
+          availableActions,
+  suggestedPrompts:
+    mode === "con_premio" && !hasData
+      ? [
+          {
+            id: "reto-principal-1",
+            label: "¿Cómo juego con premio?",
+            question: "¿Cómo juego con premio en el reto principal?",
+          },
+          {
+            id: "reto-principal-2",
+            label: "¿Qué me falta?",
+            question: "¿Qué me falta para poder jugar con premio en esta pantalla?",
+          },
+          {
+            id: "reto-principal-3",
+            label: "¿Puedo jugar libre?",
+            question: "¿Puedo jugar sin premio en esta pantalla?",
+          },
+        ]
+      : !nivel1Passed
+      ? [
+          {
+            id: "reto-principal-1",
+            label: "¿Cómo empiezo?",
+            question: "¿Cómo empiezo el nivel 1 en el reto principal?",
+          },
+          {
+            id: "reto-principal-2",
+            label: "¿Cómo se aprueba?",
+            question: "¿Cómo se aprueba el nivel 1 del reto principal?",
+          },
+          {
+            id: "reto-principal-3",
+            label: "¿Cuánto tiempo tengo?",
+            question: "¿Cuánto tiempo tengo para responder en el nivel 1?",
+          },
+        ]
+      : !nivel2Passed
+      ? [
+          {
+            id: "reto-principal-1",
+            label: "¿Qué sigue ahora?",
+            question: "¿Qué sigue ahora en el nivel 2 del reto principal?",
+          },
+          {
+            id: "reto-principal-2",
+            label: "¿Cómo apruebo nivel 2?",
+            question: "¿Cómo apruebo el nivel 2 del reto principal?",
+          },
+          {
+            id: "reto-principal-3",
+            label: "¿Qué partido está activo?",
+            question: "¿Qué partido está seleccionado ahora en el nivel 2?",
+          },
+        ]
+      : [
+          {
+            id: "reto-principal-1",
+            label: "¿Cómo funciona la ruleta?",
+            question: "¿Cómo funciona la ruleta del reto principal?",
+          },
+          {
+            id: "reto-principal-2",
+            label: "¿Qué números premian?",
+            question: "¿Qué números dan premio en la ruleta del reto principal?",
+          },
+          {
+            id: "reto-principal-3",
+            label: "¿Dónde veo ganadores?",
+            question: "¿Dónde veo la lista de ganadores del reto principal?",
+          },
+        ],
+  selectedItemTitle:
+    participant?.alias ||
+    participant?.full_name ||
+    partyId ||
+    (mode === "con_premio"
+      ? "Modo con premio"
+      : "Modo sin premio"),
       status,
             dynamicData: {
         accesoVerificado: hasData,

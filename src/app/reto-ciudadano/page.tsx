@@ -160,25 +160,72 @@ export default function RetoCiudadanoPage() {
     }
 
     setPageContext({
-      pageId: "reto-ciudadano",
-      pageTitle: "Reto ciudadano",
-      route: "/reto-ciudadano",
-      summary:
-        "Pantalla principal de Reto Ciudadano con acceso a sus juegos y a la lógica general de registro para premio.",
-      activeSection: checkingData ? "verificando-acceso" : "hub-reto-ciudadano",
-      visibleText: visibleParts.join("\n"),
-      availableActions: hasData
-        ? ["Entrar al Reto principal", "Entrar a Camino Ciudadano", "Volver al inicio"]
-        : [
-            "Registrarme para jugar con premio",
-            "Iniciar sesión con código",
-            "Entrar al Reto principal",
-            "Entrar a Camino Ciudadano",
-            "Volver al inicio",
-          ],
-      selectedItemTitle: hasData
-        ? participant?.alias || participant?.full_name || "Reto Ciudadano"
-        : "Reto Ciudadano",
+  pageId: "reto-ciudadano",
+  pageTitle: "Reto ciudadano",
+  route: "/reto-ciudadano",
+  summary:
+    "Pantalla principal de Reto Ciudadano con acceso a sus juegos y a la lógica general de registro para premio.",
+  speakableSummary:
+    "Estás en Reto Ciudadano. Aquí puedes registrarte o iniciar sesión para participar en modalidades con premio, o entrar libremente a los juegos sin premio.",
+  activeSection: checkingData ? "verificando-acceso" : "hub-reto-ciudadano",
+  visibleText: visibleParts.join("\n"),
+       availableActions: hasData
+    ? ["Entrar al Reto principal", "Entrar a Camino Ciudadano", "Volver al inicio"]
+    : [
+        "Registrarme para jugar con premio",
+        "Iniciar sesión con código",
+        "Entrar al Reto principal",
+        "Entrar a Camino Ciudadano",
+        "Volver al inicio",
+      ],
+  suggestedPrompts: hasData
+    ? [
+        {
+          id: "reto-hub-1",
+          label: "¿Qué puedo hacer aquí?",
+          question: "¿Qué puedo hacer ahora en esta pantalla de Reto Ciudadano?",
+        },
+        {
+          id: "reto-hub-2",
+          label: "¿Ya estoy habilitado?",
+          question: "¿Ya aparezco con acceso habilitado para jugar con premio en Reto Ciudadano?",
+        },
+        {
+          id: "reto-hub-3",
+          label: "¿Cuál juego elijo?",
+          question: "¿Qué diferencia hay entre Reto principal y Camino Ciudadano?",
+        },
+        {
+          id: "reto-hub-4",
+          label: "¿Cómo entro con premio?",
+          question: "¿Cómo participo con premio desde esta pantalla de Reto Ciudadano?",
+        },
+      ]
+    : [
+        {
+          id: "reto-hub-1",
+          label: "¿Cómo participo?",
+          question: "¿Cómo participo en Reto Ciudadano desde esta pantalla?",
+        },
+        {
+          id: "reto-hub-2",
+          label: "¿Premio o libre?",
+          question: "¿Cuál es la diferencia entre jugar con premio y jugar sin premio en Reto Ciudadano?",
+        },
+        {
+          id: "reto-hub-3",
+          label: "¿Necesito registro?",
+          question: "¿Necesito registrarme para jugar en Reto Ciudadano?",
+        },
+        {
+          id: "reto-hub-4",
+          label: "¿Qué juegos hay?",
+          question: "¿Qué juegos están disponibles en esta pantalla de Reto Ciudadano?",
+        },
+      ],
+  selectedItemTitle: hasData
+    ? participant?.alias || participant?.full_name || "Reto Ciudadano"
+    : "Reto Ciudadano",
       status: dataError ? "error" : checkingData ? "loading" : "ready",
       dynamicData: {
         subventanasDisponibles: 2,

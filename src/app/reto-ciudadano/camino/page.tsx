@@ -59,15 +59,81 @@ visibleParts.push(
   ? "Pantalla de Camino Ciudadano con juego completado."
   : "Pantalla de Camino Ciudadano con recorrido por casillas, preguntas y avance hacia la meta.";
 
-    setPageContext({
-      pageId: "reto-ciudadano-camino",
-      pageTitle: "Camino Ciudadano",
-      route: "/reto-ciudadano/camino",
-      summary,
-      activeSection,
-      visibleText: visibleParts.join("\n"),
-      availableActions,
-      selectedItemTitle: mode === "con_premio" ? "Modo con premio" : "Modo sin premio",
+      setPageContext({
+  pageId: "reto-ciudadano-camino",
+  pageTitle: "Camino Ciudadano",
+  route: "/reto-ciudadano/camino",
+  summary,
+  speakableSummary:
+    caminoState?.showQuestion
+      ? "Estás en Camino Ciudadano y ahora mismo tienes una pregunta activa que debes responder para continuar avanzando."
+      : caminoState?.won
+      ? "Estás en Camino Ciudadano y ya alcanzaste la meta del recorrido."
+      : caminoState?.gameOver
+      ? "Estás en Camino Ciudadano y el juego actual terminó sin llegar a la meta."
+      : "Estás en Camino Ciudadano. Aquí avanzarás por casillas, responderás preguntas y buscarás llegar a la meta.",
+  activeSection,
+  visibleText: visibleParts.join("\n"),
+       availableActions,
+  suggestedPrompts: caminoState?.showQuestion
+    ? [
+        {
+          id: "camino-1",
+          label: "¿Qué hago ahora?",
+          question: "¿Qué debo hacer ahora en esta pregunta de Camino Ciudadano?",
+        },
+        {
+          id: "camino-2",
+          label: "¿Cuánto tiempo queda?",
+          question: "¿Cuánto tiempo queda para responder en Camino Ciudadano?",
+        },
+        {
+          id: "camino-3",
+          label: "¿Qué pasa si fallo?",
+          question: "¿Qué pasa si no respondo bien esta pregunta en Camino Ciudadano?",
+        },
+      ]
+    : caminoState?.won
+    ? [
+        {
+          id: "camino-1",
+          label: "¿Ya gané?",
+          question: "¿Ya gané en Camino Ciudadano?",
+        },
+        {
+          id: "camino-2",
+          label: "¿Qué sigue ahora?",
+          question: "¿Qué sigue ahora después de ganar en Camino Ciudadano?",
+        },
+        {
+          id: "camino-3",
+          label: "¿Puedo volver a jugar?",
+          question: "¿Puedo volver a jugar Camino Ciudadano?",
+        },
+      ]
+    : [
+        {
+          id: "camino-1",
+          label: "¿Cómo se juega?",
+          question: "¿Cómo se juega Camino Ciudadano?",
+        },
+        {
+          id: "camino-2",
+          label: "¿Qué hago al empezar?",
+          question: "¿Qué hago primero al entrar a Camino Ciudadano?",
+        },
+        {
+          id: "camino-3",
+          label: "¿Cómo avanzo?",
+          question: "¿Cómo avanzo por las casillas en Camino Ciudadano?",
+        },
+        {
+          id: "camino-4",
+          label: "¿Qué diferencia hay?",
+          question: "¿Qué diferencia hay entre jugar Camino Ciudadano con premio y sin premio?",
+        },
+      ],
+  selectedItemTitle: mode === "con_premio" ? "Modo con premio" : "Modo sin premio",
       status: "ready",
       dynamicData: {
         mode,
