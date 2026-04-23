@@ -102,12 +102,12 @@ visibleParts.push(
         </div>
 
         <div className="shrink-0 flex flex-col gap-2">
-          <Link
-            href="/reto-ciudadano"
-            className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 text-center vc-btn-wave vc-btn-pulse"
-          >
-            ← Volver a Reto Ciudadano
-          </Link>
+            <Link
+  href="/reto-ciudadano"
+  className="rounded-xl border px-3 py-2 text-sm font-semibold text-white bg-blue-600 border-blue-700 hover:bg-blue-700 text-center vc-btn-wave vc-btn-pulse"
+>
+  ← Volver a Reto Ciudadano
+</Link>
         </div>
       </div>
 

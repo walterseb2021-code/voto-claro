@@ -2086,20 +2086,17 @@ export default function RetoCiudadanoPrincipalPage() {
         </p>
       </div>
 
-      <div className="shrink-0 flex flex-col gap-2">
-        <Link
-          href="/"
-          className="rounded-xl border px-3 py-2 text-sm font-semibold text-white bg-blue-600 border-blue-700 hover:bg-blue-700 text-center vc-btn-wave vc-btn-pulse"
-        >
-          ← Volver al inicio
-        </Link>
-        <Link
-          href="/reto-ciudadano"
-          className="rounded-xl border px-3 py-2 text-sm font-semibold text-white bg-blue-600 border-blue-700 hover:bg-blue-700 text-center vc-btn-wave vc-btn-pulse"
-        >
-          ← Volver a Reto Ciudadano
-        </Link>
-      </div>
+        <div className="shrink-0 flex flex-col gap-2">
+  <button
+    type="button"
+    onClick={() => {
+      window.location.href = "/reto-ciudadano";
+    }}
+    className="rounded-xl border px-3 py-2 text-sm font-semibold text-white bg-blue-600 border-blue-700 hover:bg-blue-700 text-center vc-btn-wave vc-btn-pulse"
+  >
+    ← Volver a Reto Ciudadano
+  </button>
+</div>
     </div>
 
          <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-1">
