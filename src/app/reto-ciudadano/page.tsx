@@ -49,7 +49,7 @@ export default function RetoCiudadanoPage() {
             Este módulo reúne varias experiencias de juego ciudadano.
           </p>
           <p className="mt-1 text-xs text-slate-600">
-            Elige la subventana a la que quieres entrar.
+            Elige la juego al que quieres entrar.
           </p>
         </div>
 

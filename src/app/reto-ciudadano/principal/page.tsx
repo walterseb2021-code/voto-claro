@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { useRouter } from "next/navigation";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type PlayMode = "sin_premio" | "con_premio";
@@ -1610,8 +1609,7 @@ function ListaGanadores(props: {
 }
 
 export default function RetoCiudadanoPrincipalPage() {
-  const router = useRouter();
-  const { setPageContext, clearPageContext } = useAssistantRuntime();
+    const { setPageContext, clearPageContext } = useAssistantRuntime();
     const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -2080,9 +2078,38 @@ export default function RetoCiudadanoPrincipalPage() {
     };
   }, [clearPageContext]);
 
-  return (
-    <main className="vc-reto mx-auto max-w-4xl px-4 py-6 vc-fade-up">
-            <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up">
+        return (
+  <main className="vc-reto mx-auto max-w-4xl px-4 py-6 vc-fade-up">
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-xl md:text-2xl font-extrabold text-slate-900">
+          RETO CIUDADANO — RETO PRINCIPAL
+        </h1>
+        <p className="mt-1 text-sm text-slate-700">
+          Juego por niveles: Conocimiento general → Partido → Ruleta.
+        </p>
+        <p className="mt-1 text-xs text-slate-600">
+          Modo actual: <span className="font-semibold">{modeLabel}</span>
+        </p>
+      </div>
+
+      <div className="shrink-0 flex flex-col gap-2">
+        <Link
+          href="/"
+          className="rounded-xl border px-3 py-2 text-sm font-semibold text-white bg-blue-600 border-blue-700 hover:bg-blue-700 text-center vc-btn-wave vc-btn-pulse"
+        >
+          ← Volver al inicio
+        </Link>
+        <Link
+          href="/reto-ciudadano"
+          className="rounded-xl border px-3 py-2 text-sm font-semibold text-white bg-blue-600 border-blue-700 hover:bg-blue-700 text-center vc-btn-wave vc-btn-pulse"
+        >
+          ← Volver a Reto Ciudadano
+        </Link>
+      </div>
+    </div>
+
+    <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up">
         <div className="text-sm font-extrabold text-slate-900">Acceso de participación</div>
                 <p className="mt-2 text-sm text-slate-700">
           El registro es único para todo el app. Solo necesitas iniciar sesión con tu código si quieres jugar en modalidad con premio. La modalidad sin premio sigue siendo libre.
