@@ -1883,11 +1883,10 @@ export default function RetoCiudadanoPrincipalPage() {
     );
 
         if (mode === "con_premio" && !hasData) {
-      visibleParts.push(
-        "La modalidad con premio exige iniciar sesión con el código del registro general del app."
-      );
-    }
-
+  visibleParts.push(
+    "La modalidad con premio exige acceso previo desde la ventana principal de Reto Ciudadano."
+  );
+}
         if (mode === "con_premio" && hasData && premioCheckLoading) {
       visibleParts.push("Se está validando silenciosamente la modalidad con premio.");
     }
@@ -1952,61 +1951,55 @@ export default function RetoCiudadanoPrincipalPage() {
       }
     }
 
-            const activeSection =
-      checkingData
-        ? "verificando-acceso"
-                : mode === "con_premio" && !hasData
-        ? "acceso-premio"
-        : mode === "con_premio" && premioCheckLoading
-        ? "validando-premio"
-        : mode === "con_premio" && !premioHabilitado
-        ? "premio-no-habilitado"
-        : !nivel1Passed
-        ? "nivel-1"
-        : !nivel2Passed
-        ? "nivel-2"
-        : "nivel-3";
+           const activeSection =
+  mode === "con_premio" && !hasData
+    ? "acceso-premio"
+    : mode === "con_premio" && premioCheckLoading
+    ? "validando-premio"
+    : mode === "con_premio" && !premioHabilitado
+    ? "premio-no-habilitado"
+    : !nivel1Passed
+    ? "nivel-1"
+    : !nivel2Passed
+    ? "nivel-2"
+    : "nivel-3";
 
-             const availableActions =
-      checkingData
-        ? ["Esperar verificación de acceso"]
-                : mode === "con_premio" && !hasData
-        ? ["Registrarme en la ficha general", "Iniciar sesión con código", "Cambiar a modo sin premio"]
-        : mode === "con_premio" && premioCheckLoading
-        ? ["Esperar validación de premio", "Cambiar a modo sin premio"]
-        : mode === "con_premio" && !premioHabilitado
-        ? ["Cambiar a modo sin premio", "Revisar datos del participante"]
-        : !nivel1Passed
-        ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
-        : !nivel2Passed
-        ? ["Seleccionar partido", "Comenzar Nivel 2", "Responder preguntas del partido"]
-        : [
-            "Comenzar Nivel 3",
-            "Girar la ruleta",
-            "Revisar lista de ganadores",
-          ];
+            const availableActions =
+  mode === "con_premio" && !hasData
+    ? ["Volver a Reto Ciudadano", "Cambiar a modo sin premio"]
+    : mode === "con_premio" && premioCheckLoading
+    ? ["Esperar validación de premio", "Cambiar a modo sin premio"]
+    : mode === "con_premio" && !premioHabilitado
+    ? ["Cambiar a modo sin premio", "Volver a Reto Ciudadano"]
+    : !nivel1Passed
+    ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
+    : !nivel2Passed
+    ? ["Seleccionar partido", "Comenzar Nivel 2", "Responder preguntas del partido"]
+    : [
+        "Comenzar Nivel 3",
+        "Girar la ruleta",
+        "Revisar lista de ganadores",
+      ];
 
-              const summary =
-      checkingData
-        ? "Pantalla del reto principal verificando acceso del participante."
-                : mode === "con_premio" && !hasData
-        ? "Pantalla del reto principal en modalidad con premio, pendiente de inicio de sesión con el código general del app."
-        : mode === "con_premio" && premioCheckLoading
-        ? "Pantalla del reto principal validando silenciosamente la elegibilidad para premio."
-        : mode === "con_premio" && !premioHabilitado
-        ? "Pantalla del reto principal con premio no habilitado por validación o bloqueo."
-        : !nivel1Passed
-        ? "Pantalla del reto principal en Nivel 1 de conocimiento general."
-        : !nivel2Passed
-        ? "Pantalla del reto principal en Nivel 2 por partido político."
-        : "Pantalla del reto principal con Nivel 3 desbloqueado.";
+             const summary =
+  mode === "con_premio" && !hasData
+    ? "Pantalla del reto principal en modalidad con premio, pendiente de acceso desde la ventana principal de Reto Ciudadano."
+    : mode === "con_premio" && premioCheckLoading
+    ? "Pantalla del reto principal validando silenciosamente la elegibilidad para premio."
+    : mode === "con_premio" && !premioHabilitado
+    ? "Pantalla del reto principal con premio no habilitado por validación o bloqueo."
+    : !nivel1Passed
+    ? "Pantalla del reto principal en Nivel 1 de conocimiento general."
+    : !nivel2Passed
+    ? "Pantalla del reto principal en Nivel 2 por partido político."
+    : "Pantalla del reto principal con Nivel 3 desbloqueado.";
 
          const status =
-      dataError || partyError || ganadoresState?.error
-        ? "error"
-        : checkingData || partyLoading || ganadoresState?.loading
-        ? "loading"
-        : "ready";
+  dataError || partyError || ganadoresState?.error
+    ? "error"
+    : partyLoading || ganadoresState?.loading || premioCheckLoading
+    ? "loading"
+    : "ready";
 
     setPageContext({
       pageId: "reto-ciudadano-principal",
@@ -2109,101 +2102,7 @@ export default function RetoCiudadanoPrincipalPage() {
       </div>
     </div>
 
-    <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up">
-        <div className="text-sm font-extrabold text-slate-900">Acceso de participación</div>
-                <p className="mt-2 text-sm text-slate-700">
-          El registro es único para todo el app. Solo necesitas iniciar sesión con tu código si quieres jugar en modalidad con premio. La modalidad sin premio sigue siendo libre.
-        </p>
-
-        {checkingData ? (
-          <div className="mt-4 rounded-xl border bg-white p-3 text-sm font-bold text-slate-800">
-            Verificando si ya tienes una sesión activa como participante…
-          </div>
-        ) : null}
-
-        {dataError ? (
-          <div className="mt-4 rounded-xl border bg-red-50 p-3 text-sm font-bold text-red-700">
-            Error al verificar datos: {dataError}
-          </div>
-        ) : null}
-
-        {!checkingData && !hasData ? (
-          <div className="mt-4 grid gap-4">
-                        
-            <div className="flex gap-2 flex-wrap">
-              <Link
-              href="/proyecto-ciudadano/registro?returnTo=/reto-ciudadano/principal"
-              className="inline-flex items-center rounded-xl border px-4 py-2 text-sm font-extrabold bg-blue-600 text-white border-blue-700 hover:bg-blue-700 vc-btn-wave vc-btn-pulse"
-              >
-              Registrarme para participar
-             </Link>
-            </div>
-
-            <div className="rounded-2xl border bg-white p-4">
-              <h3 className="text-base font-extrabold text-slate-900 mb-2">
-                🔑 Iniciar sesión con código
-              </h3>
-              <p className="text-sm text-slate-700 mb-3">
-                Si ya tienes tu código de acceso, ingrésalo aquí para usar el Reto principal.
-              </p>
-
-              {loginCodigoError ? (
-                <div
-                  className="mb-3 rounded-xl p-3 text-sm font-semibold"
-                  style={{
-                    backgroundColor: loginCodigoError.includes("✅") ? "#f0fdf4" : "#fee2e2",
-                    border: loginCodigoError.includes("✅") ? "1px solid #bbf7d0" : "1px solid #fecaca",
-                    color: loginCodigoError.includes("✅") ? "#166534" : "#dc2626",
-                  }}
-                >
-                  {loginCodigoError}
-                </div>
-              ) : null}
-
-              <form onSubmit={handleLoginConCodigo} className="grid gap-3">
-                <input
-                  type="text"
-                  value={codigoAcceso}
-                  onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
-                  placeholder="Ej: EMP-2026-3A7F"
-                  className="rounded-xl border px-3 py-2 text-sm"
-                  disabled={loginCodigoLoading}
-                />
-
-                <button
-                  type="submit"
-                  className="w-full rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
-                  disabled={loginCodigoLoading}
-                >
-                  {loginCodigoLoading ? "Verificando..." : "Iniciar sesión con código"}
-                </button>
-              </form>
-            </div>
-          </div>
-        ) : null}
-
-        {!checkingData && hasData ? (
-          <div className="mt-4 rounded-2xl border bg-green-50 p-4">
-            <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
-
-            <div className="mt-1 text-sm text-slate-800 leading-relaxed">
-              Ya puedes usar el Reto principal con tu sesión general del app.
-            </div>
-
-            <div className="mt-2 text-sm text-slate-800">
-              Participante: <span className="font-extrabold">{participant?.full_name || "Participante activo"}</span>
-            </div>
-
-            {participant?.alias ? (
-              <div className="mt-1 text-sm text-slate-800">
-                Alias: <span className="font-extrabold">{participant.alias}</span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-1">
+         <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-1">
         <div className="text-sm font-extrabold text-slate-900">Elegir modalidad</div>
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -2220,16 +2119,17 @@ export default function RetoCiudadanoPrincipalPage() {
           </button>
 
           <button
-            type="button"
-            onClick={() => setMode("con_premio")}
-            className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
-              mode === "con_premio"
-                ? "bg-green-100 text-green-900 border-green-300"
-                : "bg-white text-slate-800 hover:bg-slate-50"
-            }`}
-          >
-            Con premio (requiere registro)
-          </button>
+  type="button"
+  onClick={() => setMode("con_premio")}
+  className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
+    mode === "con_premio"
+      ? "bg-green-100 text-green-900 border-green-300"
+      : "bg-white text-slate-800 hover:bg-slate-50"
+  }`}
+>
+  Con premio
+</button>
+
           {/* Descripción del premio */}
           {mode === "con_premio" && (
             <div className="mt-3 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
@@ -2241,7 +2141,7 @@ export default function RetoCiudadanoPrincipalPage() {
         </div>
 
         <p className="mt-3 text-xs text-slate-600">
-          Nota: el sistema de premios puede estar desactivado durante campaña por normativa.
+          Nota: para jugar con premio debes tener tu acceso habilitado desde la ventana principal de Reto Ciudadano.
         </p>
       </section>
 
@@ -2290,24 +2190,24 @@ export default function RetoCiudadanoPrincipalPage() {
       )}
           
               <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
-        {mode === "con_premio" && !checkingData && !hasData ? (
-          <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
-            🔒 Para jugar con premio debes iniciar sesión con tu código del registro general del app.
-          </div>
-        ) : mode === "con_premio" && !premioCheckLoading && !premioHabilitado ? (
-          <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
-            🔒 La modalidad con premio no está habilitada en este momento.
-          </div>
-        ) : (
-          <Nivel1General
-            key={`l1-${sessionKey}-${mode}`}
-            mode={mode}
-            onStatus={(s) => {
-              setNivel1Good(s.good);
-              setNivel1Passed(s.passed);
-            }}
-          />
-        )}
+           {mode === "con_premio" && !hasData ? (
+      <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+  🔒 Para jugar con premio debes registrarte o iniciar sesión desde la ventana principal de Reto Ciudadano.
+</div>
+) : mode === "con_premio" && !premioCheckLoading && !premioHabilitado ? (
+  <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+    🔒 La modalidad con premio no está habilitada en este momento.
+  </div>
+) : (
+  <Nivel1General
+    key={`l1-${sessionKey}-${mode}`}
+    mode={mode}
+    onStatus={(s) => {
+      setNivel1Good(s.good);
+      setNivel1Passed(s.passed);
+    }}
+  />
+)}
 
         <Nivel2Partido
           key={`l2-${sessionKey}-${mode}`}

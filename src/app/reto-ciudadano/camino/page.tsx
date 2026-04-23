@@ -17,9 +17,13 @@ export default function CaminoCiudadanoPage() {
   useEffect(() => {
     const visibleParts: string[] = [];
 
-    visibleParts.push(
-      `Modo actual visible: ${mode === "con_premio" ? "con premio" : "sin premio"}.`
-    );
+visibleParts.push("Bienvenido a Camino Ciudadano.");
+visibleParts.push(
+  "Aquí avanzarás por un recorrido de casillas, respondiendo preguntas y buscando llegar a la meta."
+);
+visibleParts.push(
+  `Modo actual visible: ${mode === "con_premio" ? "con premio" : "sin premio"}.`
+);
 
     if (caminoState) {
       visibleParts.push(
@@ -46,14 +50,14 @@ export default function CaminoCiudadanoPage() {
       : "camino-ciudadano";
 
     const availableActions = caminoState?.showQuestion
-      ? ["Responder pregunta de Camino Ciudadano"]
-      : ["Elegir modalidad", "Jugar Camino Ciudadano"];
+  ? ["Responder pregunta de Camino Ciudadano"]
+  : ["Elegir modalidad", "Lanzar dado", "Jugar Camino Ciudadano"];
 
     const summary = caminoState?.showQuestion
-      ? "Pantalla de Camino Ciudadano con una pregunta activa."
-      : caminoState?.won
-      ? "Pantalla de Camino Ciudadano con juego completado."
-      : "Pantalla independiente de Camino Ciudadano dentro de Reto Ciudadano.";
+  ? "Pantalla de Camino Ciudadano con una pregunta activa."
+  : caminoState?.won
+  ? "Pantalla de Camino Ciudadano con juego completado."
+  : "Pantalla de Camino Ciudadano con recorrido por casillas, preguntas y avance hacia la meta.";
 
     setPageContext({
       pageId: "reto-ciudadano-camino",
@@ -90,11 +94,11 @@ export default function CaminoCiudadanoPage() {
             RETO CIUDADANO — CAMINO CIUDADANO
           </h1>
           <p className="mt-1 text-sm text-slate-700">
-            Subventana independiente dentro de Reto Ciudadano.
-          </p>
-          <p className="mt-1 text-xs text-slate-600">
-            Más adelante esta ventana tendrá su propia lógica de elegibilidad trimestral.
-          </p>
+  Juego de recorrido por casillas donde avanzas, respondes preguntas y buscas llegar a la meta.
+</p>
+<p className="mt-1 text-xs text-slate-600">
+  Puedes jugar esta experiencia como parte del módulo Reto Ciudadano.
+</p>
         </div>
 
         <div className="shrink-0 flex flex-col gap-2">

@@ -122,12 +122,16 @@ function RegistroForm() {
   useEffect(() => {
     const normalizedReturnTo = (returnTo || '').trim();
 
-const destinationLabel =
+    const destinationLabel =
   normalizedReturnTo === 'espacio-emprendedor'
     ? 'Espacio Emprendedor'
     : normalizedReturnTo === 'comentarios'
     ? 'Comentarios Ciudadanos'
+    : normalizedReturnTo === '/reto-ciudadano' || normalizedReturnTo === 'reto-ciudadano'
+    ? 'Reto Ciudadano'
     : normalizedReturnTo === '/reto-ciudadano/principal' || normalizedReturnTo === 'reto-ciudadano/principal'
+    ? 'Reto Ciudadano'
+    : normalizedReturnTo === '/reto-ciudadano/camino' || normalizedReturnTo === 'reto-ciudadano/camino'
     ? 'Reto Ciudadano'
     : 'Proyecto Ciudadano';
 
@@ -343,14 +347,18 @@ const destinationLabel =
               </p>
             </div>
 
-          <Link
+            <Link
   href={
     normalizedReturnTo === 'espacio-emprendedor'
       ? '/espacio-emprendedor?registered=true'
       : normalizedReturnTo === 'comentarios'
       ? '/comentarios?registered=true'
+      : normalizedReturnTo === '/reto-ciudadano' || normalizedReturnTo === 'reto-ciudadano'
+      ? '/reto-ciudadano?registered=true'
       : normalizedReturnTo === '/reto-ciudadano/principal' || normalizedReturnTo === 'reto-ciudadano/principal'
-      ? '/reto-ciudadano/principal?registered=true'
+      ? '/reto-ciudadano?registered=true'
+      : normalizedReturnTo === '/reto-ciudadano/camino' || normalizedReturnTo === 'reto-ciudadano/camino'
+      ? '/reto-ciudadano?registered=true'
       : '/proyecto-ciudadano?registered=true'
   }
   className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
@@ -368,14 +376,18 @@ const destinationLabel =
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Registro de participante</h1>
-           <Link
+             <Link
   href={
     normalizedReturnTo === 'espacio-emprendedor'
       ? '/espacio-emprendedor'
       : normalizedReturnTo === 'comentarios'
       ? '/comentarios'
+      : normalizedReturnTo === '/reto-ciudadano' || normalizedReturnTo === 'reto-ciudadano'
+      ? '/reto-ciudadano'
       : normalizedReturnTo === '/reto-ciudadano/principal' || normalizedReturnTo === 'reto-ciudadano/principal'
-      ? '/reto-ciudadano/principal'
+      ? '/reto-ciudadano'
+      : normalizedReturnTo === '/reto-ciudadano/camino' || normalizedReturnTo === 'reto-ciudadano/camino'
+      ? '/reto-ciudadano'
       : '/proyecto-ciudadano'
   }
   className="text-sm text-slate-600 hover:underline"
@@ -385,10 +397,9 @@ const destinationLabel =
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
-          <p className="text-slate-600 mb-4 text-sm">
-           Completa tus datos para poder registrarte y participar.
-            Al finalizar, recibirás un código único para iniciar sesión rápidamente.
-          </p>
+           <p className="text-slate-600 mb-4 text-sm">
+  Completa tus datos para poder registrarte y participar. Al finalizar, recibirás un código único para iniciar sesión rápidamente.
+</p>
 
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
