@@ -153,7 +153,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
     return () => window.clearInterval(t);
   }, [locked]);
 
-  function lockOneHourAndStop() {
+  function lockAttemptWindowAndStop() {
     const until = Date.now() + LOCK_MS;
     setLockUntil(until);
     setStarted(false);
@@ -281,7 +281,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
     if (locked) return;
 
     if (attemptsLeft <= 0) {
-      lockOneHourAndStop();
+      lockAttemptWindowAndStop();
       return;
     }
 
@@ -336,7 +336,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
     if (passed) return;
 
     if (attemptsLeft <= 0) {
-      lockOneHourAndStop();
+      lockAttemptWindowAndStop();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished, passed]);
@@ -373,7 +373,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
             if (locked) return;
 
             if (attemptsLeft <= 0) {
-              lockOneHourAndStop();
+              lockAttemptWindowAndStop();
               return;
             }
 
@@ -509,9 +509,8 @@ function Nivel3Ruleta(props: {
   mode: PlayMode;
   onRestartToLevel1?: () => void;
   onFinishPick?: (pick: number) => void;
-  winnerData?: { alias: string; celular: string; email: string; dni: string } | null;
 }) {
-  const { enabled, mode, onRestartToLevel1, onFinishPick, winnerData } = props;
+  const { enabled, mode, onRestartToLevel1, onFinishPick } = props;
 
   const [started, setStarted] = useState(false);
 
@@ -676,30 +675,6 @@ function Nivel3Ruleta(props: {
 
       setSpinsUsed((x) => x + 1);
       setSpinning(false);
-
-      // ✅ Si es premio en modo con premio Y tenemos datos del ganador, guardar en BD
-      if (isPrize && mode === "con_premio" && winnerData) {
-        try {
-          const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-          );
-
-          await supabase.from("reto_ganadores").insert({
-            alias: winnerData.alias,
-            dni: winnerData.dni,
-            celular: winnerData.celular,
-            email: winnerData.email,
-            nivel: 3,
-            segmento: pick,
-            premio: "Premio ruleta",
-            device_id: "WEB",
-            group_code: "GRUPOA"
-          });
-        } catch (e) {
-          console.error("Error guardando ganador:", e);
-        }
-      }
 
       onFinishPick?.(pick);
     }, 2800);
@@ -1604,61 +1579,169 @@ function ListaGanadores(props: {
 export default function RetoCiudadanoPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
   const [mode, setMode] = useState<PlayMode>("sin_premio");
-  const [dni, setDni] = useState("");
-  const [celular, setCelular] = useState("");
-  const [email, setEmail] = useState("");
-  const [alias, setAlias] = useState(""); // ✅ NUEVO CAMPO OBLIGATORIO
-  const [premioAutorizado, setPremioAutorizado] = useState(false);
-  const [premioError, setPremioError] = useState<string | null>(null);
+ const [participant, setParticipant] = useState<any>(null);
+const [checkingData, setCheckingData] = useState(true);
+const [hasData, setHasData] = useState(false);
 
-  async function registrarPremio() {
-    setPremioError(null);
+const [codigoAcceso, setCodigoAcceso] = useState("");
+const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
+const [loginCodigoError, setLoginCodigoError] = useState<string | null>(null);
 
-    if (!dni || !celular || !email || !alias) {
-      setPremioError("Todos los campos son obligatorios, incluido el alias.");
+const [premioAutorizado, setPremioAutorizado] = useState(false);
+const [premioError, setPremioError] = useState<string | null>(null);
+
+function getOrCreateDeviceId() {
+  if (typeof window === "undefined") return null;
+  const key = "vc_device_id";
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const id = "DEV-" + crypto.randomUUID();
+  window.localStorage.setItem(key, id);
+  return id;
+}
+
+async function refreshParticipant(currentDeviceId?: string | null) {
+  const deviceId = currentDeviceId ?? getOrCreateDeviceId();
+  if (!deviceId) {
+    setParticipant(null);
+    setHasData(false);
+    setCheckingData(false);
+    return null;
+  }
+
+  setCheckingData(true);
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { data, error } = await supabase
+      .from("project_participants")
+      .select("*")
+      .eq("device_id", deviceId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    setParticipant(data ?? null);
+    setHasData(!!data);
+    return data ?? null;
+  } catch {
+    setParticipant(null);
+    setHasData(false);
+    return null;
+  } finally {
+    setCheckingData(false);
+  }
+}
+
+async function loginConCodigo() {
+  setLoginCodigoError(null);
+
+  const code = codigoAcceso.trim();
+  if (!code) {
+    setLoginCodigoError("Ingresa tu código de acceso.");
+    return;
+  }
+
+  const deviceId = getOrCreateDeviceId();
+  if (!deviceId) {
+    setLoginCodigoError("No se pudo identificar este dispositivo.");
+    return;
+  }
+
+  setLoginCodigoLoading(true);
+
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { data, error } = await supabase
+      .from("project_participants")
+      .select("*")
+      .eq("codigo_acceso", code)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      setLoginCodigoError("Código no encontrado.");
       return;
     }
 
-    if (alias.length < 3 || alias.length > 20) {
-      setPremioError("El alias debe tener entre 3 y 20 caracteres.");
-      return;
-    }
+    const { error: updateError } = await supabase
+      .from("project_participants")
+      .update({ device_id: deviceId })
+      .eq("id", data.id);
 
-    try {
-      const res = await fetch("/api/reto-ciudadano/premio/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dni,
-          celular,
-          email,
-          alias, // ✅ ENVIAR ALIAS
-          device_id: "WEB",
-          group_code: "GRUPOA",
-        }),
-      });
+    if (updateError) throw updateError;
 
-      const data = await res.json();
+    setCodigoAcceso("");
+    await refreshParticipant(deviceId);
+  } catch {
+    setLoginCodigoError("No se pudo iniciar sesión con ese código.");
+  } finally {
+    setLoginCodigoLoading(false);
+  }
+}
 
-      if (!res.ok) {
-        if (data.error === "BLOQUEO_24H") {
-          setPremioError("Estás bloqueado por 24 horas.");
-          return;
-        }
-        if (data.error === "BLOQUEO_PREMIO") {
-          setPremioError("Ya ganaste premio. Debes esperar 1 mes.");
-          return;
-        }
+async function autorizarPremioConParticipante(currentParticipant: any) {
+  setPremioError(null);
 
-        setPremioError("No se pudo registrar.");
+  if (!currentParticipant) {
+    setPremioError("Primero debes registrarte o iniciar sesión con tu código.");
+    return;
+  }
+
+  const dni = String(currentParticipant?.dni ?? "").trim();
+  const celular = String(currentParticipant?.phone ?? "").trim();
+  const email = String(currentParticipant?.email ?? "").trim();
+  const alias = String(currentParticipant?.alias ?? "").trim();
+  const device_id = String(currentParticipant?.device_id ?? "").trim();
+
+  if (!dni || !celular || !email || !alias) {
+    setPremioError("Tu ficha general del app debe tener DNI, celular, correo y alias completos.");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/reto-ciudadano/premio/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dni,
+        celular,
+        email,
+        alias,
+        device_id,
+        group_code: "GRUPOA",
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (data.error === "BLOQUEO_24H") {
+        setPremioError("Estás bloqueado por 24 horas.");
+        return;
+      }
+      if (data.error === "BLOQUEO_PREMIO") {
+        setPremioError("Ya ganaste premio. Debes esperar 1 mes.");
         return;
       }
 
-      setPremioAutorizado(true);
-    } catch {
-      setPremioError("Error de conexión.");
+      setPremioError("No se pudo validar el acceso al premio.");
+      return;
     }
+
+    setPremioAutorizado(true);
+  } catch {
+    setPremioError("Error de conexión.");
   }
+}
 
   const [partyId, setPartyId] = useState<string>("perufederal");
   const [partyIds, setPartyIds] = useState<string[]>([]);
@@ -1691,7 +1774,9 @@ const [ganadoresState, setGanadoresState] = useState<{
     // ✅ llevar arriba
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-
+    useEffect(() => {
+  void refreshParticipant();
+}, []);
   useEffect(() => {
     if (!nivel1Passed) return;
 
@@ -1731,26 +1816,28 @@ const [ganadoresState, setGanadoresState] = useState<{
   }, [mode]);
 
       // ✅ Datos del ganador para pasar a la ruleta
-  const winnerData = premioAutorizado ? { alias, dni, celular, email } : null;
-
-     useEffect(() => {
+          useEffect(() => {
   const visibleParts: string[] = [];
 
   visibleParts.push(
     `Modo actual visible: ${mode === "con_premio" ? "con premio" : "sin premio"}.`
   );
 
-  if (mode === "con_premio" && !premioAutorizado) {
-    visibleParts.push(
-      "Se muestra el formulario de registro obligatorio para participar con premio."
-    );
+   if (mode === "con_premio" && !premioAutorizado) {
+  if (checkingData) {
+    visibleParts.push("Se está verificando si el usuario ya tiene una sesión activa para participar con premio.");
+  } else if (!hasData || !participant) {
+    visibleParts.push("Se muestra acceso por registro general del app o inicio de sesión con código para participar con premio.");
+  } else {
+    visibleParts.push("El usuario ya tiene sesión activa y puede validar su acceso con premio.");
   }
+}
 
   if (mode === "con_premio" && premioAutorizado) {
-    visibleParts.push(
-      `Registro validado para premio con alias visible: ${alias || "(sin alias)"}.`
-    );
-  }
+  visibleParts.push(
+    `Acceso con premio validado para el alias visible: ${participant?.alias || "(sin alias)"}.`
+  );
+}
 
   if (premioError) {
     visibleParts.push(`Error visible de premio: ${premioError}`);
@@ -1837,10 +1924,14 @@ const [ganadoresState, setGanadoresState] = useState<{
       ? "nivel-2"
       : "nivel-3";
 
-  const availableActions =
-    mode === "con_premio" && !premioAutorizado
-      ? ["Completar registro para premio", "Elegir modalidad"]
-      : caminoState?.showQuestion
+      const availableActions =
+  mode === "con_premio" && !premioAutorizado
+    ? checkingData
+      ? ["Verificar sesión activa", "Elegir modalidad"]
+      : !hasData || !participant
+      ? ["Registrarme primero", "Ingresar con código", "Elegir modalidad"]
+      : ["Validar acceso con premio", "Elegir modalidad"]
+    : caminoState?.showQuestion
       ? ["Responder pregunta de Camino Ciudadano"]
       : !nivel1Passed
       ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
@@ -1853,10 +1944,14 @@ const [ganadoresState, setGanadoresState] = useState<{
           "Revisar lista de ganadores",
         ];
 
-  const summary =
-    mode === "con_premio" && !premioAutorizado
-      ? "Pantalla del reto ciudadano con registro obligatorio antes de jugar por premio."
-      : caminoState?.showQuestion
+       const summary =
+  mode === "con_premio" && !premioAutorizado
+    ? checkingData
+      ? "Pantalla del reto ciudadano verificando sesión activa para participar con premio."
+      : !hasData || !participant
+      ? "Pantalla del reto ciudadano que exige registro general del app o inicio de sesión con código para participar con premio."
+      : "Pantalla del reto ciudadano lista para validar el acceso con premio de un participante ya identificado."
+    : caminoState?.showQuestion
       ? "Pantalla del reto ciudadano con una pregunta activa en Camino Ciudadano."
       : caminoState?.won
       ? "Pantalla del reto ciudadano con Camino Ciudadano ganado."
@@ -1881,19 +1976,11 @@ const [ganadoresState, setGanadoresState] = useState<{
     activeSection,
     visibleText: visibleParts.join("\n"),
     availableActions,
-    selectedItemTitle:
-      alias ||
-      partyId ||
-      (caminoState?.won
-        ? "Camino Ciudadano ganado"
-        : mode === "con_premio"
-        ? "Modo con premio"
-        : "Modo sin premio"),
+    selectedItemTitle: undefined,
     status,
     dynamicData: {
       mode,
       premioAutorizado,
-      alias,
       nivel1Passed,
       nivel1Good,
       nivel2Passed,
@@ -1913,13 +2000,22 @@ const [ganadoresState, setGanadoresState] = useState<{
       caminoTimeLeft: caminoState?.timeLeft ?? null,
       caminoWon: caminoState?.won ?? false,
       caminoGameOver: caminoState?.gameOver ?? false,
+      participantVisible: !!participant,
+participantAlias: participant?.alias || null,
+participantDni: participant?.dni || null,
+participantPhone: participant?.phone || null,
+participantEmail: participant?.email || null,
+checkingData,
+hasData,
+loginCodigoLoading,
+loginCodigoError,
     },
   });
-}, [
+}, 
+[
   setPageContext,
   mode,
   premioAutorizado,
-  alias,
   premioError,
   nivel1Passed,
   nivel1Good,
@@ -1931,7 +2027,13 @@ const [ganadoresState, setGanadoresState] = useState<{
   partyError,
   caminoState,
   ganadoresState,
-]);
+  participant,
+  checkingData,
+  hasData,
+  loginCodigoLoading,
+  loginCodigoError,
+]
+);
 
   useEffect(() => {
     return () => {
@@ -2002,68 +2104,94 @@ const [ganadoresState, setGanadoresState] = useState<{
         </p>
       </section>
 
-      {mode === "con_premio" && (
-        <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-2">
-          <div className="text-sm font-extrabold text-slate-900">
-            Registro obligatorio para participar con premio
-          </div>
+        {mode === "con_premio" && (
+  <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-2">
+    <div className="text-sm font-extrabold text-slate-900">
+      Acceso obligatorio para participar con premio
+    </div>
 
-          {!premioAutorizado ? (
-            <>
-              <div className="mt-3 grid gap-3">
-                <input
-                  type="text"
-                  placeholder="DNI"
-                  value={dni}
-                  onChange={(e) => setDni(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                />
-                <input
-                  type="text"
-                  placeholder="Celular"
-                  value={celular}
-                  onChange={(e) => setCelular(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                />
-                <input
-                  type="email"
-                  placeholder="Correo electrónico"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                />
-                <input
-                  type="text"
-                  placeholder="Alias (cómo quieres aparecer en la lista de ganadores)"
-                  value={alias}
-                  onChange={(e) => setAlias(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                  maxLength={20}
-                />
-                <p className="text-xs text-slate-600">El alias será público en la lista de ganadores. Entre 3 y 20 caracteres.</p>
-              </div>
+    {checkingData ? (
+      <div className="mt-3 text-sm text-slate-600">
+        Verificando si ya tienes una sesión activa...
+      </div>
+    ) : !hasData || !participant ? (
+      <>
+        <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-slate-700">
+          Para participar con premio debes usar el mismo registro general del app.
+          Si aún no tienes código, regístrate una sola vez. Si ya te registraste antes,
+          inicia sesión con tu código.
+        </div>
 
-              {premioError && (
-                <div className="mt-3 text-xs font-semibold text-red-700">
-                  {premioError}
-                </div>
-              )}
+        <div className="mt-4 flex flex-col gap-3">
+          <Link
+            href="/proyecto-ciudadano/registro?returnTo=/reto-ciudadano"
+            className="rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 text-center vc-btn-wave vc-btn-pulse"
+          >
+            Registrarme primero
+          </Link>
 
+          <div className="rounded-xl border bg-slate-50 p-4">
+            <div className="text-xs font-extrabold text-slate-700">Iniciar sesión con código</div>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                placeholder="Ingresa tu código de acceso"
+                value={codigoAcceso}
+                onChange={(e) => setCodigoAcceso(e.target.value)}
+                className="w-full rounded-xl border px-3 py-2 text-sm"
+              />
               <button
                 type="button"
-                onClick={registrarPremio}
-                className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
+                onClick={loginConCodigo}
+                disabled={loginCodigoLoading}
+                className="rounded-xl border px-4 py-2 text-sm font-extrabold bg-white text-slate-800 hover:bg-slate-50 vc-btn-wave vc-btn-pulse"
               >
-                Registrarme y continuar
+                {loginCodigoLoading ? "Ingresando..." : "Ingresar con código"}
               </button>
-            </>
-          ) : (
-            <div className="mt-3 text-xs font-semibold text-green-700">
-              ✅ Registro validado. Puedes iniciar el reto. Alias: <span className="font-bold">{alias}</span>
             </div>
-          )}
-        </section>
-      )}
+
+            {loginCodigoError && (
+              <div className="mt-3 text-xs font-semibold text-red-700">
+                {loginCodigoError}
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    ) : !premioAutorizado ? (
+      <>
+        <div className="mt-3 rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-slate-700">
+          Sesión activa detectada. Participarás con estos datos:
+          <div className="mt-2 text-xs text-slate-700">
+            <div><b>Alias:</b> {participant.alias || "-"}</div>
+            <div><b>DNI:</b> {participant.dni || "-"}</div>
+            <div><b>Celular:</b> {participant.phone || "-"}</div>
+            <div><b>Correo:</b> {participant.email || "-"}</div>
+          </div>
+        </div>
+
+        {premioError && (
+          <div className="mt-3 text-xs font-semibold text-red-700">
+            {premioError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => autorizarPremioConParticipante(participant)}
+          className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
+        >
+          Validar acceso con premio
+        </button>
+      </>
+    ) : (
+      <div className="mt-3 text-xs font-semibold text-green-700">
+        ✅ Acceso con premio validado. Puedes iniciar el reto. Alias:{" "}
+        <span className="font-bold">{participant?.alias || "-"}</span>
+      </div>
+    )}
+  </section>
+)}
 
       <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
         {mode === "con_premio" && !premioAutorizado ? (
@@ -2099,40 +2227,41 @@ const [ganadoresState, setGanadoresState] = useState<{
         />
 
         <Nivel3Ruleta
-          enabled={nivel2Passed}
-          mode={mode}
-          onRestartToLevel1={hardResetToLevel1}
-          winnerData={winnerData}
-          onFinishPick={async (pick) => {
+  enabled={nivel2Passed}
+  mode={mode}
+  onRestartToLevel1={hardResetToLevel1}
+  onFinishPick={async (pick) => {
             if (mode !== "con_premio") return;
 
             // Si no tenemos celular, no podemos bloquear server-side
-            if (!celular) {
-              setPremioAutorizado(false);
-              hardResetToLevel1();
-              return;
-            }
+             const celularPremio = String(participant?.phone ?? "").trim();
+
+if (!celularPremio) {
+  setPremioAutorizado(false);
+  hardResetToLevel1();
+  return;
+}
 
             const isPrize = pick === 2 || pick === 6;
 
             try {
-              if (isPrize) {
-                await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    celular,
-                    prize_segment: pick,
-                    prize_note: "Premio ruleta",
-                  }),
-                });
-              } else {
-                await fetch("/api/reto-ciudadano/premio/lock24h", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ celular }),
-                });
-              }
+        if (isPrize) {
+  await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      celular: celularPremio,
+      prize_segment: pick,
+      prize_note: "Premio ruleta",
+    }),
+  });
+} else {
+  await fetch("/api/reto-ciudadano/premio/lock24h", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ celular: celularPremio }),
+  });
+}
             } catch {}
 
             // Fuerza que vuelva a pedir registro
@@ -2148,26 +2277,34 @@ const [ganadoresState, setGanadoresState] = useState<{
   mode={mode}
   onStateChange={setCaminoState}
   onGameWin={async () => {
-    if (mode !== "con_premio") return;
-    if (!celular) return;
+  if (mode !== "con_premio") return;
 
-    try {
-      await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          celular,
-          prize_segment: 0,
-          prize_note: "Premio Camino Ciudadano",
-        }),
-      });
-    } catch (error) {
-      console.error("Error registrando premio:", error);
-    }
-  }}
-/>
+  const celularPremio = String(participant?.phone ?? "").trim();
+  if (!celularPremio) return;
+
+  try {
+    await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        celular: celularPremio,
+        prize_segment: 0,
+        prize_note: "Premio Camino Ciudadano",
+      }),
+    });
+  } catch (error) {
+    console.error("Error registrando premio:", error);
+  }
+
+  setPremioAutorizado(false);
+
+  window.setTimeout(() => {
+    hardResetToLevel1();
+  }, 1200);
+}}
+  />
       </section>
-
+ 
       {/* ✅ NUEVO: LISTA DE GANADORES */}
       <ListaGanadores onStateChange={setGanadoresState} />
     </main>
