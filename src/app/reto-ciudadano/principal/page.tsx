@@ -1628,62 +1628,8 @@ export default function RetoCiudadanoPrincipalPage() {
   const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
   const [loginCodigoError, setLoginCodigoError] = useState("");
   const [mode, setMode] = useState<PlayMode>("sin_premio");
-  const [dni, setDni] = useState("");
-  const [celular, setCelular] = useState("");
-  const [email, setEmail] = useState("");
-  const [alias, setAlias] = useState(""); // ✅ NUEVO CAMPO OBLIGATORIO
-  const [premioAutorizado, setPremioAutorizado] = useState(false);
-  const [premioError, setPremioError] = useState<string | null>(null);
-
-  async function registrarPremio() {
-    setPremioError(null);
-
-    if (!dni || !celular || !email || !alias) {
-      setPremioError("Todos los campos son obligatorios, incluido el alias.");
-      return;
-    }
-
-    if (alias.length < 3 || alias.length > 20) {
-      setPremioError("El alias debe tener entre 3 y 20 caracteres.");
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/reto-ciudadano/premio/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dni,
-          celular,
-          email,
-          alias,
-          device_id: "WEB",
-          group_code: "GRUPOA",
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.error === "BLOQUEO_24H") {
-          setPremioError("Estás bloqueado por 24 horas.");
-          return;
-        }
-        if (data.error === "BLOQUEO_PREMIO") {
-          setPremioError("Ya ganaste premio. Debes esperar 1 mes.");
-          return;
-        }
-
-        setPremioError("No se pudo registrar.");
-        return;
-      }
-
-      setPremioAutorizado(true);
-    } catch {
-      setPremioError("Error de conexión.");
-    }
-  }
-      async function loadParticipant(currentDeviceId: string) {
+ 
+        async function loadParticipant(currentDeviceId: string) {
     setCheckingData(true);
     setDataError(null);
 
@@ -1836,8 +1782,16 @@ export default function RetoCiudadanoPrincipalPage() {
     return mode === "sin_premio" ? "Sin premio" : "Con premio";
   }, [mode]);
 
-  // ✅ Datos del ganador para pasar a la ruleta
-  const winnerData = premioAutorizado ? { alias, dni, celular, email } : null;
+    // ✅ Datos del ganador tomados del participante general del app
+  const winnerData =
+    hasData && participant
+      ? {
+          alias: String(participant.alias ?? participant.full_name ?? "").trim(),
+          dni: String(participant.dni ?? "").trim(),
+          celular: String(participant.phone ?? participant.celular ?? "").trim(),
+          email: String(participant.email ?? "").trim(),
+        }
+      : null;
 
   useEffect(() => {
     const visibleParts: string[] = [];
@@ -1846,20 +1800,16 @@ export default function RetoCiudadanoPrincipalPage() {
       `Modo actual visible: ${mode === "con_premio" ? "con premio" : "sin premio"}.`
     );
 
-    if (mode === "con_premio" && !premioAutorizado) {
+        if (mode === "con_premio" && !hasData) {
       visibleParts.push(
-        "Se muestra el formulario de registro obligatorio para participar con premio."
+        "La modalidad con premio exige iniciar sesión con el código del registro general del app."
       );
     }
 
-    if (mode === "con_premio" && premioAutorizado) {
+    if (mode === "con_premio" && hasData) {
       visibleParts.push(
-        `Registro validado para premio con alias visible: ${alias || "(sin alias)"}.`
+        `La modalidad con premio está habilitada para el participante: ${participant?.alias || participant?.full_name || "(sin nombre)"}.`
       );
-    }
-
-    if (premioError) {
-      visibleParts.push(`Error visible de premio: ${premioError}`);
     }
 
     if (nivel1Passed) {
@@ -1912,26 +1862,22 @@ export default function RetoCiudadanoPrincipalPage() {
       }
     }
 
-        const activeSection =
+            const activeSection =
       checkingData
         ? "verificando-acceso"
-        : !hasData
-        ? "acceso-reto-principal"
-        : mode === "con_premio" && !premioAutorizado
-        ? "registro-premio"
+        : mode === "con_premio" && !hasData
+        ? "acceso-premio"
         : !nivel1Passed
         ? "nivel-1"
         : !nivel2Passed
         ? "nivel-2"
         : "nivel-3";
 
-         const availableActions =
+             const availableActions =
       checkingData
         ? ["Esperar verificación de acceso"]
-        : !hasData
-        ? ["Registrarme en la ficha general", "Iniciar sesión con código"]
-        : mode === "con_premio" && !premioAutorizado
-        ? ["Completar registro para premio", "Elegir modalidad"]
+        : mode === "con_premio" && !hasData
+        ? ["Registrarme en la ficha general", "Iniciar sesión con código", "Cambiar a modo sin premio"]
         : !nivel1Passed
         ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
         : !nivel2Passed
@@ -1942,23 +1888,21 @@ export default function RetoCiudadanoPrincipalPage() {
             "Revisar lista de ganadores",
           ];
 
-          const summary =
+              const summary =
       checkingData
         ? "Pantalla del reto principal verificando acceso del participante."
-        : !hasData
-        ? "Pantalla del reto principal en modo observador, con acceso común del app pendiente."
-        : mode === "con_premio" && !premioAutorizado
-        ? "Pantalla del reto principal con registro obligatorio antes de jugar por premio."
+        : mode === "con_premio" && !hasData
+        ? "Pantalla del reto principal en modalidad con premio, pendiente de inicio de sesión con el código general del app."
         : !nivel1Passed
         ? "Pantalla del reto principal en Nivel 1 de conocimiento general."
         : !nivel2Passed
         ? "Pantalla del reto principal en Nivel 2 por partido político."
         : "Pantalla del reto principal con Nivel 3 desbloqueado.";
 
-    const status =
-      partyError || premioError || ganadoresState?.error
+         const status =
+      dataError || partyError || ganadoresState?.error
         ? "error"
-        : partyLoading || ganadoresState?.loading
+        : checkingData || partyLoading || ganadoresState?.loading
         ? "loading"
         : "ready";
 
@@ -1970,8 +1914,9 @@ export default function RetoCiudadanoPrincipalPage() {
       activeSection,
       visibleText: visibleParts.join("\n"),
       availableActions,
-      selectedItemTitle:
-        alias ||
+            selectedItemTitle:
+        participant?.alias ||
+        participant?.full_name ||
         partyId ||
         (mode === "con_premio"
           ? "Modo con premio"
@@ -1985,9 +1930,7 @@ export default function RetoCiudadanoPrincipalPage() {
         registroUnicoApp: true,
         codigoUnicoPorParticipante: true,
         mismoCodigoEnTodoElApp: true,
-        mode,
-        premioAutorizado,
-        alias,
+                mode,
         nivel1Passed,
         nivel1Good,
         nivel2Passed,
@@ -1995,21 +1938,19 @@ export default function RetoCiudadanoPrincipalPage() {
         partyId,
         partyIdsCount: partyIds.length,
         partyLoading,
-        tieneErrorPremio: !!premioError,
         tieneErrorPartido: !!partyError,
         listaGanadoresVisible: true,
         filtroGanadores: ganadoresState?.filtro ?? null,
         ganadoresCount: ganadoresState?.ganadoresCount ?? null,
+        premioRequiereCodigo: mode === "con_premio",
+        puedeJugarConPremio: hasData,
       },
     });
-      }, [
+       }, [
     setPageContext,
     checkingData,
     hasData,
     mode,
-    premioAutorizado,
-    alias,
-    premioError,
     nivel1Passed,
     nivel1Good,
     nivel2Passed,
@@ -2021,6 +1962,7 @@ export default function RetoCiudadanoPrincipalPage() {
     ganadoresState,
     participant?.full_name,
     participant?.alias,
+    dataError,
   ]);
   useEffect(() => {
     return () => {
@@ -2032,8 +1974,8 @@ export default function RetoCiudadanoPrincipalPage() {
     <main className="vc-reto mx-auto max-w-4xl px-4 py-6 vc-fade-up">
             <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up">
         <div className="text-sm font-extrabold text-slate-900">Acceso de participación</div>
-        <p className="mt-2 text-sm text-slate-700">
-          El registro es único para todo el app. Si ya te registraste antes, puedes entrar con tu código de acceso.
+                <p className="mt-2 text-sm text-slate-700">
+          El registro es único para todo el app. Solo necesitas iniciar sesión con tu código si quieres jugar en modalidad con premio. La modalidad sin premio sigue siendo libre.
         </p>
 
         {checkingData ? (
@@ -2050,8 +1992,8 @@ export default function RetoCiudadanoPrincipalPage() {
 
         {!checkingData && !hasData ? (
           <div className="mt-4 grid gap-4">
-            <div className="rounded-xl border bg-white p-3 text-sm font-bold text-slate-800">
-              Para participar en el Reto principal, primero debes registrarte una sola vez en la ficha general del app o iniciar sesión con tu código.
+                        <div className="rounded-xl border bg-white p-3 text-sm font-bold text-slate-800">
+              La modalidad con premio exige registro único del app e inicio de sesión con tu código. La modalidad sin premio no necesita registro.
             </div>
 
             <div className="flex gap-2 flex-wrap">
@@ -2170,77 +2112,41 @@ export default function RetoCiudadanoPrincipalPage() {
         </p>
       </section>
 
-            {!checkingData && hasData && mode === "con_premio" && (
+                 {mode === "con_premio" && hasData && (
         <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-2">
           <div className="text-sm font-extrabold text-slate-900">
-            Registro obligatorio para participar con premio
+            Modalidad con premio habilitada
           </div>
 
-          {!premioAutorizado ? (
-            <>
-              <div className="mt-3 grid gap-3">
-                <input
-                  type="text"
-                  placeholder="DNI"
-                  value={dni}
-                  onChange={(e) => setDni(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                />
-                <input
-                  type="text"
-                  placeholder="Celular"
-                  value={celular}
-                  onChange={(e) => setCelular(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                />
-                <input
-                  type="email"
-                  placeholder="Correo electrónico"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                />
-                <input
-                  type="text"
-                  placeholder="Alias (cómo quieres aparecer en la lista de ganadores)"
-                  value={alias}
-                  onChange={(e) => setAlias(e.target.value)}
-                  className="rounded-xl border px-3 py-2 text-sm"
-                  maxLength={20}
-                />
-                <p className="text-xs text-slate-600">El alias será público en la lista de ganadores. Entre 3 y 20 caracteres.</p>
-              </div>
+          <div className="mt-3 rounded-xl border bg-green-50 p-4 text-sm text-slate-800">
+            Estás usando tu sesión general del app para participar con premio en el Reto principal.
+          </div>
 
-              {premioError && (
-                <div className="mt-3 text-xs font-semibold text-red-700">
-                  {premioError}
-                </div>
-              )}
+          <div className="mt-3 text-xs text-slate-600">
+            Participante:
+            <span className="ml-1 font-semibold">
+              {participant?.full_name || participant?.alias || "Participante activo"}
+            </span>
+          </div>
 
-              <button
-                type="button"
-                onClick={registrarPremio}
-                className="mt-4 rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
-              >
-                Registrarme y continuar
-              </button>
-            </>
-          ) : (
-            <div className="mt-3 text-xs font-semibold text-green-700">
-              ✅ Registro validado. Puedes iniciar el reto. Alias: <span className="font-bold">{alias}</span>
+          {participant?.alias ? (
+            <div className="mt-1 text-xs text-slate-600">
+              Alias público:
+              <span className="ml-1 font-semibold">{participant.alias}</span>
             </div>
-          )}
+          ) : null}
+
+          {(participant?.email || participant?.phone || participant?.celular) ? (
+            <div className="mt-1 text-xs text-slate-600">
+              Contacto confirmado para premio.
+            </div>
+          ) : null}
         </section>
       )}
-
-            <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
-        {!checkingData && !hasData ? (
+                  <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
+        {mode === "con_premio" && !checkingData && !hasData ? (
           <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
-            🔒 Primero debes iniciar sesión con tu registro general del app para usar el Reto principal.
-          </div>
-        ) : mode === "con_premio" && !premioAutorizado ? (
-          <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
-            🔒 Debes completar el registro para iniciar el Nivel 1.
+            🔒 Para jugar con premio debes iniciar sesión con tu código del registro general del app.
           </div>
         ) : (
           <Nivel1General
@@ -2255,7 +2161,7 @@ export default function RetoCiudadanoPrincipalPage() {
 
         <Nivel2Partido
           key={`l2-${sessionKey}-${mode}`}
-          enabled={hasData && nivel1Passed}
+          enabled={(mode === "sin_premio" || hasData) && nivel1Passed}
           mode={mode}
           nivel1Good={nivel1Good}
           partyId={partyId}
@@ -2271,16 +2177,18 @@ export default function RetoCiudadanoPrincipalPage() {
         />
 
         <Nivel3Ruleta
-          enabled={hasData && nivel2Passed}
+          enabled={(mode === "sin_premio" || hasData) && nivel2Passed}
           mode={mode}
           onRestartToLevel1={hardResetToLevel1}
           winnerData={winnerData}
           onFinishPick={async (pick) => {
             if (mode !== "con_premio") return;
 
-            // Si no tenemos celular, no podemos bloquear server-side
-            if (!celular) {
-              setPremioAutorizado(false);
+            const celularPremio = String(
+              participant?.phone ?? participant?.celular ?? winnerData?.celular ?? ""
+            ).trim();
+
+            if (!celularPremio) {
               hardResetToLevel1();
               return;
             }
@@ -2293,7 +2201,7 @@ export default function RetoCiudadanoPrincipalPage() {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    celular,
+                    celular: celularPremio,
                     prize_segment: pick,
                     prize_note: "Premio ruleta",
                   }),
@@ -2302,12 +2210,10 @@ export default function RetoCiudadanoPrincipalPage() {
                 await fetch("/api/reto-ciudadano/premio/lock24h", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ celular }),
+                  body: JSON.stringify({ celular: celularPremio }),
                 });
               }
             } catch {}
-
-            setPremioAutorizado(false);
 
             window.setTimeout(() => {
               hardResetToLevel1();
