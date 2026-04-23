@@ -31,6 +31,7 @@ function RegistroForm() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const returnTo = searchParams.get('returnTo');
+  const normalizedReturnTo = (returnTo || '').trim();
   const [deviceId, setDeviceId] = useState<string>("");
   const [form, setForm] = useState({
     full_name: '',
@@ -119,8 +120,16 @@ function RegistroForm() {
   };
 
   useEffect(() => {
-    const destinationLabel =
-      returnTo === 'espacio-emprendedor' ? 'Espacio Emprendedor' : 'Proyecto Ciudadano';
+    const normalizedReturnTo = (returnTo || '').trim();
+
+const destinationLabel =
+  normalizedReturnTo === 'espacio-emprendedor'
+    ? 'Espacio Emprendedor'
+    : normalizedReturnTo === 'comentarios'
+    ? 'Comentarios Ciudadanos'
+    : normalizedReturnTo === '/reto-ciudadano/principal' || normalizedReturnTo === 'reto-ciudadano/principal'
+    ? 'Reto Ciudadano'
+    : 'Proyecto Ciudadano';
 
     const filledFields = [
       form.full_name ? 'nombres completos' : null,
@@ -334,12 +343,14 @@ function RegistroForm() {
               </p>
             </div>
 
-             <Link
+          <Link
   href={
-    returnTo === 'espacio-emprendedor'
+    normalizedReturnTo === 'espacio-emprendedor'
       ? '/espacio-emprendedor?registered=true'
-      : returnTo === 'comentarios'
+      : normalizedReturnTo === 'comentarios'
       ? '/comentarios?registered=true'
+      : normalizedReturnTo === '/reto-ciudadano/principal' || normalizedReturnTo === 'reto-ciudadano/principal'
+      ? '/reto-ciudadano/principal?registered=true'
       : '/proyecto-ciudadano?registered=true'
   }
   className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
@@ -357,12 +368,14 @@ function RegistroForm() {
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Registro de participante</h1>
-          <Link
+           <Link
   href={
-    returnTo === 'espacio-emprendedor'
+    normalizedReturnTo === 'espacio-emprendedor'
       ? '/espacio-emprendedor'
-      : returnTo === 'comentarios'
+      : normalizedReturnTo === 'comentarios'
       ? '/comentarios'
+      : normalizedReturnTo === '/reto-ciudadano/principal' || normalizedReturnTo === 'reto-ciudadano/principal'
+      ? '/reto-ciudadano/principal'
       : '/proyecto-ciudadano'
   }
   className="text-sm text-slate-600 hover:underline"
@@ -373,7 +386,7 @@ function RegistroForm() {
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
           <p className="text-slate-600 mb-4 text-sm">
-            Completa tus datos para participar en Proyecto Ciudadano. Puedes presentar proyectos y apoyar iniciativas de tu comunidad.
+           Completa tus datos para poder registrarte y participar.
             Al finalizar, recibirás un código único para iniciar sesión rápidamente.
           </p>
 

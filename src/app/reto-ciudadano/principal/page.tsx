@@ -2102,18 +2102,14 @@ export default function RetoCiudadanoPrincipalPage() {
 
         {!checkingData && !hasData ? (
           <div className="mt-4 grid gap-4">
-                        <div className="rounded-xl border bg-white p-3 text-sm font-bold text-slate-800">
-              La modalidad con premio exige registro único del app e inicio de sesión con tu código. La modalidad sin premio no necesita registro.
-            </div>
-
+                        
             <div className="flex gap-2 flex-wrap">
-              <button
-              type="button"
-              className="rounded-xl border px-4 py-2 text-sm font-extrabold bg-blue-600 text-white border-blue-700 hover:bg-blue-700 vc-btn-wave vc-btn-pulse"
-              onClick={() => router.push("/proyecto-ciudadano/registro?returnTo=/reto-ciudadano/principal")}
+              <Link
+              href="/proyecto-ciudadano/registro?returnTo=/reto-ciudadano/principal"
+              className="inline-flex items-center rounded-xl border px-4 py-2 text-sm font-extrabold bg-blue-600 text-white border-blue-700 hover:bg-blue-700 vc-btn-wave vc-btn-pulse"
               >
               Registrarme para participar
-            </button>
+             </Link>
             </div>
 
             <div className="rounded-2xl border bg-white p-4">
