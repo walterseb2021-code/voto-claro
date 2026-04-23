@@ -174,6 +174,18 @@ function RegistroForm() {
       : 'Formulario de registro';
 
     const visibleParts: string[] = [];
+    if (
+  normalizedReturnTo === '/reto-ciudadano' ||
+  normalizedReturnTo === 'reto-ciudadano' ||
+  normalizedReturnTo === '/reto-ciudadano/principal' ||
+  normalizedReturnTo === 'reto-ciudadano/principal' ||
+  normalizedReturnTo === '/reto-ciudadano/camino' ||
+  normalizedReturnTo === 'reto-ciudadano/camino'
+) {
+  visibleParts.push('Esta pantalla de registro fue abierta desde Reto Ciudadano.');
+  visibleParts.push('Este registro general te permitirá participar en las modalidades con premio dentro de Reto Ciudadano.');
+  visibleParts.push('Al completar el formulario, recibirás un código de acceso para iniciar sesión rápidamente.');
+}
 
     if (success) {
       visibleParts.push('El registro ya fue completado exitosamente.');
@@ -265,10 +277,18 @@ function RegistroForm() {
           },
         ];
 
-    const summary = success
-      ? 'Pantalla de registro completado con código de acceso visible y acción para continuar.'
-      : 'Pantalla de registro de participante con formulario visible, validaciones y acción para completar el registro.';
-
+   const summary = success
+  ? 'Pantalla de registro completado con código de acceso visible y acción para continuar.'
+  : (
+      normalizedReturnTo === '/reto-ciudadano' ||
+      normalizedReturnTo === 'reto-ciudadano' ||
+      normalizedReturnTo === '/reto-ciudadano/principal' ||
+      normalizedReturnTo === 'reto-ciudadano/principal' ||
+      normalizedReturnTo === '/reto-ciudadano/camino' ||
+      normalizedReturnTo === 'reto-ciudadano/camino'
+    )
+  ? 'Pantalla de registro general abierta desde Reto Ciudadano para habilitar acceso con código y participación en modalidades con premio.'
+  : 'Pantalla de registro de participante con formulario visible, validaciones y acción para completar el registro.';
     setPageContext({
       pageId: 'proyecto-ciudadano-registro',
       pageTitle: 'Registro de participante',
@@ -397,9 +417,10 @@ function RegistroForm() {
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
-           <p className="text-slate-600 mb-4 text-sm">
-  Completa tus datos para poder registrarte y participar. Al finalizar, recibirás un código único para iniciar sesión rápidamente.
-</p>
+          <p className="text-slate-600 mb-4 text-sm">
+           Completa tus datos para poder registrarte y participar.
+            Al finalizar, recibirás un código único para iniciar sesión rápidamente.
+          </p>
 
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
