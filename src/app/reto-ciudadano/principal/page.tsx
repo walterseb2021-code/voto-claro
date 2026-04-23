@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type PlayMode = "sin_premio" | "con_premio";
@@ -56,7 +57,15 @@ type PartiesAPI = {
   count: number;
   partyIds: string[];
 };
-
+function getOrCreateDeviceId() {
+  if (typeof window === "undefined") return null;
+  const key = "vc_device_id";
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const id = "DEV-" + crypto.randomUUID();
+  window.localStorage.setItem(key, id);
+  return id;
+}
 /** Normaliza texto + repara mojibake típico (UTF-8 leído como latin1) */
 function fixMojibake(s: string) {
   const str = s ?? "";
@@ -1601,7 +1610,23 @@ function ListaGanadores(props: {
 }
 
 export default function RetoCiudadanoPrincipalPage() {
+  const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
+    const supabase = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    return createClient(url, key);
+  }, []);
+
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [checkingData, setCheckingData] = useState(true);
+  const [hasData, setHasData] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [participant, setParticipant] = useState<any>(null);
+
+  const [codigoAcceso, setCodigoAcceso] = useState("");
+  const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
+  const [loginCodigoError, setLoginCodigoError] = useState("");
   const [mode, setMode] = useState<PlayMode>("sin_premio");
   const [dni, setDni] = useState("");
   const [celular, setCelular] = useState("");
@@ -1658,7 +1683,81 @@ export default function RetoCiudadanoPrincipalPage() {
       setPremioError("Error de conexión.");
     }
   }
+      async function loadParticipant(currentDeviceId: string) {
+    setCheckingData(true);
+    setDataError(null);
 
+    try {
+      const { data, error } = await supabase
+        .from("project_participants")
+        .select("*")
+        .eq("device_id", currentDeviceId)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+
+      setParticipant(data ?? null);
+      setHasData(!!data);
+    } catch (e: any) {
+      setParticipant(null);
+      setHasData(false);
+      setDataError(e?.message ?? String(e));
+    } finally {
+      setCheckingData(false);
+    }
+  }
+
+  async function handleLoginConCodigo(e: React.FormEvent) {
+    e.preventDefault();
+    setLoginCodigoLoading(true);
+    setLoginCodigoError("");
+
+    const codigo = codigoAcceso.trim().toUpperCase();
+
+    if (!codigo) {
+      setLoginCodigoError("Ingresa tu código de acceso");
+      setLoginCodigoLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("project_participants")
+        .select("*")
+        .eq("codigo_acceso", codigo)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+
+      if (!data) {
+        setLoginCodigoError("Código de acceso no válido");
+        setLoginCodigoLoading(false);
+        return;
+      }
+
+      if (!deviceId) {
+        setLoginCodigoError("No se pudo identificar tu dispositivo.");
+        setLoginCodigoLoading(false);
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from("project_participants")
+        .update({ device_id: deviceId })
+        .eq("id", data.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      await loadParticipant(deviceId);
+      setCodigoAcceso("");
+      setLoginCodigoError("✅ Sesión iniciada correctamente");
+      setTimeout(() => setLoginCodigoError(""), 3000);
+    } catch (err: any) {
+      setLoginCodigoError(err?.message || "Error al iniciar sesión");
+    } finally {
+      setLoginCodigoLoading(false);
+    }
+  }
   const [partyId, setPartyId] = useState<string>("perufederal");
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [partyLoading, setPartyLoading] = useState(false);
@@ -1677,7 +1776,15 @@ export default function RetoCiudadanoPrincipalPage() {
     error: string | null;
     ganadoresCount: number;
   } | null>(null);
+       useEffect(() => {
+    setDeviceId(getOrCreateDeviceId());
+  }, []);
 
+  useEffect(() => {
+    if (!deviceId) return;
+    void loadParticipant(deviceId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId]);
   function hardResetToLevel1() {
     setNivel1Passed(false);
     setNivel1Good(0);
@@ -1805,8 +1912,12 @@ export default function RetoCiudadanoPrincipalPage() {
       }
     }
 
-    const activeSection =
-      mode === "con_premio" && !premioAutorizado
+        const activeSection =
+      checkingData
+        ? "verificando-acceso"
+        : !hasData
+        ? "acceso-reto-principal"
+        : mode === "con_premio" && !premioAutorizado
         ? "registro-premio"
         : !nivel1Passed
         ? "nivel-1"
@@ -1814,8 +1925,12 @@ export default function RetoCiudadanoPrincipalPage() {
         ? "nivel-2"
         : "nivel-3";
 
-    const availableActions =
-      mode === "con_premio" && !premioAutorizado
+         const availableActions =
+      checkingData
+        ? ["Esperar verificación de acceso"]
+        : !hasData
+        ? ["Registrarme en la ficha general", "Iniciar sesión con código"]
+        : mode === "con_premio" && !premioAutorizado
         ? ["Completar registro para premio", "Elegir modalidad"]
         : !nivel1Passed
         ? ["Comenzar Nivel 1", "Responder preguntas de conocimiento general"]
@@ -1827,8 +1942,12 @@ export default function RetoCiudadanoPrincipalPage() {
             "Revisar lista de ganadores",
           ];
 
-    const summary =
-      mode === "con_premio" && !premioAutorizado
+          const summary =
+      checkingData
+        ? "Pantalla del reto principal verificando acceso del participante."
+        : !hasData
+        ? "Pantalla del reto principal en modo observador, con acceso común del app pendiente."
+        : mode === "con_premio" && !premioAutorizado
         ? "Pantalla del reto principal con registro obligatorio antes de jugar por premio."
         : !nivel1Passed
         ? "Pantalla del reto principal en Nivel 1 de conocimiento general."
@@ -1859,6 +1978,13 @@ export default function RetoCiudadanoPrincipalPage() {
           : "Modo sin premio"),
       status,
       dynamicData: {
+                accesoVerificado: hasData,
+        checkingData,
+        participanteNombre: participant?.full_name ?? "",
+        participanteAlias: participant?.alias ?? "",
+        registroUnicoApp: true,
+        codigoUnicoPorParticipante: true,
+        mismoCodigoEnTodoElApp: true,
         mode,
         premioAutorizado,
         alias,
@@ -1876,8 +2002,10 @@ export default function RetoCiudadanoPrincipalPage() {
         ganadoresCount: ganadoresState?.ganadoresCount ?? null,
       },
     });
-  }, [
+      }, [
     setPageContext,
+    checkingData,
+    hasData,
     mode,
     premioAutorizado,
     alias,
@@ -1891,8 +2019,9 @@ export default function RetoCiudadanoPrincipalPage() {
     partyLoading,
     partyError,
     ganadoresState,
+    participant?.full_name,
+    participant?.alias,
   ]);
-
   useEffect(() => {
     return () => {
       clearPageContext();
@@ -1901,34 +2030,103 @@ export default function RetoCiudadanoPrincipalPage() {
 
   return (
     <main className="vc-reto mx-auto max-w-4xl px-4 py-6 vc-fade-up">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl md:text-2xl font-extrabold text-slate-900">
-            RETO CIUDADANO — RETO PRINCIPAL
-          </h1>
-          <p className="mt-1 text-sm text-slate-700">
-            Juego por niveles: Conocimiento general → Partido → Ruleta.
-          </p>
-          <p className="mt-1 text-xs text-slate-600">
-            Modo actual: <span className="font-semibold">{modeLabel}</span>
-          </p>
-        </div>
+            <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up">
+        <div className="text-sm font-extrabold text-slate-900">Acceso de participación</div>
+        <p className="mt-2 text-sm text-slate-700">
+          El registro es único para todo el app. Si ya te registraste antes, puedes entrar con tu código de acceso.
+        </p>
 
-        <div className="shrink-0 flex flex-col gap-2">
-          <Link
-            href="/"
-            className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 text-center vc-btn-wave vc-btn-pulse"
-          >
-            ← Volver al inicio
-          </Link>
-          <Link
-            href="/reto-ciudadano"
-            className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 text-center vc-btn-wave vc-btn-pulse"
-          >
-            ← Volver a Reto Ciudadano
-          </Link>
-        </div>
-      </div>
+        {checkingData ? (
+          <div className="mt-4 rounded-xl border bg-white p-3 text-sm font-bold text-slate-800">
+            Verificando si ya tienes una sesión activa como participante…
+          </div>
+        ) : null}
+
+        {dataError ? (
+          <div className="mt-4 rounded-xl border bg-red-50 p-3 text-sm font-bold text-red-700">
+            Error al verificar datos: {dataError}
+          </div>
+        ) : null}
+
+        {!checkingData && !hasData ? (
+          <div className="mt-4 grid gap-4">
+            <div className="rounded-xl border bg-white p-3 text-sm font-bold text-slate-800">
+              Para participar en el Reto principal, primero debes registrarte una sola vez en la ficha general del app o iniciar sesión con tu código.
+            </div>
+
+            <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                className="rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
+                onClick={() => router.push("/proyecto-ciudadano/registro?returnTo=reto-ciudadano/principal")}
+              >
+                Registrarme para participar
+              </button>
+            </div>
+
+            <div className="rounded-2xl border bg-white p-4">
+              <h3 className="text-base font-extrabold text-slate-900 mb-2">
+                🔑 Iniciar sesión con código
+              </h3>
+              <p className="text-sm text-slate-700 mb-3">
+                Si ya tienes tu código de acceso, ingrésalo aquí para usar el Reto principal.
+              </p>
+
+              {loginCodigoError ? (
+                <div
+                  className="mb-3 rounded-xl p-3 text-sm font-semibold"
+                  style={{
+                    backgroundColor: loginCodigoError.includes("✅") ? "#f0fdf4" : "#fee2e2",
+                    border: loginCodigoError.includes("✅") ? "1px solid #bbf7d0" : "1px solid #fecaca",
+                    color: loginCodigoError.includes("✅") ? "#166534" : "#dc2626",
+                  }}
+                >
+                  {loginCodigoError}
+                </div>
+              ) : null}
+
+              <form onSubmit={handleLoginConCodigo} className="grid gap-3">
+                <input
+                  type="text"
+                  value={codigoAcceso}
+                  onChange={(e) => setCodigoAcceso(e.target.value.toUpperCase())}
+                  placeholder="Ej: EMP-2026-3A7F"
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  disabled={loginCodigoLoading}
+                />
+
+                <button
+                  type="submit"
+                  className="w-full rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
+                  disabled={loginCodigoLoading}
+                >
+                  {loginCodigoLoading ? "Verificando..." : "Iniciar sesión con código"}
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : null}
+
+        {!checkingData && hasData ? (
+          <div className="mt-4 rounded-2xl border bg-green-50 p-4">
+            <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
+
+            <div className="mt-1 text-sm text-slate-800 leading-relaxed">
+              Ya puedes usar el Reto principal con tu sesión general del app.
+            </div>
+
+            <div className="mt-2 text-sm text-slate-800">
+              Participante: <span className="font-extrabold">{participant?.full_name || "Participante activo"}</span>
+            </div>
+
+            {participant?.alias ? (
+              <div className="mt-1 text-sm text-slate-800">
+                Alias: <span className="font-extrabold">{participant.alias}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
       <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-1">
         <div className="text-sm font-extrabold text-slate-900">Elegir modalidad</div>
@@ -1972,7 +2170,7 @@ export default function RetoCiudadanoPrincipalPage() {
         </p>
       </section>
 
-      {mode === "con_premio" && (
+            {!checkingData && hasData && mode === "con_premio" && (
         <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-2">
           <div className="text-sm font-extrabold text-slate-900">
             Registro obligatorio para participar con premio
@@ -2035,8 +2233,12 @@ export default function RetoCiudadanoPrincipalPage() {
         </section>
       )}
 
-      <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
-        {mode === "con_premio" && !premioAutorizado ? (
+            <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
+        {!checkingData && !hasData ? (
+          <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+            🔒 Primero debes iniciar sesión con tu registro general del app para usar el Reto principal.
+          </div>
+        ) : mode === "con_premio" && !premioAutorizado ? (
           <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
             🔒 Debes completar el registro para iniciar el Nivel 1.
           </div>
@@ -2053,7 +2255,7 @@ export default function RetoCiudadanoPrincipalPage() {
 
         <Nivel2Partido
           key={`l2-${sessionKey}-${mode}`}
-          enabled={nivel1Passed}
+          enabled={hasData && nivel1Passed}
           mode={mode}
           nivel1Good={nivel1Good}
           partyId={partyId}
@@ -2069,7 +2271,7 @@ export default function RetoCiudadanoPrincipalPage() {
         />
 
         <Nivel3Ruleta
-          enabled={nivel2Passed}
+          enabled={hasData && nivel2Passed}
           mode={mode}
           onRestartToLevel1={hardResetToLevel1}
           winnerData={winnerData}
@@ -2105,10 +2307,8 @@ export default function RetoCiudadanoPrincipalPage() {
               }
             } catch {}
 
-            // Fuerza que vuelva a pedir registro
             setPremioAutorizado(false);
 
-            // ✅ Deja 2.4s para ver el glow/confetti antes de resetear
             window.setTimeout(() => {
               hardResetToLevel1();
             }, 2400);
