@@ -176,21 +176,108 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   const [bad, setBad] = useState(0);
   const [skip, setSkip] = useState(0);
 
-  // Timers
+    // Timers
   const [poolLeft, setPoolLeft] = useState(POOL_TOTAL_SEC);
   const [qLeft, setQLeft] = useState(QUESTION_SEC);
 
-  // Control anti doble respuesta
-  const lockedRef = useRef(false);
+  // Control de resolución de pregunta
+  const [isResolving, setIsResolving] = useState(false);
+
+  const poolDeadlineRef = useRef<number | null>(null);
+  const questionDeadlineRef = useRef<number | null>(null);
+  const tickRef = useRef<number | null>(null);
 
   const finished = started && (idx >= TOTAL || poolLeft <= 0);
+
+  function clearTick() {
+    if (tickRef.current) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+  }
+
+  function syncClocks() {
+    const now = Date.now();
+
+    const nextPoolLeft = poolDeadlineRef.current
+      ? Math.max(0, Math.ceil((poolDeadlineRef.current - now) / 1000))
+      : POOL_TOTAL_SEC;
+
+    const nextQLeft = questionDeadlineRef.current
+      ? Math.max(0, Math.ceil((questionDeadlineRef.current - now) / 1000))
+      : QUESTION_SEC;
+
+    setPoolLeft(nextPoolLeft);
+    setQLeft(nextQLeft);
+
+    return { nextPoolLeft, nextQLeft };
+  }
+
+  function startClocks() {
+    clearTick();
+
+    const now = Date.now();
+    poolDeadlineRef.current = now + POOL_TOTAL_SEC * 1000;
+    questionDeadlineRef.current = now + QUESTION_SEC * 1000;
+
+    setPoolLeft(POOL_TOTAL_SEC);
+    setQLeft(QUESTION_SEC);
+
+    tickRef.current = window.setInterval(() => {
+      const { nextPoolLeft, nextQLeft } = syncClocks();
+
+      if (nextPoolLeft <= 0) {
+        clearTick();
+      } else if (nextQLeft <= 0 && !isResolving) {
+        resolveCurrentQuestion("skip");
+      }
+    }, 200);
+  }
+
+  function resetQuestionClock() {
+    questionDeadlineRef.current = Date.now() + QUESTION_SEC * 1000;
+    setQLeft(QUESTION_SEC);
+  }
+
+  function resolveCurrentQuestion(action: "yes" | "no" | "skip") {
+    if (!started) return;
+    if (loading || error) return;
+    if (finished) return;
+    if (isResolving) return;
+
+    const question = quiz[idx];
+    if (!question && action !== "skip") return;
+
+    setIsResolving(true);
+
+    if (action === "skip") {
+      setSkip((x) => x + 1);
+    } else {
+      const ok = question.a === (action === "yes");
+      if (ok) setGood((x) => x + 1);
+      else setBad((x) => x + 1);
+    }
+
+    setIdx((x) => x + 1);
+    resetQuestionClock();
+
+    window.setTimeout(() => {
+      setIsResolving(false);
+    }, 120);
+  }
 
   async function resetRun() {
     if (locked) throw new Error("Estás temporalmente bloqueado. Vuelve más tarde.");
 
     setLoading(true);
     setError(null);
-    lockedRef.current = false;
+        clearTick();
+    poolDeadlineRef.current = null;
+    questionDeadlineRef.current = null;
+    setIsResolving(false);
+        clearTick();
+    poolDeadlineRef.current = null;
+    questionDeadlineRef.current = null;
 
     try {
       const cfg = await safeFetchJson<any>("/reto-ciudadano/config.json");
@@ -224,6 +311,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
 
       setPoolLeft(POOL_TOTAL_SEC);
       setQLeft(QUESTION_SEC);
+      setIsResolving(false);
     } catch (e: any) {
       setError(e?.message ?? "Error desconocido");
       setQuiz([]);
@@ -231,8 +319,9 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
       setGood(0);
       setBad(0);
       setSkip(0);
-      setPoolLeft(POOL_TOTAL_SEC);
+            setPoolLeft(POOL_TOTAL_SEC);
       setQLeft(QUESTION_SEC);
+      setIsResolving(false);
     } finally {
       setLoading(false);
     }
@@ -243,41 +332,9 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   }, []);
 
   const current = quiz[idx] ?? null;
-
-  useEffect(() => {
-    if (!started) return;
-    if (loading || error) return;
-    if (finished) return;
-
-    const t = window.setInterval(() => {
-      setPoolLeft((p) => Math.max(0, p - 1));
-      setQLeft((q) => Math.max(0, q - 1));
-    }, 1000);
-
-    return () => window.clearInterval(t);
-  }, [started, loading, error, finished]);
-
-  useEffect(() => {
-    if (!started) return;
-    if (loading || error) return;
-    if (finished) return;
-    if (qLeft > 0) return;
-
-    if (lockedRef.current) return;
-    lockedRef.current = true;
-
-    setSkip((x) => x + 1);
-    setIdx((x) => x + 1);
-    setQLeft(QUESTION_SEC);
-
-    queueMicrotask(() => {
-      lockedRef.current = false;
-    });
-  }, [qLeft, started, loading, error, finished]);
-
-  async function startLevel1() {
+   
+     async function startLevel1() {
     if (started) return;
-
     if (locked) return;
 
     if (attemptsLeft <= 0) {
@@ -289,57 +346,35 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
 
     setStarted(true);
     await resetRun();
+    startClocks();
   }
 
-  function answer(val: boolean) {
-    if (!started) return;
-    if (loading || error) return;
-    if (finished) return;
-    if (!current) return;
-    if (lockedRef.current) return;
-
-    lockedRef.current = true;
-
-    const ok = current.a === val;
-    if (ok) setGood((x) => x + 1);
-    else setBad((x) => x + 1);
-
-    setIdx((x) => x + 1);
-    setQLeft(QUESTION_SEC);
-
-    queueMicrotask(() => {
-      lockedRef.current = false;
-    });
+    function answer(val: boolean) {
+    resolveCurrentQuestion(val ? "yes" : "no");
   }
 
-  function doSkip() {
-    if (!started) return;
-    if (loading || error) return;
-    if (finished) return;
-    if (lockedRef.current) return;
-
-    lockedRef.current = true;
-
-    setSkip((x) => x + 1);
-    setIdx((x) => x + 1);
-    setQLeft(QUESTION_SEC);
-
-    queueMicrotask(() => {
-      lockedRef.current = false;
-    });
+    function doSkip() {
+    resolveCurrentQuestion("skip");
   }
 
   const passed = finished && good >= PASS;
 
-  useEffect(() => {
+    useEffect(() => {
     if (!finished) return;
     if (passed) return;
+
+    clearTick();
 
     if (attemptsLeft <= 0) {
       lockAttemptWindowAndStop();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished, passed]);
+    useEffect(() => {
+    return () => {
+      clearTick();
+    };
+  }, []);
 
   useEffect(() => {
     onStatus?.({ started, finished, good, passed });
@@ -372,13 +407,15 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
             if (!started) return;
             if (locked) return;
 
-            if (attemptsLeft <= 0) {
+                       if (attemptsLeft <= 0) {
               lockAttemptWindowAndStop();
               return;
             }
 
             setAttemptsUsed((x) => x + 1);
-            resetRun();
+            resetRun().then(() => {
+              startClocks();
+            });
           }}
           disabled={!started}
           className={`rounded-xl border px-3 py-2 text-xs font-extrabold vc-btn-wave vc-btn-pulse ${
@@ -462,25 +499,28 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
             <>
               <div className="mt-2 text-base font-extrabold text-slate-900">{current?.q}</div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+                               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => answer(true)}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
+                  disabled={isResolving}
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Sí
                 </button>
                 <button
                   type="button"
                   onClick={() => answer(false)}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-900 hover:bg-slate-50 vc-btn-wave vc-btn-pulse"
+                  disabled={isResolving}
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-white text-slate-900 hover:bg-slate-50 vc-btn-wave vc-btn-pulse disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   No
                 </button>
                 <button
                   type="button"
                   onClick={doSkip}
-                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-slate-50 text-slate-800 hover:bg-slate-100 vc-btn-wave vc-btn-pulse"
+                  disabled={isResolving}
+                  className="rounded-xl border px-5 py-3 text-sm font-extrabold bg-slate-50 text-slate-800 hover:bg-slate-100 vc-btn-wave vc-btn-pulse disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Saltar
                 </button>
@@ -1136,20 +1176,7 @@ function Nivel2Partido(props: {
     await resetRun(pid);
   }
 
-  useEffect(() => {
-    if (!enabled) return;
-    if (!started) return;
-    if (loading || error) return;
-    if (finished) return;
-
-    const t = window.setInterval(() => {
-      setPoolLeft((p) => Math.max(0, p - 1));
-      setQLeft((q) => Math.max(0, q - 1));
-    }, 1000);
-
-    return () => window.clearInterval(t);
-  }, [enabled, started, loading, error, finished]);
-
+  
   useEffect(() => {
     if (!enabled) return;
     if (!started) return;

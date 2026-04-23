@@ -18,7 +18,11 @@ function yearMonthNowUTC() {
 
 /**
  * POST /api/reto-ciudadano/premio/lockPrizeMonth
- * body: { celular: string, prize_segment: 2|6, prize_note?: string|null }
+ * body: { celular: string, prize_segment: number, prize_note?: string|null }
+ *
+ * Casos válidos:
+ * - Ruleta: prize_segment = 2 o 6
+ * - Camino Ciudadano: prize_segment = 0 y prize_note = "Premio Camino Ciudadano"
  *
  * - Bloquea 30 días (prize_locked_until)
  * - Inserta ganador en public.reto_premio_winners
@@ -36,13 +40,18 @@ export async function POST(req: Request) {
     if (!celular) {
       return NextResponse.json({ error: "CELULAR_REQUIRED" }, { status: 400 });
     }
-    if (!(prize_segment === 2 || prize_segment === 6)) {
-      return NextResponse.json(
-        { error: "PRIZE_SEGMENT_REQUIRED", detail: "prize_segment debe ser 2 o 6" },
-        { status: 400 }
-      );
-    }
+    const isRuletaPrize = prize_segment === 2 || prize_segment === 6;
+const isCaminoPrize = prize_segment === 0 && prize_note === "Premio Camino Ciudadano";
 
+if (!isRuletaPrize && !isCaminoPrize) {
+  return NextResponse.json(
+    {
+      error: "PRIZE_SEGMENT_REQUIRED",
+      detail: 'prize_segment debe ser 2 o 6 para ruleta, o 0 con prize_note="Premio Camino Ciudadano"',
+    },
+    { status: 400 }
+  );
+}
     const supabase = supabaseAdmin();
 
     // 1) Traer participante (para obtener dni/email/group_code)
