@@ -104,8 +104,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
 
   // 10s por pregunta + pool total 250s
   const QUESTION_SEC = 10;
-  const POOL_TOTAL_SEC = 250;
-
+ 
   // ✅ NUEVO: control de inicio
   const [started, setStarted] = useState(false);
 
@@ -177,17 +176,15 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   const [skip, setSkip] = useState(0);
 
     // Timers
-  const [poolLeft, setPoolLeft] = useState(POOL_TOTAL_SEC);
+ 
   const [qLeft, setQLeft] = useState(QUESTION_SEC);
 
   // Control de resolución de pregunta
   const [isResolving, setIsResolving] = useState(false);
-
-  const poolDeadlineRef = useRef<number | null>(null);
   const questionDeadlineRef = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
 
-  const finished = started && (idx >= TOTAL || poolLeft <= 0);
+  const finished = started && idx >= TOTAL;
 
   function clearTick() {
     if (tickRef.current) {
@@ -197,48 +194,36 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   }
 
   function syncClocks() {
-    const now = Date.now();
+  const now = Date.now();
 
-    const nextPoolLeft = poolDeadlineRef.current
-      ? Math.max(0, Math.ceil((poolDeadlineRef.current - now) / 1000))
-      : POOL_TOTAL_SEC;
+  const nextQLeft = questionDeadlineRef.current
+    ? Math.max(0, Math.ceil((questionDeadlineRef.current - now) / 1000))
+    : QUESTION_SEC;
 
-    const nextQLeft = questionDeadlineRef.current
-      ? Math.max(0, Math.ceil((questionDeadlineRef.current - now) / 1000))
-      : QUESTION_SEC;
+  setQLeft(nextQLeft);
 
-    setPoolLeft(nextPoolLeft);
-    setQLeft(nextQLeft);
-
-    return { nextPoolLeft, nextQLeft };
-  }
+  return { nextQLeft };
+}
 
   function startClocks() {
-    clearTick();
+  clearTick();
 
-    const now = Date.now();
-    poolDeadlineRef.current = now + POOL_TOTAL_SEC * 1000;
-    questionDeadlineRef.current = now + QUESTION_SEC * 1000;
+  questionDeadlineRef.current = Date.now() + QUESTION_SEC * 1000;
+  setQLeft(QUESTION_SEC);
 
-    setPoolLeft(POOL_TOTAL_SEC);
-    setQLeft(QUESTION_SEC);
+  tickRef.current = window.setInterval(() => {
+    const { nextQLeft } = syncClocks();
 
-    tickRef.current = window.setInterval(() => {
-      const { nextPoolLeft, nextQLeft } = syncClocks();
-
-      if (nextPoolLeft <= 0) {
-        clearTick();
-      } else if (nextQLeft <= 0 && !isResolving) {
-        resolveCurrentQuestion("skip");
-      }
-    }, 200);
-  }
+    if (nextQLeft <= 0 && !isResolving) {
+      resolveCurrentQuestion("skip");
+    }
+  }, 1000);
+}
 
   function resetQuestionClock() {
-    questionDeadlineRef.current = Date.now() + QUESTION_SEC * 1000;
-    setQLeft(QUESTION_SEC);
-  }
-
+  questionDeadlineRef.current = Date.now() + QUESTION_SEC * 1000;
+  setQLeft(QUESTION_SEC);
+}
   function resolveCurrentQuestion(action: "yes" | "no" | "skip") {
     if (!started) return;
     if (loading || error) return;
@@ -269,15 +254,11 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   async function resetRun() {
     if (locked) throw new Error("Estás temporalmente bloqueado. Vuelve más tarde.");
 
-    setLoading(true);
-    setError(null);
-        clearTick();
-    poolDeadlineRef.current = null;
-    questionDeadlineRef.current = null;
-    setIsResolving(false);
-        clearTick();
-    poolDeadlineRef.current = null;
-    questionDeadlineRef.current = null;
+     setLoading(true);
+setError(null);
+clearTick();
+questionDeadlineRef.current = null;
+setIsResolving(false);
 
     try {
       const cfg = await safeFetchJson<any>("/reto-ciudadano/config.json");
@@ -309,7 +290,6 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
       setBad(0);
       setSkip(0);
 
-      setPoolLeft(POOL_TOTAL_SEC);
       setQLeft(QUESTION_SEC);
       setIsResolving(false);
     } catch (e: any) {
@@ -319,7 +299,6 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
       setGood(0);
       setBad(0);
       setSkip(0);
-            setPoolLeft(POOL_TOTAL_SEC);
       setQLeft(QUESTION_SEC);
       setIsResolving(false);
     } finally {
@@ -345,8 +324,10 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
     setAttemptsUsed((x) => x + 1);
 
     setStarted(true);
-    await resetRun();
-    startClocks();
+await resetRun();
+window.setTimeout(() => {
+  startClocks();
+}, 50);
   }
 
     function answer(val: boolean) {
@@ -360,16 +341,15 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   const passed = finished && good >= PASS;
 
     useEffect(() => {
-    if (!finished) return;
-    if (passed) return;
+  if (!finished) return;
 
-    clearTick();
+  clearTick();
 
-    if (attemptsLeft <= 0) {
-      lockAttemptWindowAndStop();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finished, passed]);
+  if (!passed && attemptsLeft <= 0) {
+    lockAttemptWindowAndStop();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [finished, passed]);
     useEffect(() => {
     return () => {
       clearTick();
@@ -386,8 +366,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
         <div>
           <div className="text-base font-extrabold text-slate-900">Nivel 1 — Conocimiento general</div>
           <div className="mt-1 text-xs text-slate-700">
-            {TOTAL} preguntas • Umbral: <b>{PASS}</b> buenas • {QUESTION_SEC}s/pregunta • Pool total:{" "}
-            <b>{POOL_TOTAL_SEC}s</b>
+            {TOTAL} preguntas • Umbral: <b>{PASS}</b> buenas • {QUESTION_SEC}s por pregunta
           </div>
 
           <div className="mt-1 text-[11px] text-slate-600">
@@ -414,8 +393,10 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
 
             setAttemptsUsed((x) => x + 1);
             resetRun().then(() => {
-              startClocks();
-            });
+  window.setTimeout(() => {
+    startClocks();
+  }, 50);
+});
           }}
           disabled={!started}
           className={`rounded-xl border px-3 py-2 text-xs font-extrabold vc-btn-wave vc-btn-pulse ${
@@ -453,18 +434,13 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
       )}
 
       {started && (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border bg-white p-3">
-            <div className="text-xs text-slate-600">⏱ Pool restante</div>
-            <div className="text-lg font-extrabold text-slate-900">{poolLeft}s</div>
-          </div>
-          <div className="rounded-xl border bg-white p-3">
-            <div className="text-xs text-slate-600">⌛ Tiempo de esta pregunta</div>
-            <div className="text-lg font-extrabold text-slate-900">{qLeft}s</div>
-          </div>
-        </div>
-      )}
-
+  <div className="mt-3 grid grid-cols-1 gap-2">
+    <div className="rounded-xl border bg-white p-3">
+      <div className="text-xs text-slate-600">⌛ Tiempo de esta pregunta</div>
+      <div className="text-lg font-extrabold text-slate-900">{qLeft}s</div>
+    </div>
+  </div>
+)}
       {started && (
         <div className="mt-3 grid grid-cols-3 gap-2">
           <div className="rounded-xl border bg-white p-3">
@@ -534,7 +510,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
                 {passed ? "✅ APROBADO (pasa a Nivel 2)" : "❌ NO APROBADO"}
               </div>
               <div className="mt-2 text-xs text-slate-600">
-                Regla: se aprueba con {PASS} buenas antes de que termine el pool.
+                Regla: se aprueba con {PASS} respuestas correctas en un total de {TOTAL} preguntas.
               </div>
             </div>
           )}
