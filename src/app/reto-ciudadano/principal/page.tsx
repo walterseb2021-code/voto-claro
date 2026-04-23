@@ -2108,12 +2108,12 @@ export default function RetoCiudadanoPrincipalPage() {
 
             <div className="flex gap-2 flex-wrap">
               <button
-                type="button"
-                className="rounded-xl border px-4 py-2 text-sm font-extrabold bg-green-100 text-green-900 border-green-300 hover:bg-green-200 vc-btn-wave vc-btn-pulse"
-                onClick={() => router.push("/proyecto-ciudadano/registro?returnTo=reto-ciudadano/principal")}
+              type="button"
+              className="rounded-xl border px-4 py-2 text-sm font-extrabold bg-blue-600 text-white border-blue-700 hover:bg-blue-700 vc-btn-wave vc-btn-pulse"
+              onClick={() => router.push("/proyecto-ciudadano/registro?returnTo=/reto-ciudadano/principal")}
               >
-                Registrarme para participar
-              </button>
+              Registrarme para participar
+            </button>
             </div>
 
             <div className="rounded-2xl border bg-white p-4">
