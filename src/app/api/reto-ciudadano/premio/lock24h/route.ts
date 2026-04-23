@@ -17,11 +17,15 @@ export async function POST(req: Request) {
     const celular = String(body?.celular ?? "").trim();
 
     if (!celular) {
-      return NextResponse.json({ error: "CELULAR_REQUIRED" }, { status: 400 });
+      return NextResponse.json(
+        { error: "CELULAR_REQUIRED" },
+        { status: 400 }
+      );
     }
 
     const supabase = supabaseAdmin();
 
+    // Bloqueo operativo de 24 horas para el flujo con premio
     const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     const { data, error } = await supabase
@@ -39,10 +43,21 @@ export async function POST(req: Request) {
     }
 
     if (!data) {
-      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+      return NextResponse.json(
+        { error: "NOT_FOUND", detail: "No existe participante sincronizado para ese celular." },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json({ ok: true, until: data.locked_until }, { status: 200 });
+    return NextResponse.json(
+      {
+        ok: true,
+        celular: data.celular,
+        until: data.locked_until,
+        prize_locked_until: data.prize_locked_until ?? null,
+      },
+      { status: 200 }
+    );
   } catch (e: any) {
     return NextResponse.json(
       { error: "EXCEPTION", detail: String(e?.message ?? e) },

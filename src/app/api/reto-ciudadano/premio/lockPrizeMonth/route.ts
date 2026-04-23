@@ -12,20 +12,21 @@ function supabaseAdmin() {
 }
 
 function yearMonthNowUTC() {
-  // YYYY-MM (UTC)
   return new Date().toISOString().slice(0, 7);
 }
 
 /**
  * POST /api/reto-ciudadano/premio/lockPrizeMonth
- * body: { celular: string, prize_segment: 2|6, prize_note?: string|null }
+ * body: { celular: string, prize_segment: 2|6, prize_note?: string | null }
  *
  * - Bloquea 30 días (prize_locked_until)
  * - Inserta ganador en public.reto_premio_winners
+ * - Opera sobre el participante ya sincronizado del flujo con premio
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
+
     const celular = String(body?.celular ?? "").trim();
     const prize_segment = Number(body?.prize_segment ?? 0);
     const prize_note =
@@ -34,21 +35,30 @@ export async function POST(req: Request) {
         : null;
 
     if (!celular) {
-      return NextResponse.json({ error: "CELULAR_REQUIRED" }, { status: 400 });
+      return NextResponse.json(
+        { error: "CELULAR_REQUIRED" },
+        { status: 400 }
+      );
     }
+
     if (!(prize_segment === 2 || prize_segment === 6)) {
       return NextResponse.json(
-        { error: "PRIZE_SEGMENT_REQUIRED", detail: "prize_segment debe ser 2 o 6" },
+        {
+          error: "PRIZE_SEGMENT_REQUIRED",
+          detail: "prize_segment debe ser 2 o 6",
+        },
         { status: 400 }
       );
     }
 
     const supabase = supabaseAdmin();
 
-    // 1) Traer participante (para obtener dni/email/group_code)
+    // 1) Traer participante ya sincronizado del flujo con premio
     const { data: participant, error: pErr } = await supabase
       .from("reto_premio_participants")
-      .select("dni, celular, email, device_id, group_code, locked_until, prize_locked_until")
+      .select(
+        "dni, celular, email, device_id, group_code, locked_until, prize_locked_until"
+      )
       .eq("celular", celular)
       .maybeSingle();
 
@@ -58,12 +68,38 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
     if (!participant) {
-      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+      return NextResponse.json(
+        {
+          error: "NOT_FOUND",
+          detail: "No existe participante sincronizado para ese celular.",
+        },
+        { status: 404 }
+      );
     }
 
-    // 2) Bloqueo 30 días (1 mes “operativo”)
-    const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date();
+
+    // 2) Si ya tiene bloqueo mensual activo, devolvemos ese estado
+    if (
+      participant.prize_locked_until &&
+      new Date(participant.prize_locked_until) > now
+    ) {
+      return NextResponse.json(
+        {
+          ok: true,
+          already_locked: true,
+          until: participant.prize_locked_until,
+        },
+        { status: 200 }
+      );
+    }
+
+    // 3) Aplicar bloqueo mensual operativo
+    const until = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000
+    ).toISOString();
 
     const { data: updated, error: uErr } = await supabase
       .from("reto_premio_participants")
@@ -79,7 +115,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3) Insertar ganador (si ya existe en ese mes, no rompemos)
+    // 4) Insertar ganador (si ya existe en ese mes, no rompemos)
     const winnerPayload = {
       group_code: participant.group_code,
       dni: participant.dni,
@@ -92,21 +128,33 @@ export async function POST(req: Request) {
       status: "pendiente",
     };
 
-    const { error: wErr } = await supabase.from("reto_premio_winners").insert(winnerPayload);
+    const { error: wErr } = await supabase
+      .from("reto_premio_winners")
+      .insert(winnerPayload);
 
     if (wErr) {
-      // Si choca con el unique (celular, year_month) lo consideramos OK
       const code = (wErr as any)?.code;
+
+      // Si choca con unique (celular, year_month), se considera OK
       if (code !== "23505") {
         return NextResponse.json(
-          { error: "WINNER_INSERT_ERROR", detail: wErr.message, code },
+          {
+            error: "WINNER_INSERT_ERROR",
+            detail: wErr.message,
+            code,
+          },
           { status: 500 }
         );
       }
     }
 
     return NextResponse.json(
-      { ok: true, until: updated?.prize_locked_until ?? until },
+      {
+        ok: true,
+        celular: updated?.celular ?? celular,
+        until: updated?.prize_locked_until ?? until,
+        locked_until: updated?.locked_until ?? null,
+      },
       { status: 200 }
     );
   } catch (e: any) {

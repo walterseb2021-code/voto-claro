@@ -23,6 +23,8 @@ export async function POST(req: Request) {
     const device_id = String(body?.device_id ?? "").trim();
     const group_code = String(body?.group_code ?? "").trim();
 
+    // Seguimos pidiendo estos datos para poder sincronizar con el flujo de premio.
+    // Ya no es un "registro aparte", sino una validación/sincronización.
     if (!dni || !celular || !email || !group_code) {
       return NextResponse.json(
         { error: "DATOS_INCOMPLETOS" },
@@ -32,18 +34,28 @@ export async function POST(req: Request) {
 
     const supabase = supabaseAdmin();
 
-    // Buscar si ya existe ese celular
-    const { data: existing } = await supabase
+    // Buscar si ya existe ese celular en la tabla del flujo de premio
+    const { data: existing, error: existingErr } = await supabase
       .from("reto_premio_participants")
       .select("*")
       .eq("celular", celular)
       .maybeSingle();
 
+    if (existingErr) {
+      return NextResponse.json(
+        { error: "LOOKUP_ERROR", detail: existingErr.message },
+        { status: 500 }
+      );
+    }
+
     const now = new Date();
 
     if (existing) {
       // Si tiene bloqueo por premio (1 mes)
-      if (existing.prize_locked_until && new Date(existing.prize_locked_until) > now) {
+      if (
+        existing.prize_locked_until &&
+        new Date(existing.prize_locked_until) > now
+      ) {
         return NextResponse.json(
           {
             error: "BLOQUEO_PREMIO",
@@ -64,20 +76,57 @@ export async function POST(req: Request) {
         );
       }
 
-      // Si no está bloqueado → permitir jugar
-      return NextResponse.json({ ok: true }, { status: 200 });
-    }
-
-    // Si no existe → registrar nuevo participante
-    const { error: insertErr } = await supabase
-      .from("reto_premio_participants")
-      .insert({
+      // Si ya existe y no está bloqueado, sincronizamos datos básicos por si cambiaron
+      const updatePayload: Record<string, string> = {
         dni,
         celular,
         email,
-        device_id,
         group_code,
-      });
+      };
+
+      if (device_id) {
+        updatePayload.device_id = device_id;
+      }
+
+      const { error: updateErr } = await supabase
+        .from("reto_premio_participants")
+        .update(updatePayload)
+        .eq("celular", celular);
+
+      if (updateErr) {
+        return NextResponse.json(
+          { error: "UPDATE_ERROR", detail: updateErr.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          ok: true,
+          synced: true,
+          exists: true,
+        },
+        { status: 200 }
+      );
+    }
+
+    // Si no existe, NO es un "registro nuevo" del módulo.
+    // Es una sincronización del participante ya autenticado del app
+    // hacia la tabla específica del flujo con premio.
+    const insertPayload: Record<string, string> = {
+      dni,
+      celular,
+      email,
+      group_code,
+    };
+
+    if (device_id) {
+      insertPayload.device_id = device_id;
+    }
+
+    const { error: insertErr } = await supabase
+      .from("reto_premio_participants")
+      .insert(insertPayload);
 
     if (insertErr) {
       return NextResponse.json(
@@ -86,8 +135,14 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true }, { status: 200 });
-
+    return NextResponse.json(
+      {
+        ok: true,
+        synced: true,
+        exists: false,
+      },
+      { status: 200 }
+    );
   } catch (e: any) {
     return NextResponse.json(
       { error: "EXCEPTION", detail: String(e?.message ?? e) },
