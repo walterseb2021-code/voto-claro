@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import SafeLink from "@/components/SafeLink"; // ✅ importamos SafeLink
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type Candidate = {
   id: string;
@@ -38,6 +39,7 @@ function guideSay(text: string) {
 
 export default function HomePage() {
   const router = useRouter();
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [allowHome, setAllowHome] = useState(false);
   const [activeParty, setActiveParty] = useState<"perufederal" | "app">("perufederal");
@@ -197,6 +199,102 @@ export default function HomePage() {
     guideSay(text);
     goToSearch();
   }
+  
+  useEffect(() => {
+    if (!allowHome) return;
+
+    setPageContext({
+      pageId: "inicio",
+      pageTitle: "Inicio",
+      route: "/",
+      summary:
+        "Pantalla principal de Voto Claro donde puedes informarte, participar y explorar las distintas experiencias de la plataforma.",
+      speakableSummary:
+        "Estás en la pantalla principal de Voto Claro. Desde aquí puedes informarte, participar o explorar distintas experiencias dentro de la plataforma. Puedo ayudarte a encontrar por dónde empezar.",
+      activeSection: "inicio-principal",
+      visibleText: [
+        "Pantalla principal de Voto Claro.",
+        "Aquí puedes buscar candidatos y revisar Hoja de Vida, Plan de Gobierno y Actuar Político.",
+        "También puedes acceder a Servicios al ciudadano, Reflexionar antes de votar, Intención de voto, Comentario ciudadano, Proyecto ciudadano, Espacio emprendedor y Reto Ciudadano.",
+        "El asistente puede orientar al usuario según si quiere informarse, participar, comparar, reflexionar o aprender jugando.",
+      ].join("\n"),
+      availableActions: [
+        "Buscar candidatos",
+        "Abrir Cómo funciona",
+        "Entrar a Servicios al ciudadano",
+        "Entrar a Reflexionar antes de votar",
+        "Entrar a Intención de voto",
+        "Entrar a Comentario ciudadano",
+        "Entrar a Proyecto ciudadano",
+        "Entrar a Espacio emprendedor",
+        "Entrar a Reto Ciudadano",
+      ],
+      suggestedPrompts: [
+        {
+          id: "inicio-1",
+          label: "¿Qué puedo hacer?",
+          question: "¿Qué puedo hacer en esta plataforma?",
+        },
+        {
+          id: "inicio-2",
+          label: "¿Cómo empiezo?",
+          question: "¿Cómo empiezo a usar Voto Claro?",
+        },
+        {
+          id: "inicio-3",
+          label: "¿Qué busco?",
+          question: "¿Qué puedo buscar o explorar desde esta pantalla de inicio?",
+        },
+        {
+          id: "inicio-4",
+          label: "Participar",
+          question: "¿Dónde puedo participar activamente dentro de Voto Claro?",
+        },
+        {
+          id: "inicio-5",
+          label: "Decidir mejor",
+          question: "¿Cómo puedo usar Voto Claro para tomar una mejor decisión de voto?",
+        },
+        {
+          id: "inicio-6",
+          label: "Juegos y retos",
+          question: "¿Dónde puedo aprender o participar de forma interactiva en la app?",
+        },
+      ],
+      selectedItemTitle: "Inicio de Voto Claro",
+      status: "ready",
+      dynamicData: {
+        activeParty,
+        canSearch,
+        searchTerm: q,
+        resultadosCandidatosCount: items.length,
+        loadingCandidates: loading,
+        ventanasDisponibles: [
+          "Buscar candidatos",
+          "Servicios al ciudadano",
+          "Reflexionar antes de votar",
+          "Intención de voto",
+          "Comentario ciudadano",
+          "Proyecto ciudadano",
+          "Espacio emprendedor",
+          "Reto Ciudadano",
+        ],
+      },
+    });
+
+    return () => {
+      clearPageContext();
+    };
+  }, [
+    allowHome,
+    activeParty,
+    canSearch,
+    q,
+    items.length,
+    loading,
+    setPageContext,
+    clearPageContext,
+  ]);
 
   if (!allowHome) return null;
 
