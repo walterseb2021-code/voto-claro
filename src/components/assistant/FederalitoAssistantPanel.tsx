@@ -2801,21 +2801,41 @@ function detectIntent(rawQ: string) {
     t.includes("estatuto") ||
     t.includes("milit");
 
-  // ✅ HOME: ayuda genérica
+    // ✅ HOME: ayuda genérica
   const wantsHOMEHELP =
     t.includes("que hago") ||
     t.includes("qué hago") ||
+    t.includes("que puedo hacer") ||
+    t.includes("qué puedo hacer") ||
+    t.includes("que puedo encontrar") ||
+    t.includes("qué puedo encontrar") ||
+    t.includes("que puedo buscar") ||
+    t.includes("qué puedo buscar") ||
+    t.includes("que puedo explorar") ||
+    t.includes("qué puedo explorar") ||
+    t.includes("como empiezo") ||
+    t.includes("cómo empiezo") ||
+    t.includes("por donde empiezo") ||
+    t.includes("por dónde empiezo") ||
     t.includes("como uso") ||
     t.includes("cómo uso") ||
     t.includes("como funciona") ||
     t.includes("cómo funciona") ||
+    t.includes("para que sirve") ||
+    t.includes("para qué sirve") ||
     t.includes("ayuda") ||
     t.includes("guia") ||
     t.includes("guía") ||
     t.includes("inicio") ||
     t.includes("esta ventana") ||
     t.includes("esta pagina") ||
-    t.includes("esta página");
+    t.includes("esta página") ||
+    t.includes("plataforma") ||
+    t.includes("participar activamente") ||
+    t.includes("tomar una mejor decision") ||
+    t.includes("tomar una mejor decisión") ||
+    t.includes("aprender jugando") ||
+    t.includes("participar de forma interactiva");
 
   // ✅ HOME: comparar candidatos / planes
   const wantsCompare =
@@ -2849,10 +2869,22 @@ function detectIntent(rawQ: string) {
     t.includes("quien postula") ||
     t.includes("quién postula");
 
-  // ✅ HOME: navegación por tarjetas
+    // ✅ HOME: navegación por tarjetas
   const wantsNavigateHomeCards =
     t.includes("servicios") ||
+    t.includes("servicio al ciudadano") ||
     t.includes("reflex") ||
+    t.includes("alianza para el progreso") ||
+    t.includes("app") ||
+    t.includes("intencion de voto") ||
+    t.includes("intención de voto") ||
+    t.includes("reto ciudadano") ||
+    t.includes("comentarios ciudadanos") ||
+    t.includes("comentario ciudadano") ||
+    t.includes("proyecto ciudadano") ||
+    t.includes("espacio emprendedor") ||
+    t.includes("solo para ganadores") ||
+    t.includes("ganadores") ||
     t.includes("cambio con valent") ||
     t.includes("peru federal") ||
     t.includes("perú federal");
@@ -2889,16 +2921,21 @@ function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
       return null;
     }
 
-    // HOME fallback guiado (NUNCA Google)
+          // HOME fallback guiado (NUNCA Google)
     return (
-      "Puedo ayudarte dentro de VOTO CLARO.\n\n" +
-      "Opciones disponibles:\n" +
-      "1) Buscar candidatos y abrir su ficha (HV, Plan, Actuar político).\n" +
-      "2) Servicios al ciudadano: local de votación, miembro de mesa, multas.\n" +
-      "3) Reflexionar antes de votar: preguntas por economía, salud, educación y seguridad.\n" +
-      "4) Un cambio con valentía: acceso a propuesta oficial.\n\n" +
-      "Dime qué opción te interesa o escribe, por ejemplo:\n" +
-      "“buscar candidato”, “dónde voto”, “reflexión sobre salud”, “plan de gobierno”."
+      "Estás en la pantalla principal de VOTO CLARO.\n\n" +
+      "Desde aquí puedes informarte, participar y explorar diferentes espacios de la plataforma:\n\n" +
+      "1) Buscar candidatos y abrir su ficha: Hoja de Vida, Plan de Gobierno y Actuar Político.\n" +
+      "2) Servicios al ciudadano: local de votación, miembro de mesa, multas y trámites electorales.\n" +
+      "3) Reflexionar antes de votar: preguntas por economía, salud, educación, seguridad y otros temas clave.\n" +
+      "4) Alianza para el Progreso: espacio institucional del grupo activo en esta versión de la app.\n" +
+      "5) Intención de voto: una vista para explorar tendencias de preferencia electoral.\n" +
+      "6) Comentarios ciudadanos: espacio para opinar, debatir y participar sobre temas públicos.\n" +
+      "7) Proyecto ciudadano: espacio para proponer ideas y soluciones para la comunidad.\n" +
+      "8) Espacio emprendedor: lugar para presentar proyectos y conectar con oportunidades.\n" +
+      "9) Reto Ciudadano: juegos y dinámicas para aprender, participar y explorar de forma interactiva.\n" +
+      "10) Solo para ganadores: futura ventana para fotos, videos, entrevistas y registro de entrega de premios.\n\n" +
+      "Puedes empezar preguntando: “quiero informarme”, “quiero participar”, “quiero jugar”, “quiero proponer una idea” o “quiero ver candidatos”."
     );
   }
 
@@ -4435,81 +4472,181 @@ setMsgs((prev) => [
     await maybeSpeak(help);
   }
 
-  // ✅ Guía local HOME (para preguntas genéricas en inicio)
+    // ✅ Guía local HOME (para preguntas genéricas en inicio)
   function answerFromHomeGeneric(rawQ: string) {
     const t = normalizeLite(rawQ);
     const i = detectIntent(rawQ);
 
-    // 1) Ayuda general en inicio (“qué hago aquí”)
-    if (i.wantsHOMEHELP) {
+    const asksWhatCanDo =
+      t.includes("que puedo hacer") ||
+      t.includes("qué puedo hacer") ||
+      t.includes("plataforma") ||
+      t.includes("para que sirve") ||
+      t.includes("para qué sirve");
+
+    const asksHowStart =
+      t.includes("como empiezo") ||
+      t.includes("cómo empiezo") ||
+      t.includes("por donde empiezo") ||
+      t.includes("por dónde empiezo") ||
+      t.includes("como uso") ||
+      t.includes("cómo uso");
+
+    const asksExplore =
+      t.includes("que puedo buscar") ||
+      t.includes("qué puedo buscar") ||
+      t.includes("que puedo explorar") ||
+      t.includes("qué puedo explorar") ||
+      t.includes("que puedo encontrar") ||
+      t.includes("qué puedo encontrar");
+
+    const asksParticipate =
+      t.includes("participar") ||
+      t.includes("opinar") ||
+      t.includes("comentar") ||
+      t.includes("debatir") ||
+      t.includes("proponer") ||
+      t.includes("proyecto ciudadano") ||
+      t.includes("emprendedor");
+
+    const asksBetterVote =
+      t.includes("mejor decision") ||
+      t.includes("mejor decisión") ||
+      t.includes("decidir mejor") ||
+      t.includes("decision de voto") ||
+      t.includes("decisión de voto") ||
+      t.includes("votar mejor");
+
+    const asksInteractive =
+      t.includes("interactiva") ||
+      t.includes("aprender jugando") ||
+      t.includes("juego") ||
+      t.includes("reto") ||
+      t.includes("premio") ||
+      t.includes("ganadores");
+
+    if (asksWhatCanDo || i.wantsHOMEHELP) {
       return (
-        "Estás en la pantalla de inicio.\n\n" +
-        "Aquí puedes:\n" +
-        "1) Buscar candidatos: escribe al menos 2 letras en “Buscar candidato”.\n" +
-        "2) Abrir la ficha del candidato y revisar HV, Plan y Actuar político.\n" +
-        "3) Entrar a accesos rápidos: Servicios al ciudadano, Reflexión y Un cambio con valentía.\n\n" +
-        "Tip: escribe un apellido (por ejemplo: “Armando Massé”, “López Aliaga”, “Keiko”) y abre la ficha."
+        "En VOTO CLARO puedes hacer más que buscar información: puedes explorar, comparar, reflexionar y participar.\n\n" +
+        "Si quieres informarte, empieza por buscar candidatos y revisar su Hoja de Vida, Plan de Gobierno y Actuar Político.\n\n" +
+        "Si quieres orientarte como ciudadano, entra a Servicios al ciudadano o a Reflexionar antes de votar.\n\n" +
+        "Si quieres participar, puedes ir a Comentarios ciudadanos, Proyecto ciudadano o Espacio emprendedor.\n\n" +
+        "Si quieres aprender de forma más dinámica, entra a Reto Ciudadano.\n\n" +
+        "También encontrarás Intención de voto y, más adelante, la ventana Solo para ganadores, donde se mostrarán fotos, videos, entrevistas y entregas de premios.\n\n" +
+        "La mejor pregunta para empezar es: ¿quieres informarte, participar, proponer o explorar?"
       );
     }
 
-    // 2) Quiere comparar (orientación: primero entra a fichas + PLAN)
+    if (asksHowStart) {
+      return (
+        "Para empezar en VOTO CLARO, te recomiendo elegir una ruta según lo que buscas:\n\n" +
+        "1) Si quieres conocer candidatos, usa el buscador y abre una ficha.\n" +
+        "2) Si quieres entender mejor antes de votar, entra a Reflexionar antes de votar.\n" +
+        "3) Si quieres opinar o debatir, entra a Comentarios ciudadanos.\n" +
+        "4) Si tienes una idea para tu comunidad, entra a Proyecto ciudadano.\n" +
+        "5) Si quieres explorar una iniciativa política activa en esta versión, entra a Alianza para el Progreso.\n" +
+        "6) Si quieres participar jugando, entra a Reto Ciudadano.\n\n" +
+        "No necesitas recorrer todo de golpe. Elige una puerta de entrada y yo te puedo guiar."
+      );
+    }
+
+    if (asksExplore) {
+      return (
+        "Desde esta pantalla puedes explorar varias áreas:\n\n" +
+        "• Candidatos: Hoja de Vida, Plan de Gobierno y Actuar Político.\n" +
+        "• Servicios al ciudadano: consultas y trámites electorales.\n" +
+        "• Reflexión: preguntas para pensar mejor tu voto.\n" +
+        "• Alianza para el Progreso: espacio institucional del grupo activo en esta versión.\n" +
+        "• Intención de voto: tendencias y preferencias.\n" +
+        "• Comentarios ciudadanos: opinión y debate.\n" +
+        "• Proyecto ciudadano: ideas y soluciones comunitarias.\n" +
+        "• Espacio emprendedor: proyectos e iniciativas.\n" +
+        "• Reto Ciudadano: juegos, niveles y participación interactiva.\n" +
+        "• Solo para ganadores: futura ventana de premios, videos, fotos y entrevistas.\n\n" +
+        "La app está pensada para que no solo mires política, sino que también la entiendas y participes."
+      );
+    }
+
+    if (asksParticipate) {
+      return (
+        "Para participar activamente dentro de VOTO CLARO tienes varias rutas:\n\n" +
+        "• Comentarios ciudadanos: para opinar, debatir y responder temas públicos.\n" +
+        "• Proyecto ciudadano: para proponer soluciones o iniciativas para tu comunidad.\n" +
+        "• Espacio emprendedor: para presentar proyectos y conectar con oportunidades.\n" +
+        "• Reto Ciudadano: para participar en juegos y dinámicas interactivas.\n\n" +
+        "Más adelante, la ventana Solo para ganadores reunirá fotos, videos, entrevistas y evidencia de entrega de premios.\n\n" +
+        "Participar no es solo votar: también es opinar, proponer, aprender y construir."
+      );
+    }
+
+    if (asksBetterVote) {
+      return (
+        "Para tomar una mejor decisión de voto, puedes usar VOTO CLARO en tres pasos:\n\n" +
+        "1) Infórmate: busca candidatos y revisa su Hoja de Vida, Plan de Gobierno y Actuar Político.\n" +
+        "2) Compara: observa si lo que promete tiene relación con su trayectoria y conducta pública.\n" +
+        "3) Reflexiona: entra a Reflexionar antes de votar para pensar en temas como economía, salud, educación y seguridad.\n\n" +
+        "También puedes observar la Intención de voto, pero recuerda que una tendencia no reemplaza tu propio análisis.\n\n" +
+        "Un voto responsable no nace de la costumbre; nace de revisar, comparar y decidir con criterio."
+      );
+    }
+
+    if (asksInteractive) {
+      return (
+        "Si quieres aprender o participar de forma interactiva, entra a Reto Ciudadano.\n\n" +
+        "Ahí encontrarás juegos y subventanas donde puedes practicar, responder preguntas y participar en dinámicas ciudadanas.\n\n" +
+        "El Reto Ciudadano está pensado para que aprender sobre política no sea solo leer, sino también jugar, avanzar y poner a prueba lo que sabes.\n\n" +
+        "Más adelante, la ventana Solo para ganadores reunirá contenido relacionado con premios: fotos, videos, entrevistas y entregas."
+      );
+    }
+
     if (i.wantsCompare) {
       return (
-        "Para comparar propuestas entre candidatos:\n\n" +
-        "1) Busca un candidato y entra a su ficha.\n" +
-        "2) Cambia a la pestaña “Plan”.\n" +
-        "3) Si tienes opción de comparar, elige el segundo candidato.\n" +
-        "4) Luego pregúntame: “compara seguridad”, “compara economía”, etc.\n\n" +
-        "Si me dices los 2 nombres, te digo cómo encontrarlos rápido en la lista."
+        "Para comparar candidatos, empieza buscando uno en el cuadro de búsqueda y abre su ficha.\n\n" +
+        "Dentro de cada ficha puedes revisar Hoja de Vida, Plan de Gobierno y Actuar Político.\n\n" +
+        "La comparación te ayuda a mirar algo más importante que una promesa: la relación entre lo que un candidato dice, lo que propone y lo que ha hecho."
       );
     }
 
-    // 3) Preguntas típicas de “cómo voto / dónde voto / multas” => redirige a Servicios
     if (i.wantsHowToVote) {
       return (
-        "Eso se resuelve en “Servicios al ciudadano”.\n\n" +
-        "👉 Ve a: /ciudadano/servicio\n\n" +
-        "Ahí tienes enlaces oficiales (JNE, ONPE, RENIEC) para:\n" +
-        "- local de votación\n" +
-        "- miembro de mesa\n" +
-        "- multas electorales\n" +
-        "- trámites y consultas"
+        "Para consultas prácticas como local de votación, miembro de mesa o multas, entra a Servicios al ciudadano.\n\n" +
+        "Esa ventana reúne accesos oficiales y orientación para trámites electorales."
       );
     }
 
-    // 4) Navegación rápida por tarjetas de inicio
     if (i.wantsNavigateHomeCards) {
       return (
-        "Desde inicio puedes entrar a:\n\n" +
-        "👉 /ciudadano/servicio  (local de votación, multas, miembro de mesa)\n" +
-        "👉 /reflexion  (preguntas por ejes: economía, salud, educación, seguridad)\n" +
-        "👉 /cambio-con-valentia  (acceso a web oficial de la propuesta)\n\n" +
-        "Dime cuál quieres abrir y te digo qué encontrarás allí."
+        "Desde inicio puedes entrar a varias ventanas según lo que buscas:\n\n" +
+        "• Servicios al ciudadano: consultas electorales y trámites.\n" +
+        "• Reflexionar antes de votar: preguntas para pensar mejor tu decisión.\n" +
+        "• Alianza para el Progreso: espacio institucional del grupo activo en esta versión.\n" +
+        "• Intención de voto: tendencias y preferencias.\n" +
+        "• Comentarios ciudadanos: opinión, debate y participación.\n" +
+        "• Proyecto ciudadano: propuestas e ideas comunitarias.\n" +
+        "• Espacio emprendedor: proyectos e iniciativas.\n" +
+        "• Reto Ciudadano: juegos y participación interactiva.\n" +
+        "• Solo para ganadores: futura ventana para contenido de premios.\n\n" +
+        "Dime cuál te interesa y te explico qué encontrarás allí."
       );
     }
 
-    // 5) Quiere buscar candidato / “quién es X” => instrucciones claras sin inventar
     if (i.wantsCandidateSearch || t.includes("candidato") || t.includes("nombre") || t.includes("buscar")) {
       return (
-        "Para buscar un candidato:\n" +
-        "- Escribe al menos 2 letras en el cuadro “Buscar candidato”.\n" +
-        "- Luego haz clic en el resultado para abrir la ficha.\n\n" +
-        "Dentro de la ficha puedes preguntar por:\n" +
-        "- HV (Hoja de Vida)\n" +
-        "- Plan de Gobierno\n" +
-        "- Actuar político\n\n" +
-        "Si me dices el nombre o apellido que buscas, te indico cómo escribirlo para encontrarlo más rápido."
+        "Para buscar un candidato, escribe al menos dos letras en el cuadro “Buscar candidato”.\n\n" +
+        "Luego abre su ficha para revisar Hoja de Vida, Plan de Gobierno y Actuar Político.\n\n" +
+        "Esa ficha es el punto de partida para analizar trayectoria, propuestas y conducta pública."
       );
     }
 
-    // fallback (pero útil)
     return (
-      "En inicio puedes buscar candidatos y abrir sus fichas.\n\n" +
-      "Si me dices:\n" +
-      "- “cómo busco un candidato”\n" +
-      "- “quiero ver el plan”\n" +
-      "- “dónde voto / multas / miembro de mesa”\n" +
-      "te guío al lugar correcto."
+      "Estás en la pantalla principal de VOTO CLARO.\n\n" +
+      "Puedes elegir una ruta:\n\n" +
+      "• Informarte: busca candidatos y revisa sus fichas.\n" +
+      "• Orientarte: entra a Servicios al ciudadano o Reflexionar antes de votar.\n" +
+      "• Participar: entra a Comentarios ciudadanos, Proyecto ciudadano o Espacio emprendedor.\n" +
+      "• Explorar jugando: entra a Reto Ciudadano.\n" +
+      "• Observar tendencias: entra a Intención de voto.\n\n" +
+      "Dime qué te interesa hacer primero y te guío."
     );
   }
 
