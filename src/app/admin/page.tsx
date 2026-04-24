@@ -356,6 +356,16 @@ const loadDevices = async () => {
     Abrir Admin Proyectos
   </Link>
 </div>
+
+       <div className={card}>
+  <div className="text-sm font-extrabold text-slate-900">🏆 Solo para ganadores</div>
+  <div className="mt-1 text-xs text-slate-600">
+    Gestionar ganadores, evento del semestre, fotos, videos, entrevistas y reconocimientos.
+  </div>
+  <Link href="/admin/solo-ganadores" className={btn + " mt-3 w-full"}>
+    Abrir Admin Ganadores
+  </Link>
+</div>
           </div>
         </div>
       </section>
