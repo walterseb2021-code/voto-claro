@@ -4524,7 +4524,146 @@ setMsgs((prev) => [
       t.includes("reto") ||
       t.includes("premio") ||
       t.includes("ganadores");
+      const asksAPP =
+  t.includes("alianza para el progreso") ||
+  t.includes("app") ||
+  t.includes("grupo activo");
 
+const asksIntencion =
+  t.includes("intencion de voto") ||
+  t.includes("intención de voto") ||
+  t.includes("tendencia") ||
+  t.includes("preferencia electoral");
+
+const asksComentarios =
+  t.includes("comentarios ciudadanos") ||
+  t.includes("comentario ciudadano") ||
+  t.includes("opinar") ||
+  t.includes("debate ciudadano");
+
+const asksProyectoCiudadano =
+  t.includes("proyecto ciudadano") ||
+  t.includes("proponer ideas") ||
+  t.includes("propuesta ciudadana") ||
+  t.includes("idea ciudadana") ||
+  t.includes("solucion comunitaria") ||
+  t.includes("solución comunitaria");
+
+const asksEspacioEmprendedor =
+  t.includes("espacio emprendedor") ||
+  t.includes("emprendedor") ||
+  t.includes("emprendimiento") ||
+  t.includes("inversionista") ||
+  t.includes("inversionistas");
+
+const asksRetoCiudadano =
+  t.includes("reto ciudadano") ||
+  t.includes("aprender jugando") ||
+  t.includes("jugar") ||
+  t.includes("juego") ||
+  t.includes("ruleta") ||
+  t.includes("niveles");
+
+const asksSoloGanadores =
+  t.includes("solo para ganadores") ||
+  t.includes("ganadores") ||
+  t.includes("premios") ||
+  t.includes("entrega de premios") ||
+  t.includes("fotos") ||
+  t.includes("videos") ||
+  t.includes("entrevistas");
+
+const asksServiciosInicio =
+  t.includes("servicios al ciudadano") ||
+  t.includes("local de votacion") ||
+  t.includes("local de votación") ||
+  t.includes("miembro de mesa") ||
+  t.includes("multas") ||
+  t.includes("tramites electorales") ||
+  t.includes("trámites electorales");
+
+const asksReflexionInicio =
+  t.includes("reflexionar antes de votar") ||
+  t.includes("reflexion") ||
+  t.includes("reflexión") ||
+  t.includes("pensar mi voto") ||
+  t.includes("salud") ||
+  t.includes("educacion") ||
+  t.includes("educación") ||
+  t.includes("seguridad") ||
+  t.includes("economia") ||
+  t.includes("economía");
+      if (asksAPP) {
+  return (
+    "Alianza para el Progreso es el espacio institucional del grupo activo en esta versión de VOTO CLARO.\n\n" +
+    "Desde esa ventana podrás conocer la propuesta y el contenido político vinculado a APP dentro de la plataforma.\n\n" +
+    "Es una ruta útil si quieres explorar el enfoque institucional, el mensaje político y la propuesta presentada en esta versión de la app."
+  );
+}
+
+if (asksIntencion) {
+  return (
+    "Intención de voto es una ventana para observar tendencias de preferencia electoral dentro de la plataforma.\n\n" +
+    "Sirve para explorar cómo se van moviendo las preferencias, pero no reemplaza tu propio análisis.\n\n" +
+    "Lo recomendable es usarla junto con la revisión de candidatos, propuestas, trayectoria y reflexión ciudadana."
+  );
+}
+
+if (asksComentarios) {
+  return (
+    "Comentarios ciudadanos es un espacio para opinar, debatir y participar sobre temas públicos.\n\n" +
+    "Ahí puedes responder temas ciudadanos, participar en dinámicas semanales y, cuando corresponda, intervenir en foros o votaciones.\n\n" +
+    "Es una ventana pensada para que el usuario no solo observe la política, sino que también exprese su punto de vista."
+  );
+}
+
+if (asksProyectoCiudadano) {
+  return (
+    "Proyecto ciudadano es la ventana indicada si tienes una idea, propuesta o solución para tu comunidad.\n\n" +
+    "Ahí puedes presentar iniciativas ciudadanas, formar equipo y buscar apoyo para que una idea pueda convertirse en una propuesta concreta.\n\n" +
+    "Es el espacio para pasar de la opinión a la acción ciudadana."
+  );
+}
+
+if (asksEspacioEmprendedor) {
+  return (
+    "Espacio emprendedor está pensado para presentar proyectos, iniciativas o emprendimientos y conectarlos con oportunidades.\n\n" +
+    "Es una ventana orientada a quienes quieren impulsar una idea productiva, mostrar una propuesta o vincularse con posibles apoyos.\n\n" +
+    "Si lo tuyo es emprender o evaluar proyectos, esa es la ruta adecuada."
+  );
+}
+
+if (asksRetoCiudadano) {
+  return (
+    "Reto Ciudadano es la parte interactiva de VOTO CLARO.\n\n" +
+    "Ahí puedes aprender jugando, responder preguntas, avanzar por dinámicas y participar en experiencias ciudadanas más activas.\n\n" +
+    "Es ideal si quieres explorar la política de una forma menos formal y más participativa."
+  );
+}
+
+if (asksSoloGanadores) {
+  return (
+    "Solo para ganadores será una futura ventana destinada a mostrar contenido relacionado con premios.\n\n" +
+    "La idea es reunir allí fotos, videos, entrevistas y evidencia de entrega de premios a los participantes ganadores.\n\n" +
+    "Esa ventana ayudará a dar transparencia, seguimiento y valor público a las dinámicas con premio."
+  );
+}
+
+if (asksServiciosInicio) {
+  return (
+    "Servicios al ciudadano reúne accesos útiles para trámites y consultas electorales.\n\n" +
+    "Desde allí podrás orientarte sobre local de votación, miembro de mesa, multas y otros enlaces oficiales.\n\n" +
+    "Es una ventana práctica: sirve para resolver dudas ciudadanas concretas, no para debatir propuestas."
+  );
+}
+
+if (asksReflexionInicio) {
+  return (
+    "Reflexionar antes de votar es una ventana para pensar tu decisión con más profundidad.\n\n" +
+    "Allí encontrarás preguntas sobre temas como economía, salud, educación, seguridad, corrupción, Estado y ciudadanía.\n\n" +
+    "Es útil si no quieres votar solo por simpatía o costumbre, sino después de pensar qué necesita realmente el país."
+  );
+}
       if (asksHowStart) {
       return (
         "Para empezar en VOTO CLARO, te recomiendo elegir una ruta según lo que buscas:\n\n" +

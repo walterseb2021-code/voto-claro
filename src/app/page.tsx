@@ -230,37 +230,37 @@ export default function HomePage() {
         "Entrar a Reto Ciudadano",
       ],
       suggestedPrompts: [
-        {
-          id: "inicio-1",
-          label: "¿Qué puedo hacer?",
-          question: "¿Qué puedo hacer en esta plataforma?",
-        },
-        {
-          id: "inicio-2",
-          label: "¿Cómo empiezo?",
-          question: "¿Cómo empiezo a usar Voto Claro?",
-        },
-        {
-          id: "inicio-3",
-          label: "¿Qué busco?",
-          question: "¿Qué puedo buscar o explorar desde esta pantalla de inicio?",
-        },
-        {
-          id: "inicio-4",
-          label: "Participar",
-          question: "¿Dónde puedo participar activamente dentro de Voto Claro?",
-        },
-        {
-          id: "inicio-5",
-          label: "Decidir mejor",
-          question: "¿Cómo puedo usar Voto Claro para tomar una mejor decisión de voto?",
-        },
-        {
-          id: "inicio-6",
-          label: "Juegos y retos",
-          question: "¿Dónde puedo aprender o participar de forma interactiva en la app?",
-        },
-      ],
+  {
+    id: "inicio-1",
+    label: "Quiero informarme",
+    question: "Quiero informarme sobre candidatos y propuestas. ¿Por dónde empiezo?",
+  },
+  {
+    id: "inicio-2",
+    label: "Quiero participar",
+    question: "Quiero participar activamente dentro de Voto Claro. ¿Qué opciones tengo?",
+  },
+  {
+    id: "inicio-3",
+    label: "Decidir mejor",
+    question: "¿Cómo puedo usar Voto Claro para tomar una mejor decisión de voto?",
+  },
+  {
+    id: "inicio-4",
+    label: "Proponer ideas",
+    question: "Tengo una idea o propuesta ciudadana. ¿Qué ventana debo abrir?",
+  },
+  {
+    id: "inicio-5",
+    label: "Aprender jugando",
+    question: "Quiero aprender o participar jugando. ¿Dónde debo entrar?",
+  },
+  {
+    id: "inicio-6",
+    label: "Ver espacios",
+    question: "Explícame brevemente qué espacios tiene Voto Claro y para qué sirve cada uno.",
+  },
+],
       selectedItemTitle: "Inicio de Voto Claro",
       status: "ready",
       dynamicData: {
