@@ -677,37 +677,7 @@ export default function HomePage() {
           </SafeLink>
         </div>
          
-                 <div className="vc-block md:col-span-2 vc-fade-up vc-delay-5">
-  <SafeLink
-    href="/solo-para-ganadores"
-    onClick={(e) =>
-      handleSmartNavigate({
-        key: "solo-para-ganadores",
-        href: "/solo-para-ganadores",
-        speech:
-          "Vas a entrar a Solo para ganadores. Esta ventana reúne ganadores, fotos, videos, entrevistas, reconocimientos y detalles de eventos de premiación dentro de Voto Claro.",
-        preventDefault: true,
-        e,
-      })
-    }
-    className="vc-block-inner bg-primary-soft block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
-  >
-    <div className="flex items-start gap-3">
-      <div className="text-2xl leading-none vc-icon-hover">🏆</div>
-      <div className="min-w-0">
-        <div className="text-base font-extrabold text-black">SOLO PARA GANADORES</div>
-        <p className="mt-1 text-sm text-black">
-          Vitrina pública de ganadores, entrega de premios, fotos, videos, entrevistas y reconocimientos de Voto Claro.
-        </p>
-        <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
-          Abrir ventana →
-        </div>
-      </div>
-    </div>
-  </SafeLink>
-</div>
-
-        <div className="vc-block md:col-span-2 vc-fade-up vc-delay-1">
+         <div className="vc-block md:col-span-2 vc-fade-up vc-delay-1">
           <SafeLink
             href="/comentarios"
             onClick={(e) =>
@@ -796,6 +766,36 @@ export default function HomePage() {
             </div>
           </SafeLink>
         </div>
+                       <div className="vc-block md:col-span-2 vc-fade-up vc-delay-5">
+  <SafeLink
+    href="/solo-para-ganadores"
+    onClick={(e) =>
+      handleSmartNavigate({
+        key: "solo-para-ganadores",
+        href: "/solo-para-ganadores",
+        speech:
+          "Vitrina final de resultados: ganadores, entrega de premios, fotos, videos, entrevistas y reconocimientos de Voto Claro.",
+        preventDefault: true,
+        e,
+      })
+    }
+    className="vc-block-inner bg-primary-soft block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+  >
+    <div className="flex items-start gap-3">
+      <div className="text-2xl leading-none vc-icon-hover">🏆</div>
+      <div className="min-w-0">
+        <div className="text-base font-extrabold text-black">SOLO PARA GANADORES</div>
+        <p className="mt-1 text-sm text-black">
+          Vitrina pública de ganadores, entrega de premios, fotos, videos, entrevistas y reconocimientos de Voto Claro.
+        </p>
+        <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
+          Abrir ventana →
+        </div>
+      </div>
+    </div>
+  </SafeLink>
+</div>
+
       </section>
 
       <footer className="mt-6 text-xs text-black">
