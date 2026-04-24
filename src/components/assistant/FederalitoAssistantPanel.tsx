@@ -4525,19 +4525,7 @@ setMsgs((prev) => [
       t.includes("premio") ||
       t.includes("ganadores");
 
-    if (asksWhatCanDo || i.wantsHOMEHELP) {
-      return (
-        "En VOTO CLARO puedes hacer más que buscar información: puedes explorar, comparar, reflexionar y participar.\n\n" +
-        "Si quieres informarte, empieza por buscar candidatos y revisar su Hoja de Vida, Plan de Gobierno y Actuar Político.\n\n" +
-        "Si quieres orientarte como ciudadano, entra a Servicios al ciudadano o a Reflexionar antes de votar.\n\n" +
-        "Si quieres participar, puedes ir a Comentarios ciudadanos, Proyecto ciudadano o Espacio emprendedor.\n\n" +
-        "Si quieres aprender de forma más dinámica, entra a Reto Ciudadano.\n\n" +
-        "También encontrarás Intención de voto y, más adelante, la ventana Solo para ganadores, donde se mostrarán fotos, videos, entrevistas y entregas de premios.\n\n" +
-        "La mejor pregunta para empezar es: ¿quieres informarte, participar, proponer o explorar?"
-      );
-    }
-
-    if (asksHowStart) {
+      if (asksHowStart) {
       return (
         "Para empezar en VOTO CLARO, te recomiendo elegir una ruta según lo que buscas:\n\n" +
         "1) Si quieres conocer candidatos, usa el buscador y abre una ficha.\n" +
@@ -4637,6 +4625,15 @@ setMsgs((prev) => [
         "Esa ficha es el punto de partida para analizar trayectoria, propuestas y conducta pública."
       );
     }
+      
+       if (asksWhatCanDo || i.wantsHOMEHELP) {
+  return (
+    "VOTO CLARO es una plataforma para informarte, participar y explorar la vida política desde varias rutas.\n\n" +
+    "Puedes buscar candidatos, revisar hojas de vida, planes de gobierno y actuar político.\n\n" +
+    "También puedes reflexionar antes de votar, revisar servicios ciudadanos, observar intención de voto, participar en comentarios, presentar proyectos, explorar emprendimientos o entrar al Reto Ciudadano.\n\n" +
+    "La idea no es que recorras todo de golpe, sino que elijas qué quieres hacer primero: informarte, participar, proponer, comparar o aprender jugando."
+  );
+}
 
     return (
       "Estás en la pantalla principal de VOTO CLARO.\n\n" +
