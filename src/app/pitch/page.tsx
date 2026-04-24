@@ -387,14 +387,14 @@ function FederalitoSplash(props: {
         <div
           className="federalito-anim"
           style={{
-            width: isApp ? "min(600px, 95vw)" : "min(520px, 92vw)",
+            width: isApp ? "min(760px, 95vw)" : "min(520px, 92vw)",
             borderRadius: 22,
             overflow: "hidden",
             border: "none",
             boxShadow: "0 20px 60px rgba(0,0,0,.35)",
             background: isApp ? BG_APP : "transparent",
             position: "relative",
-            aspectRatio: "9 / 16",
+            aspectRatio: isApp ? "16 / 9" : "9 / 16",
             zIndex: 0,
             pointerEvents: "none",
           }}
@@ -410,11 +410,11 @@ function FederalitoSplash(props: {
               inset: 0,
               width: "100%",
               height: "100%",
-              objectFit: "contain",
-              objectPosition: "50% 50%",
-              transform: isApp ? "scale(0.90)" : "none",
-              transformOrigin: "center",
-              background: isApp ? BG_APP : "transparent",
+              objectFit: isApp ? "cover" : "contain",
+objectPosition: isApp ? "50% 35%" : "50% 50%",
+transform: "none",
+transformOrigin: "center",
+background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 1,
               transition: "opacity 420ms ease",
@@ -434,11 +434,11 @@ function FederalitoSplash(props: {
               inset: 0,
               width: "100%",
               height: "100%",
-              objectFit: "contain",
-              objectPosition: "50% 50%",
-              transform: isApp ? "scale(1.46)" : "none",
-              transformOrigin: "center",
-              background: isApp ? BG_APP : "transparent",
+               objectFit: isApp ? "cover" : "contain",
+objectPosition: "50% 50%",
+transform: "none",
+transformOrigin: "center",
+background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 0,
               transition: "opacity 420ms ease",
@@ -513,36 +513,35 @@ function FederalitoSplash(props: {
             VOTO_CLARO
           </h1>
 
-          <p
-            style={{
-              marginTop: 12,
-              fontSize: 15,
-              lineHeight: "22px",
-              opacity: 1,
-              color: TEXT_DARK,
-              fontWeight: 700,
-            }}
-          >
-            Bienvenido a <b>Voto Claro</b>. Aquí encontrarás documentos (Planes de Gobierno, Hojas de Vida e información de
-            fuentes confiables).
-            <br />
-            Te mostraremos <b>evidencias verificables</b> para ayudarte a identificar propuestas coherentes con la realidad
-            actual (nacional e internacional) y un candidato/a con trayectoria y conducta pública consistente con lo que
-            promete.
-          </p>
+            <p
+  style={{
+    marginTop: 12,
+    fontSize: 15,
+    lineHeight: "22px",
+    opacity: 1,
+    color: TEXT_DARK,
+    fontWeight: 700,
+  }}
+>
+  Bienvenido a <b>Voto Claro</b>.
+  <br />
+  Soy <b>César Acuña Peralta</b> y te invito a este espacio orientado a la información, la reflexión y la participación ciudadana.
+  <br />
+  Aquí podrás explorar candidatos, propuestas, trayectorias, debates públicos y diversas formas de involucrarte en la vida política.
+</p>
 
-          <p
-            style={{
-              marginTop: 10,
-              fontSize: 15,
-              lineHeight: "22px",
-              opacity: 1,
-              color: TEXT_DARK,
-              fontWeight: 800,
-            }}
-          >
-            <i>“Un voto responsable empieza con información verificable.”</i>
-          </p>
+            <p
+  style={{
+    marginTop: 10,
+    fontSize: 15,
+    lineHeight: "22px",
+    opacity: 1,
+    color: TEXT_DARK,
+    fontWeight: 800,
+  }}
+>
+  <i>“La política no solo se observa; también se analiza, se comprende, se practica y se decide con responsabilidad.”</i>
+</p>
 
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
             {/* Botón de instalación UNIVERSAL - SIEMPRE VISIBLE */}
@@ -612,14 +611,21 @@ function FederalitoSplash(props: {
       </div>
 
       <style>{`
-        @media (max-width: 640px) {
-          .federalito-anim{
-            width: min(420px, 96vw) !important;
-            aspect-ratio: 4 / 5 !important;
-            max-height: 46vh !important;
-            margin-top: 100px !important;
-            z-index: 0 !important;
-          }
+          @media (max-width: 640px) {
+  .federalito-anim{
+    width: min(420px, 96vw) !important;
+    aspect-ratio: 4 / 5 !important;
+    max-height: 46vh !important;
+    margin-top: 100px !important;
+    z-index: 0 !important;
+  }
+
+  #federalito-splash[data-party="app"] .federalito-anim{
+    width: min(96vw, 760px) !important;
+    aspect-ratio: 16 / 9 !important;
+    max-height: none !important;
+    margin-top: 40px !important;
+  }
 
           #federalito-splash-poster{
             pointer-events: none !important;
