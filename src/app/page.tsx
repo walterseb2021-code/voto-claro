@@ -779,7 +779,7 @@ export default function HomePage() {
         e,
       })
     }
-    className="vc-block-inner bg-primary-soft block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
+     className="vc-block-inner block p-5 shadow-sm hover:shadow-md hover:brightness-95 transition vc-card-hover"
   >
     <div className="flex items-start gap-3">
       <div className="text-2xl leading-none vc-icon-hover">🏆</div>

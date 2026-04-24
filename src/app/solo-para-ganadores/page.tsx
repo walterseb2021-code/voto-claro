@@ -423,9 +423,7 @@ export default function SoloParaGanadoresPage() {
             </div>
           ) : (
             <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-              Todavía no hay evento publicado. Cuando el administrador publique el evento,
-              aparecerán aquí el lugar, la fecha, los ambientes, reconocimientos y material
-              relacionado.
+              Los detalles del evento serán publicados por la administración cuando se confirme la programación oficial. Aquí se mostrará el lugar, la fecha, los ambientes, reconocimientos, fotos, videos y entrevistas relacionadas con la entrega de premios.
             </p>
           )}
         </div>

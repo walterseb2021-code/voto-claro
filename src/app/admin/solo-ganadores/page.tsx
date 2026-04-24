@@ -540,241 +540,225 @@ export default function AdminSoloGanadoresPage() {
               </button>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className={label}>Título del evento *</label>
-                <input
-                  className={input}
-                  value={eventForm.title}
-                  onChange={(e) => setEventForm((p) => ({ ...p, title: e.target.value }))}
-                  placeholder="Evento de reconocimiento ciudadano"
-                />
-              </div>
+             <div className="mt-5 space-y-5">
+  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+    <div className="mb-3 text-sm font-extrabold text-slate-900">
+      1. Datos principales del evento
+    </div>
 
-              <div>
-                <label className={label}>Semestre</label>
-                <input
-                  className={input}
-                  value={eventForm.semester}
-                  onChange={(e) => setEventForm((p) => ({ ...p, semester: e.target.value }))}
-                  placeholder="2026-I"
-                />
-              </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label className={label}>Título del evento *</label>
+        <input
+          className={input}
+          value={eventForm.title}
+          onChange={(e) => setEventForm((p) => ({ ...p, title: e.target.value }))}
+          placeholder="Evento de reconocimiento ciudadano"
+        />
+      </div>
 
-              <div>
-                <label className={label}>Fecha</label>
-                <input
-                  type="date"
-                  className={input}
-                  value={eventForm.event_date}
-                  onChange={(e) => setEventForm((p) => ({ ...p, event_date: e.target.value }))}
-                />
-              </div>
+      <div>
+        <label className={label}>Semestre</label>
+        <input
+          className={input}
+          value={eventForm.semester}
+          onChange={(e) => setEventForm((p) => ({ ...p, semester: e.target.value }))}
+          placeholder="2026-I"
+        />
+      </div>
 
-              <div>
-                <label className={label}>Estado</label>
-                <select
-                  className={input}
-                  value={eventForm.status}
-                  onChange={(e) => setEventForm((p) => ({ ...p, status: e.target.value }))}
-                >
-                  <option value="anunciado">Anunciado</option>
-                  <option value="activo">Activo</option>
-                  <option value="finalizado">Finalizado</option>
-                </select>
-              </div>
+      <div>
+        <label className={label}>Fecha</label>
+        <input
+          type="date"
+          className={input}
+          value={eventForm.event_date}
+          onChange={(e) => setEventForm((p) => ({ ...p, event_date: e.target.value }))}
+        />
+      </div>
 
-              <div>
-                <label className={label}>Lugar / ambiente</label>
-                <input
-                  className={input}
-                  value={eventForm.location_name}
-                  onChange={(e) => setEventForm((p) => ({ ...p, location_name: e.target.value }))}
-                  placeholder="Auditorio principal"
-                />
-              </div>
+      <div>
+        <label className={label}>Estado</label>
+        <select
+          className={input}
+          value={eventForm.status}
+          onChange={(e) => setEventForm((p) => ({ ...p, status: e.target.value }))}
+        >
+          <option value="anunciado">Anunciado</option>
+          <option value="activo">Activo</option>
+          <option value="finalizado">Finalizado</option>
+        </select>
+      </div>
+    </div>
+  </div>
 
-              <div>
-                <label className={label}>Ciudad</label>
-                <input
-                  className={input}
-                  value={eventForm.city}
-                  onChange={(e) => setEventForm((p) => ({ ...p, city: e.target.value }))}
-                  placeholder="Lima"
-                />
-              </div>
+  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+    <div className="mb-3 text-sm font-extrabold text-slate-900">
+      2. Lugar y ubicación
+    </div>
 
-              <div className="md:col-span-2">
-                <label className={label}>Dirección</label>
-                <input
-                  className={input}
-                  value={eventForm.address}
-                  onChange={(e) => setEventForm((p) => ({ ...p, address: e.target.value }))}
-                  placeholder="Dirección del evento"
-                />
-              </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label className={label}>Lugar / ambiente</label>
+        <input
+          className={input}
+          value={eventForm.location_name}
+          onChange={(e) => setEventForm((p) => ({ ...p, location_name: e.target.value }))}
+          placeholder="Auditorio principal"
+        />
+      </div>
 
-              <div className="md:col-span-2">
-                <label className={label}>Descripción del evento</label>
-                <textarea
-                  className={input + " min-h-24"}
-                  value={eventForm.description}
-                  onChange={(e) => setEventForm((p) => ({ ...p, description: e.target.value }))}
-                  placeholder="Describe el evento, los ambientes, invitados y finalidad."
-                />
-              </div>
+      <div>
+        <label className={label}>Ciudad</label>
+        <input
+          className={input}
+          value={eventForm.city}
+          onChange={(e) => setEventForm((p) => ({ ...p, city: e.target.value }))}
+          placeholder="Lima"
+        />
+      </div>
 
-              <div className="md:col-span-2">
-                <label className={label}>Reconocimientos</label>
-                <textarea
-                  className={input + " min-h-24"}
-                  value={eventForm.recognitions}
-                  onChange={(e) => setEventForm((p) => ({ ...p, recognitions: e.target.value }))}
-                  placeholder="Reconocimientos, premios, menciones especiales."
-                />
-              </div>
+      <div className="md:col-span-2">
+        <label className={label}>Dirección</label>
+        <input
+          className={input}
+          value={eventForm.address}
+          onChange={(e) => setEventForm((p) => ({ ...p, address: e.target.value }))}
+          placeholder="Dirección del evento"
+        />
+      </div>
+    </div>
+  </div>
 
-                <div>
-  <label className={label}>URL imagen principal</label>
-  <input
-    className={input}
-    value={eventForm.main_image_url}
-    onChange={(e) => setEventForm((p) => ({ ...p, main_image_url: e.target.value }))}
-    placeholder="URL de imagen"
-  />
+  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+    <div className="mb-3 text-sm font-extrabold text-slate-900">
+      3. Descripción y reconocimientos
+    </div>
 
-  <input
-    type="file"
-    accept="image/*"
-    className="mt-2 block w-full text-xs"
-    disabled={uploading}
-    onChange={async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = await uploadSoloGanadoresFile(file, "eventos");
-      if (url) setEventForm((p) => ({ ...p, main_image_url: url }));
-      e.currentTarget.value = "";
-    }}
-  />
-</div>
+    <div className="grid grid-cols-1 gap-3">
+      <div>
+        <label className={label}>Descripción del evento</label>
+        <textarea
+          className={input + " min-h-24"}
+          value={eventForm.description}
+          onChange={(e) => setEventForm((p) => ({ ...p, description: e.target.value }))}
+          placeholder="Describe el evento, los ambientes, invitados y finalidad."
+        />
+      </div>
 
-                <div>
-  <label className={label}>URL video promocional</label>
-  <input
-    className={input}
-    value={eventForm.promo_video_url}
-    onChange={(e) => setEventForm((p) => ({ ...p, promo_video_url: e.target.value }))}
-    placeholder="URL de video"
-  />
+      <div>
+        <label className={label}>Reconocimientos</label>
+        <textarea
+          className={input + " min-h-24"}
+          value={eventForm.recognitions}
+          onChange={(e) => setEventForm((p) => ({ ...p, recognitions: e.target.value }))}
+          placeholder="Reconocimientos, premios, menciones especiales."
+        />
+      </div>
+    </div>
+  </div>
 
-  <input
-    type="file"
-    accept="video/*"
-    className="mt-2 block w-full text-xs"
-    disabled={uploading}
-    onChange={async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = await uploadSoloGanadoresFile(file, "eventos");
-      if (url) setEventForm((p) => ({ ...p, promo_video_url: url }));
-      e.currentTarget.value = "";
-    }}
-  />
-</div>
+  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+    <div className="mb-3 text-sm font-extrabold text-slate-900">
+      4. Imagen, video y publicación
+    </div>
 
-              <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                <input
-                  type="checkbox"
-                  checked={eventForm.published}
-                  onChange={(e) => setEventForm((p) => ({ ...p, published: e.target.checked }))}
-                />
-                Publicado
-              </label>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label className={label}>URL imagen principal</label>
+        <input
+          className={input}
+          value={eventForm.main_image_url}
+          onChange={(e) => setEventForm((p) => ({ ...p, main_image_url: e.target.value }))}
+          placeholder="URL de imagen"
+        />
 
-              <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                <input
-                  type="checkbox"
-                  checked={eventForm.featured}
-                  onChange={(e) => setEventForm((p) => ({ ...p, featured: e.target.checked }))}
-                />
-                Destacado
-              </label>
+        <input
+          type="file"
+          accept="image/*"
+          className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+          disabled={uploading}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const url = await uploadSoloGanadoresFile(file, "eventos");
+            if (url) setEventForm((p) => ({ ...p, main_image_url: url }));
+            e.currentTarget.value = "";
+          }}
+        />
+
+        {eventForm.main_image_url ? (
+          <div className="mt-3 rounded-xl border border-slate-300 bg-white p-2">
+            <div className="mb-2 text-xs font-extrabold text-slate-700">
+              Vista previa de imagen
             </div>
-
-            <button type="button" onClick={saveEvent} className={btn + " mt-5"} disabled={saving}>
-              {saving ? "Guardando…" : eventForm.id ? "Guardar cambios" : "Crear evento"}
-            </button>
-
-            <div className="mt-6 grid grid-cols-1 gap-3">
-              {events.map((ev) => (
-                <div key={ev.id} className={card}>
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div>
-                      <div className="text-sm font-extrabold text-slate-900">{ev.title}</div>
-                      <div className="mt-1 text-xs text-slate-600">
-                        {ev.semester || "Sin semestre"} • {formatDate(ev.event_date)} • {ev.status}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-600">
-                        {ev.published ? "Publicado" : "Borrador"} {ev.featured ? "• Destacado" : ""}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        className={btnSm}
-                        onClick={() =>
-                          setEventForm({
-                            id: ev.id,
-                            title: ev.title || "",
-                            semester: ev.semester || "",
-                            event_date: ev.event_date || "",
-                            location_name: ev.location_name || "",
-                            address: ev.address || "",
-                            city: ev.city || "",
-                            description: ev.description || "",
-                            recognitions: ev.recognitions || "",
-                            main_image_url: ev.main_image_url || "",
-                            promo_video_url: ev.promo_video_url || "",
-                            status: ev.status || "anunciado",
-                            published: !!ev.published,
-                            featured: !!ev.featured,
-                          })
-                        }
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className={btnSm + " bg-red-700 hover:bg-red-800"}
-                        onClick={() => deleteRow("solo_ganadores_events", ev.id)}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={eventForm.main_image_url}
+              alt="Vista previa del evento"
+              className="max-h-48 w-full rounded-lg object-contain bg-slate-50"
+            />
           </div>
-        </section>
-      ) : null}
+        ) : null}
+      </div>
 
-      {tab === "ganadores" ? (
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <div className="text-lg font-extrabold text-slate-900">🏅 Ganadores</div>
-                <p className="mt-1 text-sm text-slate-700">
-                  Publica ganadores de distintas dinámicas y conecta fotos, videos o entrevistas.
-                </p>
-              </div>
+      <div>
+        <label className={label}>URL video promocional</label>
+        <input
+          className={input}
+          value={eventForm.promo_video_url}
+          onChange={(e) => setEventForm((p) => ({ ...p, promo_video_url: e.target.value }))}
+          placeholder="URL de video"
+        />
 
-              <button type="button" onClick={() => setPostForm(emptyPost)} className={btnSm}>
-                + Nuevo ganador
-              </button>
+        <input
+          type="file"
+          accept="video/*"
+          className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+          disabled={uploading}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const url = await uploadSoloGanadoresFile(file, "eventos");
+            if (url) setEventForm((p) => ({ ...p, promo_video_url: url }));
+            e.currentTarget.value = "";
+          }}
+        />
+
+        {eventForm.promo_video_url ? (
+          <div className="mt-3 rounded-xl border border-slate-300 bg-white p-2">
+            <div className="mb-2 text-xs font-extrabold text-slate-700">
+              Vista previa de video
             </div>
+            <video
+              src={eventForm.promo_video_url}
+              controls
+              className="max-h-56 w-full rounded-lg bg-black"
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+        <input
+          type="checkbox"
+          checked={eventForm.published}
+          onChange={(e) => setEventForm((p) => ({ ...p, published: e.target.checked }))}
+        />
+        Publicado
+      </label>
+
+      <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+        <input
+          type="checkbox"
+          checked={eventForm.featured}
+          onChange={(e) => setEventForm((p) => ({ ...p, featured: e.target.checked }))}
+        />
+        Destacado
+      </label>
+    </div>
+  </div>
+</div>
 
             <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -865,7 +849,7 @@ export default function AdminSoloGanadoresPage() {
   <input
     type="file"
     accept="image/*"
-    className="mt-2 block w-full text-xs"
+    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
     disabled={uploading}
     onChange={async (e) => {
       const file = e.target.files?.[0];
@@ -889,7 +873,7 @@ export default function AdminSoloGanadoresPage() {
   <input
     type="file"
     accept="video/*"
-    className="mt-2 block w-full text-xs"
+    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
     disabled={uploading}
     onChange={async (e) => {
       const file = e.target.files?.[0];
@@ -1054,7 +1038,7 @@ export default function AdminSoloGanadoresPage() {
   <input
     type="file"
     accept="image/*,video/*"
-    className="mt-2 block w-full text-xs"
+    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
     disabled={uploading}
     onChange={async (e) => {
       const file = e.target.files?.[0];

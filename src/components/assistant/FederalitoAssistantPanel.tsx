@@ -90,13 +90,17 @@ function getDefaultAssistantGreeting(pathname: string) {
     return "Hola, soy el asistente del Reto Ciudadano. Puedo ayudarte a entender el nivel, bloque o paso visible.";
   }
 
-  if (p.startsWith("/intencion-de-voto")) {
-    return "Hola, soy el asistente de Intención de Voto. Puedo ayudarte con el estado visible de esta pantalla.";
-  }
+ if (p.startsWith("/intencion-de-voto")) {
+  return "Hola, soy el asistente de Intención de Voto. Puedo ayudarte con el estado visible de esta pantalla.";
+}
 
-  if (p.startsWith("/reflexion")) {
-    return "Hola, soy el asistente de Reflexión antes de votar. Puedo ayudarte con las preguntas y reflexiones visibles.";
-  }
+if (p.startsWith("/solo-para-ganadores")) {
+  return "Hola, soy el asistente de Solo para ganadores. Puedo ayudarte a entender los ganadores, el evento del semestre, la galería, los videos, entrevistas y reconocimientos visibles.";
+}
+
+if (p.startsWith("/reflexion")) {
+  return "Hola, soy el asistente de Reflexión antes de votar. Puedo ayudarte con las preguntas y reflexiones visibles.";
+}
 
   if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")) {
     return "Hola, soy el asistente de Servicios al ciudadano. Puedo ayudarte a ubicar el servicio correcto en esta pantalla.";
@@ -535,12 +539,142 @@ const asksOpenForumsActions =
   q.includes("que puedo hacer en los foros abiertos que aparecen en esta pantalla") ||
   q.includes("qué puedo hacer en los foros abiertos que aparecen en esta pantalla");
 
-const asksCommentVsOpenForums =
+    const asksCommentVsOpenForums =
   q.includes("diferencia entre comentar el tema semanal y participar en los foros") ||
   q.includes("qué diferencia hay entre comentar el tema semanal y participar en los foros") ||
   q.includes("que diferencia hay entre comentar el tema semanal y participar en los foros") ||
   q.includes("diferencia entre comentar el tema semanal y los foros abiertos") ||
   q.includes("diferencia entre comentario semanal y foros abiertos");
+
+if (pageId === "solo-para-ganadores") {
+  const eventosPublicadosCount = Number(data.eventosPublicadosCount || 0);
+  const ganadoresPublicadosCount = Number(data.ganadoresPublicadosCount || 0);
+  const mediaPublicadaCount = Number(data.mediaPublicadaCount || 0);
+  const eventoDestacadoTitulo = String(data.eventoDestacadoTitulo || "").trim();
+  const contieneGanadores = Boolean(data.contieneGanadores);
+  const contieneEventoSemestre = Boolean(data.contieneEventoSemestre);
+  const contieneGaleria = Boolean(data.contieneGaleria);
+  const contieneVideosEntrevistas = Boolean(data.contieneVideosEntrevistas);
+
+  const asksSoloEvento =
+    q.includes("evento") ||
+    q.includes("semestre") ||
+    q.includes("lugar") ||
+    q.includes("fecha") ||
+    q.includes("ambiente") ||
+    q.includes("programacion") ||
+    q.includes("programación");
+
+  const asksSoloGanadores =
+    q.includes("ganador") ||
+    q.includes("ganadores") ||
+    q.includes("premio") ||
+    q.includes("premios") ||
+    q.includes("reconocimiento") ||
+    q.includes("reconocimientos");
+
+  const asksSoloGaleria =
+    q.includes("galeria") ||
+    q.includes("galería") ||
+    q.includes("foto") ||
+    q.includes("fotos") ||
+    q.includes("video") ||
+    q.includes("videos") ||
+    q.includes("entrevista") ||
+    q.includes("entrevistas");
+
+  const asksSoloTransparencia =
+    q.includes("transparencia") ||
+    q.includes("evidencia") ||
+    q.includes("verificar") ||
+    q.includes("verificacion") ||
+    q.includes("verificación") ||
+    q.includes("entrega");
+
+  if (asksHelp) {
+    return (
+      "Estás en Solo para ganadores, la vitrina final de resultados y reconocimientos de VOTO CLARO.\n\n" +
+      "Aquí puedes revisar ganadores destacados, evento del semestre, galería pública, fotos, videos, entrevistas y registros relacionados con la entrega de premios.\n\n" +
+      "Puedes preguntarme por: ganadores, evento del semestre, fotos, videos, entrevistas, reconocimientos o transparencia de los premios."
+    );
+  }
+
+  if (asksSoloEvento) {
+    if (!contieneEventoSemestre) {
+      return (
+        "En esta ventana hay un bloque para el Evento del semestre, pero todavía no detecto un evento publicado.\n\n" +
+        "Cuando la administración publique la programación oficial, aquí aparecerán el lugar, fecha, ambiente, reconocimientos, imagen y video del evento."
+      );
+    }
+
+    return (
+      "El bloque Evento del semestre muestra la información central del reconocimiento público.\n\n" +
+      (eventoDestacadoTitulo ? `Evento visible: ${eventoDestacadoTitulo}.\n\n` : "") +
+      `Eventos publicados detectados: ${eventosPublicadosCount}.\n\n` +
+      "Ahí se informa la fecha, lugar, ciudad, ambiente, descripción, reconocimientos, imagen principal y video promocional cuando estén disponibles."
+    );
+  }
+
+  if (asksSoloGanadores) {
+    if (!contieneGanadores) {
+      return (
+        "Todavía no detecto ganadores publicados en esta ventana.\n\n" +
+        "Cuando la administración publique ganadores, aparecerán aquí con su dinámica de origen, premio o reconocimiento, descripción, imagen, video o entrevista."
+      );
+    }
+
+    return (
+      `En esta ventana detecto ${ganadoresPublicadosCount} publicación(es) de ganadores.\n\n` +
+      "Cada ganador puede mostrarse con su nombre o alias, la dinámica donde participó, el premio o reconocimiento recibido y una descripción pública.\n\n" +
+      "Esta sección sirve para mostrar los resultados de las dinámicas con premio."
+    );
+  }
+
+  if (asksSoloGaleria) {
+    if (!contieneGaleria) {
+      return (
+        "Todavía no detecto elementos publicados en la galería.\n\n" +
+        "Cuando se publiquen fotos, videos o entrevistas, aparecerán en la sección Galería pública."
+      );
+    }
+
+    return (
+      `La galería pública tiene ${mediaPublicadaCount} elemento(s) publicado(s).\n\n` +
+      "Ahí se muestran fotos, videos, entrevistas, testimonios, ambientes del evento y registros de entrega de premios." +
+      (contieneVideosEntrevistas
+        ? "\n\nTambién detecto contenido de video o entrevista dentro de esta ventana."
+        : "")
+    );
+  }
+
+  if (asksSoloTransparencia) {
+    return (
+      "Esta ventana ayuda a dar transparencia porque concentra el resultado visible de las dinámicas con premio.\n\n" +
+      "No solo muestra que alguien ganó: también permite publicar evidencia, fotos, videos, entrevistas, entrega de premios y reconocimientos.\n\n" +
+      "Así el usuario puede ver el cierre del proceso y el reconocimiento público a los participantes."
+    );
+  }
+
+  if (asksActions) {
+    if (!actions.length) {
+      return "En esta ventana no detecto acciones claras, pero puedes revisar ganadores, evento del semestre y galería pública.";
+    }
+
+    return "En Solo para ganadores puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
+  }
+
+  if (asksScreen || asksStatus) {
+    return (
+      contextText ||
+      "Estás en Solo para ganadores. Aquí se muestran resultados, reconocimientos, eventos, fotos, videos y entrevistas de las dinámicas con premio."
+    );
+  }
+
+  return (
+    "Estoy respondiendo según la ventana Solo para ganadores.\n\n" +
+    "Puedes preguntarme por los ganadores publicados, el evento del semestre, la galería, los videos, entrevistas, reconocimientos o la transparencia de las entregas de premios."
+  );
+}
 
     if (pageId === "intencion-de-voto") {
     const asksVote =
@@ -2602,7 +2736,7 @@ async function handleCambioConValentia(
   await maybeSpeakFn(out);
 }
 
-type PageCtx =
+ type PageCtx =
   | "HOME"
   | "REFLEXION"
   | "CIUDADANO"
@@ -2611,6 +2745,7 @@ type PageCtx =
   | "INTENCION"
   | "RETO"
   | "COMENTARIO"
+  | "SOLO_GANADORES"
   | "COMO_FUNCIONA"
   | "OTHER";
 function getPageCtx(pathname: string): PageCtx {
@@ -2623,7 +2758,8 @@ function getPageCtx(pathname: string): PageCtx {
   if (p.startsWith("/cambio-con-valentia")) return "CAMBIO";
   if (p.startsWith("/candidate/")) return "CANDIDATE";
   if (p.startsWith("/intencion-de-voto")) return "INTENCION";
-  if (p.startsWith("/reto-ciudadano")) return "RETO";
+if (p.startsWith("/reto-ciudadano")) return "RETO";
+if (p.startsWith("/solo-para-ganadores")) return "SOLO_GANADORES";
  if (
   p.startsWith("/comentario-ciudadano") ||
   p.startsWith("/comentarios-ciudadanos") ||
@@ -3020,21 +3156,24 @@ async function handleGlobalPolicyAndRedirect(params: {
     return { handled: true };
   }
 
-      const ctx = getPageCtx(String(pathname || ""));
-  const currentPath = String(pathname || "");
-  const isEspacioEmprendedor = currentPath.startsWith("/espacio-emprendedor");
-  const isProyectoCiudadano = currentPath.startsWith("/proyecto-ciudadano");
+   const ctx = getPageCtx(String(pathname || ""));
+const currentPath = String(pathname || "");
+const isEspacioEmprendedor = currentPath.startsWith("/espacio-emprendedor");
+const isProyectoCiudadano = currentPath.startsWith("/proyecto-ciudadano");
+const isSoloGanadores = currentPath.startsWith("/solo-para-ganadores");
 
   // ✅ Estas pantallas no deben ser interceptadas por el gate global
-  if (
-    ctx === "INTENCION" ||
-    ctx === "RETO" ||
-    ctx === "COMENTARIO" ||
-    isEspacioEmprendedor ||
-    isProyectoCiudadano
-  ) {
-    return { handled: false };
-  }
+   if (
+  ctx === "INTENCION" ||
+  ctx === "RETO" ||
+  ctx === "COMENTARIO" ||
+  ctx === "SOLO_GANADORES" ||
+  isEspacioEmprendedor ||
+  isProyectoCiudadano ||
+  isSoloGanadores
+) {
+  return { handled: false };
+}
   const redirect = buildRedirectMessage(ctx, rawQ);
 
   // ✅ null => estás en pantalla correcta / o HOME help => NO interceptar
@@ -3802,14 +3941,15 @@ function safeResetFabPos() {
   const p = String(pathname || "");
 
   if (
-    p.startsWith("/comentarios") ||
-    p.startsWith("/espacio-emprendedor") ||
-    p.startsWith("/proyecto-ciudadano") ||
-    p.startsWith("/intencion-de-voto") ||
-    p.startsWith("/reto-ciudadano")
-  ) {
-    return buildAssistantScopeKey(pathname, pageContext as any);
-  }
+  p.startsWith("/comentarios") ||
+  p.startsWith("/espacio-emprendedor") ||
+  p.startsWith("/proyecto-ciudadano") ||
+  p.startsWith("/intencion-de-voto") ||
+  p.startsWith("/reto-ciudadano") ||
+  p.startsWith("/solo-para-ganadores")
+) {
+  return buildAssistantScopeKey(pathname, pageContext as any);
+}
 
   return p;
 }, [
@@ -3824,12 +3964,13 @@ const autoguideKey = useMemo(() => {
   const p = String(pathname || "");
   const ctx = (pageContext as any) || null;
   const isHome = p === "/";
-  const isContextualDomain =
-    p.startsWith("/comentarios") ||
-    p.startsWith("/espacio-emprendedor") ||
-    p.startsWith("/proyecto-ciudadano") ||
-    p.startsWith("/intencion-de-voto") ||
-    p.startsWith("/reto-ciudadano");
+   const isContextualDomain =
+  p.startsWith("/comentarios") ||
+  p.startsWith("/espacio-emprendedor") ||
+  p.startsWith("/proyecto-ciudadano") ||
+  p.startsWith("/intencion-de-voto") ||
+  p.startsWith("/reto-ciudadano") ||
+  p.startsWith("/solo-para-ganadores");
 
   if (isContextualDomain) {
     return buildAutoguideSeenKey(pathname, ctx);
@@ -3842,12 +3983,13 @@ const autoguideKey = useMemo(() => {
   const p = String(pathname || "");
   const ctx = (pageContext as any) || null;
   const isHome = p === "/" || p.startsWith("/#");
-  const isContextualDomain =
-    p.startsWith("/espacio-emprendedor") ||
-    p.startsWith("/proyecto-ciudadano") ||
-    p.startsWith("/intencion-de-voto") ||
-    p.startsWith("/reto-ciudadano") ||
-    p.startsWith("/comentarios");
+   const isContextualDomain =
+  p.startsWith("/espacio-emprendedor") ||
+  p.startsWith("/proyecto-ciudadano") ||
+  p.startsWith("/intencion-de-voto") ||
+  p.startsWith("/reto-ciudadano") ||
+  p.startsWith("/solo-para-ganadores") ||
+  p.startsWith("/comentarios");
 
     if (isHome) {
   return (
@@ -3903,12 +4045,13 @@ const autoguideReady = useMemo(() => {
 
   const p = String(pathname || "");
   const isHome = p === "/";
-  const isContextualDomain =
-    p.startsWith("/comentarios") ||
-    p.startsWith("/espacio-emprendedor") ||
-    p.startsWith("/proyecto-ciudadano") ||
-    p.startsWith("/intencion-de-voto") ||
-    p.startsWith("/reto-ciudadano");
+   const isContextualDomain =
+  p.startsWith("/comentarios") ||
+  p.startsWith("/espacio-emprendedor") ||
+  p.startsWith("/proyecto-ciudadano") ||
+  p.startsWith("/intencion-de-voto") ||
+  p.startsWith("/reto-ciudadano") ||
+  p.startsWith("/solo-para-ganadores");
 
   if (isHome) return true;
   if (isContextualDomain) return autoguideStatus === "ready";
@@ -4879,15 +5022,18 @@ if (String(pathname || "").startsWith("/como-funciona")) {
 
            // ✅ Páginas con contexto dinámico: primero consultar endpoint contextual escalable
                const currentPath = String(pathname || "");
-    const ctxNow: PageCtx = getPageCtx(currentPath);
-    const isEspacioEmprendedorPage = currentPath.startsWith("/espacio-emprendedor");
-    const isProyectoCiudadanoPage = currentPath.startsWith("/proyecto-ciudadano");
-    const isDynamicContextPage =
-      ctxNow === "INTENCION" ||
-      ctxNow === "RETO" ||
-      ctxNow === "COMENTARIO" ||
-      isEspacioEmprendedorPage ||
-      isProyectoCiudadanoPage;
+const ctxNow: PageCtx = getPageCtx(currentPath);
+const isEspacioEmprendedorPage = currentPath.startsWith("/espacio-emprendedor");
+const isProyectoCiudadanoPage = currentPath.startsWith("/proyecto-ciudadano");
+const isSoloGanadoresPage = currentPath.startsWith("/solo-para-ganadores");
+const isDynamicContextPage =
+  ctxNow === "INTENCION" ||
+  ctxNow === "RETO" ||
+  ctxNow === "COMENTARIO" ||
+  ctxNow === "SOLO_GANADORES" ||
+  isEspacioEmprendedorPage ||
+  isProyectoCiudadanoPage ||
+  isSoloGanadoresPage;
 
     if (isDynamicContextPage && pageContext) {
         if (
@@ -5028,6 +5174,13 @@ if (String(pathname || "").startsWith("/como-funciona")) {
         await maybeSpeak(msg);
         return;
       }
+      if (ctxNow === "SOLO_GANADORES") {
+  const msg =
+    "Estoy dentro de Solo para ganadores. Puedo ayudarte con los ganadores visibles, el evento del semestre, la galería, videos, entrevistas, reconocimientos y evidencias de entrega de premios.";
+  pushAssistant(msg);
+  await maybeSpeak(msg);
+  return;
+}
     }
     if (!candidateId) {
       const msg =
