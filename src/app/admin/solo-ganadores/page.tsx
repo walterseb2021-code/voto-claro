@@ -114,7 +114,8 @@ function formatDate(value: string | null) {
     return value;
   }
 }
- function safeFileName(name: string) {
+
+function safeFileName(name: string) {
   return String(name || "archivo")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -123,6 +124,56 @@ function formatDate(value: string | null) {
     .replace(/^-|-$/g, "")
     .toLowerCase();
 }
+
+function isDirectVideoUrl(url: string) {
+  const u = String(url || "").toLowerCase();
+  return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".mov");
+}
+
+function isImageUrl(url: string) {
+  const u = String(url || "").toLowerCase();
+  return (
+    u.endsWith(".jpg") ||
+    u.endsWith(".jpeg") ||
+    u.endsWith(".png") ||
+    u.endsWith(".webp") ||
+    u.endsWith(".gif") ||
+    u.includes("/storage/v1/object/public/")
+  );
+}
+
+function youtubeEmbedUrl(url: string) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+
+  try {
+    const u = new URL(raw);
+
+    if (u.hostname.includes("youtube.com")) {
+      const v = u.searchParams.get("v");
+      if (v) return `https://www.youtube.com/embed/${v}`;
+    }
+
+    if (u.hostname.includes("youtu.be")) {
+      const id = u.pathname.replace("/", "");
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    }
+  } catch {}
+
+  return "";
+}
+
+function errorText(err: any) {
+  return (
+    err?.message ||
+    err?.details ||
+    err?.hint ||
+    err?.code ||
+    JSON.stringify(err) ||
+    "Error desconocido"
+  );
+}
+
 export default function AdminSoloGanadoresPage() {
   const router = useRouter();
 
@@ -152,65 +203,52 @@ export default function AdminSoloGanadoresPage() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/admin");
   }
-    async function uploadSoloGanadoresFile(file: File, folder: string) {
-  if (!file) return "";
 
-  setUploading(true);
-  setMessage(null);
+  async function uploadSoloGanadoresFile(file: File, folder: string) {
+    if (!file) return "";
 
-  try {
-    const cleanName = safeFileName(file.name);
-    const path = `${folder}/${Date.now()}-${cleanName}`;
+    setUploading(true);
+    setMessage(null);
 
-    const { error } = await supabase.storage
-      .from("solo-ganadores")
-      .upload(path, file, {
+    try {
+      const cleanName = safeFileName(file.name);
+      const path = `${folder}/${Date.now()}-${cleanName}`;
+
+      const { error } = await supabase.storage.from("solo-ganadores").upload(path, file, {
         cacheControl: "3600",
         upsert: false,
       });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const { data } = supabase.storage
-      .from("solo-ganadores")
-      .getPublicUrl(path);
+      const { data } = supabase.storage.from("solo-ganadores").getPublicUrl(path);
+      const publicUrl = data.publicUrl;
 
-    const publicUrl = data.publicUrl;
+      if (!publicUrl) {
+        throw new Error("No se pudo obtener la URL pública del archivo.");
+      }
 
-    if (!publicUrl) {
-      throw new Error("No se pudo obtener la URL pública del archivo.");
+      setMessage({ type: "success", text: "✅ Archivo subido correctamente." });
+      return publicUrl;
+    } catch (err: any) {
+      const text = errorText(err);
+      console.error("Error al subir archivo:", err);
+      setMessage({ type: "error", text: "Error al subir archivo: " + text });
+      return "";
+    } finally {
+      setUploading(false);
     }
-
-    setMessage({ type: "success", text: "✅ Archivo subido correctamente." });
-    return publicUrl;
-  } catch (err) {
-    const text = err instanceof Error ? err.message : "Error desconocido";
-    setMessage({ type: "error", text: "Error al subir archivo: " + text });
-    return "";
-  } finally {
-    setUploading(false);
   }
-}
+
   async function loadAll() {
     setLoading(true);
     setMessage(null);
 
     try {
       const [eventsRes, postsRes, mediaRes] = await Promise.all([
-        supabase
-          .from("solo_ganadores_events")
-          .select("*")
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("solo_ganadores_posts")
-          .select("*")
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("solo_ganadores_media")
-          .select("*")
-          .order("created_at", { ascending: false }),
+        supabase.from("solo_ganadores_events").select("*").order("created_at", { ascending: false }),
+        supabase.from("solo_ganadores_posts").select("*").order("created_at", { ascending: false }),
+        supabase.from("solo_ganadores_media").select("*").order("created_at", { ascending: false }),
       ]);
 
       if (eventsRes.error) throw eventsRes.error;
@@ -220,8 +258,9 @@ export default function AdminSoloGanadoresPage() {
       setEvents((eventsRes.data || []) as SoloEvent[]);
       setPosts((postsRes.data || []) as SoloPost[]);
       setMedia((mediaRes.data || []) as SoloMedia[]);
-    } catch (err) {
-      const text = err instanceof Error ? err.message : "Error desconocido";
+    } catch (err: any) {
+      const text = errorText(err);
+      console.error("Error al cargar datos:", err);
       setMessage({ type: "error", text: "Error al cargar datos: " + text });
     } finally {
       setLoading(false);
@@ -289,8 +328,9 @@ export default function AdminSoloGanadoresPage() {
       setEventForm(emptyEvent);
       setMessage({ type: "success", text: "✅ Evento guardado correctamente." });
       await loadAll();
-    } catch (err) {
-      const text = err instanceof Error ? err.message : "Error desconocido";
+    } catch (err: any) {
+      const text = errorText(err);
+      console.error("Error al guardar evento:", err);
       setMessage({ type: "error", text: "Error al guardar evento: " + text });
     } finally {
       setSaving(false);
@@ -333,8 +373,9 @@ export default function AdminSoloGanadoresPage() {
       setPostForm(emptyPost);
       setMessage({ type: "success", text: "✅ Ganador guardado correctamente." });
       await loadAll();
-    } catch (err) {
-      const text = err instanceof Error ? err.message : "Error desconocido";
+    } catch (err: any) {
+      const text = errorText(err);
+      console.error("Error al guardar ganador:", err);
       setMessage({ type: "error", text: "Error al guardar ganador: " + text });
     } finally {
       setSaving(false);
@@ -376,8 +417,9 @@ export default function AdminSoloGanadoresPage() {
       setMediaForm(emptyMedia);
       setMessage({ type: "success", text: "✅ Contenido guardado correctamente." });
       await loadAll();
-    } catch (err) {
-      const text = err instanceof Error ? err.message : "Error desconocido";
+    } catch (err: any) {
+      const text = errorText(err);
+      console.error("Error al guardar contenido:", err);
       setMessage({ type: "error", text: "Error al guardar contenido: " + text });
     } finally {
       setSaving(false);
@@ -396,8 +438,9 @@ export default function AdminSoloGanadoresPage() {
 
       setMessage({ type: "success", text: "✅ Registro eliminado." });
       await loadAll();
-    } catch (err) {
-      const text = err instanceof Error ? err.message : "Error desconocido";
+    } catch (err: any) {
+      const text = errorText(err);
+      console.error("Error al eliminar:", err);
       setMessage({ type: "error", text: "Error al eliminar: " + text });
     } finally {
       setSaving(false);
@@ -421,6 +464,49 @@ export default function AdminSoloGanadoresPage() {
   const input =
     "w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700";
   const label = "block text-xs font-extrabold text-slate-700 mb-1";
+  const fileInput =
+    "mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700";
+
+  function MediaPreview({ url, labelText }: { url: string; labelText: string }) {
+    const clean = String(url || "").trim();
+    if (!clean) return null;
+
+    const embed = youtubeEmbedUrl(clean);
+
+    return (
+      <div className="mt-3 rounded-xl border border-slate-300 bg-white p-2">
+        <div className="mb-2 text-xs font-extrabold text-slate-700">{labelText}</div>
+
+        {embed ? (
+          <iframe
+            src={embed}
+            title={labelText}
+            className="h-56 w-full rounded-lg bg-black"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : isDirectVideoUrl(clean) ? (
+          <video src={clean} controls className="max-h-56 w-full rounded-lg bg-black" />
+        ) : isImageUrl(clean) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={clean}
+            alt={labelText}
+            className="max-h-48 w-full rounded-lg object-contain bg-slate-50"
+          />
+        ) : (
+          <a
+            href={clean}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-extrabold text-green-800 underline break-all"
+          >
+            Abrir enlace
+          </a>
+        )}
+      </div>
+    );
+  }
 
   if (checking) {
     return (
@@ -466,24 +552,24 @@ export default function AdminSoloGanadoresPage() {
         </div>
       </div>
 
-       {message ? (
-  <div
-    className={[
-      "mt-4 rounded-xl border p-3 text-sm font-bold",
-      message.type === "success"
-        ? "bg-green-100 border-green-500 text-green-800"
-        : "bg-red-100 border-red-500 text-red-800",
-    ].join(" ")}
-  >
-    {message.text}
-  </div>
-) : null}
+      {message ? (
+        <div
+          className={[
+            "mt-4 rounded-xl border p-3 text-sm font-bold",
+            message.type === "success"
+              ? "bg-green-100 border-green-500 text-green-800"
+              : "bg-red-100 border-red-500 text-red-800",
+          ].join(" ")}
+        >
+          {message.text}
+        </div>
+      ) : null}
 
-{uploading ? (
-  <div className="mt-4 rounded-xl border border-blue-400 bg-blue-50 p-3 text-sm font-bold text-blue-800">
-    Subiendo archivo… espera unos segundos antes de guardar.
-  </div>
-) : null}
+      {uploading ? (
+        <div className="mt-4 rounded-xl border border-blue-400 bg-blue-50 p-3 text-sm font-bold text-blue-800">
+          Subiendo archivo… espera unos segundos antes de guardar.
+        </div>
+      ) : null}
 
       <section className={sectionWrap}>
         <div className={inner}>
@@ -491,7 +577,11 @@ export default function AdminSoloGanadoresPage() {
             <button
               type="button"
               onClick={() => setTab("evento")}
-              className={tab === "evento" ? btnSm : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")}
+              className={
+                tab === "evento"
+                  ? btnSm
+                  : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")
+              }
             >
               🗓️ Evento
             </button>
@@ -499,7 +589,11 @@ export default function AdminSoloGanadoresPage() {
             <button
               type="button"
               onClick={() => setTab("ganadores")}
-              className={tab === "ganadores" ? btnSm : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")}
+              className={
+                tab === "ganadores"
+                  ? btnSm
+                  : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")
+              }
             >
               🏅 Ganadores
             </button>
@@ -507,17 +601,16 @@ export default function AdminSoloGanadoresPage() {
             <button
               type="button"
               onClick={() => setTab("media")}
-              className={tab === "media" ? btnSm : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")}
+              className={
+                tab === "media"
+                  ? btnSm
+                  : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")
+              }
             >
               📸 Galería
             </button>
 
-            <button
-              type="button"
-              onClick={loadAll}
-              className={btnSm + " ml-auto"}
-              disabled={loading}
-            >
+            <button type="button" onClick={loadAll} className={btnSm + " ml-auto"} disabled={loading}>
               {loading ? "Cargando…" : "↻ Refrescar"}
             </button>
           </div>
@@ -529,7 +622,9 @@ export default function AdminSoloGanadoresPage() {
           <div className={inner}>
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <div className="text-lg font-extrabold text-slate-900">🗓️ Evento del semestre</div>
+                <div className="text-lg font-extrabold text-slate-900">
+                  🗓️ Evento del semestre
+                </div>
                 <p className="mt-1 text-sm text-slate-700">
                   Publica lugar, fecha, ambiente, reconocimientos, imagen y video del evento.
                 </p>
@@ -540,225 +635,297 @@ export default function AdminSoloGanadoresPage() {
               </button>
             </div>
 
-             <div className="mt-5 space-y-5">
-  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-    <div className="mb-3 text-sm font-extrabold text-slate-900">
-      1. Datos principales del evento
-    </div>
+            <div className="mt-5 space-y-5">
+              <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                  1. Datos principales del evento
+                </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div>
-        <label className={label}>Título del evento *</label>
-        <input
-          className={input}
-          value={eventForm.title}
-          onChange={(e) => setEventForm((p) => ({ ...p, title: e.target.value }))}
-          placeholder="Evento de reconocimiento ciudadano"
-        />
-      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>Título del evento *</label>
+                    <input
+                      className={input}
+                      value={eventForm.title}
+                      onChange={(e) => setEventForm((p) => ({ ...p, title: e.target.value }))}
+                      placeholder="Evento de reconocimiento ciudadano"
+                    />
+                  </div>
 
-      <div>
-        <label className={label}>Semestre</label>
-        <input
-          className={input}
-          value={eventForm.semester}
-          onChange={(e) => setEventForm((p) => ({ ...p, semester: e.target.value }))}
-          placeholder="2026-I"
-        />
-      </div>
+                  <div>
+                    <label className={label}>Semestre</label>
+                    <input
+                      className={input}
+                      value={eventForm.semester}
+                      onChange={(e) => setEventForm((p) => ({ ...p, semester: e.target.value }))}
+                      placeholder="2026-I"
+                    />
+                  </div>
 
-      <div>
-        <label className={label}>Fecha</label>
-        <input
-          type="date"
-          className={input}
-          value={eventForm.event_date}
-          onChange={(e) => setEventForm((p) => ({ ...p, event_date: e.target.value }))}
-        />
-      </div>
+                  <div>
+                    <label className={label}>Fecha</label>
+                    <input
+                      type="date"
+                      className={input}
+                      value={eventForm.event_date}
+                      onChange={(e) => setEventForm((p) => ({ ...p, event_date: e.target.value }))}
+                    />
+                  </div>
 
-      <div>
-        <label className={label}>Estado</label>
-        <select
-          className={input}
-          value={eventForm.status}
-          onChange={(e) => setEventForm((p) => ({ ...p, status: e.target.value }))}
-        >
-          <option value="anunciado">Anunciado</option>
-          <option value="activo">Activo</option>
-          <option value="finalizado">Finalizado</option>
-        </select>
-      </div>
-    </div>
-  </div>
+                  <div>
+                    <label className={label}>Estado</label>
+                    <select
+                      className={input}
+                      value={eventForm.status}
+                      onChange={(e) => setEventForm((p) => ({ ...p, status: e.target.value }))}
+                    >
+                      <option value="anunciado">Anunciado</option>
+                      <option value="activo">Activo</option>
+                      <option value="finalizado">Finalizado</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
 
-  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-    <div className="mb-3 text-sm font-extrabold text-slate-900">
-      2. Lugar y ubicación
-    </div>
+              <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                  2. Lugar y ubicación
+                </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div>
-        <label className={label}>Lugar / ambiente</label>
-        <input
-          className={input}
-          value={eventForm.location_name}
-          onChange={(e) => setEventForm((p) => ({ ...p, location_name: e.target.value }))}
-          placeholder="Auditorio principal"
-        />
-      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>Lugar / ambiente</label>
+                    <input
+                      className={input}
+                      value={eventForm.location_name}
+                      onChange={(e) =>
+                        setEventForm((p) => ({ ...p, location_name: e.target.value }))
+                      }
+                      placeholder="Auditorio principal"
+                    />
+                  </div>
 
-      <div>
-        <label className={label}>Ciudad</label>
-        <input
-          className={input}
-          value={eventForm.city}
-          onChange={(e) => setEventForm((p) => ({ ...p, city: e.target.value }))}
-          placeholder="Lima"
-        />
-      </div>
+                  <div>
+                    <label className={label}>Ciudad</label>
+                    <input
+                      className={input}
+                      value={eventForm.city}
+                      onChange={(e) => setEventForm((p) => ({ ...p, city: e.target.value }))}
+                      placeholder="Lima"
+                    />
+                  </div>
 
-      <div className="md:col-span-2">
-        <label className={label}>Dirección</label>
-        <input
-          className={input}
-          value={eventForm.address}
-          onChange={(e) => setEventForm((p) => ({ ...p, address: e.target.value }))}
-          placeholder="Dirección del evento"
-        />
-      </div>
-    </div>
-  </div>
+                  <div className="md:col-span-2">
+                    <label className={label}>Dirección</label>
+                    <input
+                      className={input}
+                      value={eventForm.address}
+                      onChange={(e) => setEventForm((p) => ({ ...p, address: e.target.value }))}
+                      placeholder="Dirección del evento"
+                    />
+                  </div>
+                </div>
+              </div>
 
-  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-    <div className="mb-3 text-sm font-extrabold text-slate-900">
-      3. Descripción y reconocimientos
-    </div>
+              <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                  3. Descripción y reconocimientos
+                </div>
 
-    <div className="grid grid-cols-1 gap-3">
-      <div>
-        <label className={label}>Descripción del evento</label>
-        <textarea
-          className={input + " min-h-24"}
-          value={eventForm.description}
-          onChange={(e) => setEventForm((p) => ({ ...p, description: e.target.value }))}
-          placeholder="Describe el evento, los ambientes, invitados y finalidad."
-        />
-      </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className={label}>Descripción del evento</label>
+                    <textarea
+                      className={input + " min-h-24"}
+                      value={eventForm.description}
+                      onChange={(e) =>
+                        setEventForm((p) => ({ ...p, description: e.target.value }))
+                      }
+                      placeholder="Describe el evento, los ambientes, invitados y finalidad."
+                    />
+                  </div>
 
-      <div>
-        <label className={label}>Reconocimientos</label>
-        <textarea
-          className={input + " min-h-24"}
-          value={eventForm.recognitions}
-          onChange={(e) => setEventForm((p) => ({ ...p, recognitions: e.target.value }))}
-          placeholder="Reconocimientos, premios, menciones especiales."
-        />
-      </div>
-    </div>
-  </div>
+                  <div>
+                    <label className={label}>Reconocimientos</label>
+                    <textarea
+                      className={input + " min-h-24"}
+                      value={eventForm.recognitions}
+                      onChange={(e) =>
+                        setEventForm((p) => ({ ...p, recognitions: e.target.value }))
+                      }
+                      placeholder="Reconocimientos, premios, menciones especiales."
+                    />
+                  </div>
+                </div>
+              </div>
 
-  <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-    <div className="mb-3 text-sm font-extrabold text-slate-900">
-      4. Imagen, video y publicación
-    </div>
+              <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
+                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                  4. Imagen, video y publicación
+                </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div>
-        <label className={label}>URL imagen principal</label>
-        <input
-          className={input}
-          value={eventForm.main_image_url}
-          onChange={(e) => setEventForm((p) => ({ ...p, main_image_url: e.target.value }))}
-          placeholder="URL de imagen"
-        />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>URL imagen principal</label>
+                    <input
+                      className={input}
+                      value={eventForm.main_image_url}
+                      onChange={(e) =>
+                        setEventForm((p) => ({ ...p, main_image_url: e.target.value }))
+                      }
+                      placeholder="URL de imagen"
+                    />
 
-        <input
-          type="file"
-          accept="image/*"
-          className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-          disabled={uploading}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const url = await uploadSoloGanadoresFile(file, "eventos");
-            if (url) setEventForm((p) => ({ ...p, main_image_url: url }));
-            e.currentTarget.value = "";
-          }}
-        />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className={fileInput}
+                      disabled={uploading}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const url = await uploadSoloGanadoresFile(file, "eventos");
+                        if (url) setEventForm((p) => ({ ...p, main_image_url: url }));
+                        e.currentTarget.value = "";
+                      }}
+                    />
 
-        {eventForm.main_image_url ? (
-          <div className="mt-3 rounded-xl border border-slate-300 bg-white p-2">
-            <div className="mb-2 text-xs font-extrabold text-slate-700">
-              Vista previa de imagen
+                    <MediaPreview url={eventForm.main_image_url} labelText="Vista previa de imagen" />
+                  </div>
+
+                  <div>
+                    <label className={label}>URL video promocional</label>
+                    <input
+                      className={input}
+                      value={eventForm.promo_video_url}
+                      onChange={(e) =>
+                        setEventForm((p) => ({ ...p, promo_video_url: e.target.value }))
+                      }
+                      placeholder="URL de video o YouTube"
+                    />
+
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className={fileInput}
+                      disabled={uploading}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const url = await uploadSoloGanadoresFile(file, "eventos");
+                        if (url) setEventForm((p) => ({ ...p, promo_video_url: url }));
+                        e.currentTarget.value = "";
+                      }}
+                    />
+
+                    <MediaPreview url={eventForm.promo_video_url} labelText="Vista previa de video" />
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={eventForm.published}
+                      onChange={(e) =>
+                        setEventForm((p) => ({ ...p, published: e.target.checked }))
+                      }
+                    />
+                    Publicado
+                  </label>
+
+                  <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={eventForm.featured}
+                      onChange={(e) =>
+                        setEventForm((p) => ({ ...p, featured: e.target.checked }))
+                      }
+                    />
+                    Destacado
+                  </label>
+                </div>
+              </div>
             </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={eventForm.main_image_url}
-              alt="Vista previa del evento"
-              className="max-h-48 w-full rounded-lg object-contain bg-slate-50"
-            />
-          </div>
-        ) : null}
-      </div>
 
-      <div>
-        <label className={label}>URL video promocional</label>
-        <input
-          className={input}
-          value={eventForm.promo_video_url}
-          onChange={(e) => setEventForm((p) => ({ ...p, promo_video_url: e.target.value }))}
-          placeholder="URL de video"
-        />
+            <button type="button" onClick={saveEvent} className={btn + " mt-5"} disabled={saving}>
+              {saving
+                ? "Guardando…"
+                : eventForm.id
+                  ? "Guardar evento del semestre"
+                  : "Crear evento del semestre"}
+            </button>
 
-        <input
-          type="file"
-          accept="video/*"
-          className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-          disabled={uploading}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const url = await uploadSoloGanadoresFile(file, "eventos");
-            if (url) setEventForm((p) => ({ ...p, promo_video_url: url }));
-            e.currentTarget.value = "";
-          }}
-        />
+            <div className="mt-6 grid grid-cols-1 gap-3">
+              {events.map((ev) => (
+                <div key={ev.id} className={card}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-900">{ev.title}</div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        {ev.semester || "Sin semestre"} • {formatDate(ev.event_date)} • {ev.status}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        {ev.published ? "Publicado" : "Borrador"}{" "}
+                        {ev.featured ? "• Destacado" : ""}
+                      </div>
+                    </div>
 
-        {eventForm.promo_video_url ? (
-          <div className="mt-3 rounded-xl border border-slate-300 bg-white p-2">
-            <div className="mb-2 text-xs font-extrabold text-slate-700">
-              Vista previa de video
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        className={btnSm}
+                        onClick={() =>
+                          setEventForm({
+                            id: ev.id,
+                            title: ev.title || "",
+                            semester: ev.semester || "",
+                            event_date: ev.event_date || "",
+                            location_name: ev.location_name || "",
+                            address: ev.address || "",
+                            city: ev.city || "",
+                            description: ev.description || "",
+                            recognitions: ev.recognitions || "",
+                            main_image_url: ev.main_image_url || "",
+                            promo_video_url: ev.promo_video_url || "",
+                            status: ev.status || "anunciado",
+                            published: !!ev.published,
+                            featured: !!ev.featured,
+                          })
+                        }
+                      >
+                        Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        className={btnSm + " bg-red-700 hover:bg-red-800"}
+                        onClick={() => deleteRow("solo_ganadores_events", ev.id)}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <video
-              src={eventForm.promo_video_url}
-              controls
-              className="max-h-56 w-full rounded-lg bg-black"
-            />
           </div>
-        ) : null}
-      </div>
+        </section>
+      ) : null}
 
-      <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
-        <input
-          type="checkbox"
-          checked={eventForm.published}
-          onChange={(e) => setEventForm((p) => ({ ...p, published: e.target.checked }))}
-        />
-        Publicado
-      </label>
+      {tab === "ganadores" ? (
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-lg font-extrabold text-slate-900">🏅 Ganadores</div>
+                <p className="mt-1 text-sm text-slate-700">
+                  Publica ganadores de distintas dinámicas y conecta fotos, videos o entrevistas.
+                </p>
+              </div>
 
-      <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
-        <input
-          type="checkbox"
-          checked={eventForm.featured}
-          onChange={(e) => setEventForm((p) => ({ ...p, featured: e.target.checked }))}
-        />
-        Destacado
-      </label>
-    </div>
-  </div>
-</div>
+              <button type="button" onClick={() => setPostForm(emptyPost)} className={btnSm}>
+                + Nuevo ganador
+              </button>
+            </div>
 
             <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -832,65 +999,73 @@ export default function AdminSoloGanadoresPage() {
                 <textarea
                   className={input + " min-h-24"}
                   value={postForm.description}
-                  onChange={(e) => setPostForm((p) => ({ ...p, description: e.target.value }))}
+                  onChange={(e) =>
+                    setPostForm((p) => ({ ...p, description: e.target.value }))
+                  }
                   placeholder="Cuenta brevemente por qué se reconoce a este ganador."
                 />
               </div>
 
-                 <div>
-  <label className={label}>URL foto</label>
-  <input
-    className={input}
-    value={postForm.photo_url}
-    onChange={(e) => setPostForm((p) => ({ ...p, photo_url: e.target.value }))}
-    placeholder="URL de foto"
-  />
+              <div>
+                <label className={label}>URL foto</label>
+                <input
+                  className={input}
+                  value={postForm.photo_url}
+                  onChange={(e) => setPostForm((p) => ({ ...p, photo_url: e.target.value }))}
+                  placeholder="URL de foto"
+                />
 
-  <input
-    type="file"
-    accept="image/*"
-    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-    disabled={uploading}
-    onChange={async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = await uploadSoloGanadoresFile(file, "ganadores");
-      if (url) setPostForm((p) => ({ ...p, photo_url: url }));
-      e.currentTarget.value = "";
-    }}
-  />
-</div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className={fileInput}
+                  disabled={uploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const url = await uploadSoloGanadoresFile(file, "ganadores");
+                    if (url) setPostForm((p) => ({ ...p, photo_url: url }));
+                    e.currentTarget.value = "";
+                  }}
+                />
 
-                 <div>
-  <label className={label}>URL video</label>
-  <input
-    className={input}
-    value={postForm.video_url}
-    onChange={(e) => setPostForm((p) => ({ ...p, video_url: e.target.value }))}
-    placeholder="URL de video"
-  />
+                <MediaPreview url={postForm.photo_url} labelText="Vista previa de foto" />
+              </div>
 
-  <input
-    type="file"
-    accept="video/*"
-    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-    disabled={uploading}
-    onChange={async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = await uploadSoloGanadoresFile(file, "ganadores");
-      if (url) setPostForm((p) => ({ ...p, video_url: url }));
-      e.currentTarget.value = "";
-    }}
-  />
-</div>
+              <div>
+                <label className={label}>URL video</label>
+                <input
+                  className={input}
+                  value={postForm.video_url}
+                  onChange={(e) => setPostForm((p) => ({ ...p, video_url: e.target.value }))}
+                  placeholder="URL de video o YouTube"
+                />
+
+                <input
+                  type="file"
+                  accept="video/*"
+                  className={fileInput}
+                  disabled={uploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const url = await uploadSoloGanadoresFile(file, "ganadores");
+                    if (url) setPostForm((p) => ({ ...p, video_url: url }));
+                    e.currentTarget.value = "";
+                  }}
+                />
+
+                <MediaPreview url={postForm.video_url} labelText="Vista previa de video" />
+              </div>
 
               <div>
                 <label className={label}>URL entrevista</label>
                 <input
                   className={input}
                   value={postForm.interview_url}
-                  onChange={(e) => setPostForm((p) => ({ ...p, interview_url: e.target.value }))}
+                  onChange={(e) =>
+                    setPostForm((p) => ({ ...p, interview_url: e.target.value }))
+                  }
                   placeholder="Enlace de entrevista"
                 />
               </div>
@@ -900,7 +1075,9 @@ export default function AdminSoloGanadoresPage() {
                 <input
                   className={input}
                   value={postForm.source_winner_id}
-                  onChange={(e) => setPostForm((p) => ({ ...p, source_winner_id: e.target.value }))}
+                  onChange={(e) =>
+                    setPostForm((p) => ({ ...p, source_winner_id: e.target.value }))
+                  }
                   placeholder="ID de tabla técnica, si aplica"
                 />
               </div>
@@ -925,7 +1102,7 @@ export default function AdminSoloGanadoresPage() {
             </div>
 
             <button type="button" onClick={savePost} className={btn + " mt-5"} disabled={saving}>
-              {saving ? "Guardando…" : postForm.id ? "Guardar cambios" : "Crear ganador"}
+              {saving ? "Guardando…" : postForm.id ? "Guardar ganador" : "Crear ganador"}
             </button>
 
             <div className="mt-6 grid grid-cols-1 gap-3">
@@ -938,7 +1115,8 @@ export default function AdminSoloGanadoresPage() {
                         {p.winner_alias || p.winner_name || "Sin nombre visible"} • {p.source_module}
                       </div>
                       <div className="mt-1 text-xs text-slate-600">
-                        {p.published ? "Publicado" : "Borrador"} {p.featured ? "• Destacado" : ""}
+                        {p.published ? "Publicado" : "Borrador"}{" "}
+                        {p.featured ? "• Destacado" : ""}
                       </div>
                     </div>
 
@@ -967,6 +1145,7 @@ export default function AdminSoloGanadoresPage() {
                       >
                         Editar
                       </button>
+
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}
@@ -1026,35 +1205,40 @@ export default function AdminSoloGanadoresPage() {
                 </select>
               </div>
 
-                <div className="md:col-span-2">
-  <label className={label}>URL archivo / video *</label>
-  <input
-    className={input}
-    value={mediaForm.media_url}
-    onChange={(e) => setMediaForm((p) => ({ ...p, media_url: e.target.value }))}
-    placeholder="URL de archivo, imagen o video"
-  />
+              <div className="md:col-span-2">
+                <label className={label}>URL archivo / video *</label>
+                <input
+                  className={input}
+                  value={mediaForm.media_url}
+                  onChange={(e) => setMediaForm((p) => ({ ...p, media_url: e.target.value }))}
+                  placeholder="URL de archivo, imagen, video o YouTube"
+                />
 
-  <input
-    type="file"
-    accept="image/*,video/*"
-    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-    disabled={uploading}
-    onChange={async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = await uploadSoloGanadoresFile(file, "galeria");
-      if (url) setMediaForm((p) => ({ ...p, media_url: url }));
-      e.currentTarget.value = "";
-    }}
-  />
-</div>
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  className={fileInput}
+                  disabled={uploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const url = await uploadSoloGanadoresFile(file, "galeria");
+                    if (url) setMediaForm((p) => ({ ...p, media_url: url }));
+                    e.currentTarget.value = "";
+                  }}
+                />
+
+                <MediaPreview url={mediaForm.media_url} labelText="Vista previa del contenido" />
+              </div>
+
               <div className="md:col-span-2">
                 <label className={label}>Descripción</label>
                 <textarea
                   className={input + " min-h-24"}
                   value={mediaForm.description}
-                  onChange={(e) => setMediaForm((p) => ({ ...p, description: e.target.value }))}
+                  onChange={(e) =>
+                    setMediaForm((p) => ({ ...p, description: e.target.value }))
+                  }
                   placeholder="Describe el contenido publicado."
                 />
               </div>
@@ -1064,7 +1248,9 @@ export default function AdminSoloGanadoresPage() {
                 <select
                   className={input}
                   value={mediaForm.related_winner_id}
-                  onChange={(e) => setMediaForm((p) => ({ ...p, related_winner_id: e.target.value }))}
+                  onChange={(e) =>
+                    setMediaForm((p) => ({ ...p, related_winner_id: e.target.value }))
+                  }
                 >
                   <option value="">Sin relación</option>
                   {posts.map((p) => (
@@ -1079,7 +1265,9 @@ export default function AdminSoloGanadoresPage() {
                 <input
                   type="checkbox"
                   checked={mediaForm.published}
-                  onChange={(e) => setMediaForm((p) => ({ ...p, published: e.target.checked }))}
+                  onChange={(e) =>
+                    setMediaForm((p) => ({ ...p, published: e.target.checked }))
+                  }
                 />
                 Publicado
               </label>
@@ -1088,14 +1276,16 @@ export default function AdminSoloGanadoresPage() {
                 <input
                   type="checkbox"
                   checked={mediaForm.featured}
-                  onChange={(e) => setMediaForm((p) => ({ ...p, featured: e.target.checked }))}
+                  onChange={(e) =>
+                    setMediaForm((p) => ({ ...p, featured: e.target.checked }))
+                  }
                 />
                 Destacado
               </label>
             </div>
 
             <button type="button" onClick={saveMedia} className={btn + " mt-5"} disabled={saving}>
-              {saving ? "Guardando…" : mediaForm.id ? "Guardar cambios" : "Crear contenido"}
+              {saving ? "Guardando…" : mediaForm.id ? "Guardar contenido" : "Crear contenido"}
             </button>
 
             <div className="mt-6 grid grid-cols-1 gap-3">
@@ -1105,7 +1295,8 @@ export default function AdminSoloGanadoresPage() {
                     <div>
                       <div className="text-sm font-extrabold text-slate-900">{m.title}</div>
                       <div className="mt-1 text-xs text-slate-600">
-                        {m.media_type} • {m.published ? "Publicado" : "Borrador"} {m.featured ? "• Destacado" : ""}
+                        {m.media_type} • {m.published ? "Publicado" : "Borrador"}{" "}
+                        {m.featured ? "• Destacado" : ""}
                       </div>
                       <div className="mt-1 text-xs text-slate-500 break-all">{m.media_url}</div>
                     </div>
@@ -1129,6 +1320,7 @@ export default function AdminSoloGanadoresPage() {
                       >
                         Editar
                       </button>
+
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}

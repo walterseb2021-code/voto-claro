@@ -80,9 +80,134 @@ function sourceLabel(source: string) {
   return "Voto Claro";
 }
 
-function isVideoUrl(url: string) {
+function isDirectVideoUrl(url: string) {
   const u = String(url || "").toLowerCase();
   return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".mov");
+}
+
+function isImageUrl(url: string) {
+  const u = String(url || "").toLowerCase();
+
+  return (
+    u.endsWith(".jpg") ||
+    u.endsWith(".jpeg") ||
+    u.endsWith(".png") ||
+    u.endsWith(".webp") ||
+    u.endsWith(".gif") ||
+    u.includes("/storage/v1/object/public/")
+  );
+}
+
+function youtubeEmbedUrl(url: string) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+
+  try {
+    const u = new URL(raw);
+
+    if (u.hostname.includes("youtube.com")) {
+      const v = u.searchParams.get("v");
+      if (v) return `https://www.youtube.com/embed/${v}`;
+
+      if (u.pathname.startsWith("/shorts/")) {
+        const id = u.pathname.replace("/shorts/", "").split("/")[0];
+        if (id) return `https://www.youtube.com/embed/${id}`;
+      }
+    }
+
+    if (u.hostname.includes("youtu.be")) {
+      const id = u.pathname.replace("/", "").split("/")[0];
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    }
+  } catch {}
+
+  return "";
+}
+
+function mediaKind(url: string, type?: string | null) {
+  const t = String(type || "").toLowerCase();
+  const clean = String(url || "").trim();
+
+  if (youtubeEmbedUrl(clean)) return "youtube";
+  if (isDirectVideoUrl(clean)) return "video";
+  if (t.includes("video") || t.includes("entrevista")) return "video";
+  if (isImageUrl(clean)) return "image";
+
+  return "link";
+}
+
+function PublicMediaBox({
+  url,
+  title,
+  type,
+  emptyText = "Imagen o video por publicar.",
+}: {
+  url: string | null;
+  title: string;
+  type?: string | null;
+  emptyText?: string;
+}) {
+  const clean = String(url || "").trim();
+  const [failed, setFailed] = useState(false);
+
+  if (!clean || failed) {
+    return (
+      <div className="h-full min-h-[220px] rounded-2xl border border-slate-300 bg-slate-50 flex items-center justify-center p-5 text-center text-sm font-semibold text-slate-600">
+        {emptyText}
+      </div>
+    );
+  }
+
+  const kind = mediaKind(clean, type);
+  const embed = youtubeEmbedUrl(clean);
+
+  if (kind === "youtube" && embed) {
+    return (
+      <iframe
+        src={embed}
+        title={title}
+        className="h-full min-h-[220px] w-full rounded-2xl border border-slate-300 bg-black"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    );
+  }
+
+  if (kind === "video") {
+    return (
+      <video
+        src={clean}
+        controls
+        className="h-full min-h-[220px] w-full rounded-2xl border border-slate-300 bg-black object-contain"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  if (kind === "image") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={clean}
+        alt={title}
+        className="h-full min-h-[220px] w-full rounded-2xl border border-slate-300 bg-slate-50 object-cover"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <div className="h-full min-h-[220px] rounded-2xl border border-slate-300 bg-slate-50 flex items-center justify-center p-5 text-center">
+      <a
+        href={clean}
+        target="_blank"
+        rel="noreferrer"
+        className="text-sm font-extrabold text-green-800 underline break-all"
+      >
+        Abrir contenido
+      </a>
+    </div>
+  );
 }
 
 export default function SoloParaGanadoresPage() {
@@ -101,13 +226,14 @@ export default function SoloParaGanadoresPage() {
   }, []);
 
   const featuredEvent = events.find((e) => e.featured) || events[0] || null;
+
   const featuredPosts = posts.filter((p) => p.featured).length
     ? posts.filter((p) => p.featured)
-    : posts.slice(0, 3);
+    : posts.slice(0, 6);
 
   const featuredMedia = media.filter((m) => m.featured).length
     ? media.filter((m) => m.featured)
-    : media.slice(0, 6);
+    : media.slice(0, 9);
 
   useEffect(() => {
     let alive = true;
@@ -353,7 +479,9 @@ export default function SoloParaGanadoresPage() {
                 </h2>
 
                 <div className="mt-2 text-sm font-semibold text-slate-700">
-                  {featuredEvent.semester ? `Semestre: ${featuredEvent.semester}` : "Semestre por confirmar"}
+                  {featuredEvent.semester
+                    ? `Semestre: ${featuredEvent.semester}`
+                    : "Semestre por confirmar"}
                 </div>
 
                 <div className="mt-1 text-sm text-slate-700">
@@ -378,10 +506,15 @@ export default function SoloParaGanadoresPage() {
                   <p className="mt-4 text-sm text-slate-700 leading-relaxed">
                     {featuredEvent.description}
                   </p>
-                ) : null}
+                ) : (
+                  <p className="mt-4 text-sm text-slate-700 leading-relaxed">
+                    Los detalles del evento serán publicados por la administración cuando
+                    se confirme la programación oficial.
+                  </p>
+                )}
 
                 {featuredEvent.recognitions ? (
-                  <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+                  <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700 whitespace-pre-line">
                     <b>Reconocimientos:</b>
                     <br />
                     {featuredEvent.recognitions}
@@ -389,41 +522,30 @@ export default function SoloParaGanadoresPage() {
                 ) : null}
               </div>
 
-              <div className="rounded-2xl border border-slate-300 bg-slate-50 overflow-hidden min-h-[220px] flex items-center justify-center">
+              <div className="min-h-[220px]">
                 {featuredEvent.promo_video_url ? (
-                  isVideoUrl(featuredEvent.promo_video_url) ? (
-                    <video
-                      src={featuredEvent.promo_video_url}
-                      controls
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <a
-                      href={featuredEvent.promo_video_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-5 text-sm font-extrabold text-green-800 underline"
-                    >
-                      Ver video promocional
-                    </a>
-                  )
-                ) : featuredEvent.main_image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={featuredEvent.main_image_url}
-                    alt={featuredEvent.title}
-                    className="w-full h-full object-cover"
+                  <PublicMediaBox
+                    url={featuredEvent.promo_video_url}
+                    title={featuredEvent.title}
+                    type="video"
+                    emptyText="Video del evento por publicar."
                   />
                 ) : (
-                  <div className="p-5 text-center text-sm text-slate-600">
-                    Imagen o video del evento por publicar.
-                  </div>
+                  <PublicMediaBox
+                    url={featuredEvent.main_image_url}
+                    title={featuredEvent.title}
+                    type="foto"
+                    emptyText="Imagen o video del evento por publicar."
+                  />
                 )}
               </div>
             </div>
           ) : (
             <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-              Los detalles del evento serán publicados por la administración cuando se confirme la programación oficial. Aquí se mostrará el lugar, la fecha, los ambientes, reconocimientos, fotos, videos y entrevistas relacionadas con la entrega de premios.
+              Los detalles del evento serán publicados por la administración cuando se
+              confirme la programación oficial. Aquí se mostrará el lugar, la fecha,
+              los ambientes, reconocimientos, fotos, videos y entrevistas relacionadas
+              con la entrega de premios.
             </p>
           )}
         </div>
@@ -436,21 +558,28 @@ export default function SoloParaGanadoresPage() {
           </div>
 
           {featuredPosts.length ? (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {featuredPosts.map((post) => (
                 <div key={post.id} className={card}>
-                  <div className="rounded-xl bg-slate-100 border border-slate-300 overflow-hidden h-44 flex items-center justify-center">
+                  <div className="h-44">
                     {post.photo_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={post.photo_url}
-                        alt={post.title}
-                        className="w-full h-full object-cover"
+                      <PublicMediaBox
+                        url={post.photo_url}
+                        title={post.title}
+                        type="foto"
+                        emptyText="Imagen del ganador por publicar."
                       />
-                    ) : post.video_url && isVideoUrl(post.video_url) ? (
-                      <video src={post.video_url} controls className="w-full h-full object-cover" />
+                    ) : post.video_url ? (
+                      <PublicMediaBox
+                        url={post.video_url}
+                        title={post.title}
+                        type="video"
+                        emptyText="Video del ganador por publicar."
+                      />
                     ) : (
-                      <div className="text-4xl">🏆</div>
+                      <div className="h-full rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center">
+                        <div className="text-4xl">🏆</div>
+                      </div>
                     )}
                   </div>
 
@@ -482,7 +611,7 @@ export default function SoloParaGanadoresPage() {
                     </p>
                   ) : null}
 
-                  {post.video_url && !isVideoUrl(post.video_url) ? (
+                  {post.video_url ? (
                     <a
                       href={post.video_url}
                       target="_blank"
@@ -528,18 +657,17 @@ export default function SoloParaGanadoresPage() {
           {featuredMedia.length ? (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {featuredMedia.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-slate-300 bg-white overflow-hidden shadow-sm">
-                  <div className="h-44 bg-slate-100 flex items-center justify-center overflow-hidden">
-                    {isVideoUrl(item.media_url) || item.media_type === "video" ? (
-                      <video src={item.media_url} controls className="w-full h-full object-cover" />
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.media_url}
-                        alt={item.title}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-slate-300 bg-white overflow-hidden shadow-sm"
+                >
+                  <div className="h-44 bg-slate-100">
+                    <PublicMediaBox
+                      url={item.media_url}
+                      title={item.title}
+                      type={item.media_type}
+                      emptyText="Contenido no disponible."
+                    />
                   </div>
 
                   <div className="p-3">
@@ -553,6 +681,17 @@ export default function SoloParaGanadoresPage() {
                       <p className="mt-1 text-xs text-slate-600 leading-relaxed">
                         {item.description}
                       </p>
+                    ) : null}
+
+                    {mediaKind(item.media_url, item.media_type) === "link" ? (
+                      <a
+                        href={item.media_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex text-xs font-extrabold text-green-800 underline"
+                      >
+                        Abrir contenido
+                      </a>
                     ) : null}
                   </div>
                 </div>
@@ -577,7 +716,9 @@ export default function SoloParaGanadoresPage() {
 
               <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-center">
                 <div className="text-2xl">🎖️</div>
-                <div className="mt-2 text-xs font-extrabold text-slate-900">Reconocimientos</div>
+                <div className="mt-2 text-xs font-extrabold text-slate-900">
+                  Reconocimientos
+                </div>
               </div>
             </div>
           )}
