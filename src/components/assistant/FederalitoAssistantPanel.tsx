@@ -546,15 +546,26 @@ const asksOpenForumsActions =
   q.includes("diferencia entre comentar el tema semanal y los foros abiertos") ||
   q.includes("diferencia entre comentario semanal y foros abiertos");
 
-if (pageId === "solo-para-ganadores") {
+     if (pageId === "solo-para-ganadores") {
   const eventosPublicadosCount = Number(data.eventosPublicadosCount || 0);
   const ganadoresPublicadosCount = Number(data.ganadoresPublicadosCount || 0);
   const mediaPublicadaCount = Number(data.mediaPublicadaCount || 0);
   const eventoDestacadoTitulo = String(data.eventoDestacadoTitulo || "").trim();
+
   const contieneGanadores = Boolean(data.contieneGanadores);
   const contieneEventoSemestre = Boolean(data.contieneEventoSemestre);
   const contieneGaleria = Boolean(data.contieneGaleria);
   const contieneVideosEntrevistas = Boolean(data.contieneVideosEntrevistas);
+
+  const asksSoloPurpose =
+    q.includes("que es esta ventana") ||
+    q.includes("qué es esta ventana") ||
+    q.includes("para que sirve") ||
+    q.includes("para qué sirve") ||
+    q.includes("que es solo para ganadores") ||
+    q.includes("qué es solo para ganadores") ||
+    q.includes("explicame esta ventana") ||
+    q.includes("explícame esta ventana");
 
   const asksSoloEvento =
     q.includes("evento") ||
@@ -563,25 +574,47 @@ if (pageId === "solo-para-ganadores") {
     q.includes("fecha") ||
     q.includes("ambiente") ||
     q.includes("programacion") ||
-    q.includes("programación");
+    q.includes("programación") ||
+    q.includes("donde sera") ||
+    q.includes("dónde será") ||
+    q.includes("cuando sera") ||
+    q.includes("cuándo será");
 
   const asksSoloGanadores =
-    q.includes("ganador") ||
-    q.includes("ganadores") ||
+    q.includes("que ganadores") ||
+    q.includes("qué ganadores") ||
+    q.includes("ganadores aparecen") ||
+    q.includes("quienes ganaron") ||
+    q.includes("quiénes ganaron") ||
+    q.includes("ganador destacado") ||
+    q.includes("ganadores destacados");
+
+  const asksSoloPremiosReconocimientos =
     q.includes("premio") ||
     q.includes("premios") ||
     q.includes("reconocimiento") ||
-    q.includes("reconocimientos");
+    q.includes("reconocimientos") ||
+    q.includes("galardon") ||
+    q.includes("galardón") ||
+    q.includes("que recibieron") ||
+    q.includes("qué recibieron");
 
   const asksSoloGaleria =
     q.includes("galeria") ||
     q.includes("galería") ||
     q.includes("foto") ||
     q.includes("fotos") ||
+    q.includes("imagen") ||
+    q.includes("imagenes") ||
+    q.includes("imágenes");
+
+  const asksSoloVideosEntrevistas =
     q.includes("video") ||
     q.includes("videos") ||
     q.includes("entrevista") ||
-    q.includes("entrevistas");
+    q.includes("entrevistas") ||
+    q.includes("testimonio") ||
+    q.includes("testimonios");
 
   const asksSoloTransparencia =
     q.includes("transparencia") ||
@@ -589,29 +622,31 @@ if (pageId === "solo-para-ganadores") {
     q.includes("verificar") ||
     q.includes("verificacion") ||
     q.includes("verificación") ||
-    q.includes("entrega");
+    q.includes("entrega") ||
+    q.includes("prueba") ||
+    q.includes("constancia");
 
-  if (asksHelp) {
+  if (asksHelp || asksSoloPurpose) {
     return (
-      "Estás en Solo para ganadores, la vitrina final de resultados y reconocimientos de VOTO CLARO.\n\n" +
-      "Aquí puedes revisar ganadores destacados, evento del semestre, galería pública, fotos, videos, entrevistas y registros relacionados con la entrega de premios.\n\n" +
-      "Puedes preguntarme por: ganadores, evento del semestre, fotos, videos, entrevistas, reconocimientos o transparencia de los premios."
+      "Solo para ganadores es la vitrina pública de cierre de las dinámicas con premio.\n\n" +
+      "Su función no es iniciar una participación, sino mostrar el resultado: quiénes destacaron, en qué dinámica participaron y qué reconocimiento recibieron.\n\n" +
+      "Esta ventana sirve para que el ciudadano vea el final del proceso: evento, ganadores, galería, videos, entrevistas y evidencias públicas."
     );
   }
 
   if (asksSoloEvento) {
     if (!contieneEventoSemestre) {
       return (
-        "En esta ventana hay un bloque para el Evento del semestre, pero todavía no detecto un evento publicado.\n\n" +
-        "Cuando la administración publique la programación oficial, aquí aparecerán el lugar, fecha, ambiente, reconocimientos, imagen y video del evento."
+        "El bloque Evento del semestre está reservado para anunciar o mostrar la ceremonia principal de reconocimiento.\n\n" +
+        "Ahora mismo no detecto un evento publicado. Cuando esté activo, aquí se verá la fecha, lugar, ciudad, dirección, descripción, reconocimientos y material visual del evento."
       );
     }
 
     return (
-      "El bloque Evento del semestre muestra la información central del reconocimiento público.\n\n" +
+      "El Evento del semestre concentra la información institucional de la premiación.\n\n" +
       (eventoDestacadoTitulo ? `Evento visible: ${eventoDestacadoTitulo}.\n\n` : "") +
       `Eventos publicados detectados: ${eventosPublicadosCount}.\n\n` +
-      "Ahí se informa la fecha, lugar, ciudad, ambiente, descripción, reconocimientos, imagen principal y video promocional cuando estén disponibles."
+      "En este bloque el usuario puede revisar dónde será o dónde fue el evento, qué se reconoció, qué ambiente se usó y qué contenido visual acompaña la entrega."
     );
   }
 
@@ -619,60 +654,95 @@ if (pageId === "solo-para-ganadores") {
     if (!contieneGanadores) {
       return (
         "Todavía no detecto ganadores publicados en esta ventana.\n\n" +
-        "Cuando la administración publique ganadores, aparecerán aquí con su dinámica de origen, premio o reconocimiento, descripción, imagen, video o entrevista."
+        "Cuando se publiquen, esta sección mostrará a los participantes destacados y la dinámica desde la que llegaron: Reto Ciudadano, Comentarios Ciudadanos, Proyecto Ciudadano, Espacio Emprendedor u otra fuente."
       );
     }
 
     return (
-      `En esta ventana detecto ${ganadoresPublicadosCount} publicación(es) de ganadores.\n\n` +
-      "Cada ganador puede mostrarse con su nombre o alias, la dinámica donde participó, el premio o reconocimiento recibido y una descripción pública.\n\n" +
-      "Esta sección sirve para mostrar los resultados de las dinámicas con premio."
+      `En Ganadores destacados detecto ${ganadoresPublicadosCount} publicación(es) visible(s).\n\n` +
+      "Esta parte responde a una pregunta concreta: quién destacó dentro de las dinámicas de VOTO CLARO.\n\n" +
+      "Cada tarjeta puede mostrar nombre o alias, ventana de origen, fecha, descripción y enlaces relacionados si fueron publicados."
+    );
+  }
+
+  if (asksSoloPremiosReconocimientos) {
+    return (
+      "Los premios y reconocimientos explican qué mérito se está destacando.\n\n" +
+      "No se trata solo de poner un nombre en una lista: la idea es indicar por qué esa persona aparece, qué dinámica ganó o en qué participación destacó.\n\n" +
+      "Cuando la administración completa la información, el usuario puede ver el reconocimiento asociado a cada ganador."
     );
   }
 
   if (asksSoloGaleria) {
     if (!contieneGaleria) {
       return (
-        "Todavía no detecto elementos publicados en la galería.\n\n" +
-        "Cuando se publiquen fotos, videos o entrevistas, aparecerán en la sección Galería pública."
+        "La Galería pública está preparada para mostrar fotos e imágenes del evento, los participantes, los ambientes y los momentos de premiación.\n\n" +
+        "Ahora mismo no detecto elementos publicados en esa galería."
       );
     }
 
     return (
-      `La galería pública tiene ${mediaPublicadaCount} elemento(s) publicado(s).\n\n` +
-      "Ahí se muestran fotos, videos, entrevistas, testimonios, ambientes del evento y registros de entrega de premios." +
-      (contieneVideosEntrevistas
-        ? "\n\nTambién detecto contenido de video o entrevista dentro de esta ventana."
-        : "")
+      `La Galería pública tiene ${mediaPublicadaCount} elemento(s) publicado(s).\n\n` +
+      "Esta sección funciona como memoria visual: permite ver imágenes del evento, registros de entrega, ambientes, participantes y momentos destacados.\n\n" +
+      "A diferencia de Ganadores destacados, aquí el foco no es solo la persona, sino la evidencia visual del proceso."
+    );
+  }
+
+  if (asksSoloVideosEntrevistas) {
+    if (!contieneVideosEntrevistas) {
+      return (
+        "Ahora mismo no detecto videos o entrevistas publicados en esta ventana.\n\n" +
+        "Cuando existan, esta sección permitirá ver testimonios, clips del evento, entrevistas a ganadores o registros audiovisuales de la entrega."
+      );
+    }
+
+    return (
+      "Sí, esta ventana puede mostrar videos o entrevistas cuando la administración los publica.\n\n" +
+      "Ese contenido ayuda a que el reconocimiento no quede solo en texto: permite escuchar, ver momentos del evento y conservar testimonio público de la participación."
     );
   }
 
   if (asksSoloTransparencia) {
     return (
-      "Esta ventana ayuda a dar transparencia porque concentra el resultado visible de las dinámicas con premio.\n\n" +
-      "No solo muestra que alguien ganó: también permite publicar evidencia, fotos, videos, entrevistas, entrega de premios y reconocimientos.\n\n" +
-      "Así el usuario puede ver el cierre del proceso y el reconocimiento público a los participantes."
+      "Esta ventana aporta transparencia porque convierte el premio en un resultado visible.\n\n" +
+      "Permite mostrar quién fue reconocido, de qué dinámica viene, qué recibió y qué evidencia pública acompaña la entrega.\n\n" +
+      "Así el usuario no solo lee que hubo ganadores: puede revisar registros, fotos, videos, entrevistas y detalles del evento."
     );
   }
 
   if (asksActions) {
     if (!actions.length) {
-      return "En esta ventana no detecto acciones claras, pero puedes revisar ganadores, evento del semestre y galería pública.";
+      return (
+        "En esta ventana puedes revisar tres zonas principales: Evento del semestre, Ganadores destacados y Galería pública.\n\n" +
+        "También puedes volver al inicio para seguir explorando otras áreas de VOTO CLARO."
+      );
     }
 
-    return "En Solo para ganadores puedes hacer esto:\n" + `- ${actions.join("\n- ")}`;
+    return (
+      "En Solo para ganadores puedes orientarte así:\n\n" +
+      `- ${actions.join("\n- ")}\n\n` +
+      "Te recomiendo empezar por el evento si quieres contexto general, por ganadores si buscas nombres, o por galería si quieres evidencia visual."
+    );
   }
 
   if (asksScreen || asksStatus) {
     return (
-      contextText ||
-      "Estás en Solo para ganadores. Aquí se muestran resultados, reconocimientos, eventos, fotos, videos y entrevistas de las dinámicas con premio."
+      "Estás viendo la ventana Solo para ganadores.\n\n" +
+      `Estado visible: ${contieneEventoSemestre ? "hay evento publicado" : "evento no publicado"}; ` +
+      `${contieneGanadores ? "hay ganadores publicados" : "sin ganadores visibles"}; ` +
+      `${contieneGaleria ? "hay galería publicada" : "sin galería visible"}.\n\n` +
+      "Esta pantalla resume el cierre público de las dinámicas con premio."
     );
   }
 
   return (
-    "Estoy respondiendo según la ventana Solo para ganadores.\n\n" +
-    "Puedes preguntarme por los ganadores publicados, el evento del semestre, la galería, los videos, entrevistas, reconocimientos o la transparencia de las entregas de premios."
+    "Puedo ayudarte con esta ventana desde cinco enfoques distintos:\n\n" +
+    "1) propósito de Solo para ganadores,\n" +
+    "2) evento del semestre,\n" +
+    "3) ganadores destacados,\n" +
+    "4) fotos, videos y entrevistas,\n" +
+    "5) transparencia de premios.\n\n" +
+    "Hazme una pregunta sobre uno de esos puntos y te respondo sin mezclar los temas."
   );
 }
 
@@ -5026,7 +5096,7 @@ const ctxNow: PageCtx = getPageCtx(currentPath);
 const isEspacioEmprendedorPage = currentPath.startsWith("/espacio-emprendedor");
 const isProyectoCiudadanoPage = currentPath.startsWith("/proyecto-ciudadano");
 const isSoloGanadoresPage = currentPath.startsWith("/solo-para-ganadores");
-const isDynamicContextPage =
+   const isDynamicContextPage =
   ctxNow === "INTENCION" ||
   ctxNow === "RETO" ||
   ctxNow === "COMENTARIO" ||
@@ -5035,13 +5105,16 @@ const isDynamicContextPage =
   isProyectoCiudadanoPage ||
   isSoloGanadoresPage;
 
-    if (isDynamicContextPage && pageContext) {
-        if (
-  ctxNow === "COMENTARIO" &&
-  (
-    shouldForceLocalComentarioAnswer(rawQ, pageContext as any) ||
-    shouldForceLocalComentarioForumAnswer(rawQ, pageContext as any)
-  )
+if (isDynamicContextPage && pageContext) {
+  if (
+    (
+      ctxNow === "COMENTARIO" &&
+    (
+      shouldForceLocalComentarioAnswer(rawQ, pageContext as any) ||
+      shouldForceLocalComentarioForumAnswer(rawQ, pageContext as any)
+    )
+  ) ||
+  ctxNow === "SOLO_GANADORES"
 ) {
   const localAnswer = sanitizeAssistantTextForUi(
     answerFromDynamicPageContext(rawQ, pageContext as any)
