@@ -98,8 +98,8 @@ if (p.startsWith("/solo-para-ganadores")) {
   return "Hola, soy el asistente de Solo para ganadores. Puedo ayudarte a entender los ganadores, el evento del semestre, la galería, los videos, entrevistas y reconocimientos visibles.";
 }
 
-if (p.startsWith("/reflexion")) {
-  return "Hola, soy el asistente de Reflexión antes de votar. Puedo ayudarte con las preguntas y reflexiones visibles.";
+ if (p.startsWith("/reflexion")) {
+  return "Hola, soy el asistente de Reflexiones políticas y ciudadanas. Puedo ayudarte a revisar ejes temáticos, preguntas y reflexiones para formar criterio ciudadano.";
 }
 
   if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios")) {
@@ -3356,7 +3356,7 @@ function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
   if (i.wantsREFLEXION) {
     if (ctx === "REFLEXION") return null;
     return (
-      "Eso corresponde a “Reflexionar antes de votar”.\n\n" +
+       "Eso corresponde a “Reflexiones políticas y ciudadanas”.\n\n" +
       "👉 Ve a: /reflexion\n\n" +
       "Ahí puedo leerte preguntas y reflexiones sin inventar."
     );
@@ -3377,7 +3377,7 @@ function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
     "Muévete a una de estas secciones:\n" +
     "- Inicio: búsqueda de candidatos\n" +
     "- Servicios al ciudadano\n" +
-    "- Reflexión antes de votar\n" +
+    "- Reflexiones políticas y ciudadanas\n" +
     "- Un cambio con valentía"
   );
 }
@@ -4258,12 +4258,12 @@ const autoguideKey = useMemo(() => {
     ).trim();
   }
 
-  if (p.startsWith("/reflexion")) {
-    return (
-      "Estás en Reflexionar antes de votar. " +
-      "Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación y seguridad."
-    ).trim();
-  }
+   if (p.startsWith("/reflexion")) {
+  return (
+    "Estás en Reflexiones políticas y ciudadanas. " +
+    "Aquí puedes explorar preguntas y reflexiones por ejes como economía, salud, educación, seguridad, justicia, ambiente, tecnología y vida pública."
+  ).trim();
+}
 
   if (p.startsWith("/cambio-con-valentia")) {
     return (
@@ -4452,6 +4452,8 @@ useEffect(() => {
             normalizedLast.includes("pantalla de inicio de voto claro") ||
             normalizedLast.includes("estás en servicios al ciudadano") ||
             normalizedLast.includes("estás en reflexionar antes de votar") ||
+            normalizedLast.includes("estás en reflexiones políticas y ciudadanas") ||
+            normalizedLast.includes("estas en reflexiones politicas y ciudadanas") ||
             normalizedLast.includes("estás en un cambio con valentía") ||
             normalizedLast.includes("estás en cómo funciona voto claro") ||
             normalizedLast.includes("modo observador") ||
@@ -4771,106 +4773,174 @@ setMsgs((prev) => [
     return null;
   }
 
-  async function handleReflexion(rawQ: string) {
-    const q = (rawQ || "").trim();
-    if (!q) return;
+    async function handleReflexion(rawQ: string) {
+  const q = (rawQ || "").trim();
+  if (!q) return;
 
-    const onlyNumber = q.match(/^\s*[1-5]\s*$/) ? Number(q.trim()) : null;
+  const qNorm = normalizeLite(q);
+  const onlyNumber = q.match(/^\s*[1-5]\s*$/) ? Number(q.trim()) : null;
 
-    if (refWaitingNumber && refAxisId && onlyNumber) {
-      const axis = REFLEXION_AXES.find((a) => a.id === refAxisId);
-      const idx = onlyNumber - 1;
+  const axesMenu = REFLEXION_AXES.map((a, i) => `${i + 1}) ${a.title}`).join("\n");
 
-      if (!axis || !axis.questions?.[idx]) {
-        const msg = "No encontré esa pregunta. Dime un número del 1 al 5.";
+  const asksPurpose =
+    qNorm.includes("que es esta seccion") ||
+    qNorm.includes("qué es esta sección") ||
+    qNorm.includes("para que sirve") ||
+    qNorm.includes("para qué sirve") ||
+    qNorm.includes("que son las reflexiones") ||
+    qNorm.includes("qué son las reflexiones") ||
+    qNorm.includes("reflexiones politicas") ||
+    qNorm.includes("reflexiones políticas") ||
+    qNorm.includes("reflexiones ciudadanas");
+
+  const asksAxes =
+    qNorm.includes("ejes") ||
+    qNorm.includes("temas") ||
+    qNorm.includes("tematicos") ||
+    qNorm.includes("temáticos") ||
+    qNorm.includes("que puedo revisar") ||
+    qNorm.includes("qué puedo revisar") ||
+    qNorm.includes("que temas hay") ||
+    qNorm.includes("qué temas hay") ||
+    qNorm.includes("lista");
+
+  const asksHowUse =
+    qNorm.includes("como uso") ||
+    qNorm.includes("cómo uso") ||
+    qNorm.includes("como funciona") ||
+    qNorm.includes("cómo funciona") ||
+    qNorm.includes("como empiezo") ||
+    qNorm.includes("cómo empiezo") ||
+    qNorm.includes("ayuda");
+
+  if (asksPurpose) {
+    const msg =
+      "Reflexiones políticas y ciudadanas es una sección para formar criterio sobre la vida pública.\n\n" +
+      "No está pensada solo para época electoral. Sirve para pensar durante toda la vida ciudadana sobre temas como economía, salud, educación, seguridad, justicia, corrupción, ambiente, tecnología, regiones y política exterior.\n\n" +
+      "No promueve partidos ni candidatos. Su función es ayudarte a pensar mejor antes de apoyar, criticar, votar, participar o tomar posición frente a un problema público.";
+
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (asksAxes) {
+    const msg =
+      "Estos son los ejes disponibles en Reflexiones políticas y ciudadanas:\n\n" +
+      axesMenu +
+      "\n\n" +
+      "Puedes escribir el nombre de un eje, por ejemplo: salud, educación, corrupción, seguridad, economía, ambiente o tecnología. También puedes decir: educación pregunta 3.";
+
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (asksHowUse) {
+    const msg =
+      "Para usar esta sección, elige un eje temático y luego abre una pregunta.\n\n" +
+      "También puedes preguntarme libremente. Por ejemplo:\n" +
+      "- quiero reflexionar sobre corrupción\n" +
+      "- qué preguntas hay sobre salud\n" +
+      "- muéstrame educación\n" +
+      "- seguridad pregunta 2\n" +
+      "- por qué importa la descentralización\n\n" +
+      "Yo te mostraré las preguntas del eje o te leeré la reflexión más cercana.";
+
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    return;
+  }
+
+  if (refWaitingNumber && refAxisId && onlyNumber) {
+    const axis = REFLEXION_AXES.find((a) => a.id === refAxisId);
+    const idx = onlyNumber - 1;
+
+    if (!axis || !axis.questions?.[idx]) {
+      const msg = "No encontré esa pregunta. Dime un número del 1 al 5.";
+      pushAssistant(msg);
+      await maybeSpeak(msg);
+      return;
+    }
+
+    const item = axis.questions[idx];
+    const out =
+      `✅ ${axis.title}\n` +
+      `Pregunta ${onlyNumber}:\n${item.question}\n\n` +
+      `${item.reflection}\n` +
+      (item.followups?.length ? `\n\nPara seguir reflexionando:\n- ${item.followups.join("\n- ")}` : "");
+
+    pushAssistant(out);
+    await maybeSpeak(out);
+    setRefWaitingNumber(false);
+    return;
+  }
+
+  const axisFromText = matchRefAxisId(q);
+  const nFromText = parseQuestionNumber(q);
+
+  if (axisFromText) {
+    const axis = REFLEXION_AXES.find((a) => a.id === axisFromText);
+    if (!axis) {
+      const msg = "No encontré ese eje. Prueba con: economía, salud, seguridad, educación, descentralización, justicia, ambiente, tecnología o política exterior.";
+      pushAssistant(msg);
+      await maybeSpeak(msg);
+      return;
+    }
+
+    setRefAxisId(axisFromText);
+
+    if (nFromText) {
+      const idx = nFromText - 1;
+      const item = axis.questions?.[idx];
+
+      if (!item) {
+        const msg = "Ese eje tiene preguntas del 1 al 5. Dime un número válido.";
         pushAssistant(msg);
         await maybeSpeak(msg);
+        setRefWaitingNumber(true);
         return;
       }
 
-      const item = axis.questions[idx];
       const out =
         `✅ ${axis.title}\n` +
-        `Pregunta ${onlyNumber}:\n${item.question}\n\n` +
+        `Pregunta ${nFromText}:\n${item.question}\n\n` +
         `${item.reflection}\n` +
         (item.followups?.length ? `\n\nPara seguir reflexionando:\n- ${item.followups.join("\n- ")}` : "");
 
       pushAssistant(out);
       await maybeSpeak(out);
-
       setRefWaitingNumber(false);
       return;
     }
 
-    const axisFromText = matchRefAxisId(q);
-    const nFromText = parseQuestionNumber(q);
+    const list = axis.questions
+      .slice(0, 5)
+      .map((qq, i) => `${i + 1}) ${qq.question}`)
+      .join("\n\n");
 
-    if (axisFromText) {
-      const axis = REFLEXION_AXES.find((a) => a.id === axisFromText);
-      if (!axis) {
-        const msg = "No encontré ese eje. Prueba: educación, salud, seguridad, economía…";
-        pushAssistant(msg);
-        await maybeSpeak(msg);
-        return;
-      }
+    const msg =
+      `Estás en el eje: ${axis.title}.\n\n` +
+      (axis.subtitle ? `${axis.subtitle}\n\n` : "") +
+      `Estas son las 5 preguntas:\n\n${list}\n\n` +
+      `Dime un número del 1 al 5 y te leo la pregunta con su reflexión.`;
 
-      setRefAxisId(axisFromText);
-
-      if (nFromText) {
-        const idx = nFromText - 1;
-        const item = axis.questions?.[idx];
-
-        if (!item) {
-          const msg = "Ese eje tiene preguntas del 1 al 5. Dime un número válido.";
-          pushAssistant(msg);
-          await maybeSpeak(msg);
-          setRefWaitingNumber(true);
-          return;
-        }
-
-        const out =
-          `✅ ${axis.title}\n` +
-          `Pregunta ${nFromText}:\n${item.question}\n\n` +
-          `${item.reflection}\n` +
-          (item.followups?.length ? `\n\nPara seguir reflexionando:\n- ${item.followups.join("\n- ")}` : "");
-
-        pushAssistant(out);
-        await maybeSpeak(out);
-        setRefWaitingNumber(false);
-        return;
-      }
-
-      const list = axis.questions
-        .slice(0, 5)
-        .map((qq, i) => `${i + 1}) ${qq.question}`)
-        .join("\n\n");
-
-      const msg =
-        `Estás en el eje: ${axis.title}.\n\n` +
-        `Estas son las 5 preguntas:\n\n${list}\n\n` +
-        `Dime un número del 1 al 5 y te leo la pregunta y su reflexión.`;
-
-      pushAssistant(msg);
-      await maybeSpeak(msg);
-      setRefWaitingNumber(true);
-      return;
-    }
-
-    if (nFromText && refAxisId) {
-      setRefWaitingNumber(true);
-      await handleReflexion(String(nFromText));
-      return;
-    }
-
-    const help =
-      "Estoy en Reflexionar antes de votar.\n" +
-      "Puedes decir por ejemplo:\n" +
-      "- “educación” (te muestro las 5 preguntas)\n" +
-      "- “educación pregunta 5” (te leo directo)\n" +
-      "- o si ya te mostré el eje: solo di “1”, “2”, “3”, “4” o “5”.";
-    pushAssistant(help);
-    await maybeSpeak(help);
+    pushAssistant(msg);
+    await maybeSpeak(msg);
+    setRefWaitingNumber(true);
+    return;
   }
+
+  if (nFromText && refAxisId) {
+    setRefWaitingNumber(true);
+    await handleReflexion(String(nFromText));
+    return;
+  }
+
+  const freeAnswer = answerFromReflexion(q);
+  pushAssistant(freeAnswer);
+  await maybeSpeak(freeAnswer);
+}
 
     // ✅ Guía local HOME (para preguntas genéricas en inicio)
      function answerFromHomeGeneric(rawQ: string) {
@@ -5063,7 +5133,7 @@ setMsgs((prev) => [
 
   if (asksReflexionInicio) {
     return (
-      "Reflexionar antes de votar está pensada para ayudarte a pensar antes de decidir.\n\n" +
+      "Reflexiones políticas y ciudadanas está pensada para ayudarte a formar criterio sobre la vida pública.\n\n" +
       "No se trata solo de elegir un nombre: se trata de preguntarte qué necesita el país en economía, salud, educación, seguridad, corrupción, Estado y ciudadanía.\n\n" +
       "Es una buena puerta de entrada si quieres votar con más criterio y no solo por simpatía, costumbre o impulso."
     );
@@ -5073,7 +5143,7 @@ setMsgs((prev) => [
     return (
       "Para empezar, no necesitas recorrer toda la app de golpe. Elige una ruta según tu intención.\n\n" +
       "Si quieres información electoral, empieza buscando un candidato y abre su ficha.\n\n" +
-      "Si quieres pensar mejor tu voto, entra a Reflexionar antes de votar.\n\n" +
+       "Si quieres pensar mejor la política y tus decisiones ciudadanas, entra a Reflexiones políticas y ciudadanas.\n\n" +
       "Si quieres participar, abre Comentarios ciudadanos o Proyecto ciudadano.\n\n" +
       "Si prefieres una experiencia más dinámica, entra a Reto Ciudadano.\n\n" +
       "La mejor forma de empezar es elegir una pregunta: ¿quieres informarte, opinar, proponer o jugar?"
@@ -5085,7 +5155,7 @@ setMsgs((prev) => [
       "Desde Inicio puedes abrir distintos caminos, no todos cumplen la misma función.\n\n" +
       "Para información electoral: busca candidatos y revisa sus fichas.\n\n" +
       "Para orientación práctica: entra a Servicios al ciudadano.\n\n" +
-      "Para pensar tu decisión: usa Reflexionar antes de votar.\n\n" +
+      "Para formar criterio ciudadano: usa Reflexiones políticas y ciudadanas.\n\n" +
       "Para observar tendencias: revisa Intención de voto.\n\n" +
       "Para participar: entra a Comentarios ciudadanos, Proyecto ciudadano o Espacio emprendedor.\n\n" +
       "Para aprender de forma interactiva: entra a Reto Ciudadano.\n\n" +
@@ -5107,7 +5177,7 @@ setMsgs((prev) => [
       "Para tomar una mejor decisión de voto, usa VOTO CLARO como una ruta de análisis.\n\n" +
       "Primero revisa candidatos: Hoja de Vida, Plan de Gobierno y Actuar Político.\n\n" +
       "Luego compara si lo que prometen tiene relación con su trayectoria y conducta pública.\n\n" +
-      "Después entra a Reflexionar antes de votar para pensar en los problemas del país y en qué tipo de liderazgo necesitas evaluar.\n\n" +
+      "Después entra a Reflexiones políticas y ciudadanas para pensar en los problemas del país y en qué tipo de liderazgo necesitas evaluar.\n\n" +
       "La Intención de voto puede servir como referencia, pero no debe decidir por ti. La decisión final debe salir de revisar, comparar y pensar."
     );
   }
@@ -5138,7 +5208,7 @@ setMsgs((prev) => [
 
   return (
     "Estás en la pantalla principal de VOTO CLARO.\n\n" +
-    "Dime qué quieres hacer primero: buscar un candidato, revisar servicios ciudadanos, reflexionar antes de votar, opinar, proponer un proyecto, explorar emprendimientos, jugar el Reto Ciudadano o revisar Solo para ganadores."
+    "Dime qué quieres hacer primero: buscar un candidato, revisar servicios ciudadanos, abrir Reflexiones políticas y ciudadanas, opinar, proponer un proyecto, explorar emprendimientos, jugar el Reto Ciudadano o revisar Solo para ganadores."
   );
 }
 

@@ -4,19 +4,28 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { REFLEXION_AXES } from "@/lib/reflexionContent";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 export default function ReflexionPage() {
+  const { setPageContext } = useAssistantRuntime();
   const axes = REFLEXION_AXES;
 
   const cierre = useMemo(
     () =>
-      "Reflexionar antes de votar no garantiza gobiernos perfectos, pero sí ciudadanos más libres y responsables. Cuando piensas tu voto, proteges tu dignidad y también la de los demás. La democracia se fortalece cuando el ciudadano no se deja llevar solo por el miedo, la rabia o la costumbre, sino por la conciencia.",
+      "Reflexionar políticamente no garantiza gobiernos perfectos, pero sí forma ciudadanos más libres y responsables. Cuando piensas la vida pública con criterio, proteges tu dignidad y también la de los demás. La democracia se fortalece cuando el ciudadano no se deja llevar solo por el miedo, la rabia, la costumbre o la propaganda, sino por la conciencia.",
     []
   );
 
   const [activeAxisId, setActiveAxisId] = useState<string | null>(null);
   const [openQuestionId, setOpenQuestionId] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const openAnswerRef = useRef<HTMLDivElement | null>(null);
+
+  const activeAxis = useMemo(
+    () => axes.find((a) => a.id === activeAxisId) ?? null,
+    [axes, activeAxisId]
+  );
 
   useEffect(() => {
     function onScroll() {
@@ -29,6 +38,75 @@ export default function ReflexionPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    const axesList = axes.map((a) => a.title).join(", ");
+
+    setPageContext({
+      pageId: "reflexion-politica",
+      route: "/reflexion",
+      pageTitle: "Reflexiones políticas y ciudadanas",
+      activeSection: activeAxis ? `Eje: ${activeAxis.title}` : "Ejes temáticos",
+      status: "ready",
+      summary:
+        "Esta ventana reúne reflexiones políticas y ciudadanas por ejes temáticos. Su propósito es ayudar a formar criterio sobre la vida pública, no promover partidos ni candidatos.",
+      speakableSummary:
+        "Estás en Reflexiones políticas y ciudadanas. Puedes elegir un eje temático, abrir preguntas y leer reflexiones para formar criterio ciudadano.",
+      visibleText:
+        `Ejes disponibles: ${axesList}. Esta sección es informativa y reflexiva. No promueve partidos ni candidatos.`,
+      availableActions: activeAxis
+        ? [
+            "Volver a ejes temáticos",
+            "Ver preguntas del eje",
+            "Abrir una reflexión",
+            "Leer reflexión en voz alta",
+            "Cambiar de eje",
+          ]
+        : [
+            "Elegir eje temático",
+            "Ver preguntas",
+            "Leer cierre filosófico",
+            "Subir al inicio de la página",
+          ],
+      dynamicData: {
+        totalEjes: axes.length,
+        ejeActivo: activeAxis?.title || "",
+        preguntaAbierta: openQuestionId || "",
+      },
+      suggestedPrompts: [
+        {
+          id: "reflexion-que-es",
+          label: "¿Qué es esta sección?",
+          question: "¿Qué son las Reflexiones políticas y ciudadanas y para qué sirven?",
+        },
+        {
+          id: "reflexion-ejes",
+          label: "Ejes disponibles",
+          question: "¿Qué ejes temáticos puedo revisar en esta sección?",
+        },
+        {
+          id: "reflexion-economia",
+          label: "Economía y empleo",
+          question: "Muéstrame preguntas y reflexiones sobre economía y empleo.",
+        },
+        {
+          id: "reflexion-salud-educacion",
+          label: "Salud y educación",
+          question: "Muéstrame preguntas y reflexiones sobre salud y educación.",
+        },
+        {
+          id: "reflexion-seguridad-justicia",
+          label: "Seguridad y justicia",
+          question: "Muéstrame preguntas sobre seguridad ciudadana, justicia y corrupción.",
+        },
+        {
+          id: "reflexion-futuro",
+          label: "Ambiente y tecnología",
+          question: "Muéstrame reflexiones sobre medio ambiente, tecnología e innovación.",
+        },
+      ],
+    });
+  }, [setPageContext, axes, activeAxis, openQuestionId]);
+
   // ✅ Narración al entrar SIN abrir Federalito
   useEffect(() => {
     const axesList = axes
@@ -37,13 +115,13 @@ export default function ReflexionPage() {
       .join("\n");
 
     const text =
-      "Estás en Reflexionar antes de votar. " +
-      "Aquí eliges un eje temático y luego una pregunta para leer una reflexión.\n\n" +
+      "Estás en Reflexiones políticas y ciudadanas. " +
+      "Aquí eliges un eje temático y luego una pregunta para leer una reflexión que ayuda a formar criterio ciudadano, no solo durante elecciones sino durante toda la vida pública.\n\n" +
       "Ejes disponibles:\n" +
       axesList +
       "\n\n" +
       "Para usarlo: toca un eje, luego una pregunta. " +
-      "Si quieres, dime por ejemplo: educación pregunta tres.";
+      "También puedes preguntarme libremente por temas como salud, educación, corrupción, seguridad, economía, medio ambiente o tecnología.";
 
     // 🔒 1) Cerrar Federalito sí o sí
     window.dispatchEvent(
@@ -65,8 +143,6 @@ export default function ReflexionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const openAnswerRef = useRef<HTMLDivElement | null>(null);
-
   useEffect(() => {
     if (!openQuestionId) return;
 
@@ -80,11 +156,6 @@ export default function ReflexionPage() {
 
     return () => clearTimeout(t);
   }, [openQuestionId]);
-
-  const activeAxis = useMemo(
-    () => axes.find((a) => a.id === activeAxisId) ?? null,
-    [axes, activeAxisId]
-  );
 
   function goBackToAxes() {
     stopVoice();
@@ -131,10 +202,10 @@ export default function ReflexionPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-              Reflexionar antes de votar
+              Reflexiones políticas y ciudadanas
             </h1>
             <p className="mt-2 text-sm md:text-base text-slate-700">
-              Elige un eje, luego una pregunta, y lee con calma una reflexión.
+              Elige un eje, luego una pregunta, y lee con calma una reflexión para formar criterio ciudadano.
             </p>
           </div>
 
@@ -146,7 +217,7 @@ export default function ReflexionPage() {
         {/* Nota */}
         <div className="mt-4 rounded-2xl border-2 border-red-700 bg-white px-4 py-3 text-sm text-slate-700">
           Esta sección es informativa y reflexiva. No promueve partidos ni
-          candidatos. Busca ayudarte a pensar tu voto con criterio.
+          candidatos. Busca ayudarte a pensar la política, la vida pública y tus decisiones ciudadanas con criterio.
         </div>
       </div>
 
@@ -160,7 +231,7 @@ export default function ReflexionPage() {
                   Elige un eje temático
                 </h2>
                 <p className="mt-1 text-sm text-slate-700">
-                  9 temas clave para pensar tu voto desde distintos ángulos.
+                  9 temas clave para pensar la vida pública desde distintos ángulos.
                 </p>
               </div>
             </div>
@@ -174,7 +245,10 @@ export default function ReflexionPage() {
                     setActiveAxisId(axis.id);
                     setOpenQuestionId(null);
                   }}
-                  className={`${CARD} ${CARD_HOVER} px-5 py-5 text-left vc-card-hover vc-fade-up vc-delay-${Math.min(idx + 2, 5)}`}
+                  className={`${CARD} ${CARD_HOVER} px-5 py-5 text-left vc-card-hover vc-fade-up vc-delay-${Math.min(
+                    idx + 2,
+                    5
+                  )}`}
                 >
                   {/* ✅ FIX contraste en APP: título blanco */}
                   <div

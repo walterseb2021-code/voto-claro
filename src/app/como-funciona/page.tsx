@@ -384,13 +384,13 @@ export default function ComoFuncionaPage() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
-            <div className="font-bold text-slate-900">Reflexionar antes de votar</div>
-            <div className="text-slate-800 mt-1">
-              Preguntas y reflexiones por ejes (economía, salud, educación, seguridad y más).
-            </div>
-            <div className="text-slate-700 mt-2 font-semibold">
-              ¿Cómo se usa aquí? Escribe un tema (por ejemplo “salud”) y luego el número de pregunta (1 a 5).
-            </div>
+            <div className="font-bold text-slate-900">Reflexiones políticas y ciudadanas</div>
+<div className="text-slate-800 mt-1">
+  Preguntas y reflexiones por ejes como economía, salud, educación, seguridad, justicia, ambiente, tecnología y vida pública.
+</div>
+<div className="text-slate-700 mt-2 font-semibold">
+  ¿Cómo se usa aquí? Escribe un tema, por ejemplo “salud”, “corrupción”, “educación” o “tecnología”, y luego elige una pregunta del 1 al 5.
+</div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
@@ -469,7 +469,7 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexionar antes de votar te guía por ejes y preguntas. Alianza para el Progreso reúne información institucional del partido. También hay videos y transmisiones, intención de voto, reto ciudadano, comentarios ciudadanos, proyecto ciudadano y espacio emprendedor APP."
+               "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexiones políticas y ciudadanas te guía por ejes, preguntas y reflexiones para formar criterio ciudadano. Alianza para el Progreso reúne información institucional del partido. También hay videos y transmisiones, intención de voto, reto ciudadano, comentarios ciudadanos, proyecto ciudadano y espacio emprendedor APP."
               )
             }
             className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
