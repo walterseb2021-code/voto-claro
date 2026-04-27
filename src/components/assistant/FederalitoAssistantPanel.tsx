@@ -107,10 +107,14 @@ if (p.startsWith("/reflexion")) {
   }
 
   if (p.startsWith("/cambio-con-valentia")) {
-    return "Hola, soy el asistente de esta ventana. Puedo explicarte el contenido visible y el acceso disponible.";
-  }
+  return "Hola, soy el asistente de esta ventana. Puedo explicarte el contenido visible y el acceso disponible.";
+}
 
-  if (p.startsWith("/candidate/")) {
+if (p.startsWith("/como-funciona")) {
+  return "Hola, soy el asistente de Cómo funciona VOTO CLARO. Puedo ayudarte a entender la guía de uso, el flujo recomendado, los límites técnicos, la política de uso y las secciones disponibles.";
+}
+
+if (p.startsWith("/candidate/")) {
     return "Hola, soy el asistente de VOTO CLARO. Puedo ayudarte con la Hoja de Vida, el Plan y Actuar político del candidato abierto.";
   }
 
@@ -645,7 +649,11 @@ const asksOpenForumsActions =
     return (
       "El Evento del semestre concentra la información institucional de la premiación.\n\n" +
       (eventoDestacadoTitulo ? `Evento visible: ${eventoDestacadoTitulo}.\n\n` : "") +
-      `Eventos publicados detectados: ${eventosPublicadosCount}.\n\n` +
+        `${pluralText(
+  eventosPublicadosCount,
+  "Evento publicado detectado",
+  "Eventos publicados detectados"
+)}: ${eventosPublicadosCount}.\n\n` +
       "En este bloque el usuario puede revisar dónde será o dónde fue el evento, qué se reconoció, qué ambiente se usó y qué contenido visual acompaña la entrega."
     );
   }
@@ -659,7 +667,11 @@ const asksOpenForumsActions =
     }
 
     return (
-      `En Ganadores destacados detecto ${ganadoresPublicadosCount} publicación(es) visible(s).\n\n` +
+       `En Ganadores destacados detecto ${ganadoresPublicadosCount} ${pluralText(
+  ganadoresPublicadosCount,
+  "publicación visible",
+  "publicaciones visibles"
+)}.\n\n` +
       "Esta parte responde a una pregunta concreta: quién destacó dentro de las dinámicas de VOTO CLARO.\n\n" +
       "Cada tarjeta puede mostrar nombre o alias, ventana de origen, fecha, descripción y enlaces relacionados si fueron publicados."
     );
@@ -682,7 +694,11 @@ const asksOpenForumsActions =
     }
 
     return (
-      `La Galería pública tiene ${mediaPublicadaCount} elemento(s) publicado(s).\n\n` +
+      `La Galería pública tiene ${mediaPublicadaCount} ${pluralText(
+  mediaPublicadaCount,
+  "elemento publicado",
+  "elementos publicados"
+)}.\n\n` +
       "Esta sección funciona como memoria visual: permite ver imágenes del evento, registros de entrega, ambientes, participantes y momentos destacados.\n\n" +
       "A diferencia de Ganadores destacados, aquí el foco no es solo la persona, sino la evidencia visual del proceso."
     );
@@ -1674,7 +1690,7 @@ if (asksForumContributionQuality) {
 
     return (
       "Tu estado actual en esta pantalla es de emprendedor verificado.\n\n" +
-      `Tienes ${misProyectosCount} proyecto(s) propio(s) y ${mensajesRecibidosCount} mensaje(s) recibido(s).`
+      `Tienes ${misProyectosCount} ${pluralText(misProyectosCount, "proyecto propio", "proyectos propios")} y ${mensajesRecibidosCount} ${pluralText(mensajesRecibidosCount, "mensaje recibido", "mensajes recibidos")}.`
     );
   }
 
@@ -1748,7 +1764,9 @@ function normalizeLite(s: string) {
     .trim();
 }
 
-
+  function pluralText(count: number, singular: string, plural: string) {
+  return count === 1 ? singular : plural;
+}
 function answerFromReflexion(rawQ: string) {
   const q = normalize(rawQ);
 
@@ -3238,6 +3256,7 @@ const isSoloGanadores = currentPath.startsWith("/solo-para-ganadores");
   ctx === "RETO" ||
   ctx === "COMENTARIO" ||
   ctx === "SOLO_GANADORES" ||
+  ctx === "COMO_FUNCIONA" ||
   isEspacioEmprendedor ||
   isProyectoCiudadano ||
   isSoloGanadores

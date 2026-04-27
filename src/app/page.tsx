@@ -454,7 +454,7 @@ export default function HomePage() {
                 focus:ring-2
                 focus:ring-accent
               "
-              placeholder="Escribe: 'Armando Massé', 'César Acuña', 'López Aliaga', 'Keiko Fujimori'..."
+              placeholder="Escribe: 'César Acuña', 'Armando Massé', 'López Aliaga', 'Keiko Fujimori'..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />

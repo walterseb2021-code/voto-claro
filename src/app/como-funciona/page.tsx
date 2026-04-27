@@ -44,13 +44,13 @@ export default function ComoFuncionaPage() {
   }
 
   return (
-    <main className="vc-how min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto">
+     <main className="vc-how min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto text-slate-900">
       <header className="mb-6">
         {/* ⬅ Volver a Inicio - AHORA CORRECTO */}
         <div className="flex justify-end mb-4">
           <button
             onClick={() => router.push('/')}
-            className="rounded-xl px-4 py-2 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition shadow-md border-2 border-red-500 vc-btn-wave vc-btn-pulse"
+             className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm border border-blue-900 vc-btn-wave"
           >
             ⬅ Volver a Inicio
           </button>
@@ -60,13 +60,12 @@ export default function ComoFuncionaPage() {
           ¿Cómo funciona VOTO CLARO?
         </h1>
         <p className="mt-2 text-slate-800 max-w-3xl vc-fade-up vc-delay-1">
-          Esta ventana es la guía de uso. Si el Asistente no habla automáticamente, haz un clic/toque en la pantalla y
-          vuelve a intentar (es un bloqueo normal del navegador).
-        </p>
+          Esta ventana reúne una guía clara para usar la plataforma, entender el papel del Asistente, conocer sus límites técnicos y revisar las normas básicas de uso responsable.
+          </p>
       </header>
 
       {/* 1) Qué es */}
-      <section className="rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
         <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VOTO CLARO?</h2>
         <p className="mt-2 text-slate-800 text-sm">
           VOTO CLARO es una app informativa para ayudarte a entender información pública antes de votar. No es un juego,
@@ -81,7 +80,7 @@ export default function ComoFuncionaPage() {
                 "Voto Claro es una app informativa para entender información pública antes de votar. No reemplaza tu criterio."
               )
             }
-            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse"
+            className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
           >
             🔊 Leer esta parte
           </button>
@@ -89,7 +88,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 2) Flujo de uso */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover vc-delay-1">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
         <h2 className="text-lg font-bold text-slate-900">2) ¿Cómo se usa la app? (flujo recomendado)</h2>
 
         <ol className="mt-3 space-y-3 text-sm text-slate-800 list-decimal pl-5">
@@ -119,7 +118,7 @@ export default function ComoFuncionaPage() {
                 "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre Hoja de Vida, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa la información y luego decide tú."
               )
             }
-            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse"
+           className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
           >
             🔊 Leer el flujo
           </button>
@@ -127,7 +126,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 3) Qué hace el Asistente */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover vc-delay-2">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
         <h2 className="text-lg font-bold text-slate-900">3) ¿Cómo te ayuda el Asistente?</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -154,7 +153,7 @@ export default function ComoFuncionaPage() {
                 "El Asistente te ayuda según la ventana en la que estás. Puede hablar si activas Voz: ON, puede escucharte con el micrófono si tu navegador lo permite, y si preguntas algo fuera de contexto te guía para ir a la ventana correcta."
               )
             }
-            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse"
+           className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
           >
             🔊 Leer esta parte
           </button>
@@ -162,7 +161,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 4) Límites técnicos */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover vc-delay-3">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
         <h2 className="text-lg font-bold text-slate-900">4) Límites técnicos (para evitar falsas expectativas)</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -202,7 +201,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 5) Política de uso */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover vc-delay-4">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
         <h2 className="text-lg font-bold text-slate-900">5) Política de uso (buen uso de la app)</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -244,7 +243,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 6) Qué hay en las secciones */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover vc-delay-5">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
         <h2 className="text-lg font-bold text-slate-900">6) ¿Qué encontrarás en cada sección?</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -253,7 +252,7 @@ export default function ComoFuncionaPage() {
         </p>
 
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Inicio</div>
             <div className="text-slate-800 mt-1">
               Es el centro de navegación. Desde aquí buscas candidatos y entras a todas las demás secciones.
@@ -263,7 +262,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Ficha del candidato</div>
             <div className="text-slate-800 mt-1">
               Aquí exploras la información del candidato en tres partes: Hoja de Vida, Plan de Gobierno y Actuar
@@ -275,7 +274,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Hoja de Vida</div>
             <div className="text-slate-800 mt-1">
               Respuestas basadas en el documento oficial. Si no existe evidencia, la app lo indicará.
@@ -286,7 +285,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rrounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Plan de Gobierno</div>
             <div className="text-slate-800 mt-1">
               Respuestas basadas en el plan. Puedes preguntar por economía, salud, seguridad, educación y propuestas.
@@ -296,7 +295,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Actuar Político</div>
             <div className="text-slate-800 mt-1">
               Información basada en registros disponibles para revisar hechos relevantes del candidato.
@@ -306,7 +305,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Servicios al ciudadano</div>
             <div className="text-slate-800 mt-1">
               Enlaces oficiales para trámites electorales (local de votación, miembro de mesa, multas y más).
@@ -316,7 +315,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Reflexionar antes de votar</div>
             <div className="text-slate-800 mt-1">
               Preguntas y reflexiones por ejes (economía, salud, educación, seguridad y más).
@@ -326,7 +325,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Alianza para el Progreso (APP)</div>
             <div className="text-slate-800 mt-1">
               Espacio institucional del partido: imagen del candidato, fundadores, perfil multidisciplinario, conversación ideológica, videos y buscador de candidatos por categoría y distrito electoral.
@@ -336,7 +335,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Videos y transmisiones</div>
             <div className="text-slate-800 mt-1">
               Reúne videos grabados o en vivo de candidatos (cuando estén disponibles en la plataforma).
@@ -346,7 +345,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Intención de voto</div>
             <div className="text-slate-800 mt-1">
               Registra tu preferencia de forma guiada. Incluye opción blanco / nulo con reflexión previa.
@@ -356,7 +355,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Reto ciudadano</div>
             <div className="text-slate-800 mt-1">
               Juego por niveles para aprender y participar. Tiene intentos limitados y tiempos de espera.
@@ -366,7 +365,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Comentarios ciudadanos</div>
             <div className="text-slate-800 mt-1">
               Espacio para publicar comentarios y leer aportes de otras personas, con reglas para evitar abusos.
@@ -376,7 +375,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Proyecto Ciudadano</div>
             <div className="text-slate-800 mt-1">
               Presenta proyectos comunitarios, forma un equipo y recibe apoyo vecinal. Los mejores proyectos son premiados cada 3 meses con fondos para materiales, herramientas e insumos.
@@ -386,7 +385,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border-2 border-red-400 bg-primary-soft p-4 vc-card-hover">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Espacio Emprendedor APP</div>
             <div className="text-slate-800 mt-1">
               Espacio exclusivo para afiliados a Alianza para el Progreso. Publica tu proyecto emprendedor, recibe contactos de inversionistas y configura tu perfil de inversión.
@@ -405,7 +404,7 @@ export default function ComoFuncionaPage() {
                 "Resumen de secciones: En Inicio buscas candidatos. En la ficha del candidato tienes Hoja de Vida, Plan de Gobierno y Actuar Político. Servicios al ciudadano te lleva a enlaces oficiales. Reflexionar antes de votar te guía por ejes y preguntas. Alianza para el Progreso reúne información institucional del partido. También hay videos y transmisiones, intención de voto, reto ciudadano, comentarios ciudadanos, proyecto ciudadano y espacio emprendedor APP."
               )
             }
-            className="rounded-xl px-4 py-2 border-2 border-red-500 bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse"
+            className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
           >
             🔊 Leer resumen de secciones
           </button>
@@ -413,7 +412,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 7) Transparencia y autoría */}
-      <section className="mt-6 rounded-2xl border-[6px] border-red-600 bg-primary-soft p-5 vc-fade-up vc-card-hover vc-delay-1">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
         <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -445,7 +444,7 @@ export default function ComoFuncionaPage() {
         <button
           type="button"
           onClick={scrollTop}
-          className="rounded-full px-6 py-3 bg-green-700 text-white text-sm font-bold hover:bg-green-800 transition shadow-lg border-2 border-red-500 vc-btn-wave vc-btn-pulse"
+          className="rounded-full px-6 py-3 bg-blue-800 text-white text-sm font-bold hover:bg-blue-900 transition shadow-md vc-btn-wave"
         >
           ⬆ Subir
         </button>
