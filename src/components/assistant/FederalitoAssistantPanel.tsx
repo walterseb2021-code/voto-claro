@@ -5397,18 +5397,37 @@ if (isDynamicContextPage && pageContext) {
         return;
       }
 
-     if (askMode === "NEWS") {
+       if (askMode === "NEWS") {
   // ✅ Actuar Político LOCAL: leer JSON del candidato (sin web)
-  const url = `/actuar/${encodeURIComponent(candidateId)}.json`;
+  const rawId = String(candidateId ?? "");
+  const normalizedId = rawId
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ñ/gi, "n")
+    .toLowerCase()
+    .replace(/[_/]+/g, " ")
+    .replace(/[^a-z0-9\s-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\s/g, "-")
+    .replace(/-+/g, "-");
+
+  let url = `/actuar/${encodeURIComponent(rawId)}.json`;
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    let res = await fetch(url, { cache: "no-store" });
+
+    if (!res.ok && normalizedId && normalizedId !== rawId) {
+      url = `/actuar/${encodeURIComponent(normalizedId)}.json`;
+      res = await fetch(url, { cache: "no-store" });
+    }
 
     if (!res.ok) {
       const msg =
         "No encontré el archivo local de Actuar Político para este candidato.\n\n" +
-        `Esperaba: ${url}\n\n` +
-        "Solución: verifica que el JSON exista en /public/actuar/ y que el nombre coincida con el slug del candidato.";
+        `Archivo esperado: ${url}\n\n` +
+        "Si este tema no está registrado aquí, puedo orientarte a buscar en fuentes confiables, pero no debo inventar información.";
       pushAssistant(msg);
       await maybeSpeak(msg);
       return;
@@ -5855,20 +5874,15 @@ function sendQuick(q: string) {
                   : "HV/Plan: responde solo con evidencia del PDF y cita páginas (p. X)."}{" "}
                 {candidateId ? "" : "Tip: entra a /candidate/[id] para que el asistente sepa qué candidato consultar."}
               </div>
- {askMode === "NEWS" ? (
+       {askMode === "NEWS" && suggestedPrompts.length === 0 ? (
   <div className="mt-3 flex flex-wrap gap-2">
     {[
-      "Resumen rápido",
-      "Hechos más recientes",
+      "Resumen político",
+      "Hechos recientes",
       "Cronología",
-      "Procesos/casos",
-      "Sentencias/fallos",
-      "Investigaciones/denuncias",
-      "Controversias",
-            "Fuentes",
-      "Buscar: corrupción",
-      "Buscar: lavado de activos",
-      "No está en el archivo (¿cómo buscar en internet?)",
+      "Procesos y sentencias",
+      "Investigaciones",
+      "Fuentes",
     ].map((label) => (
       <button
         key={label}

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import EvidenceBadge from "@/components/ui/EvidenceBadge";
 import { useSearchParams } from "next/navigation";
 import { normalizeHvJne2026 } from "@/lib/hvNormalize";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type CandidateProfile = {
   id: string;
@@ -391,6 +392,7 @@ function buildActuarAnswer(file: any, rawQ: string) {
 }
 
 export default function CandidatePage() {
+  const { setPageContext } = useAssistantRuntime();
   const [id, setId] = useState<string>("");
   const [tab, setTab] = useState<DemoSection>("HV");
 
@@ -573,15 +575,213 @@ export default function CandidatePage() {
     } satisfies Record<DemoSection, { title: string; helper: string; suggested: string[] }>;
   }, []);
 
-  useEffect(() => {
-    setQuestion("");
-    setAnswer("—");
-    setCitations([]);
-    setBusy(false);
-    setCompareResult(null);
-    setCompareLoading(false);
-    setCompareProfiles({});
-  }, [tab]);
+    useEffect(() => {
+  setQuestion("");
+  setAnswer("—");
+  setCitations([]);
+  setBusy(false);
+  setCompareResult(null);
+  setCompareLoading(false);
+  setCompareProfiles({});
+}, [tab]);
+
+useEffect(() => {
+  if (!id) return;
+
+  const candidateName = (profile?.full_name || slugToName(id)).trim();
+
+  const common = {
+    pageId: "candidate-profile",
+    route: `/candidate/${id}`,
+    pageTitle: `Ficha de candidato: ${candidateName}`,
+    activeSection:
+      tab === "HV"
+        ? "Hoja de Vida"
+        : tab === "NEWS"
+        ? "Actuar Político"
+        : "Plan de Gobierno",
+    status: "ready" as const,
+  };
+
+  if (tab === "HV") {
+    setPageContext({
+      ...common,
+      activeViewId: "candidate-hv",
+      summary:
+        "Ficha de candidato en la pestaña Hoja de Vida. Las respuestas deben basarse en el archivo local o PDF de Hoja de Vida, sin inventar información.",
+      speakableSummary:
+        `Estás en Hoja de Vida de ${candidateName}. Aquí puedes preguntar por datos personales, experiencia laboral, formación académica, sentencias, trayectoria e ingresos declarados.`,
+      visibleText:
+        "Hoja de Vida: datos personales, experiencia laboral, formación académica, trayectoria política, sentencias, ingresos, bienes y rentas.",
+      availableActions: [
+        "Consultar experiencia laboral",
+        "Consultar formación académica",
+        "Consultar sentencias",
+        "Consultar ingresos y bienes",
+        "Escribir una pregunta propia",
+      ],
+      dynamicData: {
+        candidateId: id,
+        candidateName,
+        tab,
+        sourceMode: "HV",
+      },
+      suggestedPrompts: [
+        {
+          id: "hv-resumen",
+          label: "Resumen de HV",
+          question: "Dame un resumen claro de la hoja de vida de este candidato.",
+        },
+        {
+          id: "hv-datos-personales",
+          label: "Datos personales",
+          question: "¿Qué datos personales relevantes aparecen en la hoja de vida?",
+        },
+        {
+          id: "hv-experiencia",
+          label: "Experiencia laboral",
+          question: "¿Qué experiencia laboral declara este candidato?",
+        },
+        {
+          id: "hv-formacion",
+          label: "Formación académica",
+          question: "¿Qué formación académica declara este candidato?",
+        },
+        {
+          id: "hv-sentencias",
+          label: "Sentencias",
+          question: "¿Tiene sentencias, procesos o antecedentes declarados en la hoja de vida?",
+        },
+        {
+          id: "hv-ingresos-bienes",
+          label: "Ingresos y bienes",
+          question: "¿Qué ingresos, bienes o rentas declara este candidato?",
+        },
+      ],
+    });
+    return;
+  }
+
+  if (tab === "PLAN") {
+    setPageContext({
+      ...common,
+      activeViewId: "candidate-plan",
+      summary:
+        "Ficha de candidato en la pestaña Plan de Gobierno. Las respuestas deben basarse en el Plan de Gobierno, sus ejes y la comparación de planes cuando corresponda.",
+      speakableSummary:
+        `Estás en Plan de Gobierno de ${candidateName}. Aquí puedes preguntar por seguridad, economía, salud, educación y comparar planes con otro candidato.`,
+      visibleText:
+        "Plan de Gobierno: propuestas por ejes, seguridad ciudadana, economía y empleo, salud, educación y comparación Plan vs Plan.",
+      availableActions: [
+        "Consultar seguridad ciudadana",
+        "Consultar economía y empleo",
+        "Consultar salud",
+        "Consultar educación",
+        "Comparar plan con otro candidato",
+        "Escribir una pregunta propia",
+      ],
+      dynamicData: {
+        candidateId: id,
+        candidateName,
+        tab,
+        sourceMode: "PLAN",
+        compareWith,
+        compareAxis,
+        hasCompareResult: Boolean(compareResult),
+      },
+      suggestedPrompts: [
+        {
+          id: "plan-resumen",
+          label: "Resumen del plan",
+          question: "Dame un resumen por ejes del plan de gobierno de este candidato.",
+        },
+        {
+          id: "plan-seguridad",
+          label: "Seguridad",
+          question: "¿Qué propone este candidato sobre seguridad ciudadana?",
+        },
+        {
+          id: "plan-economia",
+          label: "Economía y empleo",
+          question: "¿Qué propone este candidato sobre economía y empleo?",
+        },
+        {
+          id: "plan-salud",
+          label: "Salud",
+          question: "¿Qué propone este candidato sobre salud?",
+        },
+        {
+          id: "plan-educacion",
+          label: "Educación",
+          question: "¿Qué propone este candidato sobre educación?",
+        },
+        {
+          id: "plan-comparar",
+          label: "Comparar planes",
+          question: "¿Cómo puedo comparar este plan de gobierno con el de otro candidato?",
+        },
+      ],
+    });
+    return;
+  }
+
+  setPageContext({
+    ...common,
+    activeViewId: "candidate-news",
+    summary:
+      "Ficha de candidato en la pestaña Actuar Político. Las respuestas deben basarse en el JSON local de hechos públicos registrados y mostrar fuentes cuando existan.",
+    speakableSummary:
+      `Estás en Actuar Político de ${candidateName}. Aquí puedes revisar resumen político, hechos recientes, cronología, procesos, investigaciones y fuentes registradas.`,
+    visibleText:
+      "Actuar Político: hechos públicos registrados, cronología, procesos, sentencias, investigaciones, controversias y fuentes disponibles.",
+    availableActions: [
+      "Consultar resumen político",
+      "Consultar hechos recientes",
+      "Consultar cronología",
+      "Consultar procesos y sentencias",
+      "Consultar investigaciones",
+      "Consultar fuentes",
+    ],
+    dynamicData: {
+      candidateId: id,
+      candidateName,
+      tab,
+      sourceMode: "NEWS",
+    },
+    suggestedPrompts: [
+      {
+        id: "news-resumen",
+        label: "Resumen político",
+        question: "Dame un resumen del actuar político de este candidato.",
+      },
+      {
+        id: "news-recientes",
+        label: "Hechos recientes",
+        question: "¿Cuáles son los hechos más recientes registrados sobre este candidato?",
+      },
+      {
+        id: "news-cronologia",
+        label: "Cronología",
+        question: "Muéstrame una cronología de hechos públicos registrados.",
+      },
+      {
+        id: "news-procesos",
+        label: "Procesos y sentencias",
+        question: "¿Qué procesos, casos o sentencias aparecen registrados?",
+      },
+      {
+        id: "news-investigaciones",
+        label: "Investigaciones",
+        question: "¿Qué investigaciones o denuncias aparecen en el archivo?",
+      },
+      {
+        id: "news-fuentes",
+        label: "Fuentes",
+        question: "¿Qué fuentes tiene el archivo de actuar político?",
+      },
+    ],
+  });
+}, [id, tab, profile?.full_name, setPageContext, compareWith, compareAxis, compareResult]);
 
   async function consult() {
     const q = question.trim();
