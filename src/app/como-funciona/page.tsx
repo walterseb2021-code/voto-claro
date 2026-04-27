@@ -3,6 +3,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 function sendGuide(text: string, action: "SAY" | "SAY_AND_OPEN" = "SAY") {
   if (typeof window === "undefined") return;
@@ -15,29 +16,87 @@ function sendGuide(text: string, action: "SAY" | "SAY_AND_OPEN" = "SAY") {
 
 export default function ComoFuncionaPage() {
   const router = useRouter();
+  const { setPageContext } = useAssistantRuntime();
 
   useEffect(() => {
-    // ✅ Al entrar a esta ventana: NO abrir el panel
+  setPageContext({
+  pageId: "como-funciona",
+  route: "/como-funciona",
+  pageTitle: "Cómo funciona VOTO CLARO",
+    activeSection: "Guía de uso",
+    status: "ready",
+    summary:
+      "Esta ventana explica qué es VOTO CLARO, cómo se usa la app, qué hace el Asistente, cuáles son sus límites técnicos, cuál es la política de uso y qué secciones contiene la plataforma.",
+    speakableSummary:
+      "Estás en Cómo funciona VOTO CLARO. Aquí puedes entender cómo usar la app, qué hace el Asistente, sus límites técnicos, la política de uso y las secciones disponibles.",
+    visibleText:
+      "Guía de uso de VOTO CLARO: qué es la plataforma, flujo recomendado, ayuda del Asistente, límites técnicos, política de uso, secciones disponibles y transparencia.",
+    availableActions: [
+      "Leer qué es VOTO CLARO",
+      "Leer el flujo recomendado",
+      "Leer cómo ayuda el Asistente",
+      "Leer límites técnicos",
+      "Leer política de uso",
+      "Revisar secciones disponibles",
+      "Volver al inicio",
+    ],
+    suggestedPrompts: [
+      {
+        id: "que-es-voto-claro",
+        label: "¿Qué es VOTO CLARO?",
+        question: "¿Qué es VOTO CLARO y para qué sirve esta plataforma?",
+      },
+      {
+        id: "como-usar-app",
+        label: "¿Cómo uso la app?",
+        question: "¿Cómo se usa la app paso a paso?",
+      },
+      {
+        id: "asistente-ayuda",
+        label: "¿Cómo ayuda el Asistente?",
+        question: "¿Cómo me ayuda el Asistente dentro de VOTO CLARO?",
+      },
+      {
+        id: "limites-tecnicos",
+        label: "Límites técnicos",
+        question: "¿Cuáles son los límites técnicos del Asistente?",
+      },
+      {
+        id: "politica-uso",
+        label: "Política de uso",
+        question: "¿Cuál es la política de uso de esta app?",
+      },
+      {
+        id: "secciones-disponibles",
+        label: "Secciones",
+        question: "¿Qué secciones tiene VOTO CLARO y para qué sirve cada una?",
+      },
+    ],
+  });
+
+  // ✅ Al entrar a esta ventana: NO abrir el panel
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: { action: "CLOSE" },
+    })
+  );
+
+  const t = setTimeout(() => {
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
-        detail: { action: "CLOSE" },
+        detail: {
+          action: "SAY",
+          text: "Bienvenido a Cómo funciona VOTO CLARO. Aquí aprenderás cómo usar la app, cómo te ayuda el Asistente, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa.",
+          speak: true,
+        },
       })
     );
+  }, 0);
 
-    const t = setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent("votoclaro:guide", {
-          detail: {
-            action: "SAY",
-            text: "Bienvenido a Cómo funciona VOTO CLARO. Aquí aprenderás cómo usar la app, cómo te ayuda el Asistente, cuáles son sus límites técnicos y la política de uso para una experiencia respetuosa. También encontrarás información sobre Proyecto Ciudadano y Espacio Emprendedor APP.",
-            speak: true,
-          },
-        })
-      );
-    }, 0);
-
-    return () => clearTimeout(t);
-  }, []);
+   return () => {
+  clearTimeout(t);
+};
+}, [setPageContext]);
 
   function scrollTop() {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -65,7 +124,7 @@ export default function ComoFuncionaPage() {
       </header>
 
       {/* 1) Qué es */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VOTO CLARO?</h2>
         <p className="mt-2 text-slate-800 text-sm">
           VOTO CLARO es una app informativa para ayudarte a entender información pública antes de votar. No es un juego,
@@ -88,7 +147,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 2) Flujo de uso */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">2) ¿Cómo se usa la app? (flujo recomendado)</h2>
 
         <ol className="mt-3 space-y-3 text-sm text-slate-800 list-decimal pl-5">
@@ -126,7 +185,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 3) Qué hace el Asistente */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">3) ¿Cómo te ayuda el Asistente?</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -161,7 +220,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 4) Límites técnicos */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">4) Límites técnicos (para evitar falsas expectativas)</h2>
 
         <ul className="mt-3 space-y-2 text-sm text-slate-800 list-disc pl-5">
@@ -193,7 +252,7 @@ export default function ComoFuncionaPage() {
                 "Límites técnicos: algunos navegadores bloquean el audio hasta un clic o toque. El Asistente no mantiene conversación infinita; tiene memoria corta. No habla de cualquier tema: responde solo sobre lo que existe en la app y la sección actual. No inventa. El micrófono depende de permisos del navegador."
               )
             }
-            className="rounded-xl px-4 py-2 border border-amber-700 bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition vc-btn-wave vc-btn-pulse"
+             className="rounded-xl px-4 py-2 bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition shadow-sm vc-btn-wave"
           >
             🔊 Leer límites técnicos
           </button>
@@ -201,7 +260,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 5) Política de uso */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">5) Política de uso (buen uso de la app)</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -235,7 +294,7 @@ export default function ComoFuncionaPage() {
                 "Política de uso: utiliza VOTO CLARO con respeto. No insultos ni lisuras. Pregunta dentro de lo que existe en la app. No intentes desarmar o atacar el funcionamiento. No intentes forzar al Asistente a inventar o hablar fuera de contexto."
               )
             }
-            className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition vc-btn-wave vc-btn-pulse"
+            className="rounded-xl px-4 py-2 bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition shadow-sm vc-btn-wave"
           >
             🔊 Leer política de uso
           </button>
@@ -243,7 +302,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 6) Qué hay en las secciones */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">6) ¿Qué encontrarás en cada sección?</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -285,7 +344,7 @@ export default function ComoFuncionaPage() {
             </div>
           </div>
 
-          <div className="rrounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
+           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm vc-card-hover">
             <div className="font-bold text-slate-900">Plan de Gobierno</div>
             <div className="text-slate-800 mt-1">
               Respuestas basadas en el plan. Puedes preguntar por economía, salud, seguridad, educación y propuestas.
@@ -412,7 +471,7 @@ export default function ComoFuncionaPage() {
       </section>
 
       {/* 7) Transparencia y autoría */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">7) Transparencia y autoría</h2>
 
         <p className="mt-2 text-slate-800 text-sm">
@@ -432,7 +491,7 @@ export default function ComoFuncionaPage() {
                 "Transparencia: esta aplicación es una herramienta informativa para facilitar el acceso a información pública. VOTO CLARO no reemplaza tu criterio personal. Desarrollado por: WALTER SEBASTIAN CABANILLAS ALVAREZ."
               )
             }
-            className="rounded-xl px-4 py-2 border border-slate-900 bg-slate-900 text-white text-sm font-semibold hover:opacity-90 transition vc-btn-wave vc-btn-pulse"
+             className="rounded-xl px-4 py-2 bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition shadow-sm vc-btn-wave"
           >
             🔊 Leer transparencia
           </button>
@@ -450,7 +509,7 @@ export default function ComoFuncionaPage() {
         </button>
       </div>
 
-      <footer className="mt-8 text-xs text-slate-600">Gracias por usar VOTO CLARO.</footer>
+      <footer className="mt-8 text-xs text-slate-700 text-center">Gracias por usar VOTO CLARO.</footer>
     </main>
   );
 }
