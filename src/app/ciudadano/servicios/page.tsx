@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { CIUDADANO_SERVICES } from "@/lib/ciudadanoServiceContent";
 import { useEffect, useState } from "react";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 type ServiceLink = {
   title: string;
@@ -28,7 +29,8 @@ function EntityBadge({ text }: { text: string }) {
   );
 }
 
-export default function ServiciosCiudadanoPage() {
+  export default function ServiciosCiudadanoPage() {
+  const { setPageContext } = useAssistantRuntime();
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -41,6 +43,68 @@ export default function ServiciosCiudadanoPage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+  useEffect(() => {
+  setPageContext({
+    pageId: "ciudadano-servicios",
+    route: "/ciudadano/servicios",
+    pageTitle: "Servicios al ciudadano",
+    activeSection: "Enlaces oficiales",
+    status: "ready",
+    summary:
+      "Esta ventana reúne enlaces oficiales del Estado peruano para consultas electorales, trámites, documentos públicos, padrón electoral, afiliación política, multas, local de votación y servicios de identidad.",
+    speakableSummary:
+      "Estás en Servicios al ciudadano. Aquí puedes ubicar enlaces oficiales para consultas electorales, multas, local de votación, miembro de mesa, padrón electoral, afiliación política, historial político y trámites de identidad.",
+    visibleText:
+      "Servicios al ciudadano: enlaces oficiales de JNE, ONPE y RENIEC. VOTO CLARO no pertenece al Estado ni gestiona trámites; solo facilita acceso informativo a páginas oficiales.",
+    availableActions: [
+      "Abrir sitio oficial",
+      "Copiar enlace",
+      "Consultar multas electorales",
+      "Consultar local de votación",
+      "Consultar miembro de mesa",
+      "Consultar afiliación política",
+      "Consultar padrón electoral",
+      "Revisar historial político",
+    ],
+    dynamicData: {
+      totalServicios: CIUDADANO_SERVICES.length,
+      entidades: "JNE, ONPE, RENIEC",
+      fuente: "Enlaces oficiales públicos",
+    },
+    suggestedPrompts: [
+      {
+        id: "servicio-proceso-electoral",
+        label: "Proceso electoral",
+        question: "¿Dónde veo información oficial del proceso electoral?",
+      },
+      {
+        id: "servicio-local-miembro",
+        label: "Local y mesa",
+        question: "¿Dónde consulto mi local de votación o si soy miembro de mesa?",
+      },
+      {
+        id: "servicio-multas",
+        label: "Multas",
+        question: "¿Dónde consulto mis multas electorales?",
+      },
+      {
+        id: "servicio-afiliacion",
+        label: "Afiliación política",
+        question: "¿Dónde consulto si estoy afiliado a un partido político?",
+      },
+      {
+        id: "servicio-desafiliacion",
+        label: "Desafiliación",
+        question: "¿Dónde puedo revisar cómo desafiliarme de una organización política?",
+      },
+      {
+        id: "servicio-padron-historial",
+        label: "Padrón e historial",
+        question: "¿Dónde reviso padrón electoral o historial político de candidatos y partidos?",
+      },
+    ],
+  });
+}, [setPageContext]);
 
   // ✅ Narración al entrar: contenido real de esta ventana (resumen + lista corta)
   useEffect(() => {

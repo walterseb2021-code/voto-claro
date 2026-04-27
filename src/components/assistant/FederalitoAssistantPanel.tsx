@@ -1904,10 +1904,10 @@ function answerFromCiudadanoServicio(rawQ: string) {
   }
 
   return (
-    "No encontré ese servicio en esta página.\n\n" +
-    "Prueba con: “lista”, “multas”, “miembro de mesa”, “local de votación”, “cédula”, “reniec”.\n\n" +
-    CIUDADANO_PAGE_GUIDE
-  );
+  "No encontré ese servicio en esta página.\n\n" +
+  "Prueba con: “lista”, “proceso electoral”, “multas”, “miembro de mesa”, “local de votación”, “cédula”, “afiliación”, “desafiliación”, “padrón”, “InfoGob” o “RENIEC”.\n\n" +
+  CIUDADANO_PAGE_GUIDE
+);
 }
 
 async function handleCiudadanoServicio(
@@ -3002,16 +3002,31 @@ function detectIntent(rawQ: string) {
         t.includes("corrup") ||
         t.includes("econom")));
 
-  const wantsCIUDADANO =
-    t.includes("servicio al ciudadano") ||
-    t.includes("servicios al ciudadano") ||
-    t.includes("miembro de mesa") ||
-    t.includes("local de votacion") ||
-    t.includes("local de votación") ||
-    t.includes("multas") ||
-    t.includes("reniec") ||
-    t.includes("jne") ||
-    t.includes("onpe");
+     const wantsCIUDADANO =
+  t.includes("servicio al ciudadano") ||
+  t.includes("servicios al ciudadano") ||
+  t.includes("proceso electoral") ||
+  t.includes("elecciones generales") ||
+  t.includes("eg2026") ||
+  t.includes("miembro de mesa") ||
+  t.includes("local de votacion") ||
+  t.includes("local de votación") ||
+  t.includes("cedula de sufragio") ||
+  t.includes("cédula de sufragio") ||
+  t.includes("multas") ||
+  t.includes("multa electoral") ||
+  t.includes("afiliacion") ||
+  t.includes("afiliación") ||
+  t.includes("desafiliacion") ||
+  t.includes("desafiliación") ||
+  t.includes("padron") ||
+  t.includes("padrón") ||
+  t.includes("historial politico") ||
+  t.includes("historial político") ||
+  t.includes("infogob") ||
+  t.includes("reniec") ||
+  t.includes("jne") ||
+  t.includes("onpe");
 
   const wantsCAMBIO =
     t.includes("peru federal") ||
@@ -3612,10 +3627,15 @@ export default function FederalitoAssistantPanel() {
 
   const compareCandidateId = useMemo(() => getCompareIdFromSearchParams(searchParams), [searchParams]);
 
-  const isCiudadanoServicioPage =
-  String(pathname || "").startsWith("/ciudadano/servicio") ||
-  String(pathname || "").startsWith("/ciudadano/servicios");
-  const isCambioConValentiaPage = String(pathname || "").startsWith(CAMBIO_PAGE_ROUTE);
+  const currentPath = String(pathname || "");
+
+const isCandidatePage = currentPath.startsWith("/candidate/");
+
+const isCiudadanoServicioPage =
+  currentPath.startsWith("/ciudadano/servicio") ||
+  currentPath.startsWith("/ciudadano/servicios");
+
+const isCambioConValentiaPage = currentPath.startsWith(CAMBIO_PAGE_ROUTE);
 
   const [refAxisId, setRefAxisId] = useState<string | null>(null);
   const [refWaitingNumber, setRefWaitingNumber] = useState(false);
@@ -4226,13 +4246,18 @@ useEffect(() => {
     };
   }, [pathname]);
 
-useEffect(() => {
+   useEffect(() => {
+  const p = String(pathname || "");
+
+  // Solo sincronizar HV / PLAN / NEWS dentro de ficha de candidato
+  if (!p.startsWith("/candidate/")) return;
+
   const tab = String(searchParams?.get("tab") || "").toUpperCase();
 
   if (tab === "PLAN") setAskMode("PLAN");
   else if (tab === "NEWS") setAskMode("NEWS");
-  else setAskMode("HV"); // default: HV
-}, [searchParams]);
+  else setAskMode("HV");
+}, [pathname, searchParams]);
   useEffect(() => {
     (window as any).__federalitoAssistantOpen = () => setOpen(true);
     (window as any).__federalitoAssistantClose = () => setOpen(false);
@@ -5762,7 +5787,15 @@ function sendQuick(q: string) {
                 <div className="min-w-0">
                    <div className="text-[13px] font-extrabold truncate">Asistente</div>
                   <div className="text-[11px] opacity-90 truncate">
-                    {candidateId ? `ID: ${candidateId} • ${modeLabel}` : `Modo: ${modeLabel}`}
+                      {isCandidatePage
+  ? candidateId
+    ? `ID: ${candidateId} • ${modeLabel}`
+    : `Modo: ${modeLabel}`
+  : pageContext?.pageTitle
+  ? String(pageContext.pageTitle)
+  : isCiudadanoServicioPage
+  ? "Servicios al ciudadano"
+  : "Asistente / Guía"}
                   </div>
                 </div>
               </div>
@@ -5821,16 +5854,22 @@ function sendQuick(q: string) {
                   <option value="qu">Quechua (si existe)</option>
                 </select>
 
-                <select
-                  value={askMode}
-                  onChange={(e) => setAskMode(e.target.value as AskMode)}
-                   className="rounded-full border px-3 py-1 text-[12px] font-bold bg-white vc-assistant-control"
-                  title="Qué fuente consultar"
-                >
-                  <option value="HV">HV (PDF)</option>
-                  <option value="PLAN">Plan (PDF)</option>
-                  <option value="NEWS">Actuar político</option>
-                </select>
+                  {isCandidatePage ? (
+  <select
+    value={askMode}
+    onChange={(e) => setAskMode(e.target.value as AskMode)}
+    className="rounded-full border px-3 py-1 text-[12px] font-bold bg-white vc-assistant-control"
+    title="Qué fuente consultar"
+  >
+    <option value="HV">HV (PDF)</option>
+    <option value="PLAN">Plan (PDF)</option>
+    <option value="NEWS">Actuar político</option>
+  </select>
+) : isCiudadanoServicioPage ? (
+  <span className="rounded-full border px-3 py-1 text-[12px] font-bold bg-slate-50 text-slate-800 vc-assistant-control">
+    Servicios oficiales
+  </span>
+) : null}
 
                 <button
                   type="button"
@@ -5868,13 +5907,21 @@ function sendQuick(q: string) {
                 </button>
               </div>
 
-              <div className="mt-2 text-[11px] text-slate-500">
-                {askMode === "NEWS"
-                  ? "Actuar político: usa archivo local (JSON) y muestra fuentes/enlaces."
-                  : "HV/Plan: responde solo con evidencia del PDF y cita páginas (p. X)."}{" "}
-                {candidateId ? "" : "Tip: entra a /candidate/[id] para que el asistente sepa qué candidato consultar."}
-              </div>
-       {askMode === "NEWS" && suggestedPrompts.length === 0 ? (
+                <div className="mt-2 text-[11px] text-slate-500">
+  {isCandidatePage ? (
+    <>
+      {askMode === "NEWS"
+        ? "Actuar político: usa archivo local (JSON) y muestra fuentes/enlaces."
+        : "HV/Plan: responde solo con evidencia del PDF y cita páginas (p. X)."}{" "}
+      {candidateId ? "" : "Tip: entra a /candidate/[id] para que el asistente sepa qué candidato consultar."}
+    </>
+  ) : isCiudadanoServicioPage ? (
+    "Servicios al ciudadano: te oriento usando los enlaces oficiales visibles de JNE, ONPE y RENIEC."
+  ) : (
+    "Asistente contextual: responde según la pantalla actual."
+  )}
+</div>
+       {isCandidatePage && askMode === "NEWS" && suggestedPrompts.length === 0 ? (
   <div className="mt-3 flex flex-wrap gap-2">
     {[
       "Resumen político",
@@ -5960,7 +6007,17 @@ function sendQuick(q: string) {
                       sendTyped();
                     }
                   }}
-                  placeholder={askMode === "NEWS" ? "Pregunta sobre actuar político…" : "Pregunta sobre HV/Plan…"}
+                    placeholder={
+  isCandidatePage
+    ? askMode === "NEWS"
+      ? "Pregunta sobre actuar político…"
+      : askMode === "PLAN"
+      ? "Pregunta sobre plan de gobierno…"
+      : "Pregunta sobre hoja de vida…"
+    : isCiudadanoServicioPage
+    ? "Pregunta sobre servicios ciudadanos…"
+    : "Pregunta sobre esta pantalla…"
+}
                   className={[
                     "flex-1 rounded-xl border px-3 py-2 text-[14px] font-semibold",
                     "bg-slate-50 text-slate-900 placeholder:text-slate-500",
