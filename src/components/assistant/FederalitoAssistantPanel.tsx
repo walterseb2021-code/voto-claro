@@ -1955,9 +1955,12 @@ function answerFromComoFunciona(rawQ: string) {
   }
 
   // 3) match por keyword / título
-  const hit =
-    COMO_FUNCIONA_FAQ.find((it) => (it.keywords || []).some((k) => q.includes(normalizeLite(k)))) ||
-    COMO_FUNCIONA_FAQ.find((it) => normalizeLite(it.title).includes(q) || q.includes(normalizeLite(it.title)));
+ const hit =
+  COMO_FUNCIONA_FAQ.find((it) => normalizeLite(it.title).includes(q) || q.includes(normalizeLite(it.title))) ||
+  COMO_FUNCIONA_FAQ.find((it) => (it.keywords || []).some((k) => {
+    const kk = normalizeLite(k);
+    return kk.length >= 4 && q.includes(kk);
+  }));
 
   if (hit) return `✅ ${hit.title}\n\n${dedupeLeadingTitle(hit.title, hit.answer)}`;
 

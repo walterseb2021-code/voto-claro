@@ -46,11 +46,11 @@ export default function ComoFuncionaPage() {
         label: "¿Qué es VOTO CLARO?",
         question: "¿Qué es VOTO CLARO y para qué sirve esta plataforma?",
       },
-      {
-        id: "como-usar-app",
-        label: "¿Cómo uso la app?",
-        question: "¿Cómo se usa la app paso a paso?",
-      },
+        {
+  id: "como-usar-app",
+  label: "¿Cómo uso la app?",
+  question: "Explica el flujo general de uso de VOTO CLARO, no solo la búsqueda de candidatos.",
+},
       {
         id: "asistente-ayuda",
         label: "¿Cómo ayuda el Asistente?",
@@ -66,11 +66,11 @@ export default function ComoFuncionaPage() {
         label: "Política de uso",
         question: "¿Cuál es la política de uso de esta app?",
       },
-      {
-        id: "secciones-disponibles",
-        label: "Secciones",
-        question: "¿Qué secciones tiene VOTO CLARO y para qué sirve cada una?",
-      },
+       {
+  id: "secciones-disponibles",
+  label: "Secciones de la app",
+  question: "Enumera las secciones de VOTO CLARO y explica brevemente para qué sirve cada una.",
+},
     ],
   });
 
@@ -127,8 +127,10 @@ export default function ComoFuncionaPage() {
       <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
         <h2 className="text-lg font-bold text-slate-900">1) ¿Qué es VOTO CLARO?</h2>
         <p className="mt-2 text-slate-800 text-sm">
-          VOTO CLARO es una app informativa para ayudarte a entender información pública antes de votar. No es un juego,
-          no es una red social y no reemplaza tu criterio.
+          VOTO CLARO es una plataforma política y ciudadana para informarte, reflexionar y participar.
+          Reúne rutas para revisar candidatos, servicios ciudadanos, intención de voto, comentarios, proyectos,
+          emprendimientos, retos interactivos y resultados públicos de dinámicas con reconocimiento.
+          No reemplaza tu criterio: te ayuda a ordenar información antes de decidir.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -136,7 +138,7 @@ export default function ComoFuncionaPage() {
             type="button"
             onClick={() =>
               sendGuide(
-                "Voto Claro es una app informativa para entender información pública antes de votar. No reemplaza tu criterio."
+               "Voto Claro es una plataforma política y ciudadana para informarte, reflexionar y participar. Te ayuda a revisar candidatos, servicios ciudadanos, intención de voto, comentarios, proyectos, emprendimientos, retos interactivos y resultados públicos. No reemplaza tu criterio."
               )
             }
             className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
@@ -146,43 +148,50 @@ export default function ComoFuncionaPage() {
         </div>
       </section>
 
-      {/* 2) Flujo de uso */}
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
-        <h2 className="text-lg font-bold text-slate-900">2) ¿Cómo se usa la app? (flujo recomendado)</h2>
+       {/* 2) Flujo de uso */}
+<section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">
+  <h2 className="text-lg font-bold text-slate-900">2) ¿Cómo se usa la app? (flujo general)</h2>
 
-        <ol className="mt-3 space-y-3 text-sm text-slate-800 list-decimal pl-5">
-          <li>
-            <b>Entra a Inicio</b> y busca un candidato escribiendo al menos 2 letras.
-          </li>
-          <li>
-            <b>Abre la ficha del candidato</b> y revisa sus secciones (Hoja de Vida, Plan, Actuar político).
-          </li>
-          <li>
-            <b>Haz preguntas dentro de la sección correcta</b>. El Asistente responde mejor cuando estás en la pestaña
-            correcta.
-          </li>
-          <li>
-            <b>Revisa la información</b> con calma. Si algo no aparece en la app, se indicará claramente.
-          </li>
-          <li>
-            <b>Luego decides tú</b>, con criterio.
-          </li>
-        </ol>
+  <p className="mt-2 text-slate-800 text-sm">
+    VOTO CLARO no se usa de una sola manera. La app tiene varias rutas: informarte, reflexionar,
+    participar, proponer, emprender, jugar y revisar resultados públicos de las dinámicas.
+  </p>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              sendGuide(
-                "Flujo recomendado: uno, en Inicio busca un candidato. Dos, abre su ficha. Tres, cambia entre Hoja de Vida, Plan y Actuar político. Cuatro, pregunta dentro de la sección correcta. Cinco, revisa la información y luego decide tú."
-              )
-            }
-           className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
-          >
-            🔊 Leer el flujo
-          </button>
-        </div>
-      </section>
+  <ol className="mt-3 space-y-3 text-sm text-slate-800 list-decimal pl-5">
+    <li>
+      <b>Empieza en Inicio.</b> Desde ahí puedes elegir qué quieres hacer primero: buscar candidatos, revisar servicios,
+      reflexionar, participar, proponer, emprender, jugar o ver ganadores.
+    </li>
+    <li>
+      <b>Elige una ruta según tu intención.</b> Si quieres informarte, revisa candidatos. Si quieres pensar mejor tu voto,
+      entra a Reflexionar antes de votar. Si quieres participar, usa Comentarios ciudadanos, Proyecto ciudadano o Reto Ciudadano.
+    </li>
+    <li>
+      <b>Usa cada ventana para su propósito.</b> Servicios al ciudadano orienta a enlaces oficiales; Intención de voto muestra tendencias;
+      Solo para ganadores muestra eventos, reconocimientos y evidencias públicas.
+    </li>
+    <li>
+      <b>Pregunta al Asistente dentro de la ventana correcta.</b> El Asistente responde mejor cuando la pregunta coincide con la sección visible.
+    </li>
+    <li>
+      <b>Revisa, compara y decide con criterio.</b> La app orienta y ordena información, pero la decisión final siempre es del ciudadano.
+    </li>
+  </ol>
+
+  <div className="mt-4 flex flex-wrap gap-2">
+    <button
+      type="button"
+      onClick={() =>
+        sendGuide(
+          "Flujo general: empieza en Inicio y elige una ruta según tu intención. Puedes informarte sobre candidatos, revisar servicios ciudadanos, reflexionar antes de votar, participar con comentarios, proponer proyectos, explorar emprendimientos, aprender en Reto Ciudadano, revisar intención de voto o ver ganadores. Usa cada ventana para su propósito y decide con criterio."
+        )
+      }
+      className="rounded-xl px-4 py-2 bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition shadow-sm vc-btn-wave"
+    >
+      🔊 Leer el flujo general
+    </button>
+  </div>
+</section>
 
       {/* 3) Qué hace el Asistente */}
       <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm vc-fade-up vc-card-hover mb-5">

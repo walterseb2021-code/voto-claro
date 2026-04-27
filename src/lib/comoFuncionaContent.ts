@@ -3,16 +3,17 @@
 export const COMO_FUNCIONA_ROUTE = "/como-funciona";
 
 export const COMO_FUNCIONA_GUIDE =
-  "Estás en “Cómo funciona”.\n\n" +
-  "Aquí te explico cómo usar VOTO CLARO, qué hace el asistente, cuáles son sus límites y las reglas de uso.\n\n" +
-  "Temas que puedes preguntar (con tus palabras):\n" +
-  "- “qué es esto” / “para qué sirve”\n" +
-  "- “cómo empiezo” / “cómo se usa”\n" +
-  "- “qué hace el asistente” / “me puedes ayudar”\n" +
-  "- “no habla” / “no me escucha” / “no funciona”\n" +
-  "- “reglas” / “normas” / “buen uso”\n" +
-  "- “qué hay en la app” / “secciones”\n" +
-  "- “quién hizo la app” / “es oficial”";
+  "Estás en “Cómo funciona VOTO CLARO”.\n\n" +
+  "Esta ventana explica la app completa: cómo orientarte, qué rutas existen, cómo ayuda el Asistente, cuáles son sus límites técnicos y qué reglas de uso conviene respetar.\n\n" +
+  "Temas que puedes preguntar con tus palabras:\n" +
+  "- “qué es VOTO CLARO” / “para qué sirve”\n" +
+  "- “cómo uso la app” / “flujo general”\n" +
+  "- “qué hace el asistente” / “cómo me ayuda”\n" +
+  "- “secciones de la app” / “qué hay en cada ventana”\n" +
+  "- “voz” / “micrófono” / “no habla”\n" +
+  "- “límites técnicos” / “qué pasa si falla”\n" +
+  "- “política de uso” / “reglas”\n" +
+  "- “transparencia” / “autoría” / “es oficial”.";
 
 type FaqItem = {
   title: string;
@@ -24,40 +25,26 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
   {
     title: "¿Qué es VOTO CLARO?",
     keywords: [
-      "que es",
-      "qué es",
+      "que es voto claro",
+      "qué es voto claro",
       "que es esto",
       "qué es esto",
-      "esto que es",
-      "para que sirve",
-      "para qué sirve",
-      "para que es",
-      "para qué es",
-      "de que trata",
-      "de qué trata",
-      "que hace",
-      "qué hace",
-      "que hace la app",
+      "para que sirve voto claro",
+      "para qué sirve voto claro",
+      "para que sirve la plataforma",
+      "para qué sirve la plataforma",
+      "de que trata voto claro",
+      "de qué trata voto claro",
       "para que fue creada",
       "por que existe",
       "por qué existe",
-      "para que la hicieron",
-      "es una red social",
-      "es red social",
-      "es como facebook",
-      "es como tiktok",
-      "es un juego",
-      "es juego",
-      "se juega",
-      "sirve para jugar",
-      "es para votar",
       "me dice por quien votar",
       "me dice por quién votar",
     ],
     answer:
-      "VOTO CLARO es una aplicación informativa para ayudarte a entender información pública antes de votar. " +
-      "No es un juego, no es una red social y no te dice por quién votar. " +
-      "Te ayuda a revisar información y a tomar tu decisión con más claridad.",
+      "VOTO CLARO es una plataforma política y ciudadana para informarte, reflexionar y participar.\n\n" +
+      "No es solo un buscador de candidatos. También reúne servicios ciudadanos, reflexión antes de votar, intención de voto, comentarios ciudadanos, proyectos ciudadanos, espacio emprendedor, reto ciudadano y una sección de ganadores.\n\n" +
+      "La app no decide por ti ni te dice por quién votar. Su función es ordenar información, abrir rutas de participación y ayudarte a tomar decisiones con más criterio.",
   },
 
   {
@@ -78,26 +65,18 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "pasos",
       "paso a paso",
       "flujo",
+      "flujo general",
       "guia",
       "guía",
       "como navegar",
       "cómo navegar",
-      "donde busco",
-      "dónde busco",
-      "como busco",
-      "cómo busco",
-      "buscar candidato",
-      "buscador",
-      "no encuentro",
-      "no lo encuentro",
-      "no aparece",
-      "no me sale",
+      "usar la app",
+      "uso de la app",
     ],
     answer:
-      "Uso recomendado: 1) En Inicio, busca un candidato. " +
-      "2) Entra a su ficha y revisa sus secciones (Hoja de Vida, Plan y actividad pública). " +
-      "3) Haz tus preguntas dentro de la sección que estés viendo. " +
-      "4) Revisa la información con calma y luego decide tú.",
+      "La app se usa eligiendo una ruta según lo que quieres hacer.\n\n" +
+      "Si quieres informarte, empieza por Inicio y revisa candidatos o contenidos institucionales. Si quieres tomar una decisión con más criterio, entra a Reflexionar antes de votar. Si buscas orientación práctica, usa Servicios al ciudadano. Si quieres participar, entra a Comentarios ciudadanos, Proyecto ciudadano o Reto Ciudadano. Si tienes una iniciativa productiva, revisa Espacio emprendedor. Si quieres ver resultados públicos de dinámicas con premio, entra a Solo para ganadores.\n\n" +
+      "La idea general es: primero eliges tu intención, luego entras a la ventana correcta, después preguntas al Asistente según lo que ves y finalmente revisas la información con calma.",
   },
 
   {
@@ -107,6 +86,8 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "qué hace el asistente",
       "para que sirve el asistente",
       "para qué sirve el asistente",
+      "como ayuda el asistente",
+      "cómo ayuda el asistente",
       "me ayuda",
       "me puedes ayudar",
       "me puede ayudar",
@@ -120,23 +101,88 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "resumen",
       "resumir",
       "me lee",
-      "lee",
-      "leer",
       "leeme",
       "léeme",
-      "voz",
-      "hablar",
-      "que me hable",
-      "que hable",
       "me guia",
       "me guía",
       "orienta",
       "me orienta",
     ],
     answer:
-      "El Asistente responde según la sección donde te encuentres. " +
-      "Puede explicarte y resumirte lo que estás viendo en la app, y también puede leer en voz alta si activas la voz. " +
-      "Si le preguntas algo fuera de la sección actual, te guía para ir al lugar correcto.",
+      "El Asistente te ayuda según la ventana donde estás.\n\n" +
+      "En Inicio puede orientarte sobre qué ruta abrir. En fichas de candidatos puede ayudarte con Hoja de Vida, Plan y Actuar político. En Comentarios ciudadanos, Proyecto ciudadano, Espacio emprendedor, Reto Ciudadano, Intención de voto y Solo para ganadores debe responder de acuerdo con el contexto visible.\n\n" +
+      "También puede leer en voz alta si activas la voz. Si preguntas algo que no corresponde a la ventana actual, debe orientarte hacia la sección correcta en lugar de inventar.",
+  },
+
+  {
+    title: "¿Qué secciones tiene VOTO CLARO?",
+    keywords: [
+      "secciones",
+      "secciones de la app",
+      "que secciones tiene",
+      "qué secciones tiene",
+      "enumera las secciones",
+      "lista de secciones",
+      "que ventanas tiene",
+      "qué ventanas tiene",
+      "ventanas",
+      "modulos",
+      "módulos",
+      "opciones",
+      "menu",
+      "menú",
+      "mapa",
+      "mapa de la app",
+      "que hay en cada ventana",
+      "qué hay en cada ventana",
+      "que puedo ver en la app",
+      "qué puedo ver en la app",
+      "que contiene la app",
+      "qué contiene la app",
+      "que hay en la app",
+      "qué hay en la app",
+    ],
+    answer:
+      "VOTO CLARO tiene varias secciones, y cada una cumple una función distinta:\n\n" +
+      "1. Inicio: centro de navegación para abrir las rutas principales de la plataforma.\n" +
+      "2. Buscar candidato y ficha del candidato: permite revisar Hoja de Vida, Plan de Gobierno y Actuar político.\n" +
+      "3. Servicios al ciudadano: orienta hacia trámites y consultas electorales oficiales.\n" +
+      "4. Reflexionar antes de votar: presenta preguntas por temas como economía, salud, educación, seguridad y otros ejes.\n" +
+      "5. Alianza para el Progreso: espacio institucional del grupo activo en esta versión de la app.\n" +
+      "6. Intención de voto: muestra una dinámica para registrar o explorar preferencias dentro de la plataforma.\n" +
+      "7. Reto Ciudadano: espacio interactivo para aprender y participar mediante dinámicas o juegos.\n" +
+      "8. Comentarios ciudadanos: permite opinar, comentar, debatir y participar sobre temas públicos.\n" +
+      "9. Proyecto ciudadano: permite presentar ideas o propuestas para la comunidad.\n" +
+      "10. Espacio emprendedor: orientado a proyectos productivos, emprendimientos y posibles conexiones.\n" +
+      "11. Solo para ganadores: muestra eventos, ganadores, fotos, videos, entrevistas, premios y evidencias públicas.\n\n" +
+      "Por eso la app no funciona como una sola ventana. Funciona como un recorrido con varias rutas.",
+  },
+
+  {
+    title: "Voz, audio y micrófono",
+    keywords: [
+      "voz",
+      "audio",
+      "hablar",
+      "que me hable",
+      "que hable",
+      "no habla",
+      "no suena",
+      "no hay audio",
+      "microfono",
+      "micrófono",
+      "no me escucha",
+      "no escucha",
+      "dictar",
+      "reconoce mi voz",
+      "no reconoce mi voz",
+      "no me entiende",
+      "no entiende",
+    ],
+    answer:
+      "La voz y el micrófono dependen del navegador y del dispositivo.\n\n" +
+      "Si el Asistente no habla automáticamente, normalmente basta con tocar la pantalla o hacer clic una vez, porque muchos navegadores bloquean el audio hasta que el usuario interactúa.\n\n" +
+      "Para dictar, usa el botón de micrófono si aparece disponible. Si no funciona, revisa permisos del navegador o prueba en un navegador compatible.",
   },
 
   {
@@ -145,12 +191,14 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "limites",
       "límites",
       "limitaciones",
-      "no funciona",
-      "no sirve",
+      "limites tecnicos",
+      "límites técnicos",
       "fallas",
       "falla",
       "errores",
       "error",
+      "no funciona",
+      "no sirve",
       "se cuelga",
       "se congela",
       "se traba",
@@ -159,34 +207,19 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "no carga",
       "no abre",
       "pantalla en blanco",
-      "porque no responde",
-      "por que no responde",
-      "por qué no responde",
       "porque responde mal",
-      "por que responde mal",
-      "porque no habla",
-      "por que no habla",
-      "no habla",
-      "no suena",
-      "no hay audio",
-      "no me escucha",
-      "no escucha",
-      "microfono",
-      "micrófono",
-      "no me toma el micro",
-      "no reconoce mi voz",
-      "no me entiende",
-      "no entiende",
+      "por qué responde mal",
+      "porque no responde",
+      "por qué no responde",
     ],
     answer:
-      "Esta aplicación depende del navegador y del dispositivo. " +
-      "En algunos casos, el audio puede estar bloqueado hasta que hagas un clic o toque en la pantalla. " +
-      "El asistente responde solo sobre la información disponible dentro de VOTO CLARO. " +
-      "Si algo no está en la app, te lo dirá en lugar de inventarlo.",
+      "VOTO CLARO depende del navegador, del dispositivo, de la conexión y de los datos disponibles en la app.\n\n" +
+      "El Asistente no debe inventar información. Si algo no existe en la plataforma, si una sección todavía no tiene datos publicados o si una fuente no está disponible, debe indicarlo con claridad.\n\n" +
+      "También puede haber límites de audio, micrófono, carga de datos o permisos del navegador. En esos casos conviene actualizar la página, revisar permisos o probar desde otro dispositivo.",
   },
 
   {
-    title: "Reglas de uso",
+    title: "Política de uso",
     keywords: [
       "reglas",
       "normas",
@@ -206,75 +239,31 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "insultos",
       "lisuras",
       "faltas de respeto",
-      "reportar",
-      "denunciar",
       "abuso",
       "comportamiento",
     ],
     answer:
-      "Usa VOTO CLARO con respeto. " +
-      "No está diseñada para insultar, atacar o generar contenido que no tenga que ver con su propósito informativo. " +
-      "Haz preguntas relacionadas con lo que existe dentro de la aplicación.",
+      "VOTO CLARO debe usarse con respeto y con propósito ciudadano.\n\n" +
+      "Puedes preguntar sobre las secciones, candidatos, servicios, reflexiones, participación, proyectos, emprendimientos, retos y ganadores visibles dentro de la app.\n\n" +
+      "No corresponde usar la plataforma para insultar, atacar, manipular al Asistente, pedirle que invente información o intentar desarmar el funcionamiento técnico de la app.",
   },
 
   {
-    title: "¿Qué encontrarás en cada sección?",
-    keywords: [
-      "que hay",
-      "qué hay",
-      "que hay en la app",
-      "qué hay en la app",
-      "que contiene",
-      "qué contiene",
-      "secciones",
-      "opciones",
-      "menu",
-      "menú",
-      "donde encuentro",
-      "dónde encuentro",
-      "mapa",
-      "mapa de la app",
-      "que puedo ver",
-      "qué puedo ver",
-      "que tiene",
-      "qué tiene",
-    ],
-    answer:
-      "En Inicio puedes buscar candidatos. " +
-      "En la ficha de cada candidato encontrarás su información pública organizada por secciones. " +
-      "Además, hay espacios para reflexionar antes de votar y una sección de servicios con enlaces oficiales para trámites y consultas.",
-  },
-
-  {
-    title: "Transparencia",
+    title: "Transparencia y autoría",
     keywords: [
       "transparencia",
       "quien hizo",
       "quién hizo",
       "quien creo",
       "quién creó",
-      "quien creo la app",
-      "quién creó la app",
       "quien desarrollo",
       "quién desarrolló",
-      "quien la hizo",
-      "quién la hizo",
       "quien esta detras",
       "quién está detrás",
-      "quien esta atras",
-      "quién está atrás",
-      "de donde sale",
-      "de dónde sale",
-      "quien la financio",
-      "quién la financió",
-      "financia",
       "autor",
       "autoria",
       "autoría",
-      "equipo",
       "responsable",
-      "quien responde",
-      "quién responde",
       "es oficial",
       "es del gobierno",
       "es del estado",
@@ -283,8 +272,8 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "es de la onpe",
     ],
     answer:
-      "Esta aplicación es una herramienta informativa para facilitar el acceso a información pública. " +
-      "No reemplaza el criterio personal del usuario. " +
-      "Si necesitas una fuente oficial específica, te puedo orientar a dónde encontrarla dentro de la app.",
+      "VOTO CLARO es una herramienta informativa y ciudadana. No reemplaza fuentes oficiales ni el criterio personal del usuario.\n\n" +
+      "Cuando necesites una consulta oficial, la app debe orientarte hacia servicios o enlaces institucionales cuando estén disponibles.\n\n" +
+      "La transparencia también implica reconocer límites: si una información no está publicada o no aparece en la app, no debe presentarse como si estuviera confirmada.",
   },
 ];
