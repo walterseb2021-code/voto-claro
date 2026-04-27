@@ -1833,6 +1833,146 @@ function answerFromReflexion(rawQ: string) {
 
 function answerFromCiudadanoServicio(rawQ: string) {
   const q = normalize(rawQ);
+    const findService = (terms: string[]) => {
+    return CIUDADANO_SERVICES.find((s) => {
+      const hay = normalize(`${s.title} ${s.description} ${s.entity} ${s.note || ""}`);
+      return terms.some((term) => hay.includes(normalize(term)));
+    });
+  };
+
+  const formatService = (item: any, intro: string) => {
+    if (!item) {
+      return (
+        "No encontré ese servicio en la lista visible de esta página.\n\n" +
+        "Revisa la lista de servicios oficiales o escribe “lista” para ver todos los accesos disponibles."
+      );
+    }
+
+    return (
+      `${intro}\n\n` +
+      `${item.title} (${item.entity})\n\n` +
+      `${item.description}\n\n` +
+      `Enlace oficial:\n${item.url}\n\n` +
+      "En la ventana, busca esa tarjeta y toca “Abrir sitio oficial”."
+    );
+  };
+
+  if (
+    q.includes("donde voto") ||
+    q.includes("dónde voto") ||
+    q.includes("donde me toca votar") ||
+    q.includes("dónde me toca votar") ||
+    q.includes("local de votacion") ||
+    q.includes("local de votación") ||
+    q.includes("mi local") ||
+    q.includes("lugar de votacion") ||
+    q.includes("lugar de votación")
+  ) {
+    const item = findService(["local de votacion", "local de votación"]);
+    return formatService(
+      item,
+      "Para saber dónde votar, debes entrar al servicio oficial de ONPE para consultar tu local de votación."
+    );
+  }
+
+  if (
+    q.includes("miembro de mesa") ||
+    q.includes("soy miembro") ||
+    q.includes("salgo miembro") ||
+    q.includes("me toca ser miembro")
+  ) {
+    const item = findService(["miembro de mesa"]);
+    return formatService(
+      item,
+      "Para saber si eres miembro de mesa, debes usar el servicio oficial de consulta electoral de ONPE."
+    );
+  }
+
+  if (
+    q.includes("multa") ||
+    q.includes("multas") ||
+    q.includes("tengo multa") ||
+    q.includes("debo multa") ||
+    q.includes("multa electoral") ||
+    q.includes("multas electorales")
+  ) {
+    const item = findService(["multas electorales", "multa electoral"]);
+    return formatService(
+      item,
+      "Para consultar si tienes una multa electoral, debes ingresar al portal oficial de multas electorales del JNE."
+    );
+  }
+
+  if (
+    q.includes("afiliado") ||
+    q.includes("afiliacion") ||
+    q.includes("afiliación") ||
+    q.includes("partido politico") ||
+    q.includes("partido político") ||
+    q.includes("estoy afiliado")
+  ) {
+    const item = findService(["consulta de afiliacion", "consulta de afiliación", "afiliacion politica", "afiliación política"]);
+    return formatService(
+      item,
+      "Para consultar si figuras afiliado a una organización política, debes usar la consulta pública de afiliación del JNE."
+    );
+  }
+
+  if (
+    q.includes("desafiliar") ||
+    q.includes("desafiliacion") ||
+    q.includes("desafiliación") ||
+    q.includes("salirme de un partido") ||
+    q.includes("renunciar a un partido")
+  ) {
+    const item = findService(["como desafiliarme", "cómo desafiliarme", "desafiliacion", "desafiliación"]);
+    return formatService(
+      item,
+      "Para revisar cómo desafiliarte de una organización política, debes consultar la guía oficial del JNE sobre desafiliación."
+    );
+  }
+
+  if (
+    q.includes("padron") ||
+    q.includes("padrón") ||
+    q.includes("padron electoral") ||
+    q.includes("padrón electoral")
+  ) {
+    const item = findService(["padron electoral", "padrón electoral"]);
+    return formatService(
+      item,
+      "Para revisar información vinculada al padrón electoral, debes ingresar al portal oficial de RENIEC para Elecciones Generales 2026."
+    );
+  }
+
+  if (
+    q.includes("historial politico") ||
+    q.includes("historial político") ||
+    q.includes("infogob") ||
+    q.includes("historia de candidato") ||
+    q.includes("historial de candidato") ||
+    q.includes("historial de partido")
+  ) {
+    const item = findService(["historial politico", "historial político", "infogob"]);
+    return formatService(
+      item,
+      "Para revisar historial político de candidatos, autoridades u organizaciones políticas, debes usar InfoGob del JNE."
+    );
+  }
+
+  if (
+    q.includes("proceso electoral") ||
+    q.includes("elecciones generales") ||
+    q.includes("eg2026") ||
+    q.includes("informacion electoral") ||
+    q.includes("información electoral")
+  ) {
+    const item = findService(["informacion del proceso electoral", "información del proceso electoral", "elecciones generales 2026"]);
+    return formatService(
+      item,
+      "Para ver información oficial del proceso electoral, debes ingresar al portal oficial de ONPE para Elecciones Generales 2026."
+    );
+  }
 
   if (!q || q.length < 3 || q.includes("ayuda") || q.includes("guia") || q.includes("guía") || q.includes("como usar")) {
     return `${CIUDADANO_PAGE_GUIDE}\n\n${CIUDADANO_LEGAL_NOTE}`;

@@ -107,33 +107,42 @@ function EntityBadge({ text }: { text: string }) {
 }, [setPageContext]);
 
   // ✅ Narración al entrar: contenido real de esta ventana (resumen + lista corta)
-  useEffect(() => {
-    const list = CIUDADANO_SERVICES.slice(0, 6)
-      .map((s, i) => `${i + 1}) ${s.title}`)
-      .join("\n");
+useEffect(() => {
+  const list = CIUDADANO_SERVICES.slice(0, 6)
+    .map((s, i) => `${i + 1}) ${s.title}`)
+    .join("\n");
 
-    const text =
-      "Estás en Servicios al ciudadano. " +
-      "Aquí tienes enlaces oficiales para trámites electorales.\n\n" +
-      "Servicios principales:\n" +
-      list +
-      "\n\n" +
-      "Puedes tocar “Abrir sitio oficial” en cualquiera. " +
-      "Si quieres, también puedes pedirme: “lista”, o decir “multas”, “miembro de mesa” o “local de votación”.";
+  const text =
+    "Estás en Servicios al ciudadano. " +
+    "Aquí tienes enlaces oficiales para trámites electorales y consultas públicas.\n\n" +
+    "Servicios principales:\n" +
+    list +
+    "\n\n" +
+    "Puedes tocar Abrir sitio oficial en cualquier tarjeta. " +
+    "También puedes preguntarme: dónde voto, tengo multa electoral, soy miembro de mesa, afiliación política, desafiliación, padrón electoral o historial político.";
 
-    // ✅ Al entrar a esta ventana: NO dejar el panel abierto (evita que tape la pantalla)
+  // ✅ Al entrar a esta ventana: cerrar panel para que no tape la pantalla
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: { action: "CLOSE" },
+    })
+  );
+
+  // ✅ Esperar a que el asistente termine su reset interno por cambio de ruta
+  const t = window.setTimeout(() => {
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
-        detail: { action: "CLOSE" },
+        detail: {
+          action: "SAY",
+          text,
+          speak: true,
+        },
       })
     );
+  }, 650);
 
-    window.dispatchEvent(
-      new CustomEvent("votoclaro:guide", {
-        detail: { action: "SAY", text, speak: true },
-      })
-    );
-  }, []);
+  return () => window.clearTimeout(t);
+}, []);
 
   // ✅ Estilo consistente (como A-8 / Cambio con valentía)
   const CARD = "rounded-2xl border-4 border-red-700 bg-green-50 shadow-sm";
