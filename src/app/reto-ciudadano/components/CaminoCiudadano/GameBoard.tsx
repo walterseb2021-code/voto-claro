@@ -91,19 +91,26 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
               return <div key={`${rowIdx}-${colIdx}`} className="p-1" />;
             }
 
-            const isCurrent = cell.type === 'number' && cell.num === position;
-            const isSpecial = cell.type === 'special';
+             const isCurrent = cell.type === 'number' && cell.num === position;
+             const isFinishNumber = cell.type === 'number' && cell.num === 30;
+             const isSpecial = cell.type === 'special';
 
             return (
               <div
                 key={`${rowIdx}-${colIdx}`}
-                className={`
-                  flex items-center justify-center text-sm font-medium rounded-lg transition-all
-                  border border-slate-300
-                  ${isCurrent ? 'ring-2 ring-indigo-500 shadow-md bg-indigo-50' : 'bg-white'}
-                  ${isSpecial ? 'text-xs font-semibold text-slate-600' : ''}
-                `}
-                style={{ aspectRatio: '1 / 1' }}
+                
+                 className={`
+  flex items-center justify-center text-sm font-medium rounded-lg transition-all duration-300
+  border border-slate-300
+  ${
+    isCurrent
+      ? 'vc-camino-current-cell ring-4 ring-indigo-500 shadow-lg bg-indigo-50 scale-[1.04]'
+      : isFinishNumber
+      ? 'bg-emerald-50 border-emerald-300'
+      : 'bg-white'
+  }
+  ${isSpecial ? 'text-xs font-semibold text-slate-600 bg-slate-50' : ''}
+`}style={{ aspectRatio: '1 / 1' }}
               >
                 <span className={isCurrent ? 'font-bold text-indigo-700' : 'text-slate-700'}>
                   {cell.label}
@@ -118,6 +125,21 @@ export default function GameBoard({ position, totalSquares, children }: GameBoar
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="pointer-events-auto">{children}</div>
       </div>
+         <style>{`
+  .vc-camino-current-cell {
+    animation: vcCaminoCurrentPulse 1.35s ease-in-out infinite;
+  }
+
+  @keyframes vcCaminoCurrentPulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.28);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.08);
+    }
+  }
+`}</style>
+
     </div>
   );
 }
