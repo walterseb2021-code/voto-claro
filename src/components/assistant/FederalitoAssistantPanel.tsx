@@ -106,10 +106,13 @@ if (p.startsWith("/solo-para-ganadores")) {
     return "Hola, soy el asistente de Servicios al ciudadano. Puedo ayudarte a ubicar el servicio correcto en esta pantalla.";
   }
 
-  if (p.startsWith("/cambio-con-valentia")) {
-  return "Hola, soy el asistente de esta ventana. Puedo explicarte el contenido visible y el acceso disponible.";
-}
+    if (p.startsWith("/cambio-app")) {
+    return "Hola, soy el asistente de Alianza para el Progreso APP. Puedo ayudarte con el sitio oficial, el fundador, el candidato, el perfil multidisciplinario, la conversación del partido, transmisiones y consulta de candidatos.";
+  }
 
+  if (p.startsWith("/cambio-con-valentia")) {
+    return "Hola, soy el asistente de esta ventana. Puedo explicarte el contenido visible y el acceso disponible.";
+  }
 if (p.startsWith("/como-funciona")) {
   return "Hola, soy el asistente de Cómo funciona VOTO CLARO. Puedo ayudarte a entender la guía de uso, el flujo recomendado, los límites técnicos, la política de uso y las secciones disponibles.";
 }
@@ -2871,8 +2874,90 @@ function getCompareIdFromSearchParams(sp: any) {
   return (candidates[0] ?? "").trim();
 }
 
-function answerFromCambioConValentia(rawQ: string) {
+ function answerFromCambioConValentia(rawQ: string) {
   const q = normalize(rawQ);
+  const currentPath =
+    typeof window !== "undefined" ? String(window.location.pathname || "") : "";
+  const isAppPage = currentPath.startsWith("/cambio-app");
+
+  if (isAppPage) {
+    const appTitle = "Alianza para el Progreso APP";
+    const appUrl = "https://www.app.pe/es";
+    const appPhrase = "Un Perú con oportunidades para todos.";
+
+    const wantsGuide =
+      !q ||
+      q.length < 3 ||
+      q.includes("ayuda") ||
+      q.includes("guia") ||
+      q.includes("guía") ||
+      q.includes("como usar") ||
+      q.includes("qué es") ||
+      q.includes("que es") ||
+      q.includes("que hay") ||
+      q.includes("qué hay");
+
+    if (wantsGuide) {
+      return (
+        `${appTitle}\n\n` +
+        "Esta ventana reúne información institucional de APP: sitio oficial, fundador, candidato, perfil multidisciplinario, conversación del partido, transmisiones en vivo, búsqueda de transmisiones y consulta de candidatos.\n\n" +
+        `Sitio oficial:\n${appUrl}\n\n` +
+        `Frase visible:\n${appPhrase}`
+      );
+    }
+
+    if (q.includes("link") || q.includes("enlace") || q.includes("web") || q.includes("pagina") || q.includes("página") || q.includes("sitio")) {
+      return `Sitio oficial de APP:\n${appUrl}`;
+    }
+
+    if (q.includes("fundador")) {
+      return (
+        "El bloque Fundador presenta a César Acuña Peralta y una frase institucional vinculada a descentralización y justicia territorial.\n\n" +
+        "Puedes usar el botón “Leer” para que el asistente lea ese texto en voz alta."
+      );
+    }
+
+    if (q.includes("candidato") || q.includes("cesar") || q.includes("césar") || q.includes("acuña") || q.includes("acuna")) {
+      return (
+        "El bloque Candidato presenta a César Acuña Peralta y una frase política visible en la ventana.\n\n" +
+        "Desde esta misma página también puedes bajar hasta Consulta tu candidato para abrir fichas de candidatos por categoría y distrito electoral."
+      );
+    }
+
+    if (q.includes("perfil") || q.includes("multidisciplinario") || q.includes("formacion") || q.includes("formación") || q.includes("docencia") || q.includes("emprendimiento") || q.includes("gestion") || q.includes("gestión")) {
+      return (
+        "El Perfil Multidisciplinario reúne accesos a contenidos sobre formación académica y docencia, emprendimiento y gestión educativa, trayectoria política y gestión deportiva.\n\n" +
+        "Cada botón “Ver” abre un contenido externo relacionado."
+      );
+    }
+
+    if (q.includes("transmision") || q.includes("transmisión") || q.includes("en vivo") || q.includes("youtube") || q.includes("facebook") || q.includes("tiktok")) {
+      return (
+        "En esta ventana hay dos zonas para transmisiones:\n\n" +
+        "1. En vivo ahora: muestra transmisiones activas cuando existen.\n" +
+        "2. Buscar transmisiones: permite buscar por nombre de candidato y ver historial de transmisiones registradas."
+      );
+    }
+
+    if (q.includes("consulta") || q.includes("categoria") || q.includes("categoría") || q.includes("distrito") || q.includes("region") || q.includes("región")) {
+      return (
+        "En Consulta tu candidato puedes filtrar por categoría y distrito electoral.\n\n" +
+        "Cuando eliges un candidato, la app te lleva a su ficha para revisar Hoja de Vida, Plan de Gobierno y Actuar Político."
+      );
+    }
+
+    if (q.includes("conversacion") || q.includes("conversación") || q.includes("documento") || q.includes("documentos") || q.includes("bases") || q.includes("ideologia") || q.includes("ideología") || q.includes("partido")) {
+      return (
+        "El bloque Conversación del partido permite hacer preguntas sobre documentos base del partido.\n\n" +
+        "Puedes preguntar por temas como ideología, organización, propuestas, economía, educación, seguridad o salud. Si la información no está en los documentos disponibles, debe indicarse claramente."
+      );
+    }
+
+    return (
+      `${appTitle}\n\n` +
+      "Puedo orientarte sobre estos bloques: sitio oficial, fundador, candidato, perfil multidisciplinario, conversación del partido, transmisiones y consulta de candidatos."
+    );
+  }
 
   const wantsGuide =
     !q ||
@@ -2887,7 +2972,7 @@ function answerFromCambioConValentia(rawQ: string) {
   if (wantsGuide) {
     return `${CAMBIO_PAGE_GUIDE}\n\n${CAMBIO_PAGE_TITLE}\n\nEnlace:\n${CAMBIO_PAGE_LINK_URL}\n\n${CAMBIO_PAGE_PHRASE}`;
   }
-    // ✅ Preguntas por temas/propuestas: esta ventana solo es acceso + mensaje + link
+
   if (
     q.includes("tema") ||
     q.includes("temas") ||
@@ -2903,6 +2988,7 @@ function answerFromCambioConValentia(rawQ: string) {
       CAMBIO_PAGE_LINK_URL
     );
   }
+
   if (q.includes("link") || q.includes("enlace") || q.includes("web") || q.includes("pagina") || q.includes("página")) {
     return `Enlace oficial:\n${CAMBIO_PAGE_LINK_URL}`;
   }
@@ -2914,13 +3000,16 @@ function answerFromCambioConValentia(rawQ: string) {
   return `${CAMBIO_PAGE_TITLE}\n\nEnlace:\n${CAMBIO_PAGE_LINK_URL}\n\n${CAMBIO_PAGE_PHRASE}`;
 }
 
-async function handleCambioConValentia(
+  async function handleCambioConValentia(
   rawQ: string,
   maybeSpeakFn: (t: string) => Promise<void>,
   pushFn: (t: string) => void
 ) {
   // ✅ Si es “Conversación del partido” => responder desde docs del partido
   const i = detectIntent(rawQ);
+  const currentPath =
+    typeof window !== "undefined" ? String(window.location.pathname || "") : "";
+  const partyId = currentPath.startsWith("/cambio-app") ? "app" : "perufederal";
 
   if (i.asksPartyDetails || i.wantsPLAN || i.wantsHV || i.wantsNEWS || i.t.length >= 12) {
     try {
@@ -2928,8 +3017,8 @@ async function handleCambioConValentia(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({
-          partyId: "perufederal",
+                 body: JSON.stringify({
+          partyId,
           mode: "SUMMARY",
           question: String(rawQ || "").trim(),
         }),
@@ -2986,7 +3075,7 @@ function getPageCtx(pathname: string): PageCtx {
   if (p.startsWith("/reflexion")) return "REFLEXION";
   if (p.startsWith("/ciudadano/servicio") || p.startsWith("/ciudadano/servicios"))
   return "CIUDADANO";
-  if (p.startsWith("/cambio-con-valentia")) return "CAMBIO";
+  if (p.startsWith("/cambio-app") || p.startsWith("/cambio-con-valentia")) return "CAMBIO";
   if (p.startsWith("/candidate/")) return "CANDIDATE";
   if (p.startsWith("/intencion-de-voto")) return "INTENCION";
 if (p.startsWith("/reto-ciudadano")) return "RETO";
@@ -3168,11 +3257,15 @@ function detectIntent(rawQ: string) {
   t.includes("jne") ||
   t.includes("onpe");
 
-  const wantsCAMBIO =
+     const wantsCAMBIO =
     t.includes("peru federal") ||
     t.includes("perú federal") ||
     t.includes("cambio con valentia") ||
-    t.includes("cambio con valentía");
+    t.includes("cambio con valentía") ||
+    t.includes("alianza para el progreso") ||
+    t.includes("app") ||
+    t.includes("cesar acuña") ||
+    t.includes("césar acuña");
 
   const asksPartyDetails =
     t.includes("partido") ||
@@ -3309,7 +3402,7 @@ function buildRedirectMessage(ctx: PageCtx, rawQ: string) {
       "Desde aquí puedes informarte, participar y explorar diferentes espacios de la plataforma:\n\n" +
       "1) Buscar candidatos y abrir su ficha: Hoja de Vida, Plan de Gobierno y Actuar Político.\n" +
       "2) Servicios al ciudadano: local de votación, miembro de mesa, multas y trámites electorales.\n" +
-      "3) Reflexionar antes de votar: preguntas por economía, salud, educación, seguridad y otros temas clave.\n" +
+      "3) Reflexiones políticas y ciudadanas: preguntas por economía, salud, educación, seguridad y otros temas clave.\n" +
       "4) Alianza para el Progreso: espacio institucional del grupo activo en esta versión de la app.\n" +
       "5) Intención de voto: una vista para explorar tendencias de preferencia electoral.\n" +
       "6) Comentarios ciudadanos: espacio para opinar, debatir y participar sobre temas públicos.\n" +
@@ -3463,8 +3556,10 @@ if (ctx === "CANDIDATE") {
     return { handled: false };
   }
 
-  if (ctx === "CAMBIO") {
-    if (i.wantsHV || i.wantsPLAN || i.wantsNEWS || i.wantsREFLEXION || i.wantsCIUDADANO || i.asksPartyDetails) {
+      if (ctx === "CAMBIO") {
+    // En ventanas de partido, NO bloquear preguntas sobre partido, propuesta, plan,
+    // documentos, ideología o bases: esas deben pasar a handleCambioConValentia().
+    if (i.wantsHV || i.wantsNEWS || i.wantsREFLEXION || i.wantsCIUDADANO) {
       pushAssistant(redirect);
       await maybeSpeak(redirect);
       return { handled: true };
@@ -3775,7 +3870,8 @@ const isCiudadanoServicioPage =
   currentPath.startsWith("/ciudadano/servicio") ||
   currentPath.startsWith("/ciudadano/servicios");
 
-const isCambioConValentiaPage = currentPath.startsWith(CAMBIO_PAGE_ROUTE);
+  const isCambioConValentiaPage =
+  currentPath.startsWith(CAMBIO_PAGE_ROUTE) || currentPath.startsWith("/cambio-app");
 
   const [refAxisId, setRefAxisId] = useState<string | null>(null);
   const [refWaitingNumber, setRefWaitingNumber] = useState(false);
@@ -4265,6 +4361,13 @@ const autoguideKey = useMemo(() => {
   ).trim();
 }
 
+    if (p.startsWith("/cambio-app")) {
+    return (
+      "Estás en Alianza para el Progreso APP. " +
+      "Esta ventana muestra el sitio oficial, mensajes institucionales, fundador, candidato, perfil multidisciplinario, conversación del partido, transmisiones y consulta de candidatos."
+    ).trim();
+  }
+
   if (p.startsWith("/cambio-con-valentia")) {
     return (
       "Estás en Un cambio con valentía. " +
@@ -4454,6 +4557,8 @@ useEffect(() => {
             normalizedLast.includes("estás en reflexionar antes de votar") ||
             normalizedLast.includes("estás en reflexiones políticas y ciudadanas") ||
             normalizedLast.includes("estas en reflexiones politicas y ciudadanas") ||
+            normalizedLast.includes("estás en alianza para el progreso app") ||
+            normalizedLast.includes("estas en alianza para el progreso app") ||
             normalizedLast.includes("estás en un cambio con valentía") ||
             normalizedLast.includes("estás en cómo funciona voto claro") ||
             normalizedLast.includes("modo observador") ||
@@ -5316,7 +5421,7 @@ if (String(pathname || "").startsWith("/como-funciona")) {
   }
 
   if (q.includes("reflex") || q.includes("eje") || q.includes("pregunta")) {
-    const msg = "Eso está en Reflexionar antes de votar. Ve a /reflexion.";
+    const msg = "Eso está en Reflexiones políticas y ciudadanas. Ve a /reflexion.";
     pushAssistant(msg);
     await maybeSpeak(msg);
     return;

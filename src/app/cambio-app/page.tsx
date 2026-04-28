@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import PartyDocsBlock from "@/components/party/PartyDocsBlock";
 import { setActiveParty } from "@/lib/partyThemeClient";
+import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 import {
   CAMBIO_APP_PAGE_TITLE,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/cambioAppContent";
 import { CANDIDATE_GROUPS } from "@/lib/perufederalCandidates";
 import { supabase } from "@/lib/supabaseClient";
+
 export const dynamic = "force-dynamic";
 
 function guideHoverOnce(text: string) {
@@ -30,6 +32,7 @@ function guideHoverOnce(text: string) {
     })
   );
 }
+
 function guideSpeak(text: string) {
   if (typeof window === "undefined") return;
 
@@ -83,9 +86,6 @@ const ALL_REGIONS = [
   "PERUANOS EN EL EXTERIOR",
 ];
 
-// ===============================
-// 🔎 Normalización de regiones
-// ===============================
 function normRegion(input: string) {
   return String(input ?? "")
     .trim()
@@ -103,9 +103,6 @@ function toCanonRegion(r: string) {
   return CANON_REGION_BY_NORM.get(n) ?? String(r ?? "").trim().toUpperCase();
 }
 
-// ===============================
-// ✅ EN VIVO
-// ===============================
 type LivePlatform = "YOUTUBE" | "FACEBOOK" | "TIKTOK" | "OTRA";
 
 type LiveEntry = {
@@ -133,6 +130,7 @@ function platformLabel(p: LivePlatform) {
 
 export default function CambioAppPage() {
   const router = useRouter();
+  const { setPageContext } = useAssistantRuntime();
 
   const [hoverSpoken, setHoverSpoken] = useState(false);
   const [hoverEnabled, setHoverEnabled] = useState(false);
@@ -142,7 +140,6 @@ export default function CambioAppPage() {
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryValue>("PRESIDENCIAL");
 
-  // ✅ Regiones reales POR CATEGORÍA
   const regionsForSelectedCategory = useMemo(() => {
     const group =
       CANDIDATE_GROUPS.find((g) => g.category === selectedCategory) ?? null;
@@ -161,7 +158,6 @@ export default function CambioAppPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
   }, [selectedCategory]);
 
-  // ✅ Fallback
   const regionOptions = useMemo(() => {
     return regionsForSelectedCategory.length > 0
       ? regionsForSelectedCategory
@@ -215,7 +211,6 @@ export default function CambioAppPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // ✅ Fijar APP como partido activo (y PERSISTIR para que no se pierda al volver a inicio)
     try {
       localStorage.setItem("votoclaro_active_party_v1", "app");
       sessionStorage.setItem("votoclaro_active_party_v1", "app");
@@ -224,26 +219,37 @@ export default function CambioAppPage() {
     setActiveParty("app");
 
     const welcome =
-      "Bienvenido a APP. " +
-      "Aquí puedes conocer la propuesta y visitar la página oficial.";
+      "Estás en Alianza para el Progreso APP. " +
+      "Aquí puedes revisar el sitio oficial, mensajes institucionales, el perfil del candidato, la conversación del partido, transmisiones en vivo y la consulta de candidatos por categoría y distrito electoral. " +
+      "También puedes preguntarme por ideología, bases del partido, documentos, transmisiones o candidatos visibles.";
 
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
-        detail: {
-          action: "SAY",
-          text: welcome,
-          speak: true,
-          blocking: true,
-        },
+        detail: { action: "CLOSE" },
       })
     );
 
-    const unlock = setTimeout(() => {
+    const t = window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("votoclaro:guide", {
+          detail: {
+            action: "SAY",
+            text: welcome,
+            speak: true,
+          },
+        })
+      );
+    }, 650);
+
+    const unlock = window.setTimeout(() => {
       setWelcomeFinished(true);
       setHoverEnabled(true);
     }, 6000);
 
-    return () => clearTimeout(unlock);
+    return () => {
+      window.clearTimeout(unlock);
+      window.clearTimeout(t);
+    };
   }, []);
 
   function onHoverSpeak() {
@@ -258,12 +264,11 @@ export default function CambioAppPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ===== Estilos APP (azul) =====
-  const sectionWrap = "mt-4 rounded-2xl border-4 border-red-700 p-4 shadow-sm vc-fade-up vc-card-hover";
+  const sectionWrap =
+    "mt-4 rounded-2xl border-4 border-red-700 p-4 shadow-sm vc-fade-up vc-card-hover";
 
   const innerCard = "rounded-2xl border-2 border-red-600 bg-[#BFFCFf] p-4";
 
-  // ✅ Botón institucional (NO usar bg-[#2F61A6] en el markup)
   const btnGreen =
     "vc-btn vc-btn-blue inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
     "border-2 border-red-600 text-sm font-extrabold shadow-sm transition vc-btn-wave vc-btn-pulse";
@@ -276,9 +281,6 @@ export default function CambioAppPage() {
     "vc-select-blue rounded-xl border-2 border-red-600 font-extrabold px-3 py-2 text-sm " +
     "shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2F61A6]";
 
-  // ===============================
-  // ✅ EN VIVO: Supabase real + Realtime
-  // ===============================
   const [liveEntries, setLiveEntries] = useState<LiveEntry[]>([]);
   const [liveSearch, setLiveSearch] = useState("");
   const [selectedCandidateForHistory, setSelectedCandidateForHistory] =
@@ -378,9 +380,80 @@ export default function CambioAppPage() {
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [liveEntries, selectedCandidateForHistory]);
 
+  useEffect(() => {
+    setPageContext({
+      pageId: "alianza-progreso-app",
+      route: "/cambio-app",
+      pageTitle: "Alianza para el Progreso APP",
+      activeSection: "Ventana institucional APP",
+      status: "ready",
+      summary:
+        "Esta ventana presenta información institucional de Alianza para el Progreso, acceso al sitio oficial, mensajes del fundador y candidato, perfil multidisciplinario, conversación del partido, transmisiones y consulta de candidatos.",
+      speakableSummary:
+        "Estás en Alianza para el Progreso APP. Aquí puedes revisar el sitio oficial, mensajes institucionales, perfil del candidato, conversación del partido, transmisiones en vivo y consulta de candidatos.",
+      visibleText:
+        "Bloques visibles: sitio oficial de APP, fundador, candidato, perfil multidisciplinario, conversación del partido, en vivo ahora, buscar transmisiones y consulta tu candidato.",
+      availableActions: [
+        "Abrir sitio oficial de APP",
+        "Leer frase institucional",
+        "Revisar perfil multidisciplinario",
+        "Preguntar en conversación del partido",
+        "Ver transmisiones en vivo",
+        "Buscar transmisiones por candidato",
+        "Consultar candidatos por categoría y distrito electoral",
+      ],
+      dynamicData: {
+        partyId: "app",
+        selectedCategory,
+        selectedRegion,
+        liveNowCount: liveNow.length,
+        visibleCandidatesCount: visibleCandidates.length,
+        hasSelectedCandidateForHistory: Boolean(selectedCandidateForHistory),
+      },
+      suggestedPrompts: [
+        {
+          id: "app-que-es",
+          label: "¿Qué hay aquí?",
+          question: "¿Qué contiene la ventana de Alianza para el Progreso APP?",
+        },
+        {
+          id: "app-sitio-oficial",
+          label: "Sitio oficial",
+          question: "¿Dónde puedo abrir el sitio oficial de APP?",
+        },
+        {
+          id: "app-conversacion",
+          label: "Conversación del partido",
+          question: "¿Cómo funciona el bloque Conversación del partido?",
+        },
+        {
+          id: "app-perfil",
+          label: "Perfil multidisciplinario",
+          question: "¿Qué contiene el perfil multidisciplinario del candidato?",
+        },
+        {
+          id: "app-transmisiones",
+          label: "Transmisiones",
+          question: "¿Cómo reviso transmisiones en vivo o historial de transmisiones?",
+        },
+        {
+          id: "app-consulta-candidato",
+          label: "Consulta candidatos",
+          question: "¿Cómo consulto candidatos por categoría y distrito electoral?",
+        },
+      ],
+    });
+  }, [
+    setPageContext,
+    selectedCategory,
+    selectedRegion,
+    liveNow.length,
+    visibleCandidates.length,
+    selectedCandidateForHistory,
+  ]);
+
   return (
     <main className="vc-cambio-app min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-sky-50 via-white to-sky-100 vc-fade-up">
-      {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 break-words">
@@ -394,7 +467,6 @@ export default function CambioAppPage() {
         <Link
           href="/?party=app"
           onClick={() => {
-            // ✅ Blindaje extra: asegurar party app antes de volver a Home
             try {
               localStorage.setItem("votoclaro_active_party_v1", "app");
               sessionStorage.setItem("votoclaro_active_party_v1", "app");
@@ -409,7 +481,6 @@ export default function CambioAppPage() {
         </Link>
       </div>
 
-      {/* Imagen + frase + link */}
       <section className={sectionWrap}>
         <div className={innerCard}>
           <div className="w-full flex justify-center">
@@ -432,7 +503,6 @@ export default function CambioAppPage() {
             </a>
           </div>
 
-          {/* Nombre candidato */}
           <div className="mt-4 text-center">
             <div className="text-xs text-slate-700 font-extrabold tracking-wide">
               CANDIDATO
@@ -442,7 +512,6 @@ export default function CambioAppPage() {
             </div>
           </div>
 
-          {/* Link destacado */}
           <div className="mt-5 flex justify-center">
             <a
               href={CAMBIO_APP_PAGE_LINK_URL}
@@ -457,7 +526,6 @@ export default function CambioAppPage() {
             </a>
           </div>
 
-          {/* Frase debajo del link */}
           <a
             href="https://www.app.pe/es"
             target="_blank"
@@ -478,9 +546,6 @@ export default function CambioAppPage() {
         Nota: Este enlace abre un sitio externo en una pestaña nueva.
       </div>
 
-      {/* =========================
-          BLOQUE FUNDADOR (pequeño)
-          ========================= */}
       <section className={sectionWrap}>
         <div className={innerCard}>
           <div className="flex items-start gap-4 flex-wrap">
@@ -523,9 +588,6 @@ export default function CambioAppPage() {
         </div>
       </section>
 
-      {/* =========================
-          BLOQUE CANDIDATO (principal)
-          ========================= */}
       <section className={sectionWrap}>
         <div className={innerCard}>
           <div className="text-center">
@@ -569,7 +631,6 @@ export default function CambioAppPage() {
                 🔊 Leer
               </button>
 
-              {/* Perfil Multidisciplinario */}
               <div className="mt-6 rounded-2xl border-2 border-red-600 bg-sky-50 p-4">
                 <h3 className="text-sm md:text-base font-extrabold text-slate-900 text-center">
                   Perfil Multidisciplinario
@@ -589,28 +650,27 @@ export default function CambioAppPage() {
                       label: "Trayectoria Política",
                       url: "https://www.youtube.com/watch?v=usJhHvVB96I",
                     },
-
                     {
                       label: "Gestión Deportiva",
                       url: "https://www.youtube.com/watch?v=DmRyvNO7Imc",
                     },
                   ].map((item) => (
-                   <div
-  key={item.label}
-  className="flex items-center justify-between gap-3 min-w-0 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3 vc-card-hover"
->
-  <span className="text-sm font-semibold text-slate-900 break-words flex-1 min-w-0">
-    {item.label}
-  </span>
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between gap-3 min-w-0 rounded-xl border-2 border-red-500 bg-white/85 px-4 py-3 vc-card-hover"
+                    >
+                      <span className="text-sm font-semibold text-slate-900 break-words flex-1 min-w-0">
+                        {item.label}
+                      </span>
 
-  <button
-    type="button"
-    onClick={() => window.open(item.url, "_blank", "noopener,noreferrer")}
-    className="vc-btn-blue rounded-lg px-3 py-1 text-xs font-extrabold border border-red-500 transition shrink-0 max-w-full vc-btn-wave vc-btn-pulse"
-  >
-    Ver
-  </button>
-</div>
+                      <button
+                        type="button"
+                        onClick={() => window.open(item.url, "_blank", "noopener,noreferrer")}
+                        className="vc-btn-blue rounded-lg px-3 py-1 text-xs font-extrabold border border-red-500 transition shrink-0 max-w-full vc-btn-wave vc-btn-pulse"
+                      >
+                        Ver
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -625,16 +685,10 @@ export default function CambioAppPage() {
         </div>
       </section>
 
-      {/* =========================
-          DOCUMENTOS BASE (JSON)
-         ========================= */}
       <section className={sectionWrap}>
         <PartyDocsBlock partyId="app" />
       </section>
 
-      {/* =========================
-          🔴 EN VIVO AHORA
-          ========================= */}
       <section className={sectionWrap}>
         <div className={innerCard}>
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -694,9 +748,6 @@ export default function CambioAppPage() {
         </div>
       </section>
 
-      {/* =========================
-          🔎 BUSCAR TRANSMISIONES
-          ========================= */}
       <section className={sectionWrap}>
         <div className={innerCard}>
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -811,7 +862,6 @@ export default function CambioAppPage() {
         </div>
       </section>
 
-      {/* Consulta tu candidato */}
       <section className={sectionWrap}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-lg md:text-xl font-extrabold text-slate-900">
@@ -819,69 +869,68 @@ export default function CambioAppPage() {
           </h2>
 
           <div className="flex items-center gap-3 flex-wrap">
-  <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
-    <label
-      htmlFor="candidateCategory"
-      className="text-sm font-extrabold text-slate-800"
-    >
-      Categoría:
-    </label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+              <label
+                htmlFor="candidateCategory"
+                className="text-sm font-extrabold text-slate-800"
+              >
+                Categoría:
+              </label>
 
-    <select
-      id="candidateCategory"
-      value={selectedCategory}
-      onChange={(e) => setSelectedCategory(e.target.value as CategoryValue)}
-      className={selectWarm + " w-full sm:w-auto max-w-full"}
-    >
-      {CATEGORY_OPTIONS.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-  </div>
+              <select
+                id="candidateCategory"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value as CategoryValue)}
+                className={selectWarm + " w-full sm:w-auto max-w-full"}
+              >
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-  <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
-    <label
-      htmlFor="candidateRegion"
-      className="text-sm font-extrabold text-slate-800"
-    >
-      Distrito electoral:
-    </label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+              <label
+                htmlFor="candidateRegion"
+                className="text-sm font-extrabold text-slate-800"
+              >
+                Distrito electoral:
+              </label>
 
-    {[
-      "PRESIDENCIAL",
-      "PARLAMENTO_ANDINO",
-      "SENADORES_DISTRITO_UNICO",
-    ].includes(selectedCategory) ? (
-      <select
-        id="candidateRegion"
-        value="NO_APLICA"
-        disabled
-        className="rounded-xl px-3 py-2 text-sm font-semibold shadow-sm focus:outline-none border-2 border-red-600 bg-slate-100 text-slate-400 cursor-not-allowed w-full sm:w-auto max-w-full"
-      >
-        <option value="NO_APLICA">Muestra todos</option>
-      </select>
-    ) : (
-      <select
-        id="candidateRegion"
-        value={selectedRegion}
-        onChange={(e) => setSelectedRegion(e.target.value)}
-        className={selectWarm + " w-full sm:w-auto max-w-full"}
-      >
-        <option value="TODAS">Todos</option>
-        {regionOptions.map((r) => (
-          <option key={r} value={r}>
-            {r}
-          </option>
-        ))}
-      </select>
-    )}
-  </div>
-</div>
+              {[
+                "PRESIDENCIAL",
+                "PARLAMENTO_ANDINO",
+                "SENADORES_DISTRITO_UNICO",
+              ].includes(selectedCategory) ? (
+                <select
+                  id="candidateRegion"
+                  value="NO_APLICA"
+                  disabled
+                  className="rounded-xl px-3 py-2 text-sm font-semibold shadow-sm focus:outline-none border-2 border-red-600 bg-slate-100 text-slate-400 cursor-not-allowed w-full sm:w-auto max-w-full"
+                >
+                  <option value="NO_APLICA">Muestra todos</option>
+                </select>
+              ) : (
+                <select
+                  id="candidateRegion"
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className={selectWarm + " w-full sm:w-auto max-w-full"}
+                >
+                  <option value="TODAS">Todos</option>
+                  {regionOptions.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Tarjetas */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleCandidates.map((c) => (
             <button
@@ -923,7 +972,7 @@ export default function CambioAppPage() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                   className={
+                  className={
                     "vc-btn vc-btn-blue mt-3 inline-flex items-center justify-center w-full sm:w-auto " +
                     "rounded-xl px-4 py-2 border-2 border-red-600 text-xs font-extrabold transition max-w-full vc-btn-wave vc-btn-pulse"
                   }
@@ -943,7 +992,6 @@ export default function CambioAppPage() {
         ) : null}
       </section>
 
-      {/* Botón Subir */}
       <div className="mt-6 flex justify-end">
         <button type="button" onClick={scrollToTop} className={btnGreen}>
           ↑ Subir

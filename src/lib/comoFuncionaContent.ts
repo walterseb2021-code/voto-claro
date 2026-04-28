@@ -43,7 +43,7 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
     ],
     answer:
       "VOTO CLARO es una plataforma política y ciudadana para informarte, reflexionar y participar.\n\n" +
-      "No es solo un buscador de candidatos. También reúne servicios ciudadanos, reflexión antes de votar, intención de voto, comentarios ciudadanos, proyectos ciudadanos, espacio emprendedor, reto ciudadano y una sección de ganadores.\n\n" +
+       "No es solo un buscador de candidatos. También reúne servicios ciudadanos, Reflexiones políticas y ciudadanas, intención de voto, comentarios ciudadanos, proyectos ciudadanos, espacio emprendedor, reto ciudadano y una sección de ganadores.\n\n" +
       "La app no decide por ti ni te dice por quién votar. Su función es ordenar información, abrir rutas de participación y ayudarte a tomar decisiones con más criterio.",
   },
 
@@ -75,7 +75,7 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
     ],
     answer:
       "La app se usa eligiendo una ruta según lo que quieres hacer.\n\n" +
-      "Si quieres informarte, empieza por Inicio y revisa candidatos o contenidos institucionales. Si quieres tomar una decisión con más criterio, entra a Reflexionar antes de votar. Si buscas orientación práctica, usa Servicios al ciudadano. Si quieres participar, entra a Comentarios ciudadanos, Proyecto ciudadano o Reto Ciudadano. Si tienes una iniciativa productiva, revisa Espacio emprendedor. Si quieres ver resultados públicos de dinámicas con premio, entra a Solo para ganadores.\n\n" +
+        "Si quieres informarte, empieza por Inicio y revisa candidatos o contenidos institucionales. Si quieres formar criterio político y ciudadano, entra a Reflexiones políticas y ciudadanas. Si buscas orientación práctica, usa Servicios al ciudadano. Si quieres participar, entra a Comentarios ciudadanos, Proyecto ciudadano o Reto Ciudadano. Si tienes una iniciativa productiva, revisa Espacio emprendedor. Si quieres ver resultados públicos de dinámicas con premio, entra a Solo para ganadores.\n\n" +
       "La idea general es: primero eliges tu intención, luego entras a la ventana correcta, después preguntas al Asistente según lo que ves y finalmente revisas la información con calma.",
   },
 
@@ -147,7 +147,7 @@ export const COMO_FUNCIONA_FAQ: FaqItem[] = [
       "1. Inicio: centro de navegación para abrir las rutas principales de la plataforma.\n" +
       "2. Buscar candidato y ficha del candidato: permite revisar Hoja de Vida, Plan de Gobierno y Actuar político.\n" +
       "3. Servicios al ciudadano: orienta hacia trámites y consultas electorales oficiales.\n" +
-      "4. Reflexionar antes de votar: presenta preguntas por temas como economía, salud, educación, seguridad y otros ejes.\n" +
+      "4. Reflexiones políticas y ciudadanas: presenta preguntas y reflexiones por ejes como economía, salud, educación, seguridad, justicia, ambiente, tecnología y vida pública.\n" +
       "5. Alianza para el Progreso: espacio institucional del grupo activo en esta versión de la app.\n" +
       "6. Intención de voto: muestra una dinámica para registrar o explorar preferencias dentro de la plataforma.\n" +
       "7. Reto Ciudadano: espacio interactivo para aprender y participar mediante dinámicas o juegos.\n" +
