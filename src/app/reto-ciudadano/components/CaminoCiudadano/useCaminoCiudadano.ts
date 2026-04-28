@@ -108,14 +108,10 @@ const reachedEnd = newPosition === TOTAL_SQUARES;
 const noTurnsLeft = newTurnsLeft === 0;
 const gameFinished = reachedEnd || noTurnsLeft;
 
-if (isCorrect) {
-  guideSay(
-    `Respuesta correcta. Avanzamos ${roll} casillas. Ahora estás en la casilla ${newPosition} de ${TOTAL_SQUARES}.`
-  );
+    if (isCorrect) {
+  guideSay(`Correcto. Avanzas ${roll}.`);
 } else {
-  guideSay(
-    `Respuesta incorrecta o tiempo agotado. Retrocedemos ${roll} casillas. Ahora estás en la casilla ${newPosition} de ${TOTAL_SQUARES}.`
-  );
+  guideSay(`Incorrecto. Retrocedes ${roll}.`);
 }
 
     setState(prev => ({
@@ -177,9 +173,7 @@ if (reachedEnd && mode === 'con_premio') {
   timeLeft: QUESTION_TIME_SEC,
 }));
 
-guideSay(
-  `Lanzaste el dado y salió ${roll}. Ahora responde la pregunta: ${question.question}. Tienes ${QUESTION_TIME_SEC} segundos.`
-);
+guideSay(question.question);
 
 startTimer();
   }, [state, fetchRandomQuestion, startTimer]);

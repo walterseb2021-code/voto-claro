@@ -300,8 +300,7 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
     if (lockedRef.current) return;
     lockedRef.current = true;
 
-    guideSay("Se acabó el tiempo de esta pregunta. La marcamos como no contestada y pasamos a la siguiente.");
-
+    
 setSkip((x) => x + 1);
 setIdx((x) => x + 1);
 setQLeft(QUESTION_SEC);
@@ -338,12 +337,7 @@ setQLeft(QUESTION_SEC);
 
   const ok = current.a === val;
 
-  guideSay(
-    ok
-      ? "Respuesta correcta. Sumamos una buena y pasamos a la siguiente pregunta."
-      : "Respuesta incorrecta. La marcamos como mala y pasamos a la siguiente pregunta."
-  );
-
+   
   if (ok) setGood((x) => x + 1);
   else setBad((x) => x + 1);
 
@@ -362,7 +356,6 @@ setQLeft(QUESTION_SEC);
     if (lockedRef.current) return;
 
     lockedRef.current = true;
-    guideSay("Saltaste esta pregunta. La marcamos como no contestada y pasamos a la siguiente.");
     setSkip((x) => x + 1);
     setIdx((x) => x + 1);
     setQLeft(QUESTION_SEC);
@@ -1245,8 +1238,7 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
     if (lockedRef.current) return;
     lockedRef.current = true;
 
-     guideSay("Se acabó el tiempo de esta pregunta del Nivel 2. La marcamos como no contestada y pasamos a la siguiente.");
-
+   
 setSkip((x) => x + 1);
 setIdx((x) => x + 1);
 setQLeft(QUESTION_SEC);
@@ -1268,12 +1260,6 @@ setQLeft(QUESTION_SEC);
 
       const ok = current.a === val;
 
-guideSay(
-  ok
-    ? "Respuesta correcta. Sumamos una buena y pasamos a la siguiente pregunta."
-    : "Respuesta incorrecta. La marcamos como mala y pasamos a la siguiente pregunta."
-);
-
 if (ok) setGood((x) => x + 1);
 else setBad((x) => x + 1);
     setIdx((x) => x + 1);
@@ -1294,7 +1280,6 @@ else setBad((x) => x + 1);
     lockedRef.current = true;
 
     setSkip((x) => x + 1);
-    guideSay("Saltaste esta pregunta del Nivel 2. La marcamos como no contestada y pasamos a la siguiente.");
     setIdx((x) => x + 1);
     setQLeft(QUESTION_SEC);
 
