@@ -59,19 +59,8 @@ export default function CaminoCiudadanoPage() {
   introNarratedRef.current = true;
 
   const text =
-    "Estás en Camino Ciudadano. " +
-    "Este juego consiste en avanzar por un tablero de casillas lanzando el dado. " +
-    "Cada vez que caes en una casilla, debes responder una pregunta. " +
-    "Si respondes bien, avanzas el número de casillas que salió en el dado. " +
-    "Si respondes mal o se acaba el tiempo, retrocedes ese número de casillas. " +
-    "El objetivo es llegar a la meta. Puedes jugar sin premio para practicar o con premio para participar en la selección trimestral.";
-
-  window.dispatchEvent(
-    new CustomEvent("votoclaro:guide", {
-      detail: { action: "CLOSE" },
-    })
-  );
-
+  "Estás en Camino Ciudadano. Lanza el dado, responde la pregunta y avanza por el tablero hasta llegar a la meta.";
+ 
   const t = window.setTimeout(() => {
     window.dispatchEvent(
       new CustomEvent("votoclaro:guide", {
@@ -308,12 +297,8 @@ export default function CaminoCiudadanoPage() {
           "Revisar ganadores de Camino Ciudadano",
         ];
 
-    const summary = caminoState?.showQuestion
-      ? "Pantalla de Camino Ciudadano con una pregunta activa."
-      : caminoState?.won
-      ? "Pantalla de Camino Ciudadano con juego completado."
-      : "Pantalla de Camino Ciudadano con recorrido por casillas, preguntas y avance hacia la meta.";
-
+     const summary =
+  "Camino Ciudadano es un juego de recorrido por casillas donde el usuario lanza el dado, responde preguntas y busca llegar a la meta.";
     setPageContext({
       pageId: "reto-ciudadano-camino",
       pageTitle: "Camino Ciudadano",
