@@ -1,5 +1,6 @@
 ﻿'use client';
-import { useEffect, useRef, useState } from 'react';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Box, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -11,89 +12,150 @@ interface Dice3DProps {
   disabled: boolean;
 }
 
+function generateFaceTexture(value: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#000000';
+
+  const radius = canvas.width * 0.12;
+  const positions: [number, number][] = [];
+
+  const left = canvas.width * 0.3;
+  const center = canvas.width * 0.5;
+  const right = canvas.width * 0.7;
+
+  const top = canvas.height * 0.3;
+  const middle = canvas.height * 0.5;
+  const bottom = canvas.height * 0.7;
+
+  if (value === 1) {
+    positions.push([center, middle]);
+  }
+
+  if (value === 2) {
+    positions.push([left, top], [right, bottom]);
+  }
+
+  if (value === 3) {
+    positions.push([left, top], [center, middle], [right, bottom]);
+  }
+
+  if (value === 4) {
+    positions.push([left, top], [right, top], [left, bottom], [right, bottom]);
+  }
+
+  if (value === 5) {
+    positions.push([left, top], [right, top], [center, middle], [left, bottom], [right, bottom]);
+  }
+
+  if (value === 6) {
+    positions.push([left, top], [right, top], [left, middle], [right, middle], [left, bottom], [right, bottom]);
+  }
+
+  for (const [x, y] of positions) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 // Componente interno del dado 3D
 function DiceModel({ rolling, result }: { rolling: boolean; result: number | null }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [targetRotation, setTargetRotation] = useState<THREE.Euler | null>(null);
   const [animating, setAnimating] = useState(false);
 
-  // Generar texturas para las caras (puntos negros sobre fondo blanco)
-  const generateFaceTexture = (dots: number[]) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#000000';
-    const radius = canvas.width * 0.12;
-    const positions: [number, number][] = [];
-    if (dots.length === 1) positions.push([canvas.width/2, canvas.height/2]);
-    else if (dots.length === 2) positions.push([canvas.width*0.3, canvas.height/2], [canvas.width*0.7, canvas.height/2]);
-    else if (dots.length === 3) positions.push([canvas.width*0.3, canvas.height*0.3], [canvas.width/2, canvas.height/2], [canvas.width*0.7, canvas.height*0.7]);
-    else if (dots.length === 4) positions.push([canvas.width*0.3, canvas.height*0.3], [canvas.width*0.7, canvas.height*0.3], [canvas.width*0.3, canvas.height*0.7], [canvas.width*0.7, canvas.height*0.7]);
-    else if (dots.length === 5) positions.push([canvas.width*0.3, canvas.height*0.3], [canvas.width*0.7, canvas.height*0.3], [canvas.width/2, canvas.height/2], [canvas.width*0.3, canvas.height*0.7], [canvas.width*0.7, canvas.height*0.7]);
-    else if (dots.length === 6) positions.push([canvas.width*0.3, canvas.height*0.3], [canvas.width*0.7, canvas.height*0.3], [canvas.width*0.3, canvas.height/2], [canvas.width*0.7, canvas.height/2], [canvas.width*0.3, canvas.height*0.7], [canvas.width*0.7, canvas.height*0.7]);
-    for (const [x, y] of positions) {
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, 2 * Math.PI);
-      ctx.fill();
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    return texture;
-  };
-
-  // Crear materiales con texturas
-  const materials = [
-    new THREE.MeshStandardMaterial({ map: generateFaceTexture([1]), color: 0xffffff }), // derecha
-    new THREE.MeshStandardMaterial({ map: generateFaceTexture([2]), color: 0xffffff }), // izquierda
-    new THREE.MeshStandardMaterial({ map: generateFaceTexture([3]), color: 0xffffff }), // arriba
-    new THREE.MeshStandardMaterial({ map: generateFaceTexture([4]), color: 0xffffff }), // abajo
-    new THREE.MeshStandardMaterial({ map: generateFaceTexture([5]), color: 0xffffff }), // frente
-    new THREE.MeshStandardMaterial({ map: generateFaceTexture([6]), color: 0xffffff }), // atrás
-  ];
-
-  // Rotaciones para cada resultado (cara superior)
-  const resultRotations: Record<number, THREE.Euler> = {
-    1: new THREE.Euler(0, 0, 0),                 // 1 arriba
-    2: new THREE.Euler(Math.PI / 2, 0, 0),       // 2 arriba (girar 90° en X)
-    3: new THREE.Euler(-Math.PI / 2, 0, 0),      // 3 arriba
-    4: new THREE.Euler(0, 0, Math.PI / 2),       // 4 arriba
-    5: new THREE.Euler(0, 0, -Math.PI / 2),      // 5 arriba
-    6: new THREE.Euler(0, Math.PI, 0),           // 6 arriba (girar 180° en Y)
-  };
+  // Orden de materiales en Box:
+  // derecha, izquierda, arriba, abajo, frente, atrás.
+  const materials = useMemo(
+    () => [
+      new THREE.MeshStandardMaterial({ map: generateFaceTexture(1), color: 0xffffff }), // derecha
+      new THREE.MeshStandardMaterial({ map: generateFaceTexture(2), color: 0xffffff }), // izquierda
+      new THREE.MeshStandardMaterial({ map: generateFaceTexture(3), color: 0xffffff }), // arriba
+      new THREE.MeshStandardMaterial({ map: generateFaceTexture(4), color: 0xffffff }), // abajo
+      new THREE.MeshStandardMaterial({ map: generateFaceTexture(5), color: 0xffffff }), // frente
+      new THREE.MeshStandardMaterial({ map: generateFaceTexture(6), color: 0xffffff }), // atrás
+    ],
+    []
+  );
 
   useEffect(() => {
+    return () => {
+      for (const material of materials) {
+        const map = material.map;
+        if (map) map.dispose();
+        material.dispose();
+      }
+    };
+  }, [materials]);
+
+  // Rotaciones para dejar el resultado visible en la cara superior.
+  const resultRotations = useMemo<Record<number, THREE.Euler>>(
+    () => ({
+      1: new THREE.Euler(0, 0, Math.PI / 2),
+      2: new THREE.Euler(0, 0, -Math.PI / 2),
+      3: new THREE.Euler(0, 0, 0),
+      4: new THREE.Euler(Math.PI, 0, 0),
+      5: new THREE.Euler(-Math.PI / 2, 0, 0),
+      6: new THREE.Euler(Math.PI / 2, 0, 0),
+    }),
+    []
+  );
+
+  useEffect(() => {
+    let timer: number | undefined;
+
     if (rolling && !animating) {
-      // Iniciar animación de giro aleatorio
       setAnimating(true);
+
       const randomRot = new THREE.Euler(
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2
+        Math.random() * Math.PI * 6,
+        Math.random() * Math.PI * 6,
+        Math.random() * Math.PI * 6
       );
+
       setTargetRotation(randomRot);
-    } else if (!rolling && result !== null && animating) {
-      // Finalizar animación: orientar hacia el resultado
-      setTargetRotation(resultRotations[result]);
-      // Después de un breve tiempo, marcar como no animando
-      setTimeout(() => setAnimating(false), 300);
     }
-  }, [rolling, result]);
+
+    if (!rolling && result !== null && animating) {
+      const safeResult = Math.min(6, Math.max(1, result));
+      setTargetRotation(resultRotations[safeResult]);
+
+      timer = window.setTimeout(() => {
+        setAnimating(false);
+      }, 350);
+    }
+
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [rolling, result, animating, resultRotations]);
 
   useFrame(() => {
-    if (meshRef.current && targetRotation) {
-      // Interpolar suavemente hacia la rotación objetivo
-      meshRef.current.rotation.x += (targetRotation.x - meshRef.current.rotation.x) * 0.15;
-      meshRef.current.rotation.y += (targetRotation.y - meshRef.current.rotation.y) * 0.15;
-      meshRef.current.rotation.z += (targetRotation.z - meshRef.current.rotation.z) * 0.15;
-      // Si está muy cerca, dejar de animar
-      if (Math.abs(meshRef.current.rotation.x - targetRotation.x) < 0.01 &&
-          Math.abs(meshRef.current.rotation.y - targetRotation.y) < 0.01 &&
-          Math.abs(meshRef.current.rotation.z - targetRotation.z) < 0.01) {
-        setTargetRotation(null);
-      }
+    if (!meshRef.current || !targetRotation) return;
+
+    meshRef.current.rotation.x += (targetRotation.x - meshRef.current.rotation.x) * 0.15;
+    meshRef.current.rotation.y += (targetRotation.y - meshRef.current.rotation.y) * 0.15;
+    meshRef.current.rotation.z += (targetRotation.z - meshRef.current.rotation.z) * 0.15;
+
+    const closeEnough =
+      Math.abs(meshRef.current.rotation.x - targetRotation.x) < 0.01 &&
+      Math.abs(meshRef.current.rotation.y - targetRotation.y) < 0.01 &&
+      Math.abs(meshRef.current.rotation.z - targetRotation.z) < 0.01;
+
+    if (closeEnough) {
+      meshRef.current.rotation.copy(targetRotation);
+      setTargetRotation(null);
     }
   });
 
@@ -103,16 +165,6 @@ function DiceModel({ rolling, result }: { rolling: boolean; result: number | nul
 }
 
 export default function Dice3D({ rolling, result, onClick, disabled }: Dice3DProps) {
-  const [isRolling, setIsRolling] = useState(false);
-
-  useEffect(() => {
-    if (rolling) {
-      setIsRolling(true);
-      const timer = setTimeout(() => setIsRolling(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [rolling]);
-
   return (
     <div
       className="relative w-20 h-20 cursor-pointer"
@@ -126,12 +178,12 @@ export default function Dice3D({ rolling, result, onClick, disabled }: Dice3DPro
         <DiceModel rolling={rolling} result={result} />
         <OrbitControls enableZoom={false} enablePan={false} enableRotate={false} />
       </Canvas>
-      {result !== null && !rolling && (
-        <div className="absolute inset-0 flex items-center justify-center text-white text-xl font-bold drop-shadow-md pointer-events-none">
-          {/* Opcional: mostrar número grande flotante (para mayor claridad) */}
-          {/* {result} */}
+
+      {result !== null && !rolling ? (
+        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full border bg-white px-2 py-0.5 text-xs font-extrabold text-slate-900 shadow pointer-events-none">
+          {result}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
