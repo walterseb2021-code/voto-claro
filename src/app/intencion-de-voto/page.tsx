@@ -2,7 +2,7 @@
 "use client";
 
  import Link from "next/link";
-import { useEffect, useMemo, useState, Suspense, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
@@ -147,9 +147,10 @@ function IntencionDeVotoContent() {
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     return createClient(url, key);
   }, []);
-  const { setPageContext, clearPageContext } = useAssistantRuntime();
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+   const { setPageContext, clearPageContext } = useAssistantRuntime();
+const searchParams = useSearchParams();
+const token = searchParams.get("token");
+const introSpokenRef = useRef(false);
 
   // Estados principales
   const [deviceId, setDeviceId] = useState<string>("");
@@ -557,6 +558,47 @@ function IntencionDeVotoContent() {
       window.scrollTo(0, 0);
     }
  }
+  useEffect(() => {
+  if (introSpokenRef.current) return;
+  if (loading) return;
+
+  introSpokenRef.current = true;
+
+  const enabledParties = parties.filter((p) => p.enabled).length;
+
+  const text =
+    "Estás en Intención de voto. " +
+    "Esta ventana permite participar en un ejercicio ciudadano de opinión. " +
+    "Puedes elegir una opción, cambiarla antes de confirmar y registrar un voto por ronda. " +
+    "Después de confirmar, pueden aparecer preguntas para explicar por qué elegiste esa opción. " +
+    "Recuerda: esto no es una encuesta electoral oficial ni un pronóstico de resultados.";
+
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: { action: "CLOSE" },
+    })
+  );
+
+  const t = window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: {
+          action: "SAY",
+          text:
+            text +
+            (globalRound?.name
+              ? ` Ronda visible: ${globalRound.name}.`
+              : " No detecto una ronda activa visible.") +
+            ` Opciones habilitadas visibles: ${enabledParties}.`,
+          speak: true,
+        },
+      })
+    );
+  }, 650);
+
+  return () => window.clearTimeout(t);
+}, [loading, globalRound?.name, parties]);
+
 useEffect(() => {
     const visibleParts: string[] = [];
 
@@ -640,14 +682,16 @@ useEffect(() => {
       ? "ready"
       : "loading";
 
-    setPageContext({
-      pageId: "intencion-de-voto",
-      pageTitle: "Intención de voto",
-      route: "/intencion-de-voto",
-      summary,
-      activeSection,
-      visibleText: visibleParts.join("\n"),
-      availableActions,
+     setPageContext({
+  pageId: "intencion-de-voto",
+  pageTitle: "Intención de voto",
+  route: "/intencion-de-voto",
+  summary,
+  speakableSummary:
+    "Estás en Intención de voto. Puedes elegir una opción, confirmar tu voto en la ronda activa y, si aparecen preguntas posteriores, explicar tu decisión. Esta ventana es un ejercicio ciudadano de opinión, no una encuesta electoral oficial.",
+  activeSection,
+  visibleText: visibleParts.join("\n"),
+  availableActions,
       selectedItemTitle: confirmedPartyName || pendingSlug || globalRound?.name || undefined,
       status,
       dynamicData: {
@@ -664,10 +708,42 @@ useEffect(() => {
         answersSubmitted,
         showReflection,
         hayPreguntas: !!questions,
-        pregunta1: questions?.question_1 || "",
+                pregunta1: questions?.question_1 || "",
         pregunta2: questions?.question_2 || "",
         pregunta3: questions?.question_3 || "",
       },
+      suggestedPrompts: [
+        {
+          id: "voto-que-es",
+          label: "¿Qué es esta ventana?",
+          question: "¿Qué es la ventana Intención de voto y para qué sirve?",
+        },
+        {
+          id: "voto-como-votar",
+          label: "¿Cómo voto?",
+          question: "¿Cómo selecciono y confirmo mi intención de voto?",
+        },
+        {
+          id: "voto-ronda",
+          label: "Ronda activa",
+          question: "¿Qué ronda está activa y qué grupo aparece en pantalla?",
+        },
+        {
+          id: "voto-seleccion",
+          label: "Mi selección",
+          question: "¿Qué opción tengo seleccionada o confirmada?",
+        },
+        {
+          id: "voto-nulo-blanco",
+          label: "Nulo / Blanco",
+          question: "¿Qué pasa si elijo Nulo o Blanco?",
+        },
+        {
+          id: "voto-preguntas",
+          label: "Preguntas posteriores",
+          question: "¿Hay preguntas después de confirmar el voto?",
+        },
+      ],
     });
   }, [
     setPageContext,
