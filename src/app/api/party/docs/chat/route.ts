@@ -20,7 +20,122 @@ function shouldFallback(status: number) {
   // 429 (quota), 500/502/503 (errores transitorios)
   return [403, 404, 429, 500, 502, 503].includes(status);
 }
+   function normalizeText(input: string) {
+  return String(input || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
 
+function buildLocalFallbackAnswer(params: {
+  partyId: string;
+  mode: Mode;
+  question: string;
+  chunks: any[];
+  docs: any[];
+}) {
+  const { partyId, question, chunks, docs } = params;
+
+  const partyName =
+    partyId === "app"
+      ? "Alianza para el Progreso"
+      : partyId === "perufederal"
+      ? "Perú Federal"
+      : "el partido";
+
+  const q = normalizeText(question);
+
+  const usableChunks = Array.isArray(chunks) && chunks.length > 0
+    ? chunks.slice(0, 5)
+    : [];
+
+  if (usableChunks.length > 0) {
+    const body = usableChunks
+      .map((c: any, i: number) => {
+        const title = String(c.title || `Documento ${i + 1}`).trim();
+        const topic = String(c.topic || "").trim();
+        const text = String(c.text || "").replace(/\s+/g, " ").trim();
+
+        return (
+          `${i + 1}. ${title}${topic ? ` — ${topic}` : ""}\n` +
+          `${text || "Sin texto disponible."}`
+        );
+      })
+      .join("\n\n");
+
+    return (
+      `Según los documentos base disponibles de ${partyName}, encontré esta información relacionada:\n\n` +
+      body +
+      `\n\nEsta respuesta se generó desde el respaldo local porque la IA no estuvo disponible.`
+    );
+  }
+
+  const docsSummary = Array.isArray(docs)
+    ? docs.slice(0, 3).map((d: any, i: number) => {
+        const title = String(d.title || `Documento ${i + 1}`).trim();
+
+        const principles = Array.isArray(d.principles)
+          ? d.principles
+              .slice(0, 4)
+              .map((p: any) => `- ${String(p.principle || p.title || p.name || "").trim()}`)
+              .filter((x: string) => x !== "-")
+              .join("\n")
+          : "";
+
+        const sections = Array.isArray(d.sections)
+          ? d.sections
+              .slice(0, 4)
+              .map((s: any) => {
+                const name = String(s.name || s.title || "").trim();
+                const summary = String(s.summary || s.text || "").trim();
+                return name || summary ? `- ${name}${summary ? `: ${summary}` : ""}` : "";
+              })
+              .filter(Boolean)
+              .join("\n")
+          : "";
+
+        return (
+          `${i + 1}. ${title}\n` +
+          `${principles ? `Principios:\n${principles}\n` : ""}` +
+          `${sections ? `Secciones:\n${sections}` : ""}`
+        ).trim();
+      }).filter(Boolean).join("\n\n")
+    : "";
+
+  const asksIdeology =
+    q.includes("ideologia") ||
+    q.includes("doctrina") ||
+    q.includes("principios") ||
+    q.includes("bases");
+
+  const asksProposal =
+    q.includes("propuesta") ||
+    q.includes("plan") ||
+    q.includes("programa") ||
+    q.includes("educacion") ||
+    q.includes("salud") ||
+    q.includes("seguridad") ||
+    q.includes("economia") ||
+    q.includes("corrupcion") ||
+    q.includes("descentralizacion");
+
+  if (docsSummary) {
+    return (
+      `No encontré un fragmento específico para esa pregunta, pero estos son los documentos base disponibles de ${partyName}:\n\n` +
+      docsSummary +
+      `\n\n${asksIdeology || asksProposal
+        ? "Si quieres una respuesta más precisa, pregunta por un eje concreto, por ejemplo: educación, seguridad, economía, salud, corrupción o descentralización."
+        : "Puedes hacer una pregunta más concreta sobre uno de esos puntos."}\n\n` +
+      "Esta respuesta se generó desde el respaldo local porque la IA no estuvo disponible."
+    );
+  }
+
+  return (
+    `Ese punto aún no está desarrollado en los documentos base disponibles de ${partyName}.\n\n` +
+    "Esta respuesta se generó desde el respaldo local."
+  );
+}
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -76,9 +191,21 @@ ${sections || "- (sin secciones)"}`;
             .join("\n\n");
 
     // 3) Key SOLO server-side
-    const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
+        const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
     if (!apiKey) {
-      return NextResponse.json({ ok: false, error: "Falta GEMINI_API_KEY" }, { status: 500 });
+      return NextResponse.json({
+        ok: true,
+        partyId,
+        mode,
+        answer: buildLocalFallbackAnswer({ partyId, mode, question, chunks, docs }),
+        fallback: "LOCAL_JSON_NO_GEMINI_KEY",
+        chunks_used: chunks.length,
+        docs_loaded: docs.map((d: any) => ({
+          doc_id: d.doc_id,
+          title: d.title,
+          updated_at: d.updated_at,
+        })),
+      });
     }
 
     // 🔒 Límite de seguridad para evitar payload excesivo
@@ -178,26 +305,41 @@ ${safeContext}
       if (!shouldFallback(resp.status)) break;
     }
 
-    if (!usedModel) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: `Gemini error HTTP ${lastStatus || 502}`,
-          gemini_message: lastData?.error?.message ?? null,
-          raw: lastData ?? null,
-        },
-        { status: 502 }
-      );
+         if (!usedModel) {
+      return NextResponse.json({
+        ok: true,
+        partyId,
+        mode,
+        answer: buildLocalFallbackAnswer({ partyId, mode, question, chunks, docs }),
+        fallback: `LOCAL_JSON_GEMINI_ERROR_${lastStatus || 502}`,
+        gemini_message: lastData?.error?.message ?? null,
+        chunks_used: chunks.length,
+        docs_loaded: docs.map((d: any) => ({
+          doc_id: d.doc_id,
+          title: d.title,
+          updated_at: d.updated_at,
+        })),
+      });
     }
 
     const text =
       lastData?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("")?.trim() || "";
 
-    if (!text) {
-      return NextResponse.json(
-        { ok: false, error: "Gemini no devolvió texto", model_used: usedModel, raw: lastData },
-        { status: 502 }
-      );
+          if (!text) {
+      return NextResponse.json({
+        ok: true,
+        partyId,
+        mode,
+        model_used: usedModel,
+        answer: buildLocalFallbackAnswer({ partyId, mode, question, chunks, docs }),
+        fallback: "LOCAL_JSON_EMPTY_GEMINI_TEXT",
+        chunks_used: chunks.length,
+        docs_loaded: docs.map((d: any) => ({
+          doc_id: d.doc_id,
+          title: d.title,
+          updated_at: d.updated_at,
+        })),
+      });
     }
 
     return NextResponse.json({
