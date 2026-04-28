@@ -158,6 +158,52 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     const action = String(body?.action ?? "").trim();
     const supabase = supabaseAdmin();
+        if (action === "upsert_weekly_topic") {
+      const topic = String(body?.topic ?? "").trim();
+      const question = String(body?.question ?? "").trim();
+
+      if (!topic) return json({ error: "MISSING_TOPIC" }, 400);
+      if (!question) return json({ error: "MISSING_QUESTION" }, 400);
+
+      const now = new Date();
+      const startsAt = now.toISOString();
+
+      const endsAtDate = new Date(now);
+      endsAtDate.setDate(endsAtDate.getDate() + 7);
+
+      // Cerrar otros temas activos para evitar duplicados.
+      const { error: closeError } = await supabase
+        .from("weekly_topics")
+        .update({
+          status: "archived",
+          ends_at: startsAt,
+        })
+        .eq("status", "active");
+
+      if (closeError) {
+        return json({ error: "SUPABASE_ERROR", detail: closeError.message }, 500);
+      }
+
+      const { data, error } = await supabase
+        .from("weekly_topics")
+        .insert({
+          topic,
+          question,
+          status: "active",
+          starts_at: startsAt,
+          ends_at: endsAtDate.toISOString(),
+        })
+        .select(
+          "id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
+        )
+        .single();
+
+      if (error) {
+        return json({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+      }
+
+      return json({ ok: true, weeklyTopic: data });
+    }
 
     if (action === "run_weekly_rotation") {
       const cronSecret = process.env.CRON_SECRET;

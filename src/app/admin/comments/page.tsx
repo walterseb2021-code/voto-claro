@@ -272,60 +272,65 @@ export default function AdminCommentsPage() {
     }
   }
 
-  async function saveWeeklyTopic() {
-    if (!weeklyTopic?.id) {
-      setErrorMsg("No se encontró un tema activo para actualizar.");
-      return;
-    }
+    async function saveWeeklyTopic() {
+  const topic = topicDraft.trim();
+  const question = questionDraft.trim();
 
-    const topic = topicDraft.trim();
-    const question = questionDraft.trim();
-
-    if (!topic) {
-      setErrorMsg("Escribe el tema.");
-      return;
-    }
-
-    if (!question) {
-      setErrorMsg("Escribe la pregunta guía.");
-      return;
-    }
-
-    setSavingTopic(true);
-    setErrorMsg(null);
-
-    try {
-      const res = await fetch("/api/admin/comments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          id: weeklyTopic.id,
-          topic,
-          question,
-        }),
-      });
-
-      const json = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        const msg = json?.reason
-          ? `No autorizado (${json.reason}).`
-          : json?.detail
-          ? json.detail
-          : json?.error
-          ? json.error
-          : "Error desconocido.";
-        throw new Error(msg);
-      }
-
-      await loadComments();
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? String(e));
-    } finally {
-      setSavingTopic(false);
-    }
+  if (!topic) {
+    setErrorMsg("Escribe el tema.");
+    return;
   }
+
+  if (!question) {
+    setErrorMsg("Escribe la pregunta guía.");
+    return;
+  }
+
+  setSavingTopic(true);
+  setErrorMsg(null);
+
+  try {
+    const hasActiveTopic = !!weeklyTopic?.id;
+
+    const res = await fetch("/api/admin/comments", {
+      method: hasActiveTopic ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(
+        hasActiveTopic
+          ? {
+              id: weeklyTopic!.id,
+              topic,
+              question,
+            }
+          : {
+              action: "upsert_weekly_topic",
+              topic,
+              question,
+            }
+      ),
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg = json?.reason
+        ? `No autorizado (${json.reason}).`
+        : json?.detail
+        ? json.detail
+        : json?.error
+        ? json.error
+        : "Error desconocido.";
+      throw new Error(msg);
+    }
+
+    await loadComments();
+  } catch (e: any) {
+    setErrorMsg(e?.message ?? String(e));
+  } finally {
+    setSavingTopic(false);
+  }
+}
 
   async function runWeeklyRotationNow() {
     setRunningRotation(true);
@@ -644,7 +649,11 @@ export default function AdminCommentsPage() {
                   className={btnSm}
                   disabled={savingTopic || loading || runningRotation}
                 >
-                  {savingTopic ? "Guardando..." : "Guardar tema semanal"}
+                  {savingTopic
+                  ? "Guardando..."
+                  : weeklyTopic?.id
+                  ? "Guardar tema semanal"
+                  : "Crear tema semanal activo"}
                 </button>
 
                 <button
