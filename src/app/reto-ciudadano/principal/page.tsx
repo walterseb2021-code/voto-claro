@@ -97,7 +97,19 @@ function cleanText(s: string) {
   // Quita símbolos basura típicos que aparecen en ese mojibake (no deberían existir en ES normal)
   return fixed.replace(/[┬┐]/g, "").replace(/\s+/g, " ").trim();
 }
+  function guideSay(text: string) {
+  if (typeof window === "undefined") return;
 
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: {
+        action: "SAY",
+        text,
+        speak: true,
+      },
+    })
+  );
+}
 type Nivel1GeneralProps = {
   mode: PlayMode;
   onStatus?: (s: { started: boolean; finished: boolean; good: number; passed: boolean }) => void;
@@ -185,17 +197,19 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   const [poolLeft, setPoolLeft] = useState(POOL_TOTAL_SEC);
   const [qLeft, setQLeft] = useState(QUESTION_SEC);
 
-  // Control anti doble respuesta
-  const lockedRef = useRef(false);
+    // Control anti doble respuesta
+const lockedRef = useRef(false);
+const lastSpokenQuestionRef = useRef<string>("");
 
-  const finished = started && (idx >= TOTAL || poolLeft <= 0);
+const finished = started && (idx >= TOTAL || poolLeft <= 0);
 
   async function resetRun() {
     if (locked) throw new Error("Estás temporalmente bloqueado. Vuelve más tarde.");
 
-    setLoading(true);
-    setError(null);
-    lockedRef.current = false;
+     setLoading(true);
+     setError(null);
+     lockedRef.current = false;
+     lastSpokenQuestionRef.current = "";
 
     try {
       const cfg = await safeFetchJson<any>("/reto-ciudadano/config.json");
@@ -249,6 +263,21 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
 
   const current = quiz[idx] ?? null;
 
+    useEffect(() => {
+  if (!started) return;
+  if (loading || error) return;
+  if (finished) return;
+  if (!current) return;
+
+  const key = `${current.id}-${idx}`;
+  if (lastSpokenQuestionRef.current === key) return;
+  lastSpokenQuestionRef.current = key;
+
+  guideSay(
+    `Nivel 1. Pregunta ${idx + 1} de ${TOTAL}. ${current.q}. Responde Sí, No o Saltar.`
+  );
+}, [started, loading, error, finished, current, idx]);
+
   useEffect(() => {
     if (!started) return;
     if (loading || error) return;
@@ -271,9 +300,11 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
     if (lockedRef.current) return;
     lockedRef.current = true;
 
-    setSkip((x) => x + 1);
-    setIdx((x) => x + 1);
-    setQLeft(QUESTION_SEC);
+    guideSay("Se acabó el tiempo de esta pregunta. La marcamos como no contestada y pasamos a la siguiente.");
+
+setSkip((x) => x + 1);
+setIdx((x) => x + 1);
+setQLeft(QUESTION_SEC);
 
     queueMicrotask(() => {
       lockedRef.current = false;
@@ -296,26 +327,33 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
     await resetRun();
   }
 
-  function answer(val: boolean) {
-    if (!started) return;
-    if (loading || error) return;
-    if (finished) return;
-    if (!current) return;
-    if (lockedRef.current) return;
+    function answer(val: boolean) {
+  if (!started) return;
+  if (loading || error) return;
+  if (finished) return;
+  if (!current) return;
+  if (lockedRef.current) return;
 
-    lockedRef.current = true;
+  lockedRef.current = true;
 
-    const ok = current.a === val;
-    if (ok) setGood((x) => x + 1);
-    else setBad((x) => x + 1);
+  const ok = current.a === val;
 
-    setIdx((x) => x + 1);
-    setQLeft(QUESTION_SEC);
+  guideSay(
+    ok
+      ? "Respuesta correcta. Sumamos una buena y pasamos a la siguiente pregunta."
+      : "Respuesta incorrecta. La marcamos como mala y pasamos a la siguiente pregunta."
+  );
 
-    queueMicrotask(() => {
-      lockedRef.current = false;
-    });
-  }
+  if (ok) setGood((x) => x + 1);
+  else setBad((x) => x + 1);
+
+  setIdx((x) => x + 1);
+  setQLeft(QUESTION_SEC);
+
+  queueMicrotask(() => {
+    lockedRef.current = false;
+  });
+}
 
   function doSkip() {
     if (!started) return;
@@ -324,7 +362,7 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
     if (lockedRef.current) return;
 
     lockedRef.current = true;
-
+    guideSay("Saltaste esta pregunta. La marcamos como no contestada y pasamos a la siguiente.");
     setSkip((x) => x + 1);
     setIdx((x) => x + 1);
     setQLeft(QUESTION_SEC);
@@ -1065,8 +1103,9 @@ function Nivel2Partido(props: {
   const [qLeft, setQLeft] = useState(QUESTION_SEC);
 
   const lockedRef = useRef(false);
+const lastSpokenQuestionRef = useRef<string>("");
 
-  const finished = started && (idx >= TOTAL || poolLeft <= 0);
+const finished = started && (idx >= TOTAL || poolLeft <= 0);
   const passed = finished && good >= PASS;
 
   useEffect(() => {
@@ -1084,6 +1123,21 @@ function Nivel2Partido(props: {
   }, [finished, good, passed, props]);
 
   const current = quiz[idx] ?? null;
+   useEffect(() => {
+  if (!enabled) return;
+  if (!started) return;
+  if (loading || error) return;
+  if (finished) return;
+  if (!current) return;
+
+  const key = `${current.id}-${idx}`;
+  if (lastSpokenQuestionRef.current === key) return;
+  lastSpokenQuestionRef.current = key;
+
+  guideSay(
+    `Nivel 2. Pregunta ${idx + 1} de ${TOTAL}. ${current.q}. Responde Sí, No o Saltar.`
+  );
+}, [enabled, started, loading, error, finished, current, idx]);
 
   async function resetRun(nextPartyId?: string) {
     if (locked) throw new Error("Estás temporalmente bloqueado. Vuelve más tarde.");
@@ -1093,6 +1147,7 @@ function Nivel2Partido(props: {
     setLoading(true);
     setError(null);
     lockedRef.current = false;
+    lastSpokenQuestionRef.current = "";
 
     try {
       if (!enabled) throw new Error("Nivel 2 está bloqueado.");
@@ -1190,9 +1245,11 @@ function Nivel2Partido(props: {
     if (lockedRef.current) return;
     lockedRef.current = true;
 
-    setSkip((x) => x + 1);
-    setIdx((x) => x + 1);
-    setQLeft(QUESTION_SEC);
+     guideSay("Se acabó el tiempo de esta pregunta del Nivel 2. La marcamos como no contestada y pasamos a la siguiente.");
+
+setSkip((x) => x + 1);
+setIdx((x) => x + 1);
+setQLeft(QUESTION_SEC);
 
     queueMicrotask(() => {
       lockedRef.current = false;
@@ -1209,10 +1266,16 @@ function Nivel2Partido(props: {
 
     lockedRef.current = true;
 
-    const ok = current.a === val;
-    if (ok) setGood((x) => x + 1);
-    else setBad((x) => x + 1);
+      const ok = current.a === val;
 
+guideSay(
+  ok
+    ? "Respuesta correcta. Sumamos una buena y pasamos a la siguiente pregunta."
+    : "Respuesta incorrecta. La marcamos como mala y pasamos a la siguiente pregunta."
+);
+
+if (ok) setGood((x) => x + 1);
+else setBad((x) => x + 1);
     setIdx((x) => x + 1);
     setQLeft(QUESTION_SEC);
 
@@ -1231,6 +1294,7 @@ function Nivel2Partido(props: {
     lockedRef.current = true;
 
     setSkip((x) => x + 1);
+    guideSay("Saltaste esta pregunta del Nivel 2. La marcamos como no contestada y pasamos a la siguiente.");
     setIdx((x) => x + 1);
     setQLeft(QUESTION_SEC);
 

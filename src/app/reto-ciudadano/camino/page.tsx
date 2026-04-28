@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import CaminoCiudadano, {
   type CaminoCiudadanoRuntimeState,
@@ -31,6 +31,7 @@ function getOrCreateDeviceId() {
 
 export default function CaminoCiudadanoPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
+  const introNarratedRef = useRef(false);
 
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -53,6 +54,38 @@ export default function CaminoCiudadanoPage() {
   const [ganadores, setGanadores] = useState<CaminoWinner[]>([]);
   const [ganadoresLoading, setGanadoresLoading] = useState(false);
   const [ganadoresError, setGanadoresError] = useState<string | null>(null);
+  useEffect(() => {
+  if (introNarratedRef.current) return;
+  introNarratedRef.current = true;
+
+  const text =
+    "Estás en Camino Ciudadano. " +
+    "Este juego consiste en avanzar por un tablero de casillas lanzando el dado. " +
+    "Cada vez que caes en una casilla, debes responder una pregunta. " +
+    "Si respondes bien, avanzas el número de casillas que salió en el dado. " +
+    "Si respondes mal o se acaba el tiempo, retrocedes ese número de casillas. " +
+    "El objetivo es llegar a la meta. Puedes jugar sin premio para practicar o con premio para participar en la selección trimestral.";
+
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: { action: "CLOSE" },
+    })
+  );
+
+  const t = window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: {
+          action: "SAY",
+          text,
+          speak: true,
+        },
+      })
+    );
+  }, 650);
+
+  return () => window.clearTimeout(t);
+}, []);
 
   useEffect(() => {
     setDeviceId(getOrCreateDeviceId());
@@ -600,4 +633,4 @@ export default function CaminoCiudadanoPage() {
       </section>
     </main>
   );
-}
+} 

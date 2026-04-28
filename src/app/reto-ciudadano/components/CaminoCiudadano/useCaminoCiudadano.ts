@@ -6,6 +6,19 @@ import { GameState, GameMode, Question } from './types';
 const TOTAL_SQUARES = 30;
 const INITIAL_TURNS = 10;
 const QUESTION_TIME_SEC = 10;
+function guideSay(text: string) {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: {
+        action: "SAY",
+        text,
+        speak: true,
+      },
+    })
+  );
+}
 
 export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
   const [state, setState] = useState<GameState>({
@@ -84,16 +97,26 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     const roll = state.pendingRoll;
     let newPosition = state.position;
 
-    if (isCorrect) {
-      newPosition = Math.min(state.position + roll, TOTAL_SQUARES);
-    } else {
-      newPosition = Math.max(state.position - roll, 0);
-    }
+     if (isCorrect) {
+  newPosition = Math.min(state.position + roll, TOTAL_SQUARES);
+} else {
+  newPosition = Math.max(state.position - roll, 0);
+}
 
-    const newTurnsLeft = state.turnsLeft - 1;
-    const reachedEnd = newPosition === TOTAL_SQUARES;
-    const noTurnsLeft = newTurnsLeft === 0;
-    const gameFinished = reachedEnd || noTurnsLeft;
+const newTurnsLeft = state.turnsLeft - 1;
+const reachedEnd = newPosition === TOTAL_SQUARES;
+const noTurnsLeft = newTurnsLeft === 0;
+const gameFinished = reachedEnd || noTurnsLeft;
+
+if (isCorrect) {
+  guideSay(
+    `Respuesta correcta. Avanzamos ${roll} casillas. Ahora estás en la casilla ${newPosition} de ${TOTAL_SQUARES}.`
+  );
+} else {
+  guideSay(
+    `Respuesta incorrecta o tiempo agotado. Retrocedemos ${roll} casillas. Ahora estás en la casilla ${newPosition} de ${TOTAL_SQUARES}.`
+  );
+}
 
     setState(prev => ({
       ...prev,
@@ -109,9 +132,23 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
       won: reachedEnd,
     }));
 
-    if (reachedEnd && mode === 'con_premio') {
-      onWin?.();
-    }
+     if (reachedEnd) {
+  guideSay(
+    mode === "con_premio"
+      ? "¡Felicidades! Llegaste a la meta de Camino Ciudadano. En modalidad con premio, quedarás registrado para la selección trimestral si tus datos están completos."
+      : "¡Felicidades! Llegaste a la meta de Camino Ciudadano en modo práctica."
+  );
+}
+
+if (!reachedEnd && noTurnsLeft) {
+  guideSay(
+    "Se acabaron los turnos. No llegaste a la meta en esta partida. Puedes reiniciar el juego e intentarlo nuevamente."
+  );
+}
+
+if (reachedEnd && mode === 'con_premio') {
+  onWin?.();
+}
   }, [state, mode, onWin]);
 
   // Lanzar el dado: muestra número, carga pregunta, activa modal
@@ -131,15 +168,20 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     }
 
     // Actualizar estado: mostrar el número, guardar el roll pendiente, mostrar la pregunta
-    setState(prev => ({
-      ...prev,
-      currentRoll: roll,
-      pendingRoll: roll,
-      showQuestion: true,
-      currentQuestion: question,
-      timeLeft: QUESTION_TIME_SEC,
-    }));
-    startTimer();
+      setState(prev => ({
+  ...prev,
+  currentRoll: roll,
+  pendingRoll: roll,
+  showQuestion: true,
+  currentQuestion: question,
+  timeLeft: QUESTION_TIME_SEC,
+}));
+
+guideSay(
+  `Lanzaste el dado y salió ${roll}. Ahora responde la pregunta: ${question.question}. Tienes ${QUESTION_TIME_SEC} segundos.`
+);
+
+startTimer();
   }, [state, fetchRandomQuestion, startTimer]);
 
   // Reiniciar completamente
