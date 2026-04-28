@@ -6,18 +6,27 @@ import { GameState, GameMode, Question } from './types';
 const TOTAL_SQUARES = 30;
 const INITIAL_TURNS = 10;
 const QUESTION_TIME_SEC = 10;
+
 function guideSay(text: string) {
   if (typeof window === "undefined") return;
 
   window.dispatchEvent(
     new CustomEvent("votoclaro:guide", {
-      detail: {
-        action: "SAY",
-        text,
-        speak: true,
-      },
+      detail: { action: "CLOSE" },
     })
   );
+
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: {
+          action: "SAY",
+          text,
+          speak: true,
+        },
+      })
+    );
+  }, 180);
 }
 
 export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {

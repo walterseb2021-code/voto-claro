@@ -102,13 +102,21 @@ function cleanText(s: string) {
 
   window.dispatchEvent(
     new CustomEvent("votoclaro:guide", {
-      detail: {
-        action: "SAY",
-        text,
-        speak: true,
-      },
+      detail: { action: "CLOSE" },
     })
   );
+
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("votoclaro:guide", {
+        detail: {
+          action: "SAY",
+          text,
+          speak: true,
+        },
+      })
+    );
+  }, 180);
 }
 type Nivel1GeneralProps = {
   mode: PlayMode;
@@ -635,29 +643,29 @@ function Nivel3Ruleta(props: {
   }, []);
 
   useEffect(() => {
-    if (!result) return;
+  if (!result) return;
 
-    const isWinnerNumber = result.n === 2 || result.n === 6;
+  const isWinnerNumber = result.n === 2 || result.n === 6;
 
-    if (!isWinnerNumber) return;
+  if (!isWinnerNumber) return;
 
-    setWinPulse(true);
-    const t1 = window.setTimeout(() => setWinPulse(false), 4200);
+  setWinPulse(true);
+  setShowConfetti(true);
 
-    if (result.isPrize && mode === "con_premio") {
-      setShowConfetti(true);
-      const t2 = window.setTimeout(() => setShowConfetti(false), 2200);
+  guideSay(
+    mode === "con_premio"
+      ? `¡Felicitaciones! La ruleta cayó en el número ${result.n}. Ganaste premio en el reto principal.`
+      : `¡Felicitaciones! La ruleta cayó en el número ${result.n}. Es un número ganador, pero estás jugando sin premio.`
+  );
 
-      return () => {
-        window.clearTimeout(t1);
-        window.clearTimeout(t2);
-      };
-    }
+  const t1 = window.setTimeout(() => setWinPulse(false), 4200);
+  const t2 = window.setTimeout(() => setShowConfetti(false), 2600);
 
-    return () => {
-      window.clearTimeout(t1);
-    };
-  }, [result, mode]);
+  return () => {
+    window.clearTimeout(t1);
+    window.clearTimeout(t2);
+  };
+}, [result, mode]);
 
   function resetLevel3() {
     cleanupTimer();
@@ -885,7 +893,13 @@ function Nivel3Ruleta(props: {
         </div>
 
         {result && (
-          <div className="mt-4 w-full rounded-2xl border bg-slate-50 p-4">
+  <div
+    className={`mt-4 w-full rounded-2xl border p-4 ${
+      result.isPrize
+        ? "bg-green-50 border-green-300 vc-win-pulse"
+        : "bg-slate-50"
+    }`}
+  >
             <div className="text-sm font-extrabold text-slate-900">Resultado</div>
 
             <div className="mt-2 flex items-center justify-between gap-3">
