@@ -2910,6 +2910,54 @@ function getCompareIdFromSearchParams(sp: any) {
       return `Sitio oficial de APP:\n${appUrl}`;
     }
 
+         if (
+      q.includes("perfil multidisciplinario") ||
+      q.includes("multidisciplinario") ||
+      q.includes("perfil") ||
+      q.includes("formacion") ||
+      q.includes("formación") ||
+      q.includes("docencia") ||
+      q.includes("emprendimiento") ||
+      q.includes("gestion educativa") ||
+      q.includes("gestión educativa") ||
+      q.includes("trayectoria politica") ||
+      q.includes("trayectoria política") ||
+      q.includes("gestion deportiva") ||
+      q.includes("gestión deportiva")
+    ) {
+      return (
+        "El bloque Perfil Multidisciplinario muestra accesos a contenidos públicos relacionados con César Acuña Peralta.\n\n" +
+        "En esta ventana aparecen cuatro temas:\n\n" +
+        "1. Formación Académica y Docencia.\n" +
+        "2. Emprendimiento y Gestión educativa.\n" +
+        "3. Trayectoria Política.\n" +
+        "4. Gestión Deportiva.\n\n" +
+        "Cada tarjeta tiene un botón “Ver” que abre un contenido externo relacionado. VOTO CLARO no aloja esos contenidos; solo facilita el acceso."
+      );
+    }
+
+    if (
+      q.includes("consulta candidatos") ||
+      q.includes("consulto candidatos") ||
+      q.includes("consultar candidatos") ||
+      q.includes("consulta tu candidato") ||
+      q.includes("categoria") ||
+      q.includes("categoría") ||
+      q.includes("distrito electoral") ||
+      q.includes("region") ||
+      q.includes("región") ||
+      q.includes("filtrar candidatos") ||
+      q.includes("buscar candidato")
+    ) {
+      return (
+        "Para consultar candidatos en esta ventana, baja hasta el bloque “Consulta tu candidato”.\n\n" +
+        "Ahí puedes usar dos filtros:\n\n" +
+        "1. Categoría: Presidencial, Parlamento Andino, Diputados, Senadores Distrito Único o Senadores Distrito Múltiple.\n" +
+        "2. Distrito electoral: aparece cuando la categoría necesita región o distrito.\n\n" +
+        "Después de elegir los filtros, la ventana muestra las tarjetas de candidatos disponibles. Al tocar una tarjeta, la app abre la ficha del candidato para revisar Hoja de Vida, Plan de Gobierno y Actuar Político."
+      );
+    }
+
     if (q.includes("fundador")) {
       return (
         "El bloque Fundador presenta a César Acuña Peralta y una frase institucional vinculada a descentralización y justicia territorial.\n\n" +
@@ -2917,17 +2965,18 @@ function getCompareIdFromSearchParams(sp: any) {
       );
     }
 
-    if (q.includes("candidato") || q.includes("cesar") || q.includes("césar") || q.includes("acuña") || q.includes("acuna")) {
+    if (
+      q.includes("bloque candidato") ||
+      q.includes("frase del candidato") ||
+      q.includes("mensaje del candidato") ||
+      q.includes("cesar acuña") ||
+      q.includes("césar acuña") ||
+      q.includes("acuña peralta") ||
+      q.includes("acuna peralta")
+    ) {
       return (
         "El bloque Candidato presenta a César Acuña Peralta y una frase política visible en la ventana.\n\n" +
-        "Desde esta misma página también puedes bajar hasta Consulta tu candidato para abrir fichas de candidatos por categoría y distrito electoral."
-      );
-    }
-
-    if (q.includes("perfil") || q.includes("multidisciplinario") || q.includes("formacion") || q.includes("formación") || q.includes("docencia") || q.includes("emprendimiento") || q.includes("gestion") || q.includes("gestión")) {
-      return (
-        "El Perfil Multidisciplinario reúne accesos a contenidos sobre formación académica y docencia, emprendimiento y gestión educativa, trayectoria política y gestión deportiva.\n\n" +
-        "Cada botón “Ver” abre un contenido externo relacionado."
+        "Ese bloque no es la consulta de todos los candidatos. Para revisar listas por categoría y distrito electoral, debes bajar al bloque “Consulta tu candidato”."
       );
     }
 
