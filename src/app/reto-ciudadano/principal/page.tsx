@@ -273,9 +273,7 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
   if (lastSpokenQuestionRef.current === key) return;
   lastSpokenQuestionRef.current = key;
 
-  guideSay(
-    `Nivel 1. Pregunta ${idx + 1} de ${TOTAL}. ${current.q}. Responde Sí, No o Saltar.`
-  );
+   guideSay(current.q);
 }, [started, loading, error, finished, current, idx]);
 
   useEffect(() => {
@@ -1127,9 +1125,7 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
   if (lastSpokenQuestionRef.current === key) return;
   lastSpokenQuestionRef.current = key;
 
-  guideSay(
-    `Nivel 2. Pregunta ${idx + 1} de ${TOTAL}. ${current.q}. Responde Sí, No o Saltar.`
-  );
+    guideSay(current.q);
 }, [enabled, started, loading, error, finished, current, idx]);
 
   async function resetRun(nextPartyId?: string) {

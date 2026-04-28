@@ -319,15 +319,7 @@ export default function CaminoCiudadanoPage() {
       pageTitle: "Camino Ciudadano",
       route: "/reto-ciudadano/camino",
       summary,
-      speakableSummary: caminoState?.showQuestion
-        ? "Estás en Camino Ciudadano y ahora mismo tienes una pregunta activa que debes responder para continuar avanzando."
-        : caminoState?.won
-        ? mode === "con_premio"
-          ? "Estás en Camino Ciudadano y ya alcanzaste la meta. En modalidad con premio, quedarás registrado para la selección trimestral si tu acceso y datos están completos."
-          : "Estás en Camino Ciudadano y ya alcanzaste la meta del recorrido."
-        : caminoState?.gameOver
-        ? "Estás en Camino Ciudadano y el juego actual terminó sin llegar a la meta."
-        : "Estás en Camino Ciudadano. Aquí avanzarás por casillas, responderás preguntas y buscarás llegar a la meta.",
+      speakableSummary: "",
       activeSection,
       visibleText: visibleParts.join("\n"),
       availableActions,

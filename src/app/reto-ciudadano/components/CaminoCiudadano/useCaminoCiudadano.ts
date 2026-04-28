@@ -108,12 +108,7 @@ const reachedEnd = newPosition === TOTAL_SQUARES;
 const noTurnsLeft = newTurnsLeft === 0;
 const gameFinished = reachedEnd || noTurnsLeft;
 
-    if (isCorrect) {
-  guideSay(`Correcto. Avanzas ${roll}.`);
-} else {
-  guideSay(`Incorrecto. Retrocedes ${roll}.`);
-}
-
+   
     setState(prev => ({
       ...prev,
       position: newPosition,
