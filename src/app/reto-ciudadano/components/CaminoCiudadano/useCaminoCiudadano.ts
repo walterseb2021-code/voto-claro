@@ -7,26 +7,18 @@ const TOTAL_SQUARES = 30;
 const INITIAL_TURNS = 10;
 const QUESTION_TIME_SEC = 10;
 
-function guideSay(text: string) {
+ function guideSay(text: string) {
   if (typeof window === "undefined") return;
 
   window.dispatchEvent(
     new CustomEvent("votoclaro:guide", {
-      detail: { action: "CLOSE" },
+      detail: {
+        action: "SAY",
+        text,
+        speak: true,
+      },
     })
   );
-
-  window.setTimeout(() => {
-    window.dispatchEvent(
-      new CustomEvent("votoclaro:guide", {
-        detail: {
-          action: "SAY",
-          text,
-          speak: true,
-        },
-      })
-    );
-  }, 180);
 }
 
 export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
@@ -80,20 +72,41 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
     }
   }, []);
 
-  const startTimer = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setState(prev => {
-        if (prev.timeLeft <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          // Tiempo agotado → respuesta incorrecta
-          handleAnswer(false);
-          return { ...prev, timeLeft: 0 };
-        }
+    const startTimer = useCallback(() => {
+  if (timerRef.current) clearInterval(timerRef.current);
+
+  timerRef.current = setInterval(() => {
+    setState((prev) => {
+      if (prev.timeLeft > 1) {
         return { ...prev, timeLeft: prev.timeLeft - 1 };
-      });
-    }, 1000);
-  }, []);
+      }
+
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+
+      const roll = prev.pendingRoll ?? 0;
+      const newPosition = Math.max(prev.position - roll, 0);
+      const newTurnsLeft = prev.turnsLeft - 1;
+      const noTurnsLeft = newTurnsLeft <= 0;
+
+      return {
+        ...prev,
+        position: newPosition,
+        turnsLeft: newTurnsLeft,
+        answeredQuestions: prev.currentQuestion
+          ? [...prev.answeredQuestions, prev.currentQuestion.id]
+          : prev.answeredQuestions,
+        showQuestion: false,
+        currentQuestion: null,
+        timeLeft: QUESTION_TIME_SEC,
+        gameOver: noTurnsLeft,
+        won: false,
+      };
+    });
+  }, 1000);
+}, []);
 
   // Manejar la respuesta del jugador (llamada desde el modal)
   const handleAnswer = useCallback((isCorrect: boolean) => {
