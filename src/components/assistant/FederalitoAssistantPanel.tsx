@@ -3005,13 +3005,86 @@ function getCompareIdFromSearchParams(sp: any) {
   maybeSpeakFn: (t: string) => Promise<void>,
   pushFn: (t: string) => void
 ) {
-  // ✅ Si es “Conversación del partido” => responder desde docs del partido
+       // ✅ Primero decidir si la pregunta es sobre la ventana visible o sobre documentos del partido
   const i = detectIntent(rawQ);
   const currentPath =
     typeof window !== "undefined" ? String(window.location.pathname || "") : "";
   const partyId = currentPath.startsWith("/cambio-app") ? "app" : "perufederal";
+  const q = normalizeLite(rawQ);
 
-  if (i.asksPartyDetails || i.wantsPLAN || i.wantsHV || i.wantsNEWS || i.t.length >= 12) {
+  const asksVisibleAppWindow =
+    currentPath.startsWith("/cambio-app") &&
+    (
+      q.includes("que contiene la ventana") ||
+      q.includes("qué contiene la ventana") ||
+      q.includes("que hay aqui") ||
+      q.includes("qué hay aquí") ||
+      q.includes("que hay en esta ventana") ||
+      q.includes("qué hay en esta ventana") ||
+      q.includes("contenido de la ventana") ||
+      q.includes("sitio oficial") ||
+      q.includes("pagina oficial") ||
+      q.includes("página oficial") ||
+      q.includes("donde puedo abrir") ||
+      q.includes("dónde puedo abrir") ||
+      q.includes("abrir el sitio") ||
+      q.includes("imagen principal") ||
+      q.includes("boton") ||
+      q.includes("botón") ||
+      q.includes("bloque conversacion") ||
+      q.includes("bloque conversación") ||
+      q.includes("como funciona el bloque conversacion") ||
+      q.includes("cómo funciona el bloque conversación") ||
+      q.includes("perfil multidisciplinario") ||
+      q.includes("fundador") ||
+      q.includes("candidato") ||
+      q.includes("transmisiones") ||
+      q.includes("transmision") ||
+      q.includes("transmisión") ||
+      q.includes("en vivo") ||
+      q.includes("consulta candidatos") ||
+      q.includes("consulto candidatos") ||
+      q.includes("consultar candidatos") ||
+      q.includes("categoria") ||
+      q.includes("categoría") ||
+      q.includes("distrito electoral")
+    );
+
+  const asksPartyDocs =
+    q.includes("ideologia") ||
+    q.includes("ideología") ||
+    q.includes("bases") ||
+    q.includes("documento") ||
+    q.includes("documentos") ||
+    q.includes("estatuto") ||
+    q.includes("doctrina") ||
+    q.includes("principios") ||
+    q.includes("programa") ||
+    q.includes("propuesta del partido") ||
+    q.includes("propuestas del partido") ||
+    q.includes("que dice sobre") ||
+    q.includes("qué dice sobre") ||
+    q.includes("educacion") ||
+    q.includes("educación") ||
+    q.includes("salud") ||
+    q.includes("seguridad") ||
+    q.includes("economia") ||
+    q.includes("economía") ||
+    q.includes("corrupcion") ||
+    q.includes("corrupción") ||
+    q.includes("descentralizacion") ||
+    q.includes("descentralización") ||
+    q.includes("mypes") ||
+    q.includes("empleo");
+
+  if (asksVisibleAppWindow) {
+    const out = answerFromCambioConValentia(rawQ);
+    pushFn(out);
+    await maybeSpeakFn(out);
+    return;
+  }
+
+  if (asksPartyDocs) {
     try {
       const res = await fetch("/api/party/docs/chat", {
         method: "POST",
