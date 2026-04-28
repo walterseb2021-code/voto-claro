@@ -66,32 +66,11 @@ export default function CaminoCiudadanoPage() {
     "Si respondes mal o se acaba el tiempo, retrocedes ese número de casillas. " +
     "El objetivo es llegar a la meta. Puedes jugar sin premio para practicar o con premio para participar en la selección trimestral.";
 
-    useEffect(() => {
-  if (introNarratedRef.current) return;
-  introNarratedRef.current = true;
-
-  const text =
-    "Estás en Camino Ciudadano. " +
-    "Este juego consiste en avanzar por un tablero de casillas lanzando el dado. " +
-    "Cada vez que caes en una casilla, debes responder una pregunta. " +
-    "Si respondes bien, avanzas el número de casillas que salió en el dado. " +
-    "Si respondes mal o se acaba el tiempo, retrocedes ese número de casillas. " +
-    "El objetivo es llegar a la meta. Puedes jugar sin premio para practicar o con premio para participar en la selección trimestral.";
-
-  const t = window.setTimeout(() => {
-    window.dispatchEvent(
-      new CustomEvent("votoclaro:guide", {
-        detail: {
-          action: "SAY",
-          text,
-          speak: true,
-        },
-      })
-    );
-  }, 650);
-
-  return () => window.clearTimeout(t);
-}, []);
+  window.dispatchEvent(
+    new CustomEvent("votoclaro:guide", {
+      detail: { action: "CLOSE" },
+    })
+  );
 
   const t = window.setTimeout(() => {
     window.dispatchEvent(
@@ -329,8 +308,12 @@ export default function CaminoCiudadanoPage() {
           "Revisar ganadores de Camino Ciudadano",
         ];
 
-     const summary =
-  "Camino Ciudadano es un juego de recorrido por casillas donde el usuario lanza el dado, responde preguntas y busca llegar a la meta.";
+    const summary = caminoState?.showQuestion
+      ? "Pantalla de Camino Ciudadano con una pregunta activa."
+      : caminoState?.won
+      ? "Pantalla de Camino Ciudadano con juego completado."
+      : "Pantalla de Camino Ciudadano con recorrido por casillas, preguntas y avance hacia la meta.";
+
     setPageContext({
       pageId: "reto-ciudadano-camino",
       pageTitle: "Camino Ciudadano",

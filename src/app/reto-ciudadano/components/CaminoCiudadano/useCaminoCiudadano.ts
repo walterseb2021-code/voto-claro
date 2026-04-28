@@ -91,20 +91,19 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
       const newTurnsLeft = prev.turnsLeft - 1;
       const noTurnsLeft = newTurnsLeft <= 0;
 
-       return {
-  ...prev,
-  position: newPosition,
-  turnsLeft: newTurnsLeft,
-  answeredQuestions: prev.currentQuestion
-    ? [...prev.answeredQuestions, prev.currentQuestion.id]
-    : prev.answeredQuestions,
-  showQuestion: false,
-  currentQuestion: null,
-  pendingRoll: null,
-  timeLeft: QUESTION_TIME_SEC,
-  gameOver: noTurnsLeft,
-  won: false,
-};
+      return {
+        ...prev,
+        position: newPosition,
+        turnsLeft: newTurnsLeft,
+        answeredQuestions: prev.currentQuestion
+          ? [...prev.answeredQuestions, prev.currentQuestion.id]
+          : prev.answeredQuestions,
+        showQuestion: false,
+        currentQuestion: null,
+        timeLeft: QUESTION_TIME_SEC,
+        gameOver: noTurnsLeft,
+        won: false,
+      };
     });
   }, 1000);
 }, []);
@@ -132,18 +131,20 @@ const noTurnsLeft = newTurnsLeft === 0;
 const gameFinished = reachedEnd || noTurnsLeft;
 
    
-     setState(prev => ({
-  ...prev,
-  position: newPosition,
-  turnsLeft: newTurnsLeft,
-  answeredQuestions: [...prev.answeredQuestions, prev.currentQuestion!.id],
-  showQuestion: false,
-  currentQuestion: null,
-  pendingRoll: null,
-  timeLeft: QUESTION_TIME_SEC,
-  gameOver: gameFinished && !reachedEnd,
-  won: reachedEnd,
-}));
+    setState(prev => ({
+      ...prev,
+      position: newPosition,
+      turnsLeft: newTurnsLeft,
+      answeredQuestions: [...prev.answeredQuestions, prev.currentQuestion!.id],
+      showQuestion: false,
+      currentQuestion: null,
+      // Mantenemos pendingRoll y currentRoll para mostrar el último número
+      // pero la próxima tirada los reemplazará
+      timeLeft: QUESTION_TIME_SEC,
+      gameOver: gameFinished && !reachedEnd,
+      won: reachedEnd,
+    }));
+
      if (reachedEnd) {
   guideSay(
     mode === "con_premio"
@@ -180,7 +181,7 @@ if (reachedEnd && mode === 'con_premio') {
     }
 
     // Actualizar estado: mostrar el número, guardar el roll pendiente, mostrar la pregunta
-       setState(prev => ({
+      setState(prev => ({
   ...prev,
   currentRoll: roll,
   pendingRoll: roll,
@@ -189,9 +190,7 @@ if (reachedEnd && mode === 'con_premio') {
   timeLeft: QUESTION_TIME_SEC,
 }));
 
-window.setTimeout(() => {
-  guideSay(question.question);
-}, 500);
+guideSay(question.question);
 
 startTimer();
   }, [state, fetchRandomQuestion, startTimer]);
