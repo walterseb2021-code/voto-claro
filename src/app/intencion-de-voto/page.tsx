@@ -612,8 +612,13 @@ useEffect(() => {
       visibleParts.push(`Grupo visible: ${userGroup}.`);
     }
 
-    if (pendingSlug) {
-      visibleParts.push(`Opción de voto actualmente seleccionada antes de confirmar: ${pendingSlug}.`);
+         if (pendingSlug) {
+      const pendingName =
+        parties.find((p) => p.slug === pendingSlug)?.name || pendingSlug;
+
+      visibleParts.push(
+        `Opción de voto actualmente seleccionada antes de confirmar: ${pendingName}.`
+      );
     }
 
     if (confirmedPartyName) {
@@ -650,10 +655,45 @@ useEffect(() => {
       visibleParts.push(`Total registrado visible en esta ronda: ${total}.`);
     }
 
-    const enabledParties = parties.filter((p) => p.enabled).length;
+         const enabledPartyList = parties.filter((p) => p.enabled);
+    const enabledParties = enabledPartyList.length;
+
+    const enabledPartyNames = enabledPartyList
+      .map((p) => p.name)
+      .filter(Boolean)
+      .join(", ");
+
+    const pendingPartyName =
+      enabledPartyList.find((p) => p.slug === pendingSlug)?.name || "";
+
+    const hasNullBlankOption = enabledPartyList.some((p) => {
+      const name = String(p.name || "").toLowerCase();
+      const slug = String(p.slug || "").toLowerCase();
+      return (
+        name.includes("nulo") ||
+        name.includes("blanco") ||
+        slug.includes("nulo") ||
+        slug.includes("blanco")
+      );
+    });
 
     if (enabledParties > 0) {
       visibleParts.push(`Opciones de voto habilitadas visibles: ${enabledParties}.`);
+      visibleParts.push(`Nombres de opciones visibles: ${enabledPartyNames}.`);
+    }
+
+    visibleParts.push(
+      "Regla de uso visible: tocar una tarjeta solo selecciona una opción. El voto real se registra únicamente al presionar el botón Confirmar."
+    );
+
+    visibleParts.push(
+      "Antes de confirmar, el usuario puede cambiar su selección tocando otra tarjeta. Después de confirmar, el voto queda registrado y bloqueado para la ronda activa."
+    );
+
+    if (hasNullBlankOption) {
+      visibleParts.push(
+        "La opción Nulo / Blanco está visible y funciona como una opción de voto más. Si se selecciona y se confirma, se registra la intención como Nulo / Blanco para la ronda activa."
+      );
     }
 
     const activeSection = showQuestions
@@ -687,8 +727,8 @@ useEffect(() => {
   pageTitle: "Intención de voto",
   route: "/intencion-de-voto",
   summary,
-  speakableSummary:
-    "Estás en Intención de voto. Puedes elegir una opción, confirmar tu voto en la ronda activa y, si aparecen preguntas posteriores, explicar tu decisión. Esta ventana es un ejercicio ciudadano de opinión, no una encuesta electoral oficial.",
+    speakableSummary:
+    "Estás en Intención de voto. Para participar, toca una tarjeta de opción. Eso solo selecciona; el voto real se registra cuando presionas el botón Confirmar. Antes de confirmar puedes cambiar tu selección. Después de confirmar, el voto queda registrado para la ronda activa. Esta ventana es un ejercicio ciudadano de opinión, no una encuesta electoral oficial.",
   activeSection,
   visibleText: visibleParts.join("\n"),
   availableActions,
@@ -704,6 +744,12 @@ useEffect(() => {
         votoConfirmadoNombre: confirmedPartyName || "",
         totalVotosRonda: total,
         opcionesHabilitadasCount: enabledParties,
+                opcionesVisibles: enabledPartyList.map((p) => p.name),
+        opcionesVisiblesTexto: enabledPartyNames,
+        incluyeNuloBlanco: hasNullBlankOption,
+        opcionPendienteNombre: pendingPartyName,
+        reglaConfirmacion:
+          "Tocar una tarjeta solo selecciona. El voto se registra al presionar Confirmar. Antes de confirmar se puede cambiar de opción; después queda bloqueado para la ronda activa.",
         showQuestions,
         answersSubmitted,
         showReflection,
