@@ -361,7 +361,7 @@ export async function POST(req: Request) {
     if (!id) return json({ error: "MISSING_ID" }, 400);
     if (!status) return json({ error: "MISSING_STATUS" }, 400);
 
-    const allowed = new Set(["reviewed", "archived"]);
+     const allowed = new Set(["published", "reviewed", "archived", "blocked"]);
     if (!allowed.has(status)) return json({ error: "STATUS_NOT_ALLOWED" }, 400);
 
     const tableName = target === "video" ? "weekly_video_entries" : "user_comments";

@@ -111,7 +111,6 @@ type WinnerFounderQuestionRow = {
 
 type VideoVoteCountRow = {
   weekly_video_entry_id: string;
-  count: number;
 };
 
 type TimeFilter = "TODAY" | "D7" | "D30" | "ALL";
@@ -567,33 +566,137 @@ export default function ComentariosPage() {
     }
   }
 
-  async function loadPublicReviewedVideos() {
-    setPublicVideosLoading(true);
-    setPublicVideosError(null);
+   async function loadPublicReviewedVideos() {
+  setPublicVideosLoading(true);
+  setPublicVideosError(null);
 
-    try {
-      if (!weeklyTopicId) {
-        setPublicVideos([]);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("weekly_video_entries")
-        .select("id,created_at,weekly_topic_id,group_code,platform,video_url,title,status")
-        .eq("status", "reviewed")
-        .eq("weekly_topic_id", weeklyTopicId)
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (error) throw new Error(error.message);
-
-      setPublicVideos((data ?? []) as PublicVideoRow[]);
-    } catch (e: any) {
-      setPublicVideosError(e?.message ?? String(e));
-    } finally {
-      setPublicVideosLoading(false);
+  try {
+    if (!weeklyTopicId) {
+      setPublicVideos([]);
+      setVideoVoteCounts({});
+      return;
     }
+
+    const { data, error } = await supabase
+      .from("weekly_video_entries")
+      .select("id,created_at,weekly_topic_id,group_code,platform,video_url,title,status")
+      .eq("status", "reviewed")
+      .eq("weekly_topic_id", weeklyTopicId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) throw new Error(error.message);
+
+    const rows = (data ?? []) as PublicVideoRow[];
+    setPublicVideos(rows);
+
+    await loadVideoVoteCounts(rows.map((item) => item.id));
+  } catch (e: any) {
+    setPublicVideosError(e?.message ?? String(e));
+  } finally {
+    setPublicVideosLoading(false);
   }
+}
+   async function loadVideoVoteCounts(videoIds?: string[]) {
+  try {
+    const ids =
+      videoIds && videoIds.length > 0
+        ? videoIds
+        : Array.from(
+            new Set(
+              [
+                ...publicVideos.map((v) => v.id),
+                ...votingVideos.map((v: any) => v.id),
+              ].filter(Boolean)
+            )
+          );
+
+    if (!ids.length) {
+      setVideoVoteCounts({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("weekly_video_votes")
+      .select("weekly_video_entry_id")
+      .in("weekly_video_entry_id", ids);
+
+    if (error) throw new Error(error.message);
+
+    const counts: Record<string, number> = {};
+
+      (data || []).forEach((row: { weekly_video_entry_id: string }) => {
+  counts[row.weekly_video_entry_id] =
+    (counts[row.weekly_video_entry_id] || 0) + 1;
+});
+
+    setVideoVoteCounts(counts);
+  } catch {
+    setVideoVoteCounts({});
+  }
+}
+
+const selectedArchivedTopic = useMemo(() => {
+  if (!archivedTopicsPublic.length) return null;
+
+  return (
+    archivedTopicsPublic.find((item) => item.id === selectedArchivedTopicId) ||
+    archivedTopicsPublic[0]
+  );
+}, [archivedTopicsPublic, selectedArchivedTopicId]);
+
+const selectedForumTopic = useMemo(() => {
+  if (!forumTopics.length) return null;
+
+  return (
+    forumTopics.find((item) => item.id === selectedForumTopicId) ||
+    forumTopics[0]
+  );
+}, [forumTopics, selectedForumTopicId]);
+
+const weeklyWinner = useMemo(() => {
+  if (!publicVideos.length) return null;
+
+  const rows = publicVideos.map((video) => ({
+    ...video,
+    votes: videoVoteCounts[video.id] ?? 0,
+  }));
+
+  rows.sort((a, b) => {
+    if (b.votes !== a.votes) return b.votes - a.votes;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+
+  return rows[0]?.votes > 0 ? rows[0] : null;
+}, [publicVideos, videoVoteCounts]);
+
+useEffect(() => {
+  if (!selectedArchivedTopicId && archivedTopicsPublic.length > 0) {
+    setSelectedArchivedTopicId(archivedTopicsPublic[0].id);
+  }
+}, [archivedTopicsPublic, selectedArchivedTopicId]);
+
+useEffect(() => {
+  if (!selectedForumTopicId && forumTopics.length > 0) {
+    setSelectedForumTopicId(forumTopics[0].id);
+  }
+}, [forumTopics, selectedForumTopicId]);
+
+useEffect(() => {
+  if (showPublic) {
+    void loadPublicReviewed();
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [timeFilter]);
+
+useEffect(() => {
+  if (deviceId && (weeklyTopicId || votingTopicId)) {
+    void loadMyVoteForWeeklyTopic();
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [deviceId, weeklyTopicId, votingTopicId]);
       async function loadVotingVideos() {
   try {
     if (!votingTopicId) {
@@ -663,35 +766,7 @@ export default function ComentariosPage() {
     }
   }
 
-  async function loadVideoVoteCounts() {
-    try {
-      if (!weeklyTopicId && !votingTopicId) {
-        setVideoVoteCounts({});
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("weekly_video_votes")
-        .select("weekly_video_entry_id")
-        .eq("weekly_topic_id", votingTopicId || weeklyTopicId)
-        
-      if (error) throw new Error(error.message);
-
-      const counts: Record<string, number> = {};
-
-      for (const row of data ?? []) {
-        const id = String((row as any).weekly_video_entry_id ?? "");
-        if (!id) continue;
-        counts[id] = (counts[id] ?? 0) + 1;
-      }
-
-      setVideoVoteCounts(counts);
-    } catch {
-      setVideoVoteCounts({});
-    }
-  }
-
-  async function loadWeeklyTopic() {
+    async function loadWeeklyTopic() {
     try {
       const { data, error } = await supabase
         .from("weekly_topics")
@@ -1103,32 +1178,7 @@ export default function ComentariosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPublic, showPublicVideos, timeFilter, weeklyTopicId, deviceId]);
 
-  const weeklyWinner = useMemo(() => {
-    if (!publicVideos.length) return null;
-
-    const sorted = [...publicVideos].sort((a, b) => {
-      const votesA = videoVoteCounts[a.id] ?? 0;
-      const votesB = videoVoteCounts[b.id] ?? 0;
-      return votesB - votesA;
-    });
-
-    const top = sorted[0];
-    if (!top) return null;
-
-    return {
-      ...top,
-      votes: videoVoteCounts[top.id] ?? 0,
-    };
-  }, [publicVideos, videoVoteCounts]);
-    const selectedArchivedTopic = useMemo(() => {
-    return archivedTopicsPublic.find((item) => item.id === selectedArchivedTopicId) ?? null;
-  }, [archivedTopicsPublic, selectedArchivedTopicId]);
-
-  const selectedForumTopic = useMemo(() => {
-    return forumTopics.find((item) => item.id === selectedForumTopicId) ?? null;
-  }, [forumTopics, selectedForumTopicId]);
-
-  useEffect(() => {
+    useEffect(() => {
     if (!selectedArchivedTopicId && archivedTopicsPublic.length > 0) {
       setSelectedArchivedTopicId(archivedTopicsPublic[0].id);
     }
@@ -1150,7 +1200,7 @@ export default function ComentariosPage() {
     return;
   }
 
-    if (!hasData) {
+  if (!hasData) {
     setErrMsg("Para comentar, primero debes registrarte como participante.");
     return;
   }
@@ -1164,6 +1214,11 @@ export default function ComentariosPage() {
 
   if (!text) {
     setErrMsg("Escribe un comentario antes de enviar.");
+    return;
+  }
+
+  if (text.length > 500) {
+    setErrMsg("El comentario no debe superar 500 caracteres.");
     return;
   }
 
@@ -1193,37 +1248,47 @@ export default function ComentariosPage() {
       return;
     }
 
-     const payload: any = {
-  message: text,
-  status: "published",
-  page: "/comentarios",
-  weekly_topic_id: weeklyTopicId,
-  device_id: deviceId,
-  access_participant_id: accessParticipantId,
-  group_code: groupCode?.trim() || "GENERAL",
-};
+    const payload: any = {
+      message: text,
+      status: "published",
+      page: "/comentarios",
+      weekly_topic_id: weeklyTopicId,
+      device_id: deviceId,
+      access_participant_id: accessParticipantId,
+      group_code: groupCode?.trim() || "GENERAL",
+      metadata: {
+        source_module: "comentarios-ciudadanos",
+        source_section: "comentario-semanal",
+        source_action: "publicar-comentario",
+        page_title: "Comentarios Ciudadanos",
+        route: "/comentarios",
+        topic_id: weeklyTopicId,
+        user_alias: participant?.alias || participant?.full_name || "",
+        user_full_name: participant?.full_name || "",
+        participant_id: participant?.id || "",
+        submitted_from: "comentarios-page",
+        client_timestamp: new Date().toISOString(),
+      },
+    };
+
     const { error } = await supabase.from("user_comments").insert(payload);
     if (error) throw new Error(error.message);
 
     setMessage("");
-      setOkMsg(
-  "¡Gracias! Tu comentario fue publicado correctamente."
-   );
+    setOkMsg("¡Gracias! Tu comentario fue publicado correctamente.");
 
     if (showPublic) {
       await loadPublicReviewed();
     }
-  }
-   catch (e: any) {
-  const msg = (e?.message || "").toLowerCase();
+  } catch (e: any) {
+    const msg = (e?.message || "").toLowerCase();
 
-  if (msg.includes("max_3_comments_per_topic")) {
-    setErrMsg("Ya alcanzaste el máximo de 3 comentarios para este tema semanal.");
-  } else {
-    setErrMsg(e?.message ?? String(e));
-  }
-}
-  finally {
+    if (msg.includes("max_3_comments_per_topic")) {
+      setErrMsg("Ya alcanzaste el máximo de 3 comentarios para este tema semanal.");
+    } else {
+      setErrMsg(e?.message ?? String(e));
+    }
+  } finally {
     setSending(false);
   }
 }

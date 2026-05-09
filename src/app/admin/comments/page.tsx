@@ -12,7 +12,7 @@ type CommentRow = {
   device_id: string | null;
   page: string | null;
   message: string;
-  status: "new" | "reviewed" | "archived" | "blocked";
+  status: "new" | "published" | "reviewed" | "archived" | "blocked";
 };
 
 type WeeklyTopicRow = {
@@ -1139,6 +1139,7 @@ export default function AdminCommentsPage() {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="new">new</option>
+                <option value="published">published</option>
                 <option value="reviewed">reviewed</option>
                 <option value="archived">archived</option>
                 <option value="blocked">blocked</option>
@@ -1270,13 +1271,15 @@ export default function AdminCommentsPage() {
                   </div>
                   <div className="text-xs font-extrabold text-slate-700">
                     status:{" "}
-                    {c.status === "new"
-                      ? "Nuevo"
-                      : c.status === "reviewed"
-                      ? "Revisado"
-                      : c.status === "archived"
-                      ? "Archivado"
-                      : "Bloqueado"}
+                              {c.status === "new"
+  ? "Nuevo"
+  : c.status === "published"
+  ? "Publicado"
+  : c.status === "reviewed"
+  ? "Revisado"
+  : c.status === "archived"
+  ? "Archivado"
+  : "Bloqueado"}
                   </div>
                 </div>
 
