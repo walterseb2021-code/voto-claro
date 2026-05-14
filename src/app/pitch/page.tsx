@@ -47,6 +47,25 @@ export default function PitchPage() {
   // 🔹 Estado para la instalación PWA
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
   const [isInstallable, setIsInstallable] = React.useState(false);
+  const [legalAccepted, setLegalAccepted] = React.useState(false);
+const [legalError, setLegalError] = React.useState("");
+
+function saveLegalAcceptance() {
+  document.cookie = "vc_legal_accepted=true; path=/; max-age=31536000; SameSite=Lax";
+  localStorage.setItem("vc_legal_accepted", "true");
+}
+
+async function installAppWithLegal() {
+  if (!legalAccepted) {
+    setLegalError(
+      "Para instalar o continuar, primero debes aceptar los documentos legales."
+    );
+    return;
+  }
+
+  saveLegalAcceptance();
+  await installApp();
+}
 
   React.useEffect(() => {
     let alive = true;
@@ -338,13 +357,27 @@ export default function PitchPage() {
     );
   }
 
-  return <FederalitoSplash partyId={party} isInstallable={isInstallable} installApp={installApp} />;
+  return (
+  <FederalitoSplash
+    partyId={party}
+    isInstallable={isInstallable}
+    installApp={installAppWithLegal}
+    legalAccepted={legalAccepted}
+    setLegalAccepted={setLegalAccepted}
+    legalError={legalError}
+    setLegalError={setLegalError}
+  />
+);
 }
 
-function FederalitoSplash(props: { 
+  function FederalitoSplash(props: {
   partyId: "perufederal" | "app";
   isInstallable: boolean;
   installApp: () => Promise<void>;
+  legalAccepted: boolean;
+  setLegalAccepted: React.Dispatch<React.SetStateAction<boolean>>;
+  legalError: string;
+  setLegalError: React.Dispatch<React.SetStateAction<string>>;
 }) {
   const isApp = props.partyId === "app";
   const assets = partyWelcomeAssets(props.partyId);
@@ -464,7 +497,7 @@ background: isApp ? BG_APP : "transparent",
           />
         </div>
 
-        <div
+       <div
           style={{
             textAlign: "center",
             width: "min(760px, 92vw)",
@@ -542,11 +575,106 @@ background: isApp ? BG_APP : "transparent",
 >
   <i>“La política no solo se observa; también se analiza, se comprende, se practica y se decide con responsabilidad.”</i>
 </p>
+  <div
+  style={{
+    marginTop: 12,
+    border: `2px solid ${RED_BORDER}`,
+    borderRadius: 14,
+    background: "rgba(255,255,255,.86)",
+    padding: "10px 12px",
+    textAlign: "left",
+    color: TEXT_DARK,
+    fontSize: 12,
+    lineHeight: "18px",
+    fontWeight: 800,
+  }}
+>
+  <div style={{ textAlign: "center", marginBottom: 8 }}>
+    Antes de continuar, revisa y acepta los documentos legales de VOTO CLARO.
+  </div>
 
+  <label
+    style={{
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 8,
+      cursor: "pointer",
+    }}
+  >
+    <input
+      id="vc-legal-accepted"
+      type="checkbox"
+      checked={props.legalAccepted}
+      onChange={(e) => {
+        props.setLegalAccepted(e.target.checked);
+        if (e.target.checked) props.setLegalError("");
+      }}
+      style={{
+        marginTop: 3,
+        width: 16,
+        height: 16,
+        flex: "0 0 auto",
+      }}
+    />
+
+    <span>
+      Declaro que he leído y acepto los{" "}
+      <a
+        href="/terminos"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
+      >
+        Términos y Condiciones
+      </a>
+      , la{" "}
+      <a
+        href="/privacidad"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
+      >
+        Política de Privacidad
+      </a>{" "}
+      y el{" "}
+      <a
+        href="/tratamiento-datos"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
+      >
+        Tratamiento de Datos Personales
+      </a>
+      .
+    </span>
+  </label>
+
+  <div
+    id="vc-legal-error"
+    style={{
+      display: props.legalError ? "block" : "none",
+      marginTop: 8,
+      border: `1px solid ${RED_BORDER}`,
+      borderRadius: 10,
+      background: "#fee2e2",
+      padding: "8px 10px",
+      color: "#991b1b",
+      fontSize: 12,
+      fontWeight: 900,
+      textAlign: "center",
+    }}
+  >
+    {props.legalError ||
+      "Para continuar, primero debes aceptar los documentos legales."}
+  </div>
+</div>
+ 
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
             {/* Botón de instalación UNIVERSAL - SIEMPRE VISIBLE */}
-            <button
-              onClick={props.installApp}
+               <button
+  type="button"
+  onClick={props.installApp}
+  aria-disabled={!props.legalAccepted}
               style={{
                 border: `2px solid ${RED_BORDER}`,
                 background: "#0537A8",
@@ -555,20 +683,22 @@ background: isApp ? BG_APP : "transparent",
                 borderRadius: 12,
                 padding: "12px 18px",
                 fontSize: 14,
-                cursor: "pointer",
+                cursor: props.legalAccepted ? "pointer" : "not-allowed",
+                opacity: props.legalAccepted ? 1 : 0.55,
                 boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 width: "100%",
                 marginBottom: "8px"
               }}
             >
-              📲 Intalar APP en mi celular
+              📲 Instalar APP en mi celular
             </button>
 
             {/* Botones existentes */}
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <button
-                id="federalito-splash-skip"
-                type="button"
+                <button
+  id="federalito-splash-skip"
+  type="button"
+  aria-disabled={!props.legalAccepted}
                 style={{
                   border: `2px solid ${RED_BORDER}`,
                   background: isApp ? BTN_BG_APP : BTN_BG,
@@ -577,7 +707,8 @@ background: isApp ? BG_APP : "transparent",
                   borderRadius: 12,
                   padding: "10px 14px",
                   fontSize: 14,
-                  cursor: "pointer",
+                  cursor: props.legalAccepted ? "pointer" : "not-allowed",
+                  opacity: props.legalAccepted ? 1 : 0.55,
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 }}
               >
@@ -585,8 +716,9 @@ background: isApp ? BG_APP : "transparent",
               </button>
 
               <button
-                id="federalito-splash-continue"
-                type="button"
+  id="federalito-splash-continue"
+  type="button"
+  aria-disabled={!props.legalAccepted}
                 style={{
                   border: `2px solid ${RED_BORDER}`,
                   background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
@@ -595,7 +727,8 @@ background: isApp ? BG_APP : "transparent",
                   borderRadius: 12,
                   padding: "10px 14px",
                   fontSize: 14,
-                  cursor: "pointer",
+                  cursor: props.legalAccepted ? "pointer" : "not-allowed",
+                  opacity: props.legalAccepted ? 1 : 0.55,
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 }}
               >
@@ -605,8 +738,9 @@ background: isApp ? BG_APP : "transparent",
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 1, color: "#0b1220", fontWeight: 700 }}>
-            La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar “Saltar” si no deseas ver la presentación.
-          </div>
+  La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar “Saltar” si no deseas ver la presentación.
+</div>
+
         </div>
       </div>
 
@@ -654,10 +788,53 @@ background: isApp ? BG_APP : "transparent",
     var poster = document.getElementById("federalito-splash-poster");
     var video = document.getElementById("federalito-splash-video");
     var flash = document.getElementById("federalito-splash-flash");
+var legalCheckbox = document.getElementById("vc-legal-accepted");
+var legalError = document.getElementById("vc-legal-error");
 
-    var KEY = "votoclaro_pitch_done_v1";
+var KEY = "votoclaro_pitch_done_v1";
 
-function goHome(){
+function showLegalError(){
+  try{
+    if(legalError){
+      legalError.style.display = "block";
+      legalError.textContent = "Para continuar, primero debes aceptar los documentos legales.";
+    }
+  }catch(e){}
+}
+
+function hasAcceptedLegal(){
+  try{
+    return !!legalCheckbox && legalCheckbox.checked === true;
+  }catch(e){
+    return false;
+  }
+}
+
+function saveLegalAcceptance(){
+  try{
+    document.cookie = "vc_legal_accepted=true; path=/; max-age=31536000; samesite=lax";
+    localStorage.setItem("vc_legal_accepted", "true");
+  }catch(e){}
+}
+
+try{
+  if(legalCheckbox){
+    legalCheckbox.addEventListener("change", function(){
+      if(legalCheckbox.checked && legalError){
+        legalError.style.display = "none";
+      }
+    });
+  }
+}catch(e){}
+
+  function goHome(){
+  if(!hasAcceptedLegal()){
+    showLegalError();
+    return;
+  }
+
+  saveLegalAcceptance();
+
   try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
   try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
 
@@ -717,17 +894,15 @@ function goHome(){
 
     show();
 
-    if(skip) skip.addEventListener("click", function(){
-      hide(true);
-      goHome();
-    });
+      if(skip) skip.addEventListener("click", function(){
+  goHome();
+});
 
-    window.addEventListener("keydown", function(ev){
-      if(ev.key === "Escape"){
-        hide(true);
-        goHome();
-      }
-    });
+window.addEventListener("keydown", function(ev){
+  if(ev.key === "Escape"){
+    goHome();
+  }
+});
 
     async function playVideoAudioThenGoHome(){
       try{
@@ -788,8 +963,13 @@ function goHome(){
     }
 
     if(cont) cont.addEventListener("click", function(){
-      playVideoAudioThenGoHome();
-    });
+  if(!hasAcceptedLegal()){
+    showLegalError();
+    return;
+  }
+
+  playVideoAudioThenGoHome();
+});
 
   }catch(e){}
 })();`,

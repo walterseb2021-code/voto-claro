@@ -2293,7 +2293,7 @@ const suggestedPrompts =
                 placeholder="Ej: GRUPOA"
               />
               <div className="mt-1 text-xs text-slate-600">
-                Si vienes desde un pitch, esto se llena automáticamente.
+                Casilla con tu alias.Esto se llena automáticamente.
               </div>
             </div>
 
