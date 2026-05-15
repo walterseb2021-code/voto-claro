@@ -163,16 +163,7 @@ export default async function TratamientoDatosPage({
             Privacidad y en los Términos y Condiciones de VOTO CLARO.
           </p>
 
-          <div className="rounded-2xl border-2 border-red-600 bg-green-50/70 p-4">
-            <p>
-              Este consentimiento es una base general para el uso de la plataforma.
-              Si VOTO CLARO implementa campañas, afiliación partidaria formal,
-              procesos electorales, bases de datos masivas o comunicaciones
-              políticas segmentadas, se recomienda revisión legal específica antes
-              de su uso público definitivo.
-            </p>
-          </div>
-        </section>
+          s</section>
 
         <div className="mt-8 flex flex-wrap gap-3">
           <a

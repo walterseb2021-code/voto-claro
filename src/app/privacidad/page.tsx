@@ -166,15 +166,7 @@ export default async function PrivacidadPage({
             vigente será la publicada en esta página.
           </p>
 
-          <div className="rounded-2xl border-2 border-red-600 bg-green-50/70 p-4">
-            <p>
-              Nota: esta política funciona como base operativa de privacidad para
-              la plataforma. Para uso partidario formal, campaña electoral o manejo
-              masivo de datos personales, conviene que un abogado peruano revise la
-              versión final antes de su publicación definitiva.
-            </p>
-          </div>
-        </section>
+          </section>
 
         <div className="mt-8 flex flex-wrap gap-3">
           <a
