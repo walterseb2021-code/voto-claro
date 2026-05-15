@@ -3,7 +3,16 @@ export const metadata = {
   description: "Política de privacidad y protección de datos personales de VOTO CLARO.",
 };
 
-export default function PrivacidadPage() {
+export default async function PrivacidadPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ returnTo?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
+  const rawReturnTo = params.returnTo || "/pitch";
+  const returnTo = rawReturnTo.startsWith("/pitch") ? rawReturnTo : "/pitch";
+  const encodedReturnTo = encodeURIComponent(returnTo);
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="mx-auto max-w-4xl rounded-2xl border-2 border-red-600 bg-white/90 p-6 shadow-sm">
@@ -169,21 +178,21 @@ export default function PrivacidadPage() {
 
         <div className="mt-8 flex flex-wrap gap-3">
           <a
-            href="/"
+            href={returnTo}
             className="inline-flex rounded-xl border-2 border-red-600 bg-green-800 px-4 py-2 text-sm font-extrabold text-white hover:bg-green-900"
           >
             ← Volver a VOTO CLARO
           </a>
 
           <a
-            href="/terminos"
+            href={`/terminos?returnTo=${encodedReturnTo}`}
             className="inline-flex rounded-xl border-2 border-red-600 bg-white px-4 py-2 text-sm font-extrabold text-slate-900 hover:bg-green-50"
           >
             Ver Términos y Condiciones
           </a>
 
           <a
-            href="/tratamiento-datos"
+            href={`/tratamiento-datos?returnTo=${encodedReturnTo}`}
             className="inline-flex rounded-xl border-2 border-red-600 bg-white px-4 py-2 text-sm font-extrabold text-slate-900 hover:bg-green-50"
           >
             Ver Tratamiento de Datos

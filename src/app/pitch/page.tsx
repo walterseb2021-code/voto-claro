@@ -76,6 +76,12 @@ async function installAppWithLegal() {
 
         const url = new URL(window.location.href);
         const token = (url.searchParams.get("t") ?? "").trim();
+         const welcomeReturnUrl = window.location.pathname + window.location.search;
+localStorage.setItem("vc_welcome_return_url", welcomeReturnUrl);
+document.cookie =
+  "vc_welcome_return_url=" +
+  encodeURIComponent(welcomeReturnUrl) +
+  "; path=/; max-age=31536000; SameSite=Lax";
 
         // ✅ Definir partido activo según token (reactivo + persistido)
         // GRUPOB y GRUPOC apuntan a Alianza por el Progreso (app)
@@ -620,7 +626,7 @@ background: isApp ? BG_APP : "transparent",
     <span>
       Declaro que he leído y acepto los{" "}
       <a
-        href="/terminos"
+        href={`/terminos?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/pitch")}`}
         target="_blank"
         rel="noopener noreferrer"
         style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
@@ -629,7 +635,7 @@ background: isApp ? BG_APP : "transparent",
       </a>
       , la{" "}
       <a
-        href="/privacidad"
+        href={`/privacidad?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/pitch")}`}
         target="_blank"
         rel="noopener noreferrer"
         style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
@@ -638,7 +644,7 @@ background: isApp ? BG_APP : "transparent",
       </a>{" "}
       y el{" "}
       <a
-        href="/tratamiento-datos"
+        href={`/tratamiento-datos?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/pitch")}`}
         target="_blank"
         rel="noopener noreferrer"
         style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
