@@ -462,12 +462,11 @@ background: isApp ? BG_APP : "transparent",
           />
 
           <video
-            id="federalito-splash-video"
-            src={assets.welcomeVideoSrc}
-            muted
-            playsInline
-            loop={false}
-            preload="metadata"
+  id="federalito-splash-video"
+  src={assets.welcomeVideoSrc}
+  playsInline
+  loop={false}
+  preload="metadata"
             style={{
               position: "absolute",
               inset: 0,
@@ -913,7 +912,52 @@ window.addEventListener("keydown", function(ev){
     goHome();
   }
 });
-    async function playVideoAudioThenGoHome(){
+    function narrateWelcomeThenGoHome(){
+  try{
+    if(window.speechSynthesis){
+      try{ window.speechSynthesis.cancel(); }catch(e){}
+
+      var text =
+        "Bienvenido a Voto Claro. Soy César Acuña Peralta y te invito a este espacio orientado a la información, la reflexión y la participación ciudadana. " +
+        "Aquí podrás explorar candidatos, propuestas, trayectorias, debates públicos y diversas formas de involucrarte en la vida política. " +
+        "La política no solo se observa; también se analiza, se comprende, se practica y se decide con responsabilidad.";
+
+      var utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "es-PE";
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      utterance.onend = function(){
+        hide(false);
+        goHome();
+      };
+
+      utterance.onerror = function(){
+        hide(false);
+        goHome();
+      };
+
+      window.speechSynthesis.speak(utterance);
+
+      setTimeout(function(){
+        try{
+          if(!window.speechSynthesis.speaking){
+            hide(false);
+            goHome();
+          }
+        }catch(e){}
+      }, 12000);
+
+      return;
+    }
+  }catch(e){}
+
+  hide(false);
+  goHome();
+}
+
+async function playVideoAudioThenGoHome(){
   try{
     if(!hasAcceptedLegal()){
       showLegalError();
@@ -923,11 +967,11 @@ window.addEventListener("keydown", function(ev){
     saveLegalAcceptance();
 
     if(!video){
-      alert("No se pudo cargar el video de bienvenida. Puedes usar el botón Saltar para continuar.");
+      narrateWelcomeThenGoHome();
       return;
     }
 
-         try{ video.pause(); }catch(e){}
+    try{ video.pause(); }catch(e){}
     try{ video.currentTime = 0; }catch(e){}
 
     try{ video.removeAttribute("muted"); }catch(e){}
@@ -974,23 +1018,22 @@ window.addEventListener("keydown", function(ev){
       if(playPromise && typeof playPromise.then === "function"){
         playPromise.catch(function(){
           try{
-            if(poster) poster.style.opacity = "1";
-            if(video) {
+            if(video){
               video.pause();
               video.currentTime = 0;
-              video.opacity = "0";
               video.muted = true;
             }
+            if(poster) poster.style.opacity = "1";
           }catch(e){}
 
-           alert("El navegador bloqueó el audio de la bienvenida. Toca otra vez Entrar a VOTO CLARO. Si vuelve a bloquearse, usa Saltar para continuar.");
+          narrateWelcomeThenGoHome();
         });
       }
     }catch(e){
-            alert("No se pudo reproducir la bienvenida. Toca otra vez Entrar a VOTO CLARO. Si vuelve a bloquearse, usa Saltar para continuar.");
+      narrateWelcomeThenGoHome();
     }
   }catch(e){
-    alert("No se pudo reproducir la bienvenida. Toca nuevamente Entrar a VOTO CLARO o usa Saltar para continuar.");
+    narrateWelcomeThenGoHome();
   }
 }
 
