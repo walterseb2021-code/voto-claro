@@ -927,12 +927,15 @@ window.addEventListener("keydown", function(ev){
       return;
     }
 
-    try{ video.pause(); }catch(e){}
+         try{ video.pause(); }catch(e){}
     try{ video.currentTime = 0; }catch(e){}
 
-    video.muted = false;
-    video.volume = 1;
-    video.loop = false;
+    try{ video.removeAttribute("muted"); }catch(e){}
+    try{ video.defaultMuted = false; }catch(e){}
+    try{ video.muted = false; }catch(e){}
+    try{ video.volume = 1; }catch(e){}
+    try{ video.loop = false; }catch(e){}
+    try{ video.setAttribute("playsinline", ""); }catch(e){}
 
     try{
       void video.offsetHeight;
@@ -980,11 +983,11 @@ window.addEventListener("keydown", function(ev){
             }
           }catch(e){}
 
-          alert("El navegador no permitió reproducir automáticamente la bienvenida. Toca nuevamente Entrar a VOTO CLARO o usa Saltar para continuar.");
+           alert("El navegador bloqueó el audio de la bienvenida. Toca otra vez Entrar a VOTO CLARO. Si vuelve a bloquearse, usa Saltar para continuar.");
         });
       }
     }catch(e){
-      alert("No se pudo reproducir la bienvenida. Toca nuevamente Entrar a VOTO CLARO o usa Saltar para continuar.");
+            alert("No se pudo reproducir la bienvenida. Toca otra vez Entrar a VOTO CLARO. Si vuelve a bloquearse, usa Saltar para continuar.");
     }
   }catch(e){
     alert("No se pudo reproducir la bienvenida. Toca nuevamente Entrar a VOTO CLARO o usa Saltar para continuar.");
