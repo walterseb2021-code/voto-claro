@@ -3,7 +3,6 @@
 
 export const dynamic = "force-dynamic";
 
-import Script from "next/script";
 import React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { PITCH_DONE_KEY } from "@/lib/adminConfig";
@@ -11,18 +10,14 @@ import { partyWelcomeAssets, setActiveParty } from "@/lib/partyThemeClient";
 
 type AccessState = "CHECKING" | "GRANTED" | "DENIED" | "MISSING_TOKEN";
 
-// 🎨 COLORES
-// ✅ Perú Federal (verde)
 const BG_GREEN = "rgb(83,129,39)";
 const BG_JASPE_SOFT_GREEN =
   "radial-gradient(1200px 800px at 20% 10%, rgba(255,255,140,.07), transparent 45%)," +
   "radial-gradient(900px 700px at 80% 20%, rgba(255,245,120,.06), transparent 50%)," +
   "radial-gradient(1000px 900px at 50% 90%, rgba(255,235,110,.05), transparent 55%)";
 
-// ✅ APP (AZUL REAL del video): RGB(5,55,168) → #0537A8
 const BG_APP = "#0537A8";
 
-// (No se usa en APP ahora, se deja por si luego quieres “jaspe”)
 const BG_JASPE_SOFT_APP =
   "radial-gradient(1200px 800px at 20% 10%, rgba(190,220,255,.10), transparent 45%)," +
   "radial-gradient(900px 700px at 80% 20%, rgba(160,205,255,.08), transparent 50%)," +
@@ -32,40 +27,115 @@ const PANEL_BG = "rgba(255,255,255,.78)";
 const TEXT_DARK = "#0f172a";
 const TITLE_BLACK = "#0b0b0b";
 const RED_BORDER = "#b91c1c";
-const BTN_BG = "#14532d"; // Perú Federal (verde)
-const BTN_BG_2 = "#166534"; // Perú Federal (verde variante)
-
-// ✅ APP (azul) — base y hover
-const BTN_BG_APP = BG_APP; // #0537A8
-const BTN_BG_APP_2 = "#0D3B9A"; // más oscuro
+const BTN_BG = "#14532d";
+const BTN_BG_2 = "#166534";
+const BTN_BG_APP = BG_APP;
+const BTN_BG_APP_2 = "#0D3B9A";
 const BTN_TEXT = "#ffffff";
+
+function saveLegalAcceptance() {
+  if (typeof window === "undefined") return;
+
+  document.cookie =
+    "vc_legal_accepted=true; path=/; max-age=31536000; SameSite=Lax";
+  window.localStorage.setItem("vc_legal_accepted", "true");
+}
+
+function savePartyContext(party: "perufederal" | "app") {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem("votoclaro_active_party_v1", party);
+    window.sessionStorage.setItem("active_party", party);
+    window.sessionStorage.setItem("party", party);
+    window.sessionStorage.setItem("votoclaro_party", party);
+
+    window.localStorage.setItem("votoclaro_active_party_v1", party);
+    window.localStorage.setItem("active_party", party);
+    window.localStorage.setItem("party", party);
+    window.localStorage.setItem("votoclaro_party", party);
+
+    document.cookie =
+      "votoclaro_party=" +
+      encodeURIComponent(party) +
+      "; path=/; max-age=31536000; SameSite=Lax";
+  } catch {}
+}
 
 export default function PitchPage() {
   const [access, setAccess] = React.useState<AccessState>("CHECKING");
-  const [party, setParty] = React.useState<"perufederal" | "app">("perufederal");
-  
-  // 🔹 Estado para la instalación PWA
+  const [party, setParty] = React.useState<"perufederal" | "app">(
+    "perufederal"
+  );
+
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
   const [isInstallable, setIsInstallable] = React.useState(false);
   const [legalAccepted, setLegalAccepted] = React.useState(false);
-const [legalError, setLegalError] = React.useState("");
+  const [legalError, setLegalError] = React.useState("");
 
-function saveLegalAcceptance() {
-  document.cookie = "vc_legal_accepted=true; path=/; max-age=31536000; SameSite=Lax";
-  localStorage.setItem("vc_legal_accepted", "true");
-}
+  async function installApp() {
+    console.log("Botón Instalar App clickeado");
 
-async function installAppWithLegal() {
-  if (!legalAccepted) {
-    setLegalError(
-      "Para instalar o continuar, primero debes aceptar los documentos legales."
-    );
-    return;
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(
+          `Usuario ${outcome === "accepted" ? "instaló" : "canceló"} la app`
+        );
+        setDeferredPrompt(null);
+        setIsInstallable(false);
+        if (outcome === "accepted") return;
+      } catch (e) {
+        console.log("Error con deferredPrompt, usando fallback", e);
+      }
+    }
+
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+    if (isStandalone) {
+      alert("La app ya está instalada en tu dispositivo.");
+      return;
+    }
+
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isAndroid = /Android/.test(ua);
+
+    let message = "";
+
+    if (isIOS) {
+      message =
+        "📱 Para instalar en iPhone/iPad:\n\n" +
+        '1. Toca el icono "Compartir" (cuadrado con flecha hacia arriba)\n' +
+        "2. Desplázate hacia abajo\n" +
+        '3. Toca "Agregar a pantalla de inicio"\n' +
+        '4. Confirma tocando "Agregar"';
+    } else if (isAndroid) {
+      message =
+        "📱 Para instalar en Android:\n\n" +
+        "1. Toca los 3 puntos (menú) en la esquina superior derecha\n" +
+        '2. Busca y toca "Instalar aplicación"\n' +
+        "3. Confirma la instalación";
+    } else {
+      message =
+        "💻 Para instalar en computadora:\n\n" +
+        "Busca el icono de instalación (+) en la barra de direcciones";
+    }
+
+    alert(message);
   }
 
-  saveLegalAcceptance();
-  await installApp();
-}
+  async function installAppWithLegal() {
+    if (!legalAccepted) {
+      setLegalError(
+        "Para instalar o continuar, primero debes aceptar los documentos legales."
+      );
+      return;
+    }
+
+    saveLegalAcceptance();
+    await installApp();
+  }
 
   React.useEffect(() => {
     let alive = true;
@@ -76,26 +146,29 @@ async function installAppWithLegal() {
 
         const url = new URL(window.location.href);
         const token = (url.searchParams.get("t") ?? "").trim();
-         const welcomeReturnUrl = window.location.pathname + window.location.search;
-localStorage.setItem("vc_welcome_return_url", welcomeReturnUrl);
-document.cookie =
-  "vc_welcome_return_url=" +
-  encodeURIComponent(welcomeReturnUrl) +
-  "; path=/; max-age=31536000; SameSite=Lax";
 
-        // ✅ Definir partido activo según token (reactivo + persistido)
-        // GRUPOB y GRUPOC apuntan a Alianza por el Progreso (app)
-        const nextParty = (token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")) ? "app" : "perufederal";
+        const welcomeReturnUrl =
+          window.location.pathname + window.location.search;
+
+        localStorage.setItem("vc_welcome_return_url", welcomeReturnUrl);
+        document.cookie =
+          "vc_welcome_return_url=" +
+          encodeURIComponent(welcomeReturnUrl) +
+          "; path=/; max-age=31536000; SameSite=Lax";
+
+        const nextParty =
+          token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")
+            ? "app"
+            : "perufederal";
+
         setParty(nextParty);
         setActiveParty(nextParty);
 
-        // ✅ Requiere token en la URL
         if (!token) {
           if (alive) setAccess("MISSING_TOKEN");
           return;
         }
 
-        // ✅ Validar token en Supabase (solo si está activo)
         const { data, error } = await supabase
           .from("votoclaro_public_links")
           .select("id")
@@ -118,7 +191,6 @@ document.cookie =
 
         if (ok) {
           try {
-            // 🔐 activar gate server-side (cookie HttpOnly)
             const res = await fetch("/api/gate/pitch", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -132,7 +204,6 @@ document.cookie =
               return;
             }
 
-            // ✅ Mantener sessionStorage (UX)
             sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
             sessionStorage.setItem("votoclaro_pitch_token_v1", token);
             sessionStorage.setItem(PITCH_DONE_KEY, "1");
@@ -151,18 +222,19 @@ document.cookie =
     }
 
     checkAccess();
+
     return () => {
       alive = false;
     };
   }, []);
 
-  // 🔹 Detectar si la app es instalable (PWA)
   React.useEffect(() => {
     let isMounted = true;
-    
+
     const handleBeforeInstallPrompt = (e: any) => {
       console.log("📲 Evento beforeinstallprompt CAPTURADO");
       e.preventDefault();
+
       if (isMounted) {
         setDeferredPrompt(e);
         setIsInstallable(true);
@@ -170,85 +242,40 @@ document.cookie =
     };
 
     const checkIfInstalled = () => {
-      if (window.matchMedia('(display-mode: standalone)').matches) {
+      if (window.matchMedia("(display-mode: standalone)").matches) {
         console.log("📱 App ya está instalada");
         if (isMounted) setIsInstallable(false);
       }
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     checkIfInstalled();
 
     const timeoutId = setTimeout(() => {
       if (isMounted && !deferredPrompt) {
         console.log("🔍 Re-verificando instalabilidad...");
-        window.dispatchEvent(new Event('beforeinstallprompt'));
+        window.dispatchEvent(new Event("beforeinstallprompt"));
       }
     }, 2000);
 
     return () => {
       isMounted = false;
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
       clearTimeout(timeoutId);
     };
   }, [deferredPrompt]);
-
-  // 🔹 FUNCIÓN DE INSTALACIÓN UNIVERSAL (MODIFICADA)
-  const installApp = async () => {
-    console.log("Botón Instalar App clickeado");
-
-    // Opción 1: Usar el evento guardado (si existe)
-    if (deferredPrompt) {
-      try {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`Usuario ${outcome === 'accepted' ? 'instaló' : 'canceló'} la app`);
-        setDeferredPrompt(null);
-        setIsInstallable(false);
-        if (outcome === 'accepted') return;
-      } catch (e) {
-        console.log("Error con deferredPrompt, usando fallback", e);
-      }
-    }
-
-    // Opción 2: Detectar si ya está instalada
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone) {
-      alert('La app ya está instalada en tu dispositivo.');
-      return;
-    }
-
-    // Opción 3: Instrucciones manuales según dispositivo
-    const ua = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(ua);
-    const isAndroid = /Android/.test(ua);
-
-    let message = '';
-    
-    if (isIOS) {
-      message = '📱 Para instalar en iPhone/iPad:\n\n' +
-                '1. Toca el icono "Compartir" (cuadrado con flecha hacia arriba)\n' +
-                '2. Desplázate hacia abajo\n' +
-                '3. Toca "Agregar a pantalla de inicio"\n' +
-                '4. Confirma tocando "Agregar"';
-    } else if (isAndroid) {
-      message = '📱 Para instalar en Android:\n\n' +
-                '1. Toca los 3 puntos (menú) en la esquina superior derecha\n' +
-                '2. Busca y toca "Instalar aplicación"\n' +
-                '3. Confirma la instalación';
-    } else {
-      message = '💻 Para instalar en computadora:\n\n' +
-                'Busca el icono de instalación (+) en la barra de direcciones';
-    }
-
-    alert(message);
-  };
 
   if (access === "CHECKING") {
     return (
       <main
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: party === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
+        style={{
+          background: party === "app" ? BG_APP : BG_GREEN,
+          color: TEXT_DARK,
+        }}
       >
         <div
           className="max-w-md w-full text-center rounded-2xl"
@@ -269,7 +296,11 @@ document.cookie =
           >
             VOTO_CLARO
           </div>
-          <div className="mt-2 text-sm" style={{ color: TEXT_DARK, fontWeight: 700 }}>
+
+          <div
+            className="mt-2 text-sm"
+            style={{ color: TEXT_DARK, fontWeight: 700 }}
+          >
             Validando acceso…
           </div>
         </div>
@@ -281,7 +312,10 @@ document.cookie =
     return (
       <main
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: party === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
+        style={{
+          background: party === "app" ? BG_APP : BG_GREEN,
+          color: TEXT_DARK,
+        }}
       >
         <div
           className="max-w-md w-full text-center rounded-2xl"
@@ -303,7 +337,10 @@ document.cookie =
             Acceso bloqueado
           </div>
 
-          <p className="mt-3 text-sm leading-relaxed" style={{ color: TEXT_DARK, fontWeight: 700 }}>
+          <p
+            className="mt-3 text-sm leading-relaxed"
+            style={{ color: TEXT_DARK, fontWeight: 700 }}
+          >
             Debes ingresar con un enlace válido que incluya un token.
             <br />
             Ejemplo: <b>/pitch?t=GRUPOA-2026-01</b>
@@ -317,7 +354,10 @@ document.cookie =
     return (
       <main
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: party === "app" ? BG_APP : BG_GREEN, color: TEXT_DARK }}
+        style={{
+          background: party === "app" ? BG_APP : BG_GREEN,
+          color: TEXT_DARK,
+        }}
       >
         <div
           className="max-w-md w-full text-center rounded-2xl"
@@ -339,7 +379,10 @@ document.cookie =
             Acceso no autorizado
           </div>
 
-          <p className="mt-3 text-sm leading-relaxed" style={{ color: TEXT_DARK, fontWeight: 700 }}>
+          <p
+            className="mt-3 text-sm leading-relaxed"
+            style={{ color: TEXT_DARK, fontWeight: 700 }}
+          >
             Este enlace de prueba fue desactivado o no es válido.
             <br />
             Solicita un nuevo enlace al administrador.
@@ -364,19 +407,19 @@ document.cookie =
   }
 
   return (
-  <FederalitoSplash
-    partyId={party}
-    isInstallable={isInstallable}
-    installApp={installAppWithLegal}
-    legalAccepted={legalAccepted}
-    setLegalAccepted={setLegalAccepted}
-    legalError={legalError}
-    setLegalError={setLegalError}
-  />
-);
+    <FederalitoSplash
+      partyId={party}
+      isInstallable={isInstallable}
+      installApp={installAppWithLegal}
+      legalAccepted={legalAccepted}
+      setLegalAccepted={setLegalAccepted}
+      legalError={legalError}
+      setLegalError={setLegalError}
+    />
+  );
 }
 
-  function FederalitoSplash(props: {
+function FederalitoSplash(props: {
   partyId: "perufederal" | "app";
   isInstallable: boolean;
   installApp: () => Promise<void>;
@@ -388,13 +431,187 @@ document.cookie =
   const isApp = props.partyId === "app";
   const assets = partyWelcomeAssets(props.partyId);
 
+  const posterRef = React.useRef<HTMLImageElement | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const flashRef = React.useRef<HTMLDivElement | null>(null);
+
+  function resetVisual() {
+    const poster = posterRef.current;
+    const video = videoRef.current;
+    const flash = flashRef.current;
+
+    try {
+      if (poster) {
+        poster.style.opacity = "1";
+        poster.style.display = "block";
+        poster.style.pointerEvents = "none";
+      }
+    } catch {}
+
+    try {
+      if (video) {
+        video.pause();
+        video.currentTime = 0;
+        video.style.opacity = "0";
+        video.style.display = "block";
+        video.muted = true;
+      }
+    } catch {}
+
+    try {
+      if (flash) {
+        flash.style.opacity = "0";
+      }
+    } catch {}
+  }
+
+  function goHome() {
+    if (!props.legalAccepted) {
+      props.setLegalError(
+        "Para continuar, primero debes aceptar los documentos legales."
+      );
+      return;
+    }
+
+    saveLegalAcceptance();
+
+    try {
+      sessionStorage.setItem(PITCH_DONE_KEY, "1");
+      sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
+      sessionStorage.setItem("votoclaro_user_interacted_v1", "1");
+    } catch {}
+
+    savePartyContext(props.partyId);
+
+    const qp = props.partyId ? `&party=${encodeURIComponent(props.partyId)}` : "";
+
+    try {
+      window.location.assign(`/?fromPitch=1${qp}`);
+    } catch {
+      window.location.href = `/?fromPitch=1${qp}`;
+    }
+  }
+
+  async function playVideoAudioThenGoHome() {
+    if (!props.legalAccepted) {
+      props.setLegalError(
+        "Para continuar, primero debes aceptar los documentos legales."
+      );
+      return;
+    }
+
+    props.setLegalError("");
+    saveLegalAcceptance();
+
+    const poster = posterRef.current;
+    const video = videoRef.current;
+    const flash = flashRef.current;
+
+    if (!video) return;
+
+    try {
+      video.pause();
+      video.currentTime = 0;
+      video.loop = false;
+      video.controls = false;
+      video.setAttribute("playsinline", "");
+    } catch {}
+
+    try {
+      video.onended = function () {
+        setTimeout(() => {
+          goHome();
+        }, 250);
+      };
+    } catch {}
+
+    try {
+      video.muted = false;
+      video.volume = 1;
+
+      const playPromise = video.play();
+
+      if (playPromise && typeof playPromise.then === "function") {
+        await playPromise;
+      }
+    } catch {
+      try {
+        video.pause();
+        video.currentTime = 0;
+        video.muted = true;
+
+        const mutedPromise = video.play();
+
+        if (mutedPromise && typeof mutedPromise.then === "function") {
+          await mutedPromise;
+        }
+
+        setTimeout(() => {
+          try {
+            video.muted = false;
+            video.volume = 1;
+          } catch {}
+        }, 120);
+      } catch {
+        resetVisual();
+        props.setLegalError(
+          "No se pudo iniciar el video. Toca nuevamente Entrar a VOTO CLARO."
+        );
+        return;
+      }
+    }
+
+    try {
+      void video.offsetHeight;
+      if (poster) void poster.offsetHeight;
+    } catch {}
+
+    try {
+      if (!isApp && flash) {
+        flash.style.opacity = "0.22";
+        setTimeout(() => {
+          try {
+            flash.style.opacity = "0";
+          } catch {}
+        }, 120);
+      }
+    } catch {}
+
+    requestAnimationFrame(() => {
+      try {
+        if (poster) poster.style.opacity = "0";
+      } catch {}
+
+      try {
+        video.style.opacity = "1";
+      } catch {}
+    });
+  }
+
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    resetVisual();
+
     return () => {
       document.body.style.overflow = prev;
+
+      try {
+        const video = videoRef.current;
+        if (video) {
+          video.pause();
+          video.currentTime = 0;
+          video.muted = true;
+        }
+      } catch {}
     };
   }, []);
+
+  const welcomeReturn =
+    typeof window !== "undefined"
+      ? window.location.pathname + window.location.search
+      : "/pitch";
 
   return (
     <div
@@ -439,6 +656,7 @@ document.cookie =
           }}
         >
           <img
+            ref={posterRef}
             id="federalito-splash-poster"
             src={assets.avatarSrc}
             alt="Federalito AI"
@@ -450,10 +668,10 @@ document.cookie =
               width: "100%",
               height: "100%",
               objectFit: isApp ? "cover" : "contain",
-objectPosition: isApp ? "50% 35%" : "50% 50%",
-transform: "none",
-transformOrigin: "center",
-background: isApp ? BG_APP : "transparent",
+              objectPosition: isApp ? "50% 35%" : "50% 50%",
+              transform: "none",
+              transformOrigin: "center",
+              background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 1,
               transition: "opacity 420ms ease",
@@ -462,22 +680,23 @@ background: isApp ? BG_APP : "transparent",
           />
 
           <video
-  id="federalito-splash-video"
-  src={assets.welcomeVideoSrc}
-  muted
-  playsInline
-  loop={false}
-  preload="metadata"
+            ref={videoRef}
+            id="federalito-splash-video"
+            src={assets.welcomeVideoSrc}
+            muted
+            playsInline
+            loop={false}
+            preload="auto"
             style={{
               position: "absolute",
               inset: 0,
               width: "100%",
               height: "100%",
-               objectFit: isApp ? "cover" : "contain",
-objectPosition: "50% 50%",
-transform: "none",
-transformOrigin: "center",
-background: isApp ? BG_APP : "transparent",
+              objectFit: isApp ? "cover" : "contain",
+              objectPosition: "50% 50%",
+              transform: "none",
+              transformOrigin: "center",
+              background: isApp ? BG_APP : "transparent",
               display: "block",
               opacity: 0,
               transition: "opacity 420ms ease",
@@ -487,6 +706,7 @@ background: isApp ? BG_APP : "transparent",
           />
 
           <div
+            ref={flashRef}
             id="federalito-splash-flash"
             style={{
               position: "absolute",
@@ -503,7 +723,7 @@ background: isApp ? BG_APP : "transparent",
           />
         </div>
 
-       <div
+        <div
           style={{
             textAlign: "center",
             width: "min(760px, 92vw)",
@@ -534,7 +754,9 @@ background: isApp ? BG_APP : "transparent",
             }}
           >
             <span style={{ fontWeight: 900 }}>Asistente AI</span>
-            <span style={{ opacity: 0.85, fontWeight: 800 }}>{" - Guía de Voto Informado"}</span>
+            <span style={{ opacity: 0.85, fontWeight: 800 }}>
+              {" - Guía de Voto Informado"}
+            </span>
           </div>
 
           <h1
@@ -552,135 +774,164 @@ background: isApp ? BG_APP : "transparent",
             VOTO_CLARO
           </h1>
 
-            <p
-  style={{
-    marginTop: 12,
-    fontSize: 15,
-    lineHeight: "22px",
-    opacity: 1,
-    color: TEXT_DARK,
-    fontWeight: 700,
-  }}
->
-  Bienvenido a <b>Voto Claro</b>.
-  <br />
-  Soy <b>César Acuña Peralta</b> y te invito a este espacio orientado a la información, la reflexión y la participación ciudadana.
-  <br />
-  Aquí podrás explorar candidatos, propuestas, trayectorias, debates públicos y diversas formas de involucrarte en la vida política.
-</p>
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 15,
+              lineHeight: "22px",
+              opacity: 1,
+              color: TEXT_DARK,
+              fontWeight: 700,
+            }}
+          >
+            Bienvenido a <b>Voto Claro</b>.
+            <br />
+            Soy <b>César Acuña Peralta</b> y te invito a este espacio orientado a
+            la información, la reflexión y la participación ciudadana.
+            <br />
+            Aquí podrás explorar candidatos, propuestas, trayectorias, debates
+            públicos y diversas formas de involucrarte en la vida política.
+          </p>
 
-            <p
-  style={{
-    marginTop: 10,
-    fontSize: 15,
-    lineHeight: "22px",
-    opacity: 1,
-    color: TEXT_DARK,
-    fontWeight: 800,
-  }}
->
-  <i>“La política no solo se observa; también se analiza, se comprende, se practica y se decide con responsabilidad.”</i>
-</p>
-  <div
-  style={{
-    marginTop: 12,
-    border: `2px solid ${RED_BORDER}`,
-    borderRadius: 14,
-    background: "rgba(255,255,255,.86)",
-    padding: "10px 12px",
-    textAlign: "left",
-    color: TEXT_DARK,
-    fontSize: 12,
-    lineHeight: "18px",
-    fontWeight: 800,
-  }}
->
-  <div style={{ textAlign: "center", marginBottom: 8 }}>
-    Antes de continuar, revisa y acepta los documentos legales de VOTO CLARO.
-  </div>
+          <p
+            style={{
+              marginTop: 10,
+              fontSize: 15,
+              lineHeight: "22px",
+              opacity: 1,
+              color: TEXT_DARK,
+              fontWeight: 800,
+            }}
+          >
+            <i>
+              “La política no solo se observa; también se analiza, se comprende,
+              se practica y se decide con responsabilidad.”
+            </i>
+          </p>
 
-  <label
-    style={{
-      display: "flex",
-      alignItems: "flex-start",
-      gap: 8,
-      cursor: "pointer",
-    }}
-  >
-    <input
-      id="vc-legal-accepted"
-      type="checkbox"
-      checked={props.legalAccepted}
-      onChange={(e) => {
-        props.setLegalAccepted(e.target.checked);
-        if (e.target.checked) props.setLegalError("");
-      }}
-      style={{
-        marginTop: 3,
-        width: 16,
-        height: 16,
-        flex: "0 0 auto",
-      }}
-    />
+          <div
+            style={{
+              marginTop: 12,
+              border: `2px solid ${RED_BORDER}`,
+              borderRadius: 14,
+              background: "rgba(255,255,255,.86)",
+              padding: "10px 12px",
+              textAlign: "left",
+              color: TEXT_DARK,
+              fontSize: 12,
+              lineHeight: "18px",
+              fontWeight: 800,
+            }}
+          >
+            <div style={{ textAlign: "center", marginBottom: 8 }}>
+              Antes de continuar, revisa y acepta los documentos legales de VOTO
+              CLARO.
+            </div>
 
-    <span>
-      Declaro que he leído y acepto los{" "}
-      <a
-        href={`/terminos?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/pitch")}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
-      >
-        Términos y Condiciones
-      </a>
-      , la{" "}
-      <a
-        href={`/privacidad?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/pitch")}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
-      >
-        Política de Privacidad
-      </a>{" "}
-      y el{" "}
-      <a
-        href={`/tratamiento-datos?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/pitch")}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: "#0D3B9A", textDecoration: "underline", fontWeight: 900 }}
-      >
-        Tratamiento de Datos Personales
-      </a>
-      .
-    </span>
-  </label>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                cursor: "pointer",
+              }}
+            >
+              <input
+                id="vc-legal-accepted"
+                type="checkbox"
+                checked={props.legalAccepted}
+                onChange={(e) => {
+                  props.setLegalAccepted(e.target.checked);
+                  if (e.target.checked) props.setLegalError("");
+                }}
+                style={{
+                  marginTop: 3,
+                  width: 16,
+                  height: 16,
+                  flex: "0 0 auto",
+                }}
+              />
 
-  <div
-    id="vc-legal-error"
-    style={{
-      display: props.legalError ? "block" : "none",
-      marginTop: 8,
-      border: `1px solid ${RED_BORDER}`,
-      borderRadius: 10,
-      background: "#fee2e2",
-      padding: "8px 10px",
-      color: "#991b1b",
-      fontSize: 12,
-      fontWeight: 900,
-      textAlign: "center",
-    }}
-  >
-    {props.legalError ||
-      "Para continuar, primero debes aceptar los documentos legales."}
-  </div>
-</div>
- 
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            {/* Botón de instalación UNIVERSAL - SIEMPRE VISIBLE */}
-               <button
-  type="button"
-  onClick={props.installApp}
-  aria-disabled={!props.legalAccepted}
+              <span>
+                Declaro que he leído y acepto los{" "}
+                <a
+                  href={`/terminos?returnTo=${encodeURIComponent(welcomeReturn)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: "#0D3B9A",
+                    textDecoration: "underline",
+                    fontWeight: 900,
+                  }}
+                >
+                  Términos y Condiciones
+                </a>
+                , la{" "}
+                <a
+                  href={`/privacidad?returnTo=${encodeURIComponent(
+                    welcomeReturn
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: "#0D3B9A",
+                    textDecoration: "underline",
+                    fontWeight: 900,
+                  }}
+                >
+                  Política de Privacidad
+                </a>{" "}
+                y el{" "}
+                <a
+                  href={`/tratamiento-datos?returnTo=${encodeURIComponent(
+                    welcomeReturn
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: "#0D3B9A",
+                    textDecoration: "underline",
+                    fontWeight: 900,
+                  }}
+                >
+                  Tratamiento de Datos Personales
+                </a>
+                .
+              </span>
+            </label>
+
+            <div
+              id="vc-legal-error"
+              style={{
+                display: props.legalError ? "block" : "none",
+                marginTop: 8,
+                border: `1px solid ${RED_BORDER}`,
+                borderRadius: 10,
+                background: "#fee2e2",
+                padding: "8px 10px",
+                color: "#991b1b",
+                fontSize: 12,
+                fontWeight: 900,
+                textAlign: "center",
+              }}
+            >
+              {props.legalError ||
+                "Para continuar, primero debes aceptar los documentos legales."}
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              onClick={props.installApp}
+              aria-disabled={!props.legalAccepted}
               style={{
                 border: `2px solid ${RED_BORDER}`,
                 background: "#0537A8",
@@ -693,18 +944,25 @@ background: isApp ? BG_APP : "transparent",
                 opacity: props.legalAccepted ? 1 : 0.55,
                 boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 width: "100%",
-                marginBottom: "8px"
+                marginBottom: "8px",
               }}
             >
               📲 Instalar APP en mi celular
             </button>
 
-            {/* Botones existentes */}
-            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-                <button
-  id="federalito-splash-skip"
-  type="button"
-  aria-disabled={!props.legalAccepted}
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                id="federalito-splash-skip"
+                type="button"
+                onClick={goHome}
+                aria-disabled={!props.legalAccepted}
                 style={{
                   border: `2px solid ${RED_BORDER}`,
                   background: isApp ? BTN_BG_APP : BTN_BG,
@@ -722,9 +980,10 @@ background: isApp ? BG_APP : "transparent",
               </button>
 
               <button
-  id="federalito-splash-continue"
-  type="button"
-  aria-disabled={!props.legalAccepted}
+                id="federalito-splash-continue"
+                type="button"
+                onClick={playVideoAudioThenGoHome}
+                aria-disabled={!props.legalAccepted}
                 style={{
                   border: `2px solid ${RED_BORDER}`,
                   background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
@@ -743,29 +1002,37 @@ background: isApp ? BG_APP : "transparent",
             </div>
           </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 1, color: "#0b1220", fontWeight: 700 }}>
-  La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar “Saltar” si no deseas ver la presentación.
-</div>
-
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              opacity: 1,
+              color: "#0b1220",
+              fontWeight: 700,
+            }}
+          >
+            La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar
+            “Saltar” si no deseas ver la presentación.
+          </div>
         </div>
       </div>
 
       <style>{`
-          @media (max-width: 640px) {
-  .federalito-anim{
-    width: min(420px, 96vw) !important;
-    aspect-ratio: 4 / 5 !important;
-    max-height: 46vh !important;
-    margin-top: 100px !important;
-    z-index: 0 !important;
-  }
+        @media (max-width: 640px) {
+          .federalito-anim{
+            width: min(420px, 96vw) !important;
+            aspect-ratio: 4 / 5 !important;
+            max-height: 46vh !important;
+            margin-top: 100px !important;
+            z-index: 0 !important;
+          }
 
-  #federalito-splash[data-party="app"] .federalito-anim{
-    width: min(96vw, 760px) !important;
-    aspect-ratio: 16 / 9 !important;
-    max-height: none !important;
-    margin-top: 40px !important;
-  }
+          #federalito-splash[data-party="app"] .federalito-anim{
+            width: min(96vw, 760px) !important;
+            aspect-ratio: 16 / 9 !important;
+            max-height: none !important;
+            margin-top: 40px !important;
+          }
 
           #federalito-splash-poster{
             pointer-events: none !important;
@@ -780,227 +1047,6 @@ background: isApp ? BG_APP : "transparent",
           }
         }
       `}</style>
-
-      <Script
-        id="federalito-splash-script"
-        strategy="afterInteractive"
-        dangerouslySetInnerHTML={{
-          __html: `
-(function(){
-  try{
-    var splash = document.getElementById("federalito-splash");
-    var skip = document.getElementById("federalito-splash-skip");
-    var cont = document.getElementById("federalito-splash-continue");
-    var poster = document.getElementById("federalito-splash-poster");
-    var video = document.getElementById("federalito-splash-video");
-    var flash = document.getElementById("federalito-splash-flash");
-var legalCheckbox = document.getElementById("vc-legal-accepted");
-var legalError = document.getElementById("vc-legal-error");
-
-var KEY = "votoclaro_pitch_done_v1";
-
-function showLegalError(){
-  try{
-    if(legalError){
-      legalError.style.display = "block";
-      legalError.textContent = "Para continuar, primero debes aceptar los documentos legales.";
-    }
-  }catch(e){}
-}
-
-function hasAcceptedLegal(){
-  try{
-    return !!legalCheckbox && legalCheckbox.checked === true;
-  }catch(e){
-    return false;
-  }
-}
-
-function saveLegalAcceptance(){
-  try{
-    document.cookie = "vc_legal_accepted=true; path=/; max-age=31536000; samesite=lax";
-    localStorage.setItem("vc_legal_accepted", "true");
-  }catch(e){}
-}
-
-try{
-  if(legalCheckbox){
-    legalCheckbox.addEventListener("change", function(){
-      if(legalCheckbox.checked && legalError){
-        legalError.style.display = "none";
-      }
-    });
-  }
-}catch(e){}
-
-  function goHome(){
-  if(!hasAcceptedLegal()){
-    showLegalError();
-    return;
-  }
-
-  saveLegalAcceptance();
-
-  try{ sessionStorage.setItem(KEY, "1"); }catch(e){}
-  try{ sessionStorage.setItem("votoclaro_user_interacted_v1","1"); }catch(e){}
-
-  var party = "";
-  try{ party = (splash && splash.dataset && splash.dataset.party) ? splash.dataset.party : ""; }catch(e){}
-
-  try{
-    if(party){
-      sessionStorage.setItem("votoclaro_active_party_v1", party);
-      sessionStorage.setItem("active_party", party);
-      sessionStorage.setItem("party", party);
-      sessionStorage.setItem("votoclaro_party", party);
-
-      localStorage.setItem("votoclaro_active_party_v1", party);
-      localStorage.setItem("active_party", party);
-      localStorage.setItem("party", party);
-      localStorage.setItem("votoclaro_party", party);
-
-      document.cookie = "votoclaro_party=" + encodeURIComponent(party) + "; path=/; max-age=31536000; samesite=lax";
-    }
-  }catch(e){}
-
-  var qp = party ? ("&party=" + encodeURIComponent(party)) : "";
-  try{ window.location.assign("/?fromPitch=1" + qp); }
-  catch(e){ window.location.href = "/?fromPitch=1" + qp; }
-}
-
-    function resetVisual(){
-      try{ if(poster){ poster.style.opacity = "1"; poster.style.display = "block"; poster.style.pointerEvents = "none"; } }catch(e){}
-      try{ if(video){ video.style.opacity = "0"; video.style.display = "block"; video.muted = true; } }catch(e){}
-      try{ if(flash){ flash.style.opacity = "0"; } }catch(e){}
-    }
-
-    function hide(cancelAudio){
-      if(!splash) return;
-      splash.style.display = "none";
-
-      if(cancelAudio){
-        try{
-          if(video && typeof video.pause === "function"){
-            video.pause();
-            video.currentTime = 0;
-            video.muted = true;
-          }
-        }catch(e){}
-        try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
-      }
-
-      resetVisual();
-    }
-
-   function show(){
-  if(!splash) return;
-  splash.style.display = "block";
-  resetVisual();
-}
-
-show();
-
-if(skip) skip.addEventListener("click", function(ev){
-  try{
-    if(ev && typeof ev.preventDefault === "function") ev.preventDefault();
-  }catch(e){}
-
-  goHome();
-});
-
-window.addEventListener("keydown", function(ev){
-  if(ev.key === "Escape"){
-    goHome();
-  }
-});
-    
-   async function playVideoAudioThenGoHome(){
-  try{
-    if(!hasAcceptedLegal()){
-      showLegalError();
-      return;
-    }
-
-    saveLegalAcceptance();
-
-    if(!video){
-      return;
-    }
-
-    try{
-      if(legalError){
-        legalError.style.display = "none";
-        legalError.textContent = "";
-      }
-    }catch(e){}
-
-    try{ video.pause(); }catch(e){}
-    try{ video.currentTime = 0; }catch(e){}
-
-    video.muted = false;
-    video.volume = 1;
-    video.loop = false;
-
-    try{
-      void video.offsetHeight;
-      if(poster) void poster.offsetHeight;
-    }catch(e){}
-
-    try{
-      var isApp = false;
-      try{
-        if(splash && splash.dataset && splash.dataset.party === "app") isApp = true;
-      }catch(e){}
-
-      if(!isApp){
-        if(flash){
-          flash.style.opacity = "0.22";
-          setTimeout(function(){
-            try{ flash.style.opacity = "0"; }catch(e){}
-          }, 120);
-        }
-      }
-    }catch(e){}
-
-    requestAnimationFrame(function(){
-      try{ if(poster) poster.style.opacity = "0"; }catch(e){}
-      try{ if(video) video.style.opacity = "1"; }catch(e){}
-    });
-
-    try{
-      video.onended = function(){
-        setTimeout(function(){
-          hide(false);
-          goHome();
-        }, 250);
-      };
-    }catch(e){}
-
-    var p = video.play();
-
-    if(p && typeof p.then === "function"){
-      p.then(function(){}).catch(function(){
-        try{
-          video.muted = false;
-          video.play();
-        }catch(e){}
-      });
-    }
-  }catch(e){}
-}
-
-    if(cont) cont.addEventListener("click", function(ev){
-  try{
-    if(ev && typeof ev.preventDefault === "function") ev.preventDefault();
-  }catch(e){}
-
-  playVideoAudioThenGoHome();
-});
-
-  }catch(e){}
-})();`,
-        }}
-      />
     </div>
   );
 }
