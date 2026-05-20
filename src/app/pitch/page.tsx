@@ -892,15 +892,19 @@ try{
       resetVisual();
     }
 
-    function show(){
-      if(!splash) return;
-      splash.style.display = "block";
-      resetVisual();
-    }
+   function show(){
+  if(!splash) return;
+  splash.style.display = "block";
+  resetVisual();
+}
 
-    show();
+show();
 
-      if(skip) skip.addEventListener("click", function(){
+if(skip) skip.addEventListener("click", function(ev){
+  try{
+    if(ev && typeof ev.preventDefault === "function") ev.preventDefault();
+  }catch(e){}
+
   goHome();
 });
 
@@ -909,70 +913,88 @@ window.addEventListener("keydown", function(ev){
     goHome();
   }
 });
-
     async function playVideoAudioThenGoHome(){
-      try{
-        if(!video){
-          hide(false);
-          goHome();
-          return;
-        }
-
-        try{ video.pause(); }catch(e){}
-        try{ video.currentTime = 0; }catch(e){}
-        video.muted = false;
-        video.volume = 1;
-
-        try{
-          void video.offsetHeight;
-          if(poster) void poster.offsetHeight;
-        }catch(e){}
-
-        try{
-          var isApp = false;
-          try{
-            if(splash && splash.dataset && splash.dataset.party === "app") isApp = true;
-          }catch(e){}
-          if(!isApp){
-            if(flash){
-              flash.style.opacity = "0.22";
-              setTimeout(function(){ try{ flash.style.opacity = "0"; }catch(e){} }, 120);
-            }
-          }
-        }catch(e){}
-
-        requestAnimationFrame(function(){
-          try{ if(poster) poster.style.opacity = "0"; }catch(e){}
-          try{ if(video) video.style.opacity = "1"; }catch(e){}
-        });
-
-        try{
-          video.onended = function(){
-            setTimeout(function(){
-              hide(false);
-              goHome();
-            }, 250);
-          };
-        }catch(e){}
-
-        var p = video.play();
-        if(p && typeof p.then === "function"){
-          p.then(function(){}).catch(function(){
-            hide(false);
-            goHome();
-          });
-        }
-      }catch(e){
-        hide(false);
-        goHome();
-      }
+  try{
+    if(!hasAcceptedLegal()){
+      showLegalError();
+      return;
     }
 
-    if(cont) cont.addEventListener("click", function(){
-  if(!hasAcceptedLegal()){
-    showLegalError();
-    return;
+    saveLegalAcceptance();
+
+    if(!video){
+      alert("No se pudo cargar el video de bienvenida. Puedes usar el botón Saltar para continuar.");
+      return;
+    }
+
+    try{ video.pause(); }catch(e){}
+    try{ video.currentTime = 0; }catch(e){}
+
+    video.muted = false;
+    video.volume = 1;
+    video.loop = false;
+
+    try{
+      void video.offsetHeight;
+      if(poster) void poster.offsetHeight;
+    }catch(e){}
+
+    try{
+      var isApp = false;
+      try{
+        if(splash && splash.dataset && splash.dataset.party === "app") isApp = true;
+      }catch(e){}
+
+      if(!isApp && flash){
+        flash.style.opacity = "0.22";
+        setTimeout(function(){
+          try{ flash.style.opacity = "0"; }catch(e){}
+        }, 120);
+      }
+    }catch(e){}
+
+    requestAnimationFrame(function(){
+      try{ if(poster) poster.style.opacity = "0"; }catch(e){}
+      try{ if(video) video.style.opacity = "1"; }catch(e){}
+    });
+
+    video.onended = function(){
+      setTimeout(function(){
+        hide(false);
+        goHome();
+      }, 250);
+    };
+
+    try{
+      var playPromise = video.play();
+
+      if(playPromise && typeof playPromise.then === "function"){
+        playPromise.catch(function(){
+          try{
+            if(poster) poster.style.opacity = "1";
+            if(video) {
+              video.pause();
+              video.currentTime = 0;
+              video.opacity = "0";
+              video.muted = true;
+            }
+          }catch(e){}
+
+          alert("El navegador no permitió reproducir automáticamente la bienvenida. Toca nuevamente Entrar a VOTO CLARO o usa Saltar para continuar.");
+        });
+      }
+    }catch(e){
+      alert("No se pudo reproducir la bienvenida. Toca nuevamente Entrar a VOTO CLARO o usa Saltar para continuar.");
+    }
+  }catch(e){
+    alert("No se pudo reproducir la bienvenida. Toca nuevamente Entrar a VOTO CLARO o usa Saltar para continuar.");
   }
+}
+
+    if(cont) cont.addEventListener("click", function(ev){
+  try{
+    if(ev && typeof ev.preventDefault === "function") ev.preventDefault();
+  }catch(e){}
 
   playVideoAudioThenGoHome();
 });
