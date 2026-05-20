@@ -912,52 +912,8 @@ window.addEventListener("keydown", function(ev){
     goHome();
   }
 });
-    function narrateWelcomeThenGoHome(){
-  try{
-    if(window.speechSynthesis){
-      try{ window.speechSynthesis.cancel(); }catch(e){}
-
-      var text =
-        "Bienvenido a Voto Claro. Soy César Acuña Peralta y te invito a este espacio orientado a la información, la reflexión y la participación ciudadana. " +
-        "Aquí podrás explorar candidatos, propuestas, trayectorias, debates públicos y diversas formas de involucrarte en la vida política. " +
-        "La política no solo se observa; también se analiza, se comprende, se practica y se decide con responsabilidad.";
-
-      var utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "es-PE";
-      utterance.rate = 0.95;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-
-      utterance.onend = function(){
-        hide(false);
-        goHome();
-      };
-
-      utterance.onerror = function(){
-        hide(false);
-        goHome();
-      };
-
-      window.speechSynthesis.speak(utterance);
-
-      setTimeout(function(){
-        try{
-          if(!window.speechSynthesis.speaking){
-            hide(false);
-            goHome();
-          }
-        }catch(e){}
-      }, 12000);
-
-      return;
-    }
-  }catch(e){}
-
-  hide(false);
-  goHome();
-}
-
-async function playVideoAudioThenGoHome(){
+    
+  async function playVideoAudioThenGoHome(){
   try{
     if(!hasAcceptedLegal()){
       showLegalError();
@@ -967,9 +923,19 @@ async function playVideoAudioThenGoHome(){
     saveLegalAcceptance();
 
     if(!video){
-      narrateWelcomeThenGoHome();
+      if(legalError){
+        legalError.style.display = "block";
+        legalError.textContent = "No se encontró el video de bienvenida. Usa Saltar para continuar.";
+      }
       return;
     }
+
+    try{
+      if(legalError){
+        legalError.style.display = "none";
+        legalError.textContent = "";
+      }
+    }catch(e){}
 
     try{ video.pause(); }catch(e){}
     try{ video.currentTime = 0; }catch(e){}
@@ -979,6 +945,7 @@ async function playVideoAudioThenGoHome(){
     try{ video.muted = false; }catch(e){}
     try{ video.volume = 1; }catch(e){}
     try{ video.loop = false; }catch(e){}
+    try{ video.controls = false; }catch(e){}
     try{ video.setAttribute("playsinline", ""); }catch(e){}
 
     try{
@@ -1012,28 +979,31 @@ async function playVideoAudioThenGoHome(){
       }, 250);
     };
 
-    try{
-      var playPromise = video.play();
+    var playPromise = video.play();
 
-      if(playPromise && typeof playPromise.then === "function"){
-        playPromise.catch(function(){
-          try{
-            if(video){
-              video.pause();
-              video.currentTime = 0;
-              video.muted = true;
-            }
-            if(poster) poster.style.opacity = "1";
-          }catch(e){}
+    if(playPromise && typeof playPromise.then === "function"){
+      playPromise.catch(function(){
+        try{
+          video.pause();
+          video.currentTime = 0;
+          video.controls = true;
+          video.style.opacity = "1";
+          if(poster) poster.style.opacity = "0";
+        }catch(e){}
 
-          narrateWelcomeThenGoHome();
-        });
-      }
-    }catch(e){
-      narrateWelcomeThenGoHome();
+        if(legalError){
+          legalError.style.display = "block";
+          legalError.textContent =
+            "Chrome bloqueó el inicio automático del audio. Presiona el botón de reproducción del video o usa Saltar para continuar.";
+        }
+      });
     }
   }catch(e){
-    narrateWelcomeThenGoHome();
+    if(legalError){
+      legalError.style.display = "block";
+      legalError.textContent =
+        "No se pudo iniciar el video de bienvenida. Presiona Saltar para continuar.";
+    }
   }
 }
 
