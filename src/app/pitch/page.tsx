@@ -464,6 +464,7 @@ background: isApp ? BG_APP : "transparent",
           <video
   id="federalito-splash-video"
   src={assets.welcomeVideoSrc}
+  muted
   playsInline
   loop={false}
   preload="metadata"
@@ -913,7 +914,7 @@ window.addEventListener("keydown", function(ev){
   }
 });
     
-  async function playVideoAudioThenGoHome(){
+   async function playVideoAudioThenGoHome(){
   try{
     if(!hasAcceptedLegal()){
       showLegalError();
@@ -923,10 +924,6 @@ window.addEventListener("keydown", function(ev){
     saveLegalAcceptance();
 
     if(!video){
-      if(legalError){
-        legalError.style.display = "block";
-        legalError.textContent = "No se encontró el video de bienvenida. Usa Saltar para continuar.";
-      }
       return;
     }
 
@@ -940,13 +937,9 @@ window.addEventListener("keydown", function(ev){
     try{ video.pause(); }catch(e){}
     try{ video.currentTime = 0; }catch(e){}
 
-    try{ video.removeAttribute("muted"); }catch(e){}
-    try{ video.defaultMuted = false; }catch(e){}
-    try{ video.muted = false; }catch(e){}
-    try{ video.volume = 1; }catch(e){}
-    try{ video.loop = false; }catch(e){}
-    try{ video.controls = false; }catch(e){}
-    try{ video.setAttribute("playsinline", ""); }catch(e){}
+    video.muted = false;
+    video.volume = 1;
+    video.loop = false;
 
     try{
       void video.offsetHeight;
@@ -959,11 +952,13 @@ window.addEventListener("keydown", function(ev){
         if(splash && splash.dataset && splash.dataset.party === "app") isApp = true;
       }catch(e){}
 
-      if(!isApp && flash){
-        flash.style.opacity = "0.22";
-        setTimeout(function(){
-          try{ flash.style.opacity = "0"; }catch(e){}
-        }, 120);
+      if(!isApp){
+        if(flash){
+          flash.style.opacity = "0.22";
+          setTimeout(function(){
+            try{ flash.style.opacity = "0"; }catch(e){}
+          }, 120);
+        }
       }
     }catch(e){}
 
@@ -972,39 +967,26 @@ window.addEventListener("keydown", function(ev){
       try{ if(video) video.style.opacity = "1"; }catch(e){}
     });
 
-    video.onended = function(){
-      setTimeout(function(){
-        hide(false);
-        goHome();
-      }, 250);
-    };
+    try{
+      video.onended = function(){
+        setTimeout(function(){
+          hide(false);
+          goHome();
+        }, 250);
+      };
+    }catch(e){}
 
-    var playPromise = video.play();
+    var p = video.play();
 
-    if(playPromise && typeof playPromise.then === "function"){
-      playPromise.catch(function(){
+    if(p && typeof p.then === "function"){
+      p.then(function(){}).catch(function(){
         try{
-          video.pause();
-          video.currentTime = 0;
-          video.controls = true;
-          video.style.opacity = "1";
-          if(poster) poster.style.opacity = "0";
+          video.muted = false;
+          video.play();
         }catch(e){}
-
-        if(legalError){
-          legalError.style.display = "block";
-          legalError.textContent =
-            "Chrome bloqueó el inicio automático del audio. Presiona el botón de reproducción del video o usa Saltar para continuar.";
-        }
       });
     }
-  }catch(e){
-    if(legalError){
-      legalError.style.display = "block";
-      legalError.textContent =
-        "No se pudo iniciar el video de bienvenida. Presiona Saltar para continuar.";
-    }
-  }
+  }catch(e){}
 }
 
     if(cont) cont.addEventListener("click", function(ev){
