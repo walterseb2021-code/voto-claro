@@ -493,100 +493,87 @@ function FederalitoSplash(props: {
   }
 
   async function playVideoAudioThenGoHome() {
-    if (!props.legalAccepted) {
-      props.setLegalError(
-        "Para continuar, primero debes aceptar los documentos legales."
-      );
-      return;
+  if (!props.legalAccepted) {
+    props.setLegalError(
+      "Para continuar, primero debes aceptar los documentos legales."
+    );
+    return;
+  }
+
+  props.setLegalError("");
+  saveLegalAcceptance();
+
+  const poster = posterRef.current;
+  const video = videoRef.current;
+  const flash = flashRef.current;
+
+  if (!video) return;
+
+  try {
+    video.pause();
+    video.currentTime = 0;
+    video.loop = false;
+    video.controls = false;
+    video.muted = false;
+    video.volume = 1;
+    video.setAttribute("playsinline", "");
+  } catch {}
+
+  try {
+    video.onplaying = function () {
+      try {
+        if (!isApp && flash) {
+          flash.style.opacity = "0.22";
+          setTimeout(() => {
+            try {
+              flash.style.opacity = "0";
+            } catch {}
+          }, 120);
+        }
+      } catch {}
+
+      requestAnimationFrame(() => {
+        try {
+          if (poster) poster.style.opacity = "0";
+        } catch {}
+
+        try {
+          video.style.opacity = "1";
+        } catch {}
+      });
+    };
+
+    video.onended = function () {
+      setTimeout(() => {
+        goHome();
+      }, 250);
+    };
+  } catch {}
+
+  try {
+    const playPromise = video.play();
+
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {
+        try {
+          video.pause();
+          video.currentTime = 0;
+          video.muted = false;
+          video.style.opacity = "0";
+          if (poster) poster.style.opacity = "1";
+        } catch {}
+      });
     }
-
-    props.setLegalError("");
-    saveLegalAcceptance();
-
-    const poster = posterRef.current;
-    const video = videoRef.current;
-    const flash = flashRef.current;
-
-    if (!video) return;
-
+  } catch {
     try {
       video.pause();
       video.currentTime = 0;
-      video.loop = false;
-      video.controls = false;
-      video.setAttribute("playsinline", "");
-    } catch {}
-
-    try {
-      video.onended = function () {
-        setTimeout(() => {
-          goHome();
-        }, 250);
-      };
-    } catch {}
-
-    try {
       video.muted = false;
-      video.volume = 1;
-
-      const playPromise = video.play();
-
-      if (playPromise && typeof playPromise.then === "function") {
-        await playPromise;
-      }
-    } catch {
-      try {
-        video.pause();
-        video.currentTime = 0;
-        video.muted = true;
-
-        const mutedPromise = video.play();
-
-        if (mutedPromise && typeof mutedPromise.then === "function") {
-          await mutedPromise;
-        }
-
-        setTimeout(() => {
-          try {
-            video.muted = false;
-            video.volume = 1;
-          } catch {}
-        }, 120);
-      } catch {
-        resetVisual();
-        props.setLegalError(
-          "No se pudo iniciar el video. Toca nuevamente Entrar a VOTO CLARO."
-        );
-        return;
-      }
-    }
-
-    try {
-      void video.offsetHeight;
-      if (poster) void poster.offsetHeight;
+      video.style.opacity = "0";
+      if (poster) poster.style.opacity = "1";
     } catch {}
-
-    try {
-      if (!isApp && flash) {
-        flash.style.opacity = "0.22";
-        setTimeout(() => {
-          try {
-            flash.style.opacity = "0";
-          } catch {}
-        }, 120);
-      }
-    } catch {}
-
-    requestAnimationFrame(() => {
-      try {
-        if (poster) poster.style.opacity = "0";
-      } catch {}
-
-      try {
-        video.style.opacity = "1";
-      } catch {}
-    });
   }
+}
 
   React.useEffect(() => {
     const prev = document.body.style.overflow;
@@ -679,14 +666,13 @@ function FederalitoSplash(props: {
             }}
           />
 
-          <video
-            ref={videoRef}
-            id="federalito-splash-video"
-            src={assets.welcomeVideoSrc}
-            muted
-            playsInline
-            loop={false}
-            preload="auto"
+           <video
+  ref={videoRef}
+  id="federalito-splash-video"
+  src={assets.welcomeVideoSrc}
+  playsInline
+  loop={false}
+  preload="auto"
             style={{
               position: "absolute",
               inset: 0,
@@ -1011,8 +997,7 @@ function FederalitoSplash(props: {
               fontWeight: 700,
             }}
           >
-            La voz del video se reproduce al hacer clic en “Entrar”. Puedes usar
-            “Saltar” si no deseas ver la presentación.
+            Haz clic en “Entrar a VOTO CLARO” para ver la bienvenida. Puedes usar “Saltar” si deseas ir directo al inicio.
           </div>
         </div>
       </div>
