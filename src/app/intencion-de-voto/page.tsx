@@ -109,27 +109,30 @@ function getOrCreateDeviceId(): string {
   return newId;
 }
 
-function getGroupFromToken(): string {
-  if (typeof window === "undefined") return "GRUPOB"; // default
+  function getGroupFromToken(): string {
+  if (typeof window === "undefined") return "GRUPOB";
+
   const url = new URL(window.location.href);
-  const token = url.searchParams.get("t") || "";
-  
+  const token =
+    url.searchParams.get("token") ||
+    url.searchParams.get("t") ||
+    "";
+
   if (token.startsWith("GRUPOA-")) return "GRUPOA";
   if (token.startsWith("GRUPOB-")) return "GRUPOB";
   if (token.startsWith("GRUPOC-")) return "GRUPOC";
   if (token.startsWith("GRUPOD-")) return "GRUPOD";
   if (token.startsWith("GRUPOE-")) return "GRUPOE";
-  
-  return "GRUPOB"; // default
+
+  return "GRUPOB";
 }
 
 const MOTIVATIONAL: string[] = [
-  "Un voto responsable empieza con información verificable.",
-  "Decidir bien es un acto de respeto por tu futuro y el de tu familia.",
+  "Una opinión responsable empieza con información verificable.",
+  "Decidir bien es un acto de respeto por tu futuro y el de tu comunidad.",
   "No sigas la bulla: sigue la evidencia.",
-  "Antes de creer, contrasta. Antes de votar, verifica.",
+  "Antes de creer, contrasta. Antes de participar, verifica.",
 ];
-
 function Pill({ children }: { children: ReactNode }) {
   return (
     <span className="text-xs px-3 py-1 rounded-full border border-green-200 bg-green-100 text-green-800 font-medium">
@@ -281,7 +284,7 @@ const introSpokenRef = useRef(false);
       }
 
       setLocked(true);
-      setNotice(`Ya votaste en la ronda ${globalRound?.name || "actual"}.`);
+      setNotice(`Ya registraste tu participación en la ronda ${globalRound?.name || "actual"}.`);
 
       // Verificar si ya respondió las preguntas en ESTA ronda
       await checkIfAlreadyAnswered(devId, roundId, partyId);
@@ -395,7 +398,12 @@ const introSpokenRef = useRef(false);
     validateAnswerField(question, value);
     if (questionsError) setQuestionsError(null);
   }
+     const confirmedSlug = useMemo(() => {
+  if (!confirmedPartyId) return null;
 
+  const opt = parties.find((o) => String(o.id) === String(confirmedPartyId));
+  return opt?.slug ?? null;
+}, [confirmedPartyId, parties]);
   // ============================================
   // ENVÍO DE RESPUESTAS
   // ============================================
@@ -490,7 +498,7 @@ const introSpokenRef = useRef(false);
     if (locked) return;
     if (!deviceId) return;
     if (!pendingSlug) {
-      setNotice("Selecciona una opción antes de confirmar.");
+      setNotice("Selecciona una opción antes de confirmar tu participación.");
       return;
     }
     if (!globalRound) {
@@ -498,7 +506,7 @@ const introSpokenRef = useRef(false);
       return;
     }
 
-    setNotice("Registrando tu intención de voto…");
+    setNotice("Registrando tu intención de participación…");
 
     try {
       const res = await fetch("/api/vote/cast", {
@@ -515,7 +523,7 @@ const introSpokenRef = useRef(false);
       const data = await res.json();
 
       if (!res.ok) {
-        setNotice(data?.error ?? "No se pudo registrar el voto.");
+         setNotice(data?.error ?? "No se pudo registrar la participación.");
         if (res.status === 409) {
           setLocked(true);
         }
@@ -531,7 +539,7 @@ const introSpokenRef = useRef(false);
         setConfirmedPartyName(party.name);
       }
       
-      setNotice(`Listo. Tu voto en la ronda ${globalRound.name} quedó registrado.`);
+      setNotice(`Listo. Tu participación en la ronda ${globalRound.name} quedó registrada.`);
       if (pendingSlug === "nulo-blanco") setShowReflection(true);
 
       await loadActive();
@@ -545,11 +553,11 @@ const introSpokenRef = useRef(false);
     }
   }
 
-  const confirmedSlug = useMemo(() => {
-    if (!confirmedPartyId) return null;
-    const opt = parties.find((o) => o.id === confirmedPartyId);
-    return opt?.slug ?? null;
-  }, [confirmedPartyId, parties]);
+   const pendingPartyNameForUi = useMemo(() => {
+  if (!pendingSlug) return "";
+  const opt = parties.find((o) => o.slug === pendingSlug);
+  return opt?.name || "opción seleccionada";
+}, [pendingSlug, parties]);
 
   function scrollToTop() {
     try {
@@ -567,11 +575,11 @@ const introSpokenRef = useRef(false);
   const enabledParties = parties.filter((p) => p.enabled).length;
 
   const text =
-    "Estás en Intención de voto. " +
-    "Esta ventana permite participar en un ejercicio ciudadano de opinión. " +
-    "Puedes elegir una opción, cambiarla antes de confirmar y registrar un voto por ronda. " +
-    "Después de confirmar, pueden aparecer preguntas para explicar por qué elegiste esa opción. " +
-    "Recuerda: esto no es una encuesta electoral oficial ni un pronóstico de resultados.";
+  "Estás en Intención de voto. " +
+  "Esta ventana permite participar en una dinámica ciudadana interna de opinión. " +
+  "Puedes elegir una opción, cambiarla antes de confirmar y registrar una participación por ronda. " +
+  "Después de confirmar, pueden aparecer preguntas para explicar por qué elegiste esa opción. " +
+  "Recuerda: esto no es una encuesta electoral oficial, no es un conteo electoral y no representa resultados oficiales.";
 
   window.dispatchEvent(
     new CustomEvent("votoclaro:guide", {
@@ -617,12 +625,12 @@ useEffect(() => {
         parties.find((p) => p.slug === pendingSlug)?.name || pendingSlug;
 
       visibleParts.push(
-        `Opción de voto actualmente seleccionada antes de confirmar: ${pendingName}.`
-      );
+  `Opción de opinión actualmente seleccionada antes de confirmar: ${pendingName}.`
+);
     }
 
     if (confirmedPartyName) {
-      visibleParts.push(`Voto confirmado visible para: ${confirmedPartyName}.`);
+      visibleParts.push(`Participación confirmada visible para: ${confirmedPartyName}.`);
     }
 
     if (notice) {
@@ -646,15 +654,12 @@ useEffect(() => {
     }
 
     if (locked) {
-      visibleParts.push("La pantalla indica que el voto ya quedó bloqueado para esta ronda.");
+      visibleParts.push("La pantalla indica que la participación ya quedó bloqueada para esta ronda.");
     } else {
-      visibleParts.push("La pantalla permite elegir y confirmar una opción de voto.");
+      visibleParts.push("La pantalla permite elegir y confirmar una opción de opinión.");
     }
 
-    if (total > 0) {
-      visibleParts.push(`Total registrado visible en esta ronda: ${total}.`);
-    }
-
+   
          const enabledPartyList = parties.filter((p) => p.enabled);
     const enabledParties = enabledPartyList.length;
 
@@ -692,7 +697,7 @@ useEffect(() => {
 
     if (hasNullBlankOption) {
       visibleParts.push(
-        "La opción Nulo / Blanco está visible y funciona como una opción de voto más. Si se selecciona y se confirma, se registra la intención como Nulo / Blanco para la ronda activa."
+       "La opción Nulo / Blanco está visible y funciona como una opción de opinión más. Si se selecciona y se confirma, se registra la intención como Nulo / Blanco para la ronda activa."
       );
     }
 
@@ -727,8 +732,8 @@ useEffect(() => {
   pageTitle: "Intención de voto",
   route: "/intencion-de-voto",
   summary,
-    speakableSummary:
-    "Estás en Intención de voto. Para participar, toca una tarjeta de opción. Eso solo selecciona; el voto real se registra cuando presionas el botón Confirmar. Antes de confirmar puedes cambiar tu selección. Después de confirmar, el voto queda registrado para la ronda activa. Esta ventana es un ejercicio ciudadano de opinión, no una encuesta electoral oficial.",
+   speakableSummary:
+    "Estás en Intención de voto. Para participar, toca una tarjeta de opción. Eso solo selecciona; la participación se registra cuando presionas el botón Confirmar. Antes de confirmar puedes cambiar tu selección. Después de confirmar, la participación queda registrada para la ronda activa. Esta ventana es una dinámica ciudadana interna de opinión, no una encuesta electoral oficial, no un conteo electoral y no representa resultados oficiales.",
   activeSection,
   visibleText: visibleParts.join("\n"),
   availableActions,
@@ -742,7 +747,7 @@ useEffect(() => {
         opcionPendienteSlug: pendingSlug || "",
         votoConfirmadoId: confirmedPartyId || "",
         votoConfirmadoNombre: confirmedPartyName || "",
-        totalVotosRonda: total,
+        totalVotosRondaPublico: "No se muestra públicamente en esta pantalla.",
         opcionesHabilitadasCount: enabledParties,
                 opcionesVisibles: enabledPartyList.map((p) => p.name),
         opcionesVisiblesTexto: enabledPartyNames,
@@ -843,14 +848,14 @@ useEffect(() => {
                   )}
 
                   <p className="mt-2 text-sm md:text-base text-slate-800">
-                    Cada mes puedes votar nuevamente. Tu voto anterior queda guardado para análisis histórico.
-                  </p>
+  Puedes registrar una intención por ronda. Tu participación anterior queda guardada para análisis interno e histórico de opinión ciudadana.
+</p>
 
-                  <div className="mt-3 flex items-center gap-2 flex-wrap">
-                    <Pill>Editable hasta confirmar</Pill>
-                    <Pill>1 voto por ronda</Pill>
-                    <Pill>Nueva ronda cada mes</Pill>
-                  </div>
+<div className="mt-3 flex items-center gap-2 flex-wrap">
+  <Pill>Editable hasta confirmar</Pill>
+  <Pill>1 participación por ronda</Pill>
+  <Pill>Nueva ronda según configuración</Pill>
+</div>
 
                   <div className="mt-4 text-sm text-slate-900">
                     <span className="inline-block rounded-lg bg-green-100 px-3 py-2 border-2 border-red-500">
@@ -858,14 +863,34 @@ useEffect(() => {
                     </span>
                   </div>
 
-                  <div className="mt-4 text-xs text-slate-700">
-                    Total registrado en esta ronda: <b>{total}</b>
-                  </div>
-                        {/* Disclaimer legal */}
-<div className="mt-3 text-xs text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-300">
-  ⚠️ <strong>Importante:</strong> Este es un ejercicio ciudadano de opinión, no una encuesta electoral oficial. 
-  Los resultados no constituyen un pronóstico de resultados electorales ni reflejan la intención de voto real.
-  La información se recopila con fines de análisis de opinión pública.
+                  
+                        {/* Aviso legal y de transparencia */}
+<div className="mt-3 text-xs text-amber-900 bg-amber-50 p-3 rounded-lg border border-amber-300 space-y-2">
+  <p>
+    ⚠️ <strong>Importante:</strong> Esta sección es una dinámica ciudadana interna de opinión.
+    No es una encuesta electoral oficial, no es un conteo electoral, no reemplaza información de organismos electorales
+    y no debe interpretarse como pronóstico ni resultado oficial.
+  </p>
+  <p>
+    Para controlar duplicidades y mantener trazabilidad técnica, la aplicación puede registrar identificadores técnicos
+    como dispositivo, ronda, opción elegida y datos básicos del navegador. Estos identificadores no se muestran públicamente.
+  </p>
+  <p>
+    Al participar, declaras que aceptaste los documentos legales mostrados en la pantalla de bienvenida:
+    {" "}
+    <Link href={`/terminos?token=${encodeURIComponent(token || "")}`} className="font-semibold underline">
+      Términos
+    </Link>
+    {", "}
+    <Link href={`/privacidad?token=${encodeURIComponent(token || "")}`} className="font-semibold underline">
+      Privacidad
+    </Link>
+    {" y "}
+    <Link href={`/tratamiento-datos?token=${encodeURIComponent(token || "")}`} className="font-semibold underline">
+      Tratamiento de datos
+    </Link>
+    .
+  </p>
 </div>
                   {notice ? (
                     <div className="mt-4 text-sm text-slate-900">
@@ -894,16 +919,16 @@ useEffect(() => {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
-                Elige una opción
-              </h2>
-              <p className="text-sm text-slate-800 mt-1">
-                Tocar una tarjeta <b>solo selecciona</b>. El registro real ocurre al presionar <b>Confirmar</b>.
-              </p>
+  Elige una opción de opinión
+</h2>
+<p className="text-sm text-slate-800 mt-1">
+  Tocar una tarjeta <b>solo selecciona</b>. La participación real ocurre al presionar <b>Confirmar</b>.
+</p>
             </div>
 
             <div className="text-xs text-slate-800 border border-green-200 rounded-full px-3 py-1 bg-green-50">
               Estado:{" "}
-              {locked ? <b>voto confirmado</b> : pendingSlug ? <b>selección pendiente</b> : <b>sin selección</b>}
+              {locked ? <b>participación confirmada</b> : pendingSlug ? <b>selección pendiente</b> : <b>sin selección</b>}
             </div>
           </div>
 
@@ -937,7 +962,7 @@ useEffect(() => {
                         isConfirmed ? "ring-2 ring-green-400" : "",
                       ].join(" ")}
                       aria-label={`Seleccionar ${opt.name}`}
-                      title={opt.slug}
+                      title={opt.name}
                     >
                       <div className="flex flex-col items-center text-center">
                         <div
@@ -956,16 +981,12 @@ useEffect(() => {
 
                         <div className="font-semibold text-slate-900 leading-tight">{opt.name}</div>
 
-                        <div className="mt-2 w-full flex justify-end">
-                          <div className="text-sm font-extrabold text-slate-900">{opt.total_votes ?? 0}</div>
-                        </div>
-
                         <div className="mt-2 text-[11px] text-slate-700">
-                          {locked
-                            ? isConfirmed
-                              ? "Tu voto en esta ronda"
-                              : "Voto ya registrado"
-                            : "Toca para seleccionar."}
+                           {locked
+  ? isConfirmed
+    ? "Tu participación en esta ronda"
+    : "Participación ya registrada"
+  : "Toca para seleccionar."}
                         </div>
                       </div>
                     </button>
@@ -988,7 +1009,7 @@ useEffect(() => {
                     <div className="text-xs text-slate-700 text-center">
                       {pendingSlug ? (
                         <>
-                          Selección actual: <b>{pendingSlug}</b>. Si estás seguro, presiona <b>Confirmar</b>.
+                         Selección actual: <b>{pendingPartyNameForUi}</b>. Si estás seguro, presiona <b>Confirmar</b>.
                         </>
                       ) : (
                         <>Selecciona una opción para habilitar “Confirmar”.</>
@@ -1006,12 +1027,12 @@ useEffect(() => {
                           : "bg-slate-200 text-slate-600 cursor-not-allowed",
                       ].join(" ")}
                     >
-                      ✅ Confirmar voto en {globalRound?.name || 'ronda actual'}
+                      ✅ Confirmar intención en {globalRound?.name || 'ronda actual'}
                     </button>
                   </>
                 ) : (
                   <div className="text-sm text-slate-900 text-center">
-                    ✅ Ya votaste en la ronda {globalRound?.name || 'actual'}
+                   ✅ Ya registraste tu participación en la ronda {globalRound?.name || 'actual'}
                   </div>
                 )}
               </div>
@@ -1022,18 +1043,21 @@ useEffect(() => {
         {/* SECCIÓN DE PREGUNTAS */}
         {locked && showQuestions && !answersSubmitted && questions && (
           <section className="mt-6 border-[6px] border-red-600 rounded-2xl p-6 bg-white shadow-sm">
-            <div className="mb-4">
-              <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
-                {globalRound?.name}: Cuéntanos ¿por qué {confirmedPartyName ? `elegiste ${confirmedPartyName}` : 'elegiste este partido'}?
-              </h2>
-              <p className="text-sm text-slate-800 mt-2">
-                Tus respuestas nos ayudan a entender cómo evoluciona la opinión ciudadana mes a mes.
-                Puedes responder una, dos o las tres preguntas.
-              </p>
-              <p className="text-xs text-slate-600 mt-1">
-                <span className="font-bold">Reglas:</span> Mínimo 10 caracteres por respuesta • Sin groserías • Sin enlaces
-              </p>
-            </div>
+           <div className="mb-4">
+  <h2 className="inline-block rounded-lg bg-green-100 px-3 py-1 text-lg font-semibold text-slate-900 border-2 border-red-500">
+    {globalRound?.name || "Ronda actual"}: Cuéntanos por qué{" "}
+    {confirmedPartyName ? `elegiste ${confirmedPartyName}` : "elegiste esta opción"}
+  </h2>
+
+  <p className="text-sm text-slate-800 mt-2">
+    Tus respuestas nos ayudan a entender cómo evoluciona la opinión ciudadana dentro de esta dinámica participativa.
+    Puedes responder una, dos o las tres preguntas.
+  </p>
+
+  <p className="text-xs text-slate-600 mt-1">
+    <span className="font-bold">Reglas:</span> Mínimo 10 caracteres por respuesta • Sin groserías • Sin enlaces
+  </p>
+</div>
 
             <div className="space-y-4">
               {/* Pregunta 1 */}
@@ -1125,8 +1149,8 @@ useEffect(() => {
               </div>
 
               <p className="text-xs text-slate-600 text-center mt-2">
-                Tus respuestas son anónimas y nos ayudan a entender la evolución de la opinión ciudadana.
-              </p>
+  Tus respuestas no mostrarán públicamente tu dispositivo, identificadores técnicos ni datos administrativos.
+</p>
             </div>
           </section>
         )}
@@ -1140,14 +1164,14 @@ useEffect(() => {
               </h2>
               <p className="text-sm text-slate-800">
                 Tus respuestas en la ronda {globalRound?.name || 'actual'} han sido guardadas.
-                Podrás votar nuevamente el próximo mes.
+Podrás participar nuevamente cuando exista una nueva ronda habilitada.
               </p>
             </div>
           </section>
         )}
 
         <footer className="mt-6 text-xs text-slate-700">
-          VOTO CLARO • Intención de voto (rondas mensuales) • “Infórmate, Reflexiona y Decide cada mes.”
+         VOTO CLARO • Intención de voto • Dinámica ciudadana interna de opinión • “Infórmate, Reflexiona y Decide.”
         </footer>
 
         {/* Botón Subir */}
