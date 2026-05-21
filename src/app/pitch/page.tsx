@@ -464,7 +464,20 @@ function FederalitoSplash(props: {
       }
     } catch {}
   }
+    function warmVideo() {
+  const video = videoRef.current;
 
+  if (!video) return;
+
+  try {
+    video.preload = "auto";
+    video.muted = true;
+    video.loop = false;
+    video.controls = false;
+    video.setAttribute("playsinline", "");
+    video.load();
+  } catch {}
+}
   function goHome() {
     if (!props.legalAccepted) {
       props.setLegalError(
@@ -492,7 +505,7 @@ function FederalitoSplash(props: {
     }
   }
 
-  async function playVideoAudioThenGoHome() {
+    async function playVideoAudioThenGoHome() {
   if (!props.legalAccepted) {
     props.setLegalError(
       "Para continuar, primero debes aceptar los documentos legales."
@@ -514,7 +527,7 @@ function FederalitoSplash(props: {
     video.currentTime = 0;
     video.loop = false;
     video.controls = false;
-    video.muted = false;
+    video.muted = true;
     video.volume = 1;
     video.setAttribute("playsinline", "");
   } catch {}
@@ -541,6 +554,13 @@ function FederalitoSplash(props: {
           video.style.opacity = "1";
         } catch {}
       });
+
+      setTimeout(() => {
+        try {
+          video.muted = false;
+          video.volume = 1;
+        } catch {}
+      }, 80);
     };
 
     video.onended = function () {
@@ -553,35 +573,30 @@ function FederalitoSplash(props: {
   try {
     const playPromise = video.play();
 
-    if (playPromise && typeof playPromise.catch === "function") {
-      playPromise.catch(() => {
-        try {
-          video.pause();
-          video.currentTime = 0;
-          video.muted = false;
-          video.style.opacity = "0";
-          if (poster) poster.style.opacity = "1";
-        } catch {}
-      });
+    if (playPromise && typeof playPromise.then === "function") {
+      await playPromise;
     }
   } catch {
     try {
       video.pause();
       video.currentTime = 0;
-      video.muted = false;
+      video.muted = true;
       video.style.opacity = "0";
       if (poster) poster.style.opacity = "1";
     } catch {}
+
+    warmVideo();
   }
 }
 
-  React.useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    React.useEffect(() => {
+  const prev = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
 
-    resetVisual();
+  resetVisual();
+  warmVideo();
 
-    return () => {
+  return () => {
       document.body.style.overflow = prev;
 
       try {
@@ -594,7 +609,11 @@ function FederalitoSplash(props: {
       } catch {}
     };
   }, []);
-
+    React.useEffect(() => {
+  if (props.legalAccepted) {
+    warmVideo();
+  }
+}, [props.legalAccepted]);
   const welcomeReturn =
     typeof window !== "undefined"
       ? window.location.pathname + window.location.search
@@ -670,6 +689,7 @@ function FederalitoSplash(props: {
   ref={videoRef}
   id="federalito-splash-video"
   src={assets.welcomeVideoSrc}
+  muted
   playsInline
   loop={false}
   preload="auto"
