@@ -558,6 +558,24 @@ const introSpokenRef = useRef(false);
   const opt = parties.find((o) => o.slug === pendingSlug);
   return opt?.name || "opción seleccionada";
 }, [pendingSlug, parties]);
+  const displayParties = useMemo(() => {
+  return [...parties].sort((a, b) => {
+    const aIsNullBlank =
+      a.slug === "nulo-blanco" ||
+      a.name.toLowerCase().includes("nulo") ||
+      a.name.toLowerCase().includes("blanco");
+
+    const bIsNullBlank =
+      b.slug === "nulo-blanco" ||
+      b.name.toLowerCase().includes("nulo") ||
+      b.name.toLowerCase().includes("blanco");
+
+    if (aIsNullBlank && !bIsNullBlank) return 1;
+    if (!aIsNullBlank && bIsNullBlank) return -1;
+
+    return a.position - b.position;
+  });
+}, [parties]);
 
   function scrollToTop() {
     try {
@@ -939,7 +957,7 @@ useEffect(() => {
           ) : (
             <>
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {parties.map((opt) => {
+                 {displayParties.map((opt) => {
                   const isSelected = pendingSlug === opt.slug;
                   const isConfirmed = confirmedSlug === opt.slug;
                   const isBlank = opt.slug === "nulo-blanco";
