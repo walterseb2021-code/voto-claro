@@ -534,43 +534,67 @@ function FederalitoSplash(props: {
     return;
   }
 
-  try {
-    video.pause();
-    video.currentTime = 0;
-    video.loop = false;
-    video.controls = false;
+  const showVideo = () => {
+    try {
+      if (poster) poster.style.opacity = "0";
+      video.style.opacity = "1";
+
+      if (!isApp && flash) {
+        flash.style.opacity = "0.22";
+        setTimeout(() => {
+          try {
+            flash.style.opacity = "0";
+          } catch {}
+        }, 120);
+      }
+    } catch {}
+  };
+
+  const waitForVideoReady = async () => {
+    if (video.readyState >= 2) return;
+
+    await new Promise<void>((resolve) => {
+      let done = false;
+
+      const finish = () => {
+        if (done) return;
+        done = true;
+        video.removeEventListener("loadeddata", finish);
+        video.removeEventListener("canplay", finish);
+        resolve();
+      };
+
+      video.addEventListener("loadeddata", finish, { once: true });
+      video.addEventListener("canplay", finish, { once: true });
+
+      setTimeout(finish, 1200);
+    });
+  };
+
+  const tryPlayMuted = async () => {
     video.muted = true;
     video.volume = 1;
+    video.loop = false;
+    video.controls = false;
     video.setAttribute("playsinline", "");
-    video.style.opacity = "0";
 
-    if (poster) {
-      poster.style.opacity = "1";
+    const playPromise = video.play();
+
+    if (playPromise && typeof playPromise.then === "function") {
+      await playPromise;
     }
-  } catch {}
+  };
 
   try {
     video.onplaying = function () {
-      try {
-        if (poster) poster.style.opacity = "0";
-        video.style.opacity = "1";
+      showVideo();
 
-        if (!isApp && flash) {
-          flash.style.opacity = "0.22";
-          setTimeout(() => {
-            try {
-              flash.style.opacity = "0";
-            } catch {}
-          }, 120);
-        }
-
-        setTimeout(() => {
-          try {
-            video.muted = false;
-            video.volume = 1;
-          } catch {}
-        }, 250);
-      } catch {}
+      setTimeout(() => {
+        try {
+          video.muted = false;
+          video.volume = 1;
+        } catch {}
+      }, 400);
     };
 
     video.onended = function () {
@@ -579,12 +603,27 @@ function FederalitoSplash(props: {
       }, 250);
     };
 
-    const playPromise = video.play();
+    try {
+      video.pause();
+      video.currentTime = 0;
+    } catch {}
 
-    if (playPromise && typeof playPromise.then === "function") {
-      await playPromise;
+    try {
+      video.preload = "auto";
+      video.load();
+    } catch {}
+
+    showVideo();
+
+    try {
+      await tryPlayMuted();
+    } catch {
+      await waitForVideoReady();
+      await tryPlayMuted();
     }
-  } catch {
+  } catch (e) {
+    console.error("[Pitch] No se pudo iniciar el video en el primer intento:", e);
+
     try {
       video.pause();
       video.currentTime = 0;
@@ -593,12 +632,10 @@ function FederalitoSplash(props: {
       if (poster) poster.style.opacity = "1";
     } catch {}
 
-    warmVideo();
     setVideoStarting(false);
 
-    props.setLegalError(
-      "No se pudo iniciar el video. Toca nuevamente “Entrar a VOTO CLARO” o usa “Saltar”."
-    );
+    // No mostramos aviso al usuario para no interrumpir el flujo.
+    props.setLegalError("");
   }
 }
     React.useEffect(() => {
@@ -1012,7 +1049,7 @@ function FederalitoSplash(props: {
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 }}
               >
-                {videoStarting ? "Preparando bienvenida..." : "Entrar a VOTO CLARO"}
+                {videoStarting ? "Iniciando bienvenida..." : "Entrar a VOTO CLARO"}
               </button>
             </div>
           </div>
