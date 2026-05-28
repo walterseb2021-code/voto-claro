@@ -511,7 +511,7 @@ function FederalitoSplash(props: {
     }
   }
 
-    async function playVideoAudioThenGoHome() {
+     async function playVideoAudioThenGoHome() {
   if (!props.legalAccepted) {
     props.setLegalError(
       "Para continuar, primero debes aceptar los documentos legales."
@@ -529,7 +529,10 @@ function FederalitoSplash(props: {
   const video = videoRef.current;
   const flash = flashRef.current;
 
-  if (!video) return;
+  if (!video) {
+    setVideoStarting(false);
+    return;
+  }
 
   try {
     video.pause();
@@ -539,11 +542,19 @@ function FederalitoSplash(props: {
     video.muted = true;
     video.volume = 1;
     video.setAttribute("playsinline", "");
+    video.style.opacity = "0";
+
+    if (poster) {
+      poster.style.opacity = "1";
+    }
   } catch {}
 
   try {
     video.onplaying = function () {
       try {
+        if (poster) poster.style.opacity = "0";
+        video.style.opacity = "1";
+
         if (!isApp && flash) {
           flash.style.opacity = "0.22";
           setTimeout(() => {
@@ -552,24 +563,14 @@ function FederalitoSplash(props: {
             } catch {}
           }, 120);
         }
+
+        setTimeout(() => {
+          try {
+            video.muted = false;
+            video.volume = 1;
+          } catch {}
+        }, 250);
       } catch {}
-
-      requestAnimationFrame(() => {
-        try {
-          if (poster) poster.style.opacity = "0";
-        } catch {}
-
-        try {
-          video.style.opacity = "1";
-        } catch {}
-      });
-
-      setTimeout(() => {
-        try {
-          video.muted = false;
-          video.volume = 1;
-        } catch {}
-      }, 80);
     };
 
     video.onended = function () {
@@ -577,55 +578,29 @@ function FederalitoSplash(props: {
         goHome();
       }, 250);
     };
-  } catch {}
 
-   try {
-  // Como esto ocurre por clic directo del usuario, intentamos reproducir con audio desde el inicio.
-  video.muted = false;
-  video.volume = 1;
+    const playPromise = video.play();
 
-  // Si todavía no hay suficiente carga, esperamos un poco antes de reproducir.
-  if (video.readyState < 3) {
-    await new Promise<void>((resolve) => {
-      let done = false;
+    if (playPromise && typeof playPromise.then === "function") {
+      await playPromise;
+    }
+  } catch {
+    try {
+      video.pause();
+      video.currentTime = 0;
+      video.muted = true;
+      video.style.opacity = "0";
+      if (poster) poster.style.opacity = "1";
+    } catch {}
 
-      const finish = () => {
-        if (done) return;
-        done = true;
-        video.removeEventListener("canplay", finish);
-        video.removeEventListener("canplaythrough", finish);
-        resolve();
-      };
+    warmVideo();
+    setVideoStarting(false);
 
-      video.addEventListener("canplay", finish, { once: true });
-      video.addEventListener("canplaythrough", finish, { once: true });
-
-      setTimeout(finish, 1800);
-    });
+    props.setLegalError(
+      "No se pudo iniciar el video. Toca nuevamente “Entrar a VOTO CLARO” o usa “Saltar”."
+    );
   }
-
-  const playPromise = video.play();
-
-  if (playPromise && typeof playPromise.then === "function") {
-    await playPromise;
-  }
-} catch {
-  try {
-    video.pause();
-    video.currentTime = 0;
-    video.muted = true;
-    video.style.opacity = "0";
-    if (poster) poster.style.opacity = "1";
-  } catch {}
-
-  warmVideo();
-  setVideoStarting(false);
-  props.setLegalError(
-    "No se pudo iniciar el video automáticamente. Puedes tocar nuevamente “Entrar a VOTO CLARO” o usar “Saltar”."
-  );
 }
-}
-
     React.useEffect(() => {
   const prev = document.body.style.overflow;
   document.body.style.overflow = "hidden";
