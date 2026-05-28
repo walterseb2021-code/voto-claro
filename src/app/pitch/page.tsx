@@ -430,7 +430,7 @@ function FederalitoSplash(props: {
 }) {
   const isApp = props.partyId === "app";
   const assets = partyWelcomeAssets(props.partyId);
-
+  const [videoStarting, setVideoStarting] = React.useState(false);
   const posterRef = React.useRef<HTMLImageElement | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const flashRef = React.useRef<HTMLDivElement | null>(null);
@@ -464,18 +464,24 @@ function FederalitoSplash(props: {
       }
     } catch {}
   }
-    function warmVideo() {
+     function warmVideo() {
   const video = videoRef.current;
 
   if (!video) return;
 
   try {
     video.preload = "auto";
-    video.muted = true;
     video.loop = false;
     video.controls = false;
     video.setAttribute("playsinline", "");
-    video.load();
+
+    // Importante:
+    // No llamar video.load() si el navegador ya empezó a cargar el video,
+    // porque puede reiniciar el buffer y provocar pausas al reproducir.
+    if (video.readyState === 0) {
+      video.muted = true;
+      video.load();
+    }
   } catch {}
 }
   function goHome() {
@@ -513,6 +519,9 @@ function FederalitoSplash(props: {
     return;
   }
 
+  if (videoStarting) return;
+
+  setVideoStarting(true);
   props.setLegalError("");
   saveLegalAcceptance();
 
@@ -570,23 +579,51 @@ function FederalitoSplash(props: {
     };
   } catch {}
 
-  try {
-    const playPromise = video.play();
+   try {
+  // Como esto ocurre por clic directo del usuario, intentamos reproducir con audio desde el inicio.
+  video.muted = false;
+  video.volume = 1;
 
-    if (playPromise && typeof playPromise.then === "function") {
-      await playPromise;
-    }
-  } catch {
-    try {
-      video.pause();
-      video.currentTime = 0;
-      video.muted = true;
-      video.style.opacity = "0";
-      if (poster) poster.style.opacity = "1";
-    } catch {}
+  // Si todavía no hay suficiente carga, esperamos un poco antes de reproducir.
+  if (video.readyState < 3) {
+    await new Promise<void>((resolve) => {
+      let done = false;
 
-    warmVideo();
+      const finish = () => {
+        if (done) return;
+        done = true;
+        video.removeEventListener("canplay", finish);
+        video.removeEventListener("canplaythrough", finish);
+        resolve();
+      };
+
+      video.addEventListener("canplay", finish, { once: true });
+      video.addEventListener("canplaythrough", finish, { once: true });
+
+      setTimeout(finish, 1800);
+    });
   }
+
+  const playPromise = video.play();
+
+  if (playPromise && typeof playPromise.then === "function") {
+    await playPromise;
+  }
+} catch {
+  try {
+    video.pause();
+    video.currentTime = 0;
+    video.muted = true;
+    video.style.opacity = "0";
+    if (poster) poster.style.opacity = "1";
+  } catch {}
+
+  warmVideo();
+  setVideoStarting(false);
+  props.setLegalError(
+    "No se pudo iniciar el video automáticamente. Puedes tocar nuevamente “Entrar a VOTO CLARO” o usar “Saltar”."
+  );
+}
 }
 
     React.useEffect(() => {
@@ -609,11 +646,7 @@ function FederalitoSplash(props: {
       } catch {}
     };
   }, []);
-    React.useEffect(() => {
-  if (props.legalAccepted) {
-    warmVideo();
-  }
-}, [props.legalAccepted]);
+    
   const welcomeReturn =
     typeof window !== "undefined"
       ? window.location.pathname + window.location.search
@@ -985,11 +1018,12 @@ function FederalitoSplash(props: {
                 Saltar
               </button>
 
-              <button
-                id="federalito-splash-continue"
-                type="button"
-                onClick={playVideoAudioThenGoHome}
-                aria-disabled={!props.legalAccepted}
+                <button
+               id="federalito-splash-continue"
+               type="button"
+               onClick={playVideoAudioThenGoHome}
+               disabled={!props.legalAccepted || videoStarting}
+               aria-disabled={!props.legalAccepted || videoStarting}
                 style={{
                   border: `2px solid ${RED_BORDER}`,
                   background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
@@ -998,12 +1032,12 @@ function FederalitoSplash(props: {
                   borderRadius: 12,
                   padding: "10px 14px",
                   fontSize: 14,
-                  cursor: props.legalAccepted ? "pointer" : "not-allowed",
-                  opacity: props.legalAccepted ? 1 : 0.55,
+                  cursor: props.legalAccepted && !videoStarting ? "pointer" : "not-allowed",
+                  opacity: props.legalAccepted && !videoStarting ? 1 : 0.55,
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 }}
               >
-                Entrar a VOTO CLARO
+                {videoStarting ? "Preparando bienvenida..." : "Entrar a VOTO CLARO"}
               </button>
             </div>
           </div>
