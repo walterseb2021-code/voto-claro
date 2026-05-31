@@ -609,10 +609,14 @@ function FederalitoSplash(props: {
     } catch {}
 
     try {
-      video.preload = "auto";
-      video.load();
-    } catch {}
+  video.preload = "auto";
 
+  // Evita reiniciar la carga si el navegador ya empezó a precargar el video.
+  // Esto ayuda especialmente en celular.
+  if (video.readyState === 0) {
+    video.load();
+  }
+} catch {}
     showVideo();
 
     try {
@@ -784,7 +788,7 @@ function FederalitoSplash(props: {
             background: PANEL_BG,
             border: `3px solid ${RED_BORDER}`,
             borderRadius: 18,
-            padding: "14px 14px",
+            padding: "10px 12px",
             boxShadow: "0 18px 50px rgba(0,0,0,.22)",
           }}
         >
@@ -827,9 +831,9 @@ function FederalitoSplash(props: {
 
           <p
             style={{
-              marginTop: 12,
-              fontSize: 15,
-              lineHeight: "22px",
+              marginTop: 8,
+              fontSize: 14,
+              lineHeight: "20px",
               opacity: 1,
               color: TEXT_DARK,
               fontWeight: 700,
@@ -846,9 +850,9 @@ function FederalitoSplash(props: {
 
           <p
             style={{
-              marginTop: 10,
-              fontSize: 15,
-              lineHeight: "22px",
+              marginTop: 6,
+              fontSize: 14,
+              lineHeight: "20px",
               opacity: 1,
               color: TEXT_DARK,
               fontWeight: 800,
@@ -862,11 +866,11 @@ function FederalitoSplash(props: {
 
           <div
             style={{
-              marginTop: 12,
+              marginTop: 8,
               border: `2px solid ${RED_BORDER}`,
               borderRadius: 14,
               background: "rgba(255,255,255,.86)",
-              padding: "10px 12px",
+              padding: "8px 10px",
               textAlign: "left",
               color: TEXT_DARK,
               fontSize: 12,
@@ -971,14 +975,14 @@ function FederalitoSplash(props: {
             </div>
           </div>
 
-          <div
-            style={{
-              marginTop: 16,
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
+           <div
+  style={{
+    marginTop: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  }}
+>
             <button
               type="button"
               onClick={props.installApp}
@@ -989,13 +993,13 @@ function FederalitoSplash(props: {
                 color: BTN_TEXT,
                 fontWeight: 900,
                 borderRadius: 12,
-                padding: "12px 18px",
-                fontSize: 14,
+                padding: "9px 14px",
+                fontSize: 13,
                 cursor: props.legalAccepted ? "pointer" : "not-allowed",
                 opacity: props.legalAccepted ? 1 : 0.55,
                 boxShadow: "0 10px 25px rgba(0,0,0,.20)",
                 width: "100%",
-                marginBottom: "8px",
+                marginBottom: "4px",
               }}
             >
               📲 Instalar APP en mi celular
@@ -1020,8 +1024,8 @@ function FederalitoSplash(props: {
                   color: BTN_TEXT,
                   fontWeight: 900,
                   borderRadius: 12,
-                  padding: "10px 14px",
-                  fontSize: 14,
+                  padding: "8px 12px",
+                  fontSize: 13,
                   cursor: props.legalAccepted ? "pointer" : "not-allowed",
                   opacity: props.legalAccepted ? 1 : 0.55,
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
@@ -1042,8 +1046,8 @@ function FederalitoSplash(props: {
                   color: BTN_TEXT,
                   fontWeight: 900,
                   borderRadius: 12,
-                  padding: "10px 14px",
-                  fontSize: 14,
+                  padding: "8px 12px",
+                  fontSize: 13,
                   cursor: props.legalAccepted && !videoStarting ? "pointer" : "not-allowed",
                   opacity: props.legalAccepted && !videoStarting ? 1 : 0.55,
                   boxShadow: "0 10px 25px rgba(0,0,0,.20)",
@@ -1055,29 +1059,76 @@ function FederalitoSplash(props: {
           </div>
 
           <div
-            style={{
-              marginTop: 10,
-              fontSize: 12,
-              opacity: 1,
-              color: "#0b1220",
-              fontWeight: 700,
-            }}
-          >
-            Haz clic en “Entrar a VOTO CLARO” para ver la bienvenida. Puedes usar “Saltar” si deseas ir directo al inicio.
-          </div>
+  style={{
+    marginTop: 6,
+    fontSize: 11,
+    opacity: 1,
+    color: "#0b1220",
+    fontWeight: 700,
+  }}
+>
+  Toca “Entrar a VOTO CLARO” para ver la bienvenida o “Saltar” para ir al inicio.
+</div>
         </div>
       </div>
 
       <style>{`
         @media (max-width: 640px) {
-          .federalito-anim{
+            .federalito-anim{
             width: min(420px, 96vw) !important;
             aspect-ratio: 4 / 5 !important;
-            max-height: 46vh !important;
-            margin-top: 100px !important;
+            max-height: 42vh !important;
+            margin-top: 8px !important;
             z-index: 0 !important;
+           }
+            #federalito-splash > div{
+            padding: 8px 10px !important;
+            gap: 8px !important;
+            align-items: start !important;
+            }
+
+            #federalito-splash h1{
+            margin-top: 6px !important;
+            font-size: 32px !important;
+            line-height: 34px !important;
+            }
+
+            #federalito-splash p{
+            margin-top: 6px !important;
+            font-size: 13px !important;
+            line-height: 18px !important;
           }
 
+          #federalito-splash label{
+          font-size: 12px !important;
+          line-height: 16px !important;
+        }
+
+        #federalito-splash button{
+        padding: 8px 12px !important;
+        font-size: 13px !important;
+        }
+
+        #federalito-splash #federalito-splash-continue,
+        #federalito-splash #federalito-splash-skip{
+        min-width: 130px !important;
+       }
+
+       #federalito-splash [style*="margin-top: 16px"]{
+       margin-top: 8px !important;
+       }
+
+       #federalito-splash [style*="margin-top: 12px"]{
+       margin-top: 6px !important;
+       }
+
+       #federalito-splash [style*="padding: 14px 14px"]{
+       padding: 8px 10px !important;
+      }
+
+      #federalito-splash [style*="padding: 10px 12px"]{
+      padding: 7px 9px !important;
+      }
           #federalito-splash[data-party="app"] .federalito-anim{
             width: min(96vw, 760px) !important;
             aspect-ratio: 16 / 9 !important;
