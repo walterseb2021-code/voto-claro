@@ -534,67 +534,48 @@ function FederalitoSplash(props: {
     return;
   }
 
-  const showVideo = () => {
-    try {
-      if (poster) poster.style.opacity = "0";
-      video.style.opacity = "1";
-
-      if (!isApp && flash) {
-        flash.style.opacity = "0.22";
-        setTimeout(() => {
-          try {
-            flash.style.opacity = "0";
-          } catch {}
-        }, 120);
-      }
-    } catch {}
-  };
-
-  const waitForVideoReady = async () => {
-    if (video.readyState >= 2) return;
-
-    await new Promise<void>((resolve) => {
-      let done = false;
-
-      const finish = () => {
-        if (done) return;
-        done = true;
-        video.removeEventListener("loadeddata", finish);
-        video.removeEventListener("canplay", finish);
-        resolve();
-      };
-
-      video.addEventListener("loadeddata", finish, { once: true });
-      video.addEventListener("canplay", finish, { once: true });
-
-      setTimeout(finish, 1200);
-    });
-  };
-
-  const tryPlayMuted = async () => {
-    video.muted = true;
-    video.volume = 1;
+  try {
+    video.pause();
+    video.currentTime = 0;
     video.loop = false;
     video.controls = false;
+    video.muted = true;
+    video.volume = 1;
     video.setAttribute("playsinline", "");
 
-    const playPromise = video.play();
+    // Importante:
+    // No llamamos video.load() aquí.
+    // El video ya debe estar precargándose desde que aparece la bienvenida.
+    // Llamar load() al hacer clic puede reiniciar la carga en celular.
+    video.style.opacity = "0";
 
-    if (playPromise && typeof playPromise.then === "function") {
-      await playPromise;
+    if (poster) {
+      poster.style.opacity = "1";
     }
-  };
+  } catch {}
 
   try {
     video.onplaying = function () {
-      showVideo();
+      try {
+        if (poster) poster.style.opacity = "0";
+        video.style.opacity = "1";
 
-      setTimeout(() => {
-        try {
-          video.muted = false;
-          video.volume = 1;
-        } catch {}
-      }, 400);
+        if (!isApp && flash) {
+          flash.style.opacity = "0.22";
+          setTimeout(() => {
+            try {
+              flash.style.opacity = "0";
+            } catch {}
+          }, 120);
+        }
+
+        setTimeout(() => {
+          try {
+            video.muted = false;
+            video.volume = 1;
+          } catch {}
+        }, 80);
+      } catch {}
     };
 
     video.onended = function () {
@@ -603,30 +584,13 @@ function FederalitoSplash(props: {
       }, 250);
     };
 
-    try {
-      video.pause();
-      video.currentTime = 0;
-    } catch {}
+    const playPromise = video.play();
 
-    try {
-  video.preload = "auto";
-
-  // Evita reiniciar la carga si el navegador ya empezó a precargar el video.
-  // Esto ayuda especialmente en celular.
-  if (video.readyState === 0) {
-    video.load();
-  }
-} catch {}
-    showVideo();
-
-    try {
-      await tryPlayMuted();
-    } catch {
-      await waitForVideoReady();
-      await tryPlayMuted();
+    if (playPromise && typeof playPromise.then === "function") {
+      await playPromise;
     }
   } catch (e) {
-    console.error("[Pitch] No se pudo iniciar el video en el primer intento:", e);
+    console.error("[Pitch] Error iniciando video de bienvenida:", e);
 
     try {
       video.pause();
@@ -637,8 +601,6 @@ function FederalitoSplash(props: {
     } catch {}
 
     setVideoStarting(false);
-
-    // No mostramos aviso al usuario para no interrumpir el flujo.
     props.setLegalError("");
   }
 }
