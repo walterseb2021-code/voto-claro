@@ -430,7 +430,6 @@ function FederalitoSplash(props: {
 }) {
   const isApp = props.partyId === "app";
   const assets = partyWelcomeAssets(props.partyId);
-  const [videoStarting, setVideoStarting] = React.useState(false);
   const posterRef = React.useRef<HTMLImageElement | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const flashRef = React.useRef<HTMLDivElement | null>(null);
@@ -511,7 +510,7 @@ function FederalitoSplash(props: {
     }
   }
 
-     async function playVideoAudioThenGoHome() {
+      async function playVideoAudioThenGoHome() {
   if (!props.legalAccepted) {
     props.setLegalError(
       "Para continuar, primero debes aceptar los documentos legales."
@@ -526,32 +525,16 @@ function FederalitoSplash(props: {
   const video = videoRef.current;
   const flash = flashRef.current;
 
-  if (!video) return;
-
-  try {
-    video.pause();
-    video.currentTime = 0;
-    video.loop = false;
-    video.controls = false;
-    video.muted = true;
-    video.volume = 1;
-    video.setAttribute("playsinline", "");
-    video.style.opacity = "0";
-
-    if (poster) {
-      poster.style.opacity = "1";
-    }
-  } catch {}
+  if (!video) {
+    console.error("[Pitch] No existe referencia al video.");
+    return;
+  }
 
   try {
     video.onplaying = function () {
       try {
-        requestAnimationFrame(() => {
-          try {
-            if (poster) poster.style.opacity = "0";
-            video.style.opacity = "1";
-          } catch {}
-        });
+        if (poster) poster.style.opacity = "0";
+        video.style.opacity = "1";
 
         if (!isApp && flash) {
           flash.style.opacity = "0.22";
@@ -565,9 +548,10 @@ function FederalitoSplash(props: {
         setTimeout(() => {
           try {
             video.muted = false;
+            video.defaultMuted = false;
             video.volume = 1;
           } catch {}
-        }, 80);
+        }, 120);
       } catch {}
     };
 
@@ -576,19 +560,49 @@ function FederalitoSplash(props: {
         goHome();
       }, 250);
     };
-  } catch {}
 
-  try {
+    video.onerror = function () {
+      console.error("[Pitch] Error cargando archivo de video:", video.error);
+      try {
+        video.pause();
+        video.currentTime = 0;
+        video.muted = true;
+        video.defaultMuted = true;
+        video.style.opacity = "0";
+        if (poster) poster.style.opacity = "1";
+      } catch {}
+    };
+
+    video.pause();
+    video.currentTime = 0;
+    video.loop = false;
+    video.controls = false;
+    video.muted = true;
+    video.defaultMuted = true;
+    video.volume = 1;
+    video.preload = "auto";
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+
+    // Mantiene el avatar visible hasta que el evento onplaying confirme
+    // que el video realmente empezó.
+    video.style.opacity = "0";
+    if (poster) poster.style.opacity = "1";
+
+    // IMPORTANTE:
+    // No usar await, no esperar loadeddata/canplay y no llamar load() aquí.
+    // El play debe ejecutarse inmediatamente dentro del clic del usuario.
     const playPromise = video.play();
 
     if (playPromise && typeof playPromise.catch === "function") {
       playPromise.catch((e) => {
-        console.error("[Pitch] Error iniciando video:", e);
+        console.error("[Pitch] video.play() fue bloqueado o falló:", e);
 
         try {
           video.pause();
           video.currentTime = 0;
           video.muted = true;
+          video.defaultMuted = true;
           video.style.opacity = "0";
           if (poster) poster.style.opacity = "1";
         } catch {}
@@ -597,12 +611,13 @@ function FederalitoSplash(props: {
       });
     }
   } catch (e) {
-    console.error("[Pitch] Error ejecutando video.play():", e);
+    console.error("[Pitch] Error ejecutando bienvenida:", e);
 
     try {
       video.pause();
       video.currentTime = 0;
       video.muted = true;
+      video.defaultMuted = true;
       video.style.opacity = "0";
       if (poster) poster.style.opacity = "1";
     } catch {}
@@ -1003,26 +1018,26 @@ function FederalitoSplash(props: {
               </button>
 
                 <button
-               id="federalito-splash-continue"
-               type="button"
-               onClick={playVideoAudioThenGoHome}
-               disabled={!props.legalAccepted}
-               aria-disabled={!props.legalAccepted}
-                style={{
-                  border: `2px solid ${RED_BORDER}`,
-                  background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
-                  color: BTN_TEXT,
-                  fontWeight: 900,
-                  borderRadius: 12,
-                  padding: "8px 12px",
-                  fontSize: 13,
-                  cursor: props.legalAccepted ? "pointer" : "not-allowed",
-                  opacity: props.legalAccepted ? 1 : 0.55,
-                  boxShadow: "0 10px 25px rgba(0,0,0,.20)",
-                }}
-              >
-                Entrar a VOTO CLARO
-              </button>
+  id="federalito-splash-continue"
+  type="button"
+  onClick={playVideoAudioThenGoHome}
+  disabled={!props.legalAccepted}
+  aria-disabled={!props.legalAccepted}
+  style={{
+    border: `2px solid ${RED_BORDER}`,
+    background: isApp ? BTN_BG_APP_2 : BTN_BG_2,
+    color: BTN_TEXT,
+    fontWeight: 900,
+    borderRadius: 12,
+    padding: "8px 12px",
+    fontSize: 13,
+    cursor: props.legalAccepted ? "pointer" : "not-allowed",
+    opacity: props.legalAccepted ? 1 : 0.55,
+    boxShadow: "0 10px 25px rgba(0,0,0,.20)",
+  }}
+>
+  Entrar a VOTO CLARO
+</button>
             </div>
           </div>
 
