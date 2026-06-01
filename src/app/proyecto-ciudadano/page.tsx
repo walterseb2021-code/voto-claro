@@ -37,6 +37,11 @@ const EVALUATION_CRITERIA = [
 
 const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
 const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.pdf';
+function maskAccessCode(code: string) {
+  const clean = String(code || '').trim();
+  if (!clean) return '';
+  return `••••-${clean.slice(-4)}`;
+}
 
 export default function ProyectoCiudadanoPage() {
   const router = useRouter();
@@ -202,7 +207,7 @@ export default function ProyectoCiudadanoPage() {
     const participantName = participant?.full_name || '';
     const participantAlias = participant?.alias || '';
     const participantCode = participant?.codigo_acceso || '';
-
+    const maskedParticipantCode = maskAccessCode(participantCode);
     const hasLoginCodeText = codigoAcceso.trim().length > 0;
 
 const participantHomeViewMode =
@@ -260,13 +265,13 @@ const hasWinners = winnersVisible.length > 0;
         visibleParts.push(`Alias visible: ${participantAlias}.`);
       }
       if (participantCode) {
-        visibleParts.push(`Código de acceso visible: ${participantCode}.`);
+      visibleParts.push(`Existe un código de acceso asociado al participante, mostrado de forma protegida como ${maskedParticipantCode}.`);
       }
       visibleParts.push('Se ven acciones para presentar proyecto y para ver proyectos activos.');
     }
 
     if (hasLoginCodeText) {
-      visibleParts.push(`Texto visible en el campo de código: ${codigoAcceso.trim().toUpperCase()}.`);
+      visibleParts.push('Hay texto escrito en el campo de código de acceso, pero no se expone su contenido al asistente.');
     } else if (!participantReady && !(loading || checking)) {
       visibleParts.push('No hay código escrito en el campo de acceso rápido.');
     }
@@ -411,9 +416,10 @@ const speakableSummary =
       suggestedPrompts,
       dynamicData: {
         participantVisible: participantReady,
-        participantName: participantName || null,
-        participantAlias: participantAlias || null,
+        participantNameVisible: !!participantName,
+        participantAliasVisible: !!participantAlias,
         participantCodeVisible: !!participantCode,
+        participantCodeMasked: maskedParticipantCode || null,
         loginCodeTyped: hasLoginCodeText,
         loginCodigoLoading,
         loginCodigoError: loginCodigoError || null,
@@ -431,9 +437,9 @@ const speakableSummary =
         budgetCategories: BUDGET_CATEGORIES,
         evaluationWeights: EVALUATION_WEIGHTS,
         evaluationCriteria: EVALUATION_CRITERIA,
-        competitionFrequency: 'trimestral',
-        winnersPerCycle: 3,
-        winnerRule: 'un ganador por cada categoría presupuestal',
+        competitionFrequency: 'según convocatoria',
+        winnersPerCycle: 'según bases y disponibilidad',
+        winnerRule: 'proyectos destacados o reconocidos según bases, validación y disponibilidad',
       },
       contextVersion: 'pc-home-v2',
     });
@@ -490,18 +496,17 @@ const speakableSummary =
 
         {/* Mensaje de bienvenida */}
            <div className={`bg-white ${card} mb-6`}>
-          <p className="text-slate-700 text-lg font-semibold">
-            💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
-            Cada 3 meses se elige un proyecto ganador por categoría presupuestal.
-          </p>
+           <p className="text-slate-700 text-lg font-semibold">
+           💡 Convierte tus ideas en acción. Presenta un proyecto para tu comunidad, forma un equipo y recibe apoyo vecinal.
+            Los proyectos podrán ser evaluados periódicamente según las bases, validación y disponibilidad de la convocatoria.
+           </p>
 
           {/* Bases del premio */}
-          <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-            <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
-            El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-            No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
-            La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
-          </div>
+           <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
+           <strong>🏆 Aviso sobre reconocimientos:</strong> Cualquier premio, fondo, apoyo, reconocimiento o entrega de materiales
+            estará sujeto a las bases oficiales de la convocatoria, validación del proyecto, disponibilidad presupuestal y verificación
+            de la organización. No se garantiza entrega automática de dinero ni beneficio económico directo por participar.
+            </div>
         </div>
 
         {/* Reglas de participación y evaluación */}
@@ -518,10 +523,10 @@ const speakableSummary =
               Los proyectos compiten en <strong>tres categorías presupuestales</strong>: hasta S/10,000, hasta S/20,000 y hasta S/30,000.
             </p>
             <p>
-              Cada 3 meses se elige <strong>un ganador por categoría</strong>.
+              Periódicamente se podrá seleccionar <strong>un proyecto destacado por categoría</strong>, según bases, validación y disponibilidad.
             </p>
             <p>
-              La nota final combina <strong>40 puntos por respaldo ciudadano</strong> y <strong>60 puntos por calidad del proyecto</strong>.
+              La evaluación referencial combina <strong>40 puntos por respaldo ciudadano</strong> y <strong>60 puntos por calidad del proyecto</strong>, sin perjuicio de la validación final de la organización.
             </p>
             <p>
               La calidad del proyecto se evalúa considerando <strong>impacto comunitario</strong>, <strong>claridad del problema y la solución</strong>, <strong>viabilidad técnica y presupuestal</strong> y <strong>sostenibilidad del beneficio</strong>.
@@ -562,12 +567,12 @@ const speakableSummary =
         {/* Bloque de ganadores del ciclo anterior */}
         <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border-2 border-yellow-600 p-6 mb-6 shadow-sm vc-fade-up vc-delay-1">
           <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-            🏆 Ganadores del ciclo anterior
+          🏆 Proyectos destacados del ciclo anterior
           </h2>
           {winnersLoading ? (
             <p className="text-slate-600">Cargando ganadores...</p>
           ) : winners.length === 0 ? (
-            <p className="text-slate-500">Próximamente se mostrarán los proyectos ganadores.</p>
+            <p className="text-slate-500">Próximamente se mostrarán los proyectos destacados o reconocidos.</p>
           ) : (
             <div className="space-y-3">
               {winners.map((winner, index) => (
@@ -579,7 +584,7 @@ const speakableSummary =
                     <div className="flex-1">
                       <h3 className="font-bold text-slate-900">{winner.name}</h3>
                       <p className="text-sm text-slate-600">{winner.category} • {winner.department} - {winner.district}</p>
-                      <p className="text-xs text-slate-500 mt-1">Líder: {winner.leader?.alias || 'Anónimo'}</p>
+                      <p className="text-xs text-slate-500 mt-1">Líder: {winner.leader?.alias || 'No publicado'}</p>
                     </div>
                        <button
   type="button"
@@ -601,7 +606,7 @@ const speakableSummary =
             <div className={`bg-white ${card} mb-4`}>
               <h2 className="text-xl font-bold text-slate-900 mb-3">Regístrate para participar</h2>
               <p className="text-slate-600 mb-4">
-                Completa tu perfil para poder presentar proyectos o apoyar iniciativas ciudadanas.
+                Completa tu perfil para poder presentar proyectos o apoyar iniciativas ciudadanas, aceptando las reglas de participación y tratamiento de datos correspondientes.
               </p>
                <button
   type="button"
@@ -618,7 +623,7 @@ const speakableSummary =
                 <span className="text-2xl">🔑</span> Iniciar sesión con código
               </h2>
               <p className="text-slate-600 mb-4 text-sm">
-                Si ya tienes un código de acceso (el que te dieron al registrarte), ingrésalo aquí.
+                Si ya tienes un código de acceso, ingrésalo aquí. Este código es personal y no debe compartirse públicamente.
               </p>
 
               {loginCodigoError && (
@@ -654,8 +659,10 @@ const speakableSummary =
                 <p className="text-sm text-slate-600">Alias: {participant.alias}</p>
                 <p className="text-xs text-slate-500 mt-1">Registrado el {new Date(participant.created_at).toLocaleDateString()}</p>
                 {participant.codigo_acceso && (
-                  <p className="text-xs text-blue-600 mt-1 font-mono">Código: {participant.codigo_acceso}</p>
-                )}
+                <p className="text-xs text-blue-600 mt-1 font-mono">
+                Código de acceso: {maskAccessCode(participant.codigo_acceso)} · Consérvalo privado.
+                </p>
+               )}
               </div>
               <button
                 onClick={handleRefresh}
@@ -692,7 +699,9 @@ const speakableSummary =
         {/* Lista de proyectos destacados */}
         <div className={`bg-white ${card} mt-6`}>
           <h2 className="text-xl font-bold text-slate-900 mb-3">Proyectos destacados</h2>
-          <p className="text-slate-500">Próximamente se mostrarán los proyectos con más apoyo ciudadano.</p>
+          <p className="text-slate-500">
+          Próximamente se mostrarán proyectos destacados según apoyo ciudadano, validación y reglas de la convocatoria.
+          </p>
               <button
   type="button"
   onClick={() => router.push('/proyecto-ciudadano/proyectos')}
