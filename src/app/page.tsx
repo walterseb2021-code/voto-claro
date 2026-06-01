@@ -209,14 +209,15 @@ export default function HomePage() {
       route: "/",
       summary:
         "Pantalla principal de Voto Claro donde puedes informarte, participar y explorar las distintas experiencias de la plataforma.",
-      speakableSummary:
-        "Estás en la pantalla principal de Voto Claro. Desde aquí puedes informarte, participar o explorar distintas experiencias dentro de la plataforma. Puedo ayudarte a encontrar por dónde empezar.",
+       speakableSummary:
+     "Estás en la pantalla principal de Voto Claro. Desde aquí puedes informarte, participar y explorar distintas experiencias ciudadanas dentro de la plataforma. Recuerda que Voto Claro no reemplaza información oficial de los organismos electorales ni decide por el usuario; solo orienta con fines informativos y participativos.",
       activeSection: "inicio-principal",
       visibleText: [
-        "Pantalla principal de Voto Claro.",
-        "Aquí puedes buscar candidatos y revisar Hoja de Vida, Plan de Gobierno y Actuar Político.",
-        "También puedes acceder a Servicios al ciudadano, Reflexionar antes de votar, Intención de voto, Comentario ciudadano, Proyecto ciudadano, Espacio emprendedor, Reto Ciudadano y Solo para ganadores.",
-        "El asistente puede orientar al usuario según si quiere informarse, participar, comparar, reflexionar o aprender jugando.",
+      "Pantalla principal de Voto Claro.",
+      "Aquí puedes buscar candidatos y revisar información como Hoja de Vida, Plan de Gobierno y Actuar Político, cuando existan documentos o fuentes disponibles.",
+      "También puedes acceder a Servicios al ciudadano, Reflexionar antes de votar, Intención de voto, Comentario ciudadano, Proyecto ciudadano, Espacio emprendedor, Reto Ciudadano y Solo para ganadores.",
+      "La plataforma es informativa y participativa. No reemplaza información oficial de ONPE, JNE, RENIEC u otros organismos competentes.",
+      "El asistente puede orientar al usuario según si quiere informarse, participar, comparar, reflexionar o aprender jugando, sin inventar datos y priorizando evidencia disponible.",
       ].join("\n"),
       availableActions: [
         "Buscar candidatos",
@@ -322,7 +323,11 @@ export default function HomePage() {
             <p className="mt-1 text-sm md:text-base text-black">
               El Asistente te guía paso a paso por documentos, fuentes y comparaciones.
             </p>
-
+             <div className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 text-xs text-amber-900 font-semibold leading-relaxed">
+             <b>Aviso importante:</b> VOTO CLARO es una plataforma informativa y participativa.
+             No reemplaza información oficial de ONPE, JNE, RENIEC u otros organismos competentes,
+             no constituye propaganda electoral oficial, no emite resultados electorales y no decide por el usuario.
+             </div>
             <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
               <button
                 type="button"
@@ -403,12 +408,12 @@ export default function HomePage() {
                 type="button"
                 onClick={() =>
                   guideSay(
-                    "Recuerda: un voto responsable empieza con información verificable. Primero busca, luego verifica, y recién al final decide."
+                    "Recuerda: una decisión responsable empieza con información verificable. Primero busca, luego verifica, y recién al final forma tu propio criterio."
                   )
                 }
                 className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border-2 border-borderparty bg-white text-black font-semibold hover:brightness-95 transition vc-btn-wave vc-btn-pulse"
               >
-                “Un voto responsable empieza con información verificable.”
+                “Una decisión responsable empieza con información verificable.”
               </button>
             </div>
 
@@ -430,7 +435,7 @@ export default function HomePage() {
 
               <p className="text-sm text-black mt-1">
                 Escribe al menos 2 letras del candidato que buscas. Abre la ficha para consultar Hoja de Vida (HV),
-                Plan de Gobierno y Actuar Político.
+                Plan de Gobierno y Actuar Político, según la información y fuentes disponibles.
               </p>
             </div>
 
@@ -623,7 +628,7 @@ export default function HomePage() {
                 key: "intencion",
                 href: "/intencion-de-voto",
                 speech:
-                  "Vas a entrar a Intención de voto. Es una pantalla piloto con once partidos y nulo o blanco, para visualizar tendencias de forma simple. Recuerda: decide con información verificable.",
+                  "Vas a entrar a Intención de voto. Es una dinámica ciudadana interna de opinión, no una encuesta oficial, no un conteo electoral y no representa resultados oficiales. Recuerda: forma tu criterio con información verificable.",
                 preventDefault: true,
                 e,
               })
@@ -635,8 +640,8 @@ export default function HomePage() {
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">INTENCIÓN DE VOTO</div>
                 <p className="mt-1 text-sm text-black">
-                  Vista piloto (11 partidos + Nulo/Blanco) para explorar tendencias. Próximamente se incluirán todos los
-                  partidos.
+                  Dinámica ciudadana interna de opinión. No es encuesta oficial, no es conteo electoral y no representa
+                  resultados oficiales.
                 </p>
                 <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
                   Abrir página →
@@ -654,7 +659,7 @@ export default function HomePage() {
                 key: "reto-ciudadano",
                 href: "/reto-ciudadano",
                 speech:
-                  "Vas a entrar a Reto Ciudadano. Es un juego por niveles: conocimiento general, partido y ruleta. Puedes jugar en modo sin premio o con premio.",
+                  "Vas a entrar a Reto Ciudadano. Es una dinámica lúdica por niveles: conocimiento general, partido y ruleta. Cualquier premio o reconocimiento depende de las bases, validación y disponibilidad establecidas.",
                 preventDefault: true,
                 e,
               })
@@ -666,7 +671,7 @@ export default function HomePage() {
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">RETO CIUDADANO</div>
                 <p className="mt-1 text-sm text-black">
-                  Juego por niveles: Conocimiento general → Partido → Ruleta. Practica y vuelve a intentar con
+                  Dinámica lúdica por niveles: Conocimiento general → Partido → Ruleta. Practica y aprende con
                   información verificable.
                 </p>
                 <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
@@ -685,7 +690,7 @@ export default function HomePage() {
                 key: "comentarios",
                 href: "/comentarios",
                 speech:
-                  "Vas a entrar a Comentarios ciudadanos. Ahí puedes dejar tu opinión o sugerencia. Es anónimo y ayuda a mejorar la app.",
+                  "Vas a entrar a Comentarios ciudadanos. Ahí puedes dejar tu opinión o sugerencia. Los comentarios se publican solo si son aprobados, y no se muestran públicamente identificadores técnicos del usuario.",
                 preventDefault: true,
                 e,
               })
@@ -697,7 +702,7 @@ export default function HomePage() {
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">COMENTARIO CIUDADANO</div>
                 <p className="mt-1 text-sm text-black">
-                  Deja tu opinión o sugerencia para mejorar Voto Claro. (Se publica solo si es aprobado).
+                  Deja tu opinión o sugerencia para mejorar Voto Claro. Se publica solo si es aprobado y sin mostrar identificadores técnicos del usuario.
                 </p>
                 <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
                   Abrir página →
@@ -715,7 +720,7 @@ export default function HomePage() {
                 key: "proyecto-ciudadano",
                 href: "/proyecto-ciudadano",
                 speech:
-                  "Vas a entrar a Proyecto Ciudadano. Aquí puedes presentar proyectos para tu comunidad, formar un equipo y recibe apoyo vecinal. Los mejores proyectos serán premiados cada tres meses.",
+                  "Vas a entrar a Proyecto Ciudadano. Aquí puedes presentar proyectos para tu comunidad, formar un equipo y recibir apoyo vecinal. Los reconocimientos o premios dependen de las bases, validación y disponibilidad establecidas por la organización.",
                 preventDefault: true,
                 e,
               })
@@ -727,7 +732,7 @@ export default function HomePage() {
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">PROYECTO CIUDADANO</div>
                 <p className="mt-1 text-sm text-black">
-                  Presenta tu proyecto comunitario, forma un equipo y recibe apoyo vecinal. Los mejores proyectos son premiados.
+                  Presenta tu proyecto comunitario, forma un equipo y recibe apoyo vecinal. Los reconocimientos o premios se sujetan a bases, validación y disponibilidad.
                 </p>
                 <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
                   Abrir página →
@@ -745,7 +750,7 @@ export default function HomePage() {
                 key: "espacio-emprendedor",
                 href: "/espacio-emprendedor",
                 speech:
-                  "Vas a entrar a Espacio Emprendedor APP. Espacio exclusivo para afiliados a Alianza para el Progreso donde puedes publicar proyectos emprendedores y conectar con inversionistas.",
+                  "Vas a entrar a Espacio Emprendedor APP. Es un espacio dirigido a participantes autorizados, donde pueden publicar proyectos emprendedores y conectar con posibles interesados o inversionistas, según las reglas de la plataforma.",
                 preventDefault: true,
                 e,
               })
@@ -757,7 +762,7 @@ export default function HomePage() {
               <div className="min-w-0">
                 <div className="text-base font-extrabold text-black">ESPACIO EMPRENDEDOR APP</div>
                 <p className="mt-1 text-sm text-black">
-                  Espacio exclusivo para afiliados a Alianza para el Progreso. Publica tu proyecto emprendedor y conecta con inversionistas.
+                  Espacio dirigido a participantes autorizados. Publica tu proyecto emprendedor y conecta con posibles interesados o inversionistas, según las reglas de la plataforma.
                 </p>
                 <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
                   Abrir espacio →
@@ -774,7 +779,7 @@ export default function HomePage() {
         key: "solo-para-ganadores",
         href: "/solo-para-ganadores",
         speech:
-          "Vitrina final de resultados: ganadores, entrega de premios, fotos, videos, entrevistas y reconocimientos de Voto Claro.",
+          "Vitrina pública de reconocimientos: ganadores validados, publicaciones, fotos, videos, entrevistas y constancias de participación, según las bases de cada dinámica.",
         preventDefault: true,
         e,
       })
@@ -786,7 +791,7 @@ export default function HomePage() {
       <div className="min-w-0">
         <div className="text-base font-extrabold text-black">SOLO PARA GANADORES</div>
         <p className="mt-1 text-sm text-black">
-          Vitrina pública de ganadores, entrega de premios, fotos, videos, entrevistas y reconocimientos de Voto Claro.
+          Vitrina pública de ganadores validados, publicaciones, fotos, videos, entrevistas y reconocimientos, según las bases de cada dinámica.
         </p>
         <div className="mt-3 inline-flex items-center text-sm font-extrabold text-primary">
           Abrir ventana →
@@ -798,9 +803,9 @@ export default function HomePage() {
 
       </section>
 
-      <footer className="mt-6 text-xs text-black">
-        VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes. No
-        reemplaza el criterio personal.
+      <footer className="mt-6 text-xs text-black leading-relaxed">
+      VOTO CLARO muestra información para ayudar a entender propuestas y antecedentes según documentos y fuentes disponibles.
+      No reemplaza el criterio personal, no sustituye información oficial de organismos electorales y no emite resultados electorales.
       </footer>
     </main>
   );
