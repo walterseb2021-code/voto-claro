@@ -49,14 +49,13 @@ export function onPartyChange(cb: (partyId: PartyId) => void) {
 }
 
 export function partyWelcomeAssets(partyId: PartyId) {
-  if (partyId === "app") {
-    return {
-      partyId,
-      avatarSrc: "/app-avatar.png",
-      welcomeVideoSrc: "/media/app-bienvenida.mp4",
-    };
-  }
-
+      if (partyId === "app") {
+  return {
+    partyId,
+    avatarSrc: "/app-avatar.png",
+    welcomeVideoSrc: "/media/app-bienvenida-mobile.mp4",
+  };
+}
   // Default: Perú Federal
   return {
     partyId,
