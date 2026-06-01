@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 const LEGAL_COOKIE = "vc_legal_accepted";
 
-function isPublicAsset(pathname: string) {
+ function isPublicAsset(pathname: string) {
   return (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -12,7 +12,8 @@ function isPublicAsset(pathname: string) {
     pathname.startsWith("/manifest") ||
     pathname.startsWith("/robots") ||
     pathname.startsWith("/sitemap") ||
-    /\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|xml|json|woff|woff2)$/i.test(pathname)
+    pathname.startsWith("/media/") ||
+    /\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|xml|json|woff|woff2|mp4|webm|mov|m4v|mp3|wav|ogg)$/i.test(pathname)
   );
 }
 
