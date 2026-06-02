@@ -1,4 +1,5 @@
 'use client';
+
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -19,6 +20,7 @@ const CATEGORIAS = [
 
 const MIN_SUPPORTS_REQUIRED = 100;
 const MAX_PROJECT_BUDGET = 30000;
+const MAX_PDF_SIZE_MB = 10;
 const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
 const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.pdf';
 
@@ -49,6 +51,20 @@ function getBudgetCategoryLabel(category: string | null): string {
   return 'Sin categoría presupuestal';
 }
 
+function sanitizeText(value: string) {
+  return String(value || '').trim();
+}
+
+function sanitizeMoneyInput(value: string) {
+  return value.replace(/[^\d.]/g, '').slice(0, 12);
+}
+
+function getProtectedFileName(file: File | null) {
+  if (!file) return null;
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf';
+  return `archivo-proyecto.${ext}`;
+}
+
 export default function NuevoProyectoPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
@@ -58,16 +74,18 @@ export default function NuevoProyectoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
   const [form, setForm] = useState({
-  name: '',
-  category: '',
-  objective: '',
-  description: '',
-  district: '',
-  department: '',
-  requested_budget: '',
-  data_truth_confirmed: false,
-});
+    name: '',
+    category: '',
+    objective: '',
+    description: '',
+    district: '',
+    department: '',
+    requested_budget: '',
+    data_truth_confirmed: false,
+  });
+
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [cycle, setCycle] = useState<any>(null);
 
@@ -88,6 +106,7 @@ export default function NuevoProyectoPage() {
   useEffect(() => {
     async function loadData() {
       const deviceId = localStorage.getItem('vc_device_id');
+
       if (!deviceId) {
         router.push('/proyecto-ciudadano/registro');
         return;
@@ -123,20 +142,49 @@ export default function NuevoProyectoPage() {
 
     loadData();
   }, [router]);
-   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-  const target = e.target;
-  const value =
-    target instanceof HTMLInputElement && target.type === 'checkbox'
-      ? target.checked
-      : target.value;
 
-  setForm({ ...form, [target.name]: value });
-};
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const target = e.target;
+
+    if (target instanceof HTMLInputElement && target.type === 'checkbox') {
+      setForm({ ...form, [target.name]: target.checked });
+      return;
+    }
+
+    if (target.name === 'requested_budget') {
+      setForm({ ...form, requested_budget: sanitizeMoneyInput(target.value) });
+      return;
+    }
+
+    setForm({ ...form, [target.name]: target.value });
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setPdfFile(e.target.files[0]);
+    const selected = e.target.files?.[0] || null;
+
+    if (!selected) {
+      setPdfFile(null);
+      return;
     }
+
+    if (selected.type !== 'application/pdf') {
+      setError('Solo se permiten archivos PDF.');
+      setPdfFile(null);
+      e.target.value = '';
+      return;
+    }
+
+    if (selected.size > MAX_PDF_SIZE_MB * 1024 * 1024) {
+      setError(`El archivo no debe superar los ${MAX_PDF_SIZE_MB} MB.`);
+      setPdfFile(null);
+      e.target.value = '';
+      return;
+    }
+
+    setError(null);
+    setPdfFile(selected);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,14 +192,22 @@ export default function NuevoProyectoPage() {
     setSubmitting(true);
     setError(null);
 
-    if (!form.name || !form.category || !form.objective || !form.description || !form.district) {
-      setError('Todos los campos son obligatorios.');
-      setSubmitting(false);
-      return;
-    }
+    const cleanName = sanitizeText(form.name);
+    const cleanCategory = sanitizeText(form.category);
+    const cleanObjective = sanitizeText(form.objective);
+    const cleanDescription = sanitizeText(form.description);
+    const cleanDistrict = sanitizeText(form.district);
+    const cleanDepartment = sanitizeText(form.department);
 
-    if (!form.department) {
-      setError('Debes seleccionar un departamento.');
+    if (
+      !cleanName ||
+      !cleanCategory ||
+      !cleanObjective ||
+      !cleanDescription ||
+      !cleanDistrict ||
+      !cleanDepartment
+    ) {
+      setError('Todos los campos son obligatorios.');
       setSubmitting(false);
       return;
     }
@@ -162,7 +218,11 @@ export default function NuevoProyectoPage() {
       return;
     }
 
-    if (requestedBudgetNumber == null || Number.isNaN(requestedBudgetNumber) || requestedBudgetNumber <= 0) {
+    if (
+      requestedBudgetNumber == null ||
+      Number.isNaN(requestedBudgetNumber) ||
+      requestedBudgetNumber <= 0
+    ) {
       setError('El monto solicitado debe ser un número válido mayor que cero.');
       setSubmitting(false);
       return;
@@ -174,11 +234,19 @@ export default function NuevoProyectoPage() {
       return;
     }
 
-       if (!form.data_truth_confirmed) {
-  setError('Debes declarar que la información presentada es real, actualizada y cuenta con el consentimiento de las personas incluidas.');
-  setSubmitting(false);
-  return;
-}
+    if (!derivedBudgetCategory) {
+      setError('El monto solicitado no corresponde a una categoría presupuestal válida.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (!form.data_truth_confirmed) {
+      setError(
+        'Debes declarar que la información presentada es real, actualizada y cuenta con el consentimiento de las personas incluidas.'
+      );
+      setSubmitting(false);
+      return;
+    }
 
     if (!pdfFile) {
       setError('Debes subir el archivo PDF del proyecto.');
@@ -192,40 +260,42 @@ export default function NuevoProyectoPage() {
       return;
     }
 
-    if (pdfFile.size > 10 * 1024 * 1024) {
-      setError('El archivo no debe superar los 10 MB.');
+    if (pdfFile.size > MAX_PDF_SIZE_MB * 1024 * 1024) {
+      setError(`El archivo no debe superar los ${MAX_PDF_SIZE_MB} MB.`);
       setSubmitting(false);
       return;
     }
 
     try {
-         if (!cycle?.id) {
-  setError('No hay un ciclo activo disponible para presentar proyectos en este momento.');
-  setSubmitting(false);
-  return;
-}
+      if (!cycle?.id) {
+        setError('No hay un ciclo activo disponible para presentar proyectos en este momento.');
+        setSubmitting(false);
+        return;
+      }
 
-const { data: existingLeaderProject, error: existingLeaderError } = await supabase
-  .from('projects')
-  .select('id, name, status')
-  .eq('cycle_id', cycle.id)
-  .eq('leader_id', participant.id)
-  .in('status', ['pending', 'active'])
-  .maybeSingle();
+      const { data: existingLeaderProject, error: existingLeaderError } = await supabase
+        .from('projects')
+        .select('id, name, status')
+        .eq('cycle_id', cycle.id)
+        .eq('leader_id', participant.id)
+        .in('status', ['pending', 'active'])
+        .maybeSingle();
 
-if (existingLeaderError) {
-  console.error('Error verificando proyecto existente del líder:', existingLeaderError);
-}
+      if (existingLeaderError) {
+        console.error('Error verificando proyecto existente del líder:', existingLeaderError);
+      }
 
-if (existingLeaderProject) {
-  setError('Ya tienes un proyecto registrado en el ciclo actual. No puedes presentar otro hasta que termine el trimestre de este concurso.');
-  setSubmitting(false);
-  return;
-}
+      if (existingLeaderProject) {
+        setError(
+          'Ya tienes un proyecto registrado en el ciclo actual. No puedes presentar otro hasta que termine este ciclo de evaluación.'
+        );
+        setSubmitting(false);
+        return;
+      }
 
-
-      const fileExt = pdfFile.name.split('.').pop();
+      const fileExt = pdfFile.name.split('.').pop()?.toLowerCase() || 'pdf';
       const fileName = `${participant.id}/${Date.now()}.${fileExt}`;
+
       const { error: uploadError } = await supabase.storage
         .from('project_pdfs')
         .upload(fileName, pdfFile);
@@ -241,14 +311,14 @@ if (existingLeaderProject) {
       const { error: insertError } = await supabase
         .from('projects')
         .insert({
-          cycle_id: cycle?.id,
+          cycle_id: cycle.id,
           leader_id: participant.id,
-          name: form.name,
-          category: form.category,
-          objective: form.objective,
-          description: form.description,
-          district: form.district,
-          department: form.department,
+          name: cleanName,
+          category: cleanCategory,
+          objective: cleanObjective,
+          description: cleanDescription,
+          district: cleanDistrict,
+          department: cleanDepartment,
           requested_budget: requestedBudgetNumber,
           budget_category: derivedBudgetCategory,
           minimum_supports_required: MIN_SUPPORTS_REQUIRED,
@@ -282,6 +352,7 @@ if (existingLeaderProject) {
       form.district ? 'distrito' : null,
       form.department ? 'departamento' : null,
       form.requested_budget ? 'monto solicitado' : null,
+      form.data_truth_confirmed ? 'declaración obligatoria' : null,
     ].filter(Boolean) as string[];
 
     const missingFields = [
@@ -292,6 +363,7 @@ if (existingLeaderProject) {
       !form.district ? 'distrito' : null,
       !form.department ? 'departamento' : null,
       !form.requested_budget ? 'monto solicitado' : null,
+      !form.data_truth_confirmed ? 'declaración obligatoria' : null,
       !pdfFile ? 'archivo PDF' : null,
     ].filter(Boolean) as string[];
 
@@ -326,7 +398,7 @@ if (existingLeaderProject) {
     }
 
     if (participant) {
-      visibleParts.push(`Participante visible: ${participant.full_name || participant.alias || 'participante registrado'}.`);
+      visibleParts.push('Hay un participante registrado visible para esta sesión, sin exponer datos personales completos al asistente.');
     } else if (!loading) {
       visibleParts.push('No se muestra un participante válido en esta pantalla.');
     }
@@ -339,37 +411,55 @@ if (existingLeaderProject) {
 
     if (!success && !loading) {
       visibleParts.push('Está visible el formulario para presentar un nuevo proyecto.');
+
       if (filledFields.length) {
         visibleParts.push(`Campos con contenido: ${filledFields.join(', ')}.`);
       }
+
       if (missingFields.length) {
         visibleParts.push(`Campos pendientes: ${missingFields.join(', ')}.`);
       }
+
       if (form.category) {
         visibleParts.push(`Categoría temática seleccionada: ${form.category}.`);
       }
+
       if (form.department) {
         visibleParts.push(`Departamento seleccionado: ${form.department}.`);
       }
+
       if (form.requested_budget) {
         visibleParts.push(`Monto solicitado visible: S/${form.requested_budget}.`);
       }
+
       if (derivedBudgetCategory) {
         visibleParts.push(`Categoría presupuestal derivada: ${derivedBudgetCategoryLabel}.`);
       } else if (form.requested_budget) {
         visibleParts.push('El monto visible todavía no cae en una categoría presupuestal válida.');
       }
+
       if (pdfFile) {
-        visibleParts.push(`PDF cargado: ${pdfFile.name}.`);
+        visibleParts.push('Hay un archivo PDF cargado para el proyecto, sin exponer el nombre original del archivo al asistente.');
       } else {
         visibleParts.push('Todavía no hay un archivo PDF cargado.');
       }
+
+      visibleParts.push(
+        form.data_truth_confirmed
+          ? 'La declaración obligatoria del postulante está marcada.'
+          : 'La declaración obligatoria del postulante todavía no está marcada.'
+      );
     }
 
-    visibleParts.push(`Regla visible del programa: el proyecto necesita al menos ${MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos para entrar a evaluación final.`);
-    visibleParts.push(`Ponderación visible de evaluación: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto.`);
+    visibleParts.push(
+      `Regla visible del programa: el proyecto necesita al menos ${MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos para entrar a evaluación final.`
+    );
+    visibleParts.push(
+      `Ponderación referencial visible de evaluación: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto, sujeta a validación.`
+    );
     visibleParts.push(`Criterios visibles de calidad: ${EVALUATION_CRITERIA.join(', ')}.`);
     visibleParts.push('Hay acceso visible para descargar el formato oficial del proyecto en DOCX y ver el modelo en PDF.');
+    visibleParts.push('Cualquier reconocimiento, apoyo o premio queda sujeto a bases, validación y disponibilidad de la organización.');
 
     if (error) {
       visibleParts.push(`Error visible: ${error}.`);
@@ -390,6 +480,7 @@ if (existingLeaderProject) {
           'Volver',
           'Descargar formato oficial en DOCX',
           'Ver formato modelo en PDF',
+          'Aceptar declaración obligatoria',
           'Enviar proyecto',
         ];
 
@@ -419,22 +510,22 @@ if (existingLeaderProject) {
           },
           {
             id: 'pc-nuevo-2',
-            label: '¿Qué monto tengo?',
+            label: 'Monto solicitado',
             question: '¿Qué monto solicitado está visible en este formulario?',
           },
           {
             id: 'pc-nuevo-3',
-            label: '¿Qué categoría presupuestal me corresponde?',
+            label: 'Categoría presupuestal',
             question: '¿Qué categoría presupuestal le corresponde a este proyecto según el monto visible?',
           },
           {
             id: 'pc-nuevo-4',
-            label: '¿Ya cargué el PDF?',
+            label: 'PDF del proyecto',
             question: '¿Ya cargué el PDF del proyecto en esta pantalla?',
           },
           {
             id: 'pc-nuevo-5',
-            label: '¿Dónde descargo el formato?',
+            label: 'Formato oficial',
             question: '¿Dónde puedo descargar el formato oficial del proyecto desde esta pantalla?',
           },
         ];
@@ -443,7 +534,7 @@ if (existingLeaderProject) {
       ? 'Pantalla de nuevo proyecto cargando datos del participante y del ciclo activo.'
       : success
       ? 'Pantalla de nuevo proyecto con envío exitoso y mensaje de confirmación visible.'
-      : 'Pantalla de nuevo proyecto con formulario visible, monto solicitado, categoría presupuestal derivada, formato oficial descargable y estado de envío.';
+      : 'Pantalla de nuevo proyecto con formulario visible, monto solicitado, categoría presupuestal derivada, formato oficial descargable, declaración obligatoria y estado de envío.';
 
     setPageContext({
       pageId: 'proyecto-ciudadano-nuevo-proyecto',
@@ -463,20 +554,21 @@ if (existingLeaderProject) {
             'formato-oficial-del-proyecto',
             'reglas-de-participacion',
             'formulario',
-            'bases-del-premio',
+            'declaracion-obligatoria',
+            'aviso-reconocimientos',
           ],
       visibleActions: availableActions,
       availableActions,
       visibleText: visibleParts.join('\n'),
-      selectedItemTitle: form.name || undefined,
+      selectedItemTitle: form.name ? 'Proyecto en edición' : undefined,
       selectedCategory: form.category || undefined,
       status: loading || submitting ? 'loading' : error ? 'error' : 'ready',
       suggestedPrompts,
       dynamicData: {
         participantVisible: !!participant,
-        participantName: participant?.full_name || participant?.alias || null,
+        participantDataProtected: true,
         cycleActive: !!cycle?.id,
-        cycleId: cycle?.id || null,
+        cycleIdVisible: !!cycle?.id,
         loading,
         submitting,
         success,
@@ -484,7 +576,7 @@ if (existingLeaderProject) {
         filledFields,
         missingFields,
         pdfLoaded: !!pdfFile,
-        pdfFileName: pdfFile?.name || null,
+        pdfFileNameProtected: pdfFile ? getProtectedFileName(pdfFile) : null,
         pdfFileSize: pdfFile?.size || null,
         officialTemplateAvailable: true,
         officialTemplateDocxUrl: OFFICIAL_TEMPLATE_DOCX,
@@ -496,17 +588,20 @@ if (existingLeaderProject) {
         maxProjectBudget: MAX_PROJECT_BUDGET,
         evaluationWeights: EVALUATION_WEIGHTS,
         evaluationCriteria: EVALUATION_CRITERIA,
-        formValues: {
-          name: form.name || null,
+        dataTruthConfirmed: form.data_truth_confirmed,
+        formValuesProtected: {
+          nameFilled: !!form.name,
           category: form.category || null,
-          objective: form.objective || null,
-          description: form.description || null,
-          district: form.district || null,
+          objectiveFilled: !!form.objective,
+          descriptionFilled: !!form.description,
+          districtFilled: !!form.district,
           department: form.department || null,
-          requested_budget: form.requested_budget || null,
+          requestedBudgetFilled: !!form.requested_budget,
         },
+        recognitionRule:
+          'Todo reconocimiento, apoyo o premio queda sujeto a bases, validación y disponibilidad de la organización.',
       },
-      contextVersion: 'pc-nuevo-proyecto-v2',
+      contextVersion: 'pc-nuevo-proyecto-v3',
     });
   }, [
     setPageContext,
@@ -547,7 +642,7 @@ if (existingLeaderProject) {
             <div className="text-6xl mb-4">📄✅</div>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">¡Proyecto enviado!</h1>
             <p className="text-slate-600 mb-4">
-              Tu proyecto ha sido recibido y está en revisión por el administrador. Recibirás notificación cuando sea aprobado.
+              Tu proyecto ha sido recibido para revisión. Será publicado o evaluado según las reglas de la convocatoria y la validación de la organización.
             </p>
             <Link
               href="/proyecto-ciudadano"
@@ -575,6 +670,7 @@ if (existingLeaderProject) {
           <h2 className="text-lg font-bold text-slate-900 mb-2">📄 Formato oficial del proyecto</h2>
           <p className="text-slate-600 text-sm mb-4">
             Descarga el formato oficial, complétalo con la información del proyecto y luego súbelo en PDF en este formulario.
+            El formato ayuda a que las propuestas sean claras, comparables y revisables.
           </p>
 
           <div className="flex flex-wrap gap-3">
@@ -600,9 +696,16 @@ if (existingLeaderProject) {
         <div className="bg-white rounded-2xl border-2 border-emerald-600 p-5 shadow-sm mb-6">
           <h2 className="text-lg font-bold text-slate-900 mb-2">📋 Reglas de participación</h2>
           <div className="space-y-2 text-sm text-slate-700">
-            <p>Tu proyecto necesita <strong>al menos 100 apoyos vecinales válidos</strong> para entrar a evaluación final.</p>
-            <p>Las categorías presupuestales son: <strong>hasta S/10,000</strong>, <strong>hasta S/20,000</strong> y <strong>hasta S/30,000</strong>.</p>
-            <p>La evaluación final combina <strong>40 puntos por respaldo ciudadano</strong> y <strong>60 puntos por calidad del proyecto</strong>.</p>
+            <p>
+              Tu proyecto necesita <strong>al menos {MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos</strong> para entrar a evaluación final.
+            </p>
+            <p>
+              Las categorías presupuestales son: <strong>hasta S/10,000</strong>, <strong>hasta S/20,000</strong> y <strong>hasta S/30,000</strong>.
+            </p>
+            <p>
+              La evaluación referencial combina <strong>40 puntos por respaldo ciudadano</strong> y <strong>60 puntos por calidad del proyecto</strong>,
+              sin perjuicio de la validación final de la organización.
+            </p>
           </div>
         </div>
 
@@ -642,7 +745,9 @@ if (existingLeaderProject) {
               >
                 <option value="">Selecciona una categoría</option>
                 {CATEGORIAS.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
             </div>
@@ -692,9 +797,6 @@ if (existingLeaderProject) {
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                 required
               >
-                <p className="text-xs text-slate-500 mt-1">
-  Este dato sirve para identificar en qué región se ejecutará el proyecto. Pueden presentarse varios proyectos de una misma región.
-</p>
                 <option value="">Selecciona un departamento</option>
                 <option value="Amazonas">Amazonas</option>
                 <option value="Áncash">Áncash</option>
@@ -722,6 +824,9 @@ if (existingLeaderProject) {
                 <option value="Tumbes">Tumbes</option>
                 <option value="Ucayali">Ucayali</option>
               </select>
+              <p className="text-xs text-slate-500 mt-1">
+                Este dato sirve para identificar en qué región se ejecutará el proyecto. Pueden presentarse varios proyectos de una misma región.
+              </p>
             </div>
 
             <div>
@@ -744,7 +849,8 @@ if (existingLeaderProject) {
 
             <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3">
               <p className="text-sm font-semibold text-emerald-800">
-                Categoría presupuestal detectada: {derivedBudgetCategory ? derivedBudgetCategoryLabel : 'Completa el monto solicitado'}
+                Categoría presupuestal detectada:{' '}
+                {derivedBudgetCategory ? derivedBudgetCategoryLabel : 'Completa el monto solicitado'}
               </p>
             </div>
 
@@ -752,53 +858,56 @@ if (existingLeaderProject) {
               <label className="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del proyecto *</label>
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,application/pdf"
                 onChange={handleFileChange}
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                 required
               />
-              <p className="text-xs text-slate-500 mt-1">Máximo 10 MB. Solo PDF.</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Máximo {MAX_PDF_SIZE_MB} MB. Solo PDF. No incluyas datos sensibles innecesarios en el archivo.
+              </p>
             </div>
 
             <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-              <strong>⚠️ Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto.
-              El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores.
-              No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado (S/30,000 / S/20,000 / S/10,000).
-              La mano de obra puede ser voluntaria (propia del comité) o estar presupuestada, en cuyo caso se paga directamente a los trabajadores.
+              <strong>⚠️ Aviso sobre reconocimientos:</strong> Cualquier premio, fondo, apoyo, reconocimiento o entrega de materiales
+              estará sujeto a las bases oficiales de la convocatoria, validación del proyecto, disponibilidad presupuestal y verificación
+              de la organización. No se garantiza entrega automática de dinero ni beneficio económico directo por presentar un proyecto.
             </div>
-              <div className="bg-yellow-50 rounded-xl border border-yellow-300 p-4 text-sm text-yellow-800">
-  <strong>📌 Importante:</strong> El proyecto debe presentarse con el PDF oficial completo y el monto solicitado no puede superar S/30,000.
-</div>
 
-<div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-  <h3 className="text-sm font-bold text-amber-900 mb-2">Declaración obligatoria del postulante</h3>
+            <div className="bg-yellow-50 rounded-xl border border-yellow-300 p-4 text-sm text-yellow-800">
+              <strong>📌 Importante:</strong> El proyecto debe presentarse con el PDF oficial completo y el monto solicitado no puede superar S/{MAX_PROJECT_BUDGET.toLocaleString('es-PE')}.
+            </div>
 
-  <div className="space-y-2 text-sm text-amber-900">
-    <p>
-      El correo, celular y demás datos consignados en tu ficha deben ser reales, estar actualizados y pertenecer al ciudadano responsable de esta postulación.
-    </p>
-    <p>
-      Si se comprueba que alguna persona no existe, que se usaron nombres sin consentimiento o que la información presentada es falsa, la postulación quedará descalificada.
-    </p>
-  </div>
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+              <h3 className="text-sm font-bold text-amber-900 mb-2">Declaración obligatoria del postulante</h3>
 
-  <label className="flex items-start gap-2 mt-3 text-sm text-slate-700">
-    <input
-      type="checkbox"
-      name="data_truth_confirmed"
-      checked={form.data_truth_confirmed}
-      onChange={handleChange}
-      className="mt-1"
-    />
-    <span>
-      Declaro que la información presentada es verdadera, actualizada y que cuento con el consentimiento de las personas incluidas en esta postulación.
-    </span>
-  </label>
-</div>
+              <div className="space-y-2 text-sm text-amber-900">
+                <p>
+                  El correo, celular y demás datos consignados en tu ficha deben ser reales, estar actualizados y pertenecer al ciudadano responsable de esta postulación.
+                </p>
+                <p>
+                  Si se comprueba que se usaron datos falsos, nombres sin consentimiento o información fraudulenta, la postulación podrá ser observada, rechazada o retirada conforme a las reglas de participación.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2 mt-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="data_truth_confirmed"
+                  checked={form.data_truth_confirmed}
+                  onChange={handleChange}
+                  className="mt-1"
+                />
+                <span>
+                  Declaro que la información presentada es verdadera, actualizada, que cuento con el consentimiento de las personas incluidas en esta postulación y que acepto las reglas de revisión, publicación y tratamiento de datos aplicables.
+                </span>
+              </label>
+            </div>
+
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !form.data_truth_confirmed}
                 className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
               >
                 {submitting ? 'Enviando...' : 'Enviar proyecto'}
@@ -806,8 +915,9 @@ if (existingLeaderProject) {
             </div>
           </form>
 
-          <p className="text-xs text-slate-500 mt-4 text-center">
+          <p className="text-xs text-slate-500 mt-4 text-center leading-relaxed">
             El proyecto será revisado por el administrador antes de ser publicado. Solo se aceptan proyectos que beneficien a la comunidad.
+            La presentación no garantiza aprobación, publicación, premio, reconocimiento ni financiamiento.
           </p>
         </div>
       </div>
