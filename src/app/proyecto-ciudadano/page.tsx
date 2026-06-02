@@ -36,7 +36,7 @@ const EVALUATION_CRITERIA = [
 ];
 
 const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
-const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.pdf';
+const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/ejemplo_proyecto_ciudadano_lleno.pdf';
 function maskAccessCode(code: string) {
   const clean = String(code || '').trim();
   if (!clean) return '';
@@ -540,8 +540,7 @@ const speakableSummary =
             📄 Formato oficial del proyecto
           </h2>
           <p className="text-slate-600 mb-4 text-sm">
-            Descarga el formato oficial, complétalo con la información de tu proyecto y luego súbelo en PDF para su revisión.
-            Este formato está diseñado para que todos los proyectos se presenten de manera clara, breve y comparable.
+            Descarga el formato editable vacío para completar tu proyecto. También puedes revisar un ejemplo llenado en PDF para guiarte sobre el nivel de detalle esperado.
           </p>
 
           <div className="flex flex-wrap gap-3">
@@ -559,7 +558,7 @@ const speakableSummary =
               rel="noopener noreferrer"
               className="inline-block bg-slate-200 text-slate-800 px-5 py-2 rounded-xl font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
             >
-              👁️ Ver formato modelo (.pdf)
+              👁️ Ver ejemplo (.pdf)
             </a>
           </div>
         </div>

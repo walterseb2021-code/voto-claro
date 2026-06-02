@@ -22,7 +22,7 @@ const MIN_SUPPORTS_REQUIRED = 100;
 const MAX_PROJECT_BUDGET = 30000;
 const MAX_PDF_SIZE_MB = 10;
 const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
-const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.pdf';
+const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/ejemplo_proyecto_ciudadano_lleno.pdf';
 
 const EVALUATION_WEIGHTS = {
   citizenSupport: 40,
@@ -669,8 +669,7 @@ export default function NuevoProyectoPage() {
         <div className="bg-white rounded-2xl border-2 border-indigo-600 p-5 shadow-sm mb-6">
           <h2 className="text-lg font-bold text-slate-900 mb-2">📄 Formato oficial del proyecto</h2>
           <p className="text-slate-600 text-sm mb-4">
-            Descarga el formato oficial, complétalo con la información del proyecto y luego súbelo en PDF en este formulario.
-            El formato ayuda a que las propuestas sean claras, comparables y revisables.
+            Descarga el formato editable vacío, complétalo con la información del proyecto y luego súbelo en PDF en este formulario. También puedes revisar un ejemplo llenado para guiarte sobre el nivel de detalle esperado.
           </p>
 
           <div className="flex flex-wrap gap-3">
@@ -688,7 +687,7 @@ export default function NuevoProyectoPage() {
               rel="noopener noreferrer"
               className="inline-block bg-slate-200 text-slate-800 px-4 py-2 rounded-xl font-semibold hover:bg-slate-300 transition"
             >
-              👁️ Ver formato modelo (.pdf)
+              👁️ Ver ejemplo (.pdf)
             </a>
           </div>
         </div>
