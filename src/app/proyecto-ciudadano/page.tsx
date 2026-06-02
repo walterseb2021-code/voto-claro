@@ -264,9 +264,9 @@ const hasWinners = winnersVisible.length > 0;
       if (participantAlias) {
         visibleParts.push(`Alias visible: ${participantAlias}.`);
       }
-      if (participantCode) {
-      visibleParts.push(`Existe un código de acceso asociado al participante, mostrado de forma protegida como ${maskedParticipantCode}.`);
-      }
+       if (participantCode) {
+       visibleParts.push('Existe un código de acceso asociado al participante, pero no se muestra completo ni parcialmente en el panel.');
+       }
       visibleParts.push('Se ven acciones para presentar proyecto y para ver proyectos activos.');
     }
 
@@ -419,7 +419,7 @@ const speakableSummary =
         participantNameVisible: !!participantName,
         participantAliasVisible: !!participantAlias,
         participantCodeVisible: !!participantCode,
-        participantCodeMasked: maskedParticipantCode || null,
+        participantCodeProtected: !!participantCode,
         loginCodeTyped: hasLoginCodeText,
         loginCodigoLoading,
         loginCodigoError: loginCodigoError || null,
@@ -658,11 +658,11 @@ const speakableSummary =
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Bienvenido, {participant.full_name}</h2>
                 <p className="text-sm text-slate-600">Alias: {participant.alias}</p>
                 <p className="text-xs text-slate-500 mt-1">Registrado el {new Date(participant.created_at).toLocaleDateString()}</p>
-                {participant.codigo_acceso && (
-                <p className="text-xs text-blue-600 mt-1 font-mono">
-                Código de acceso: {maskAccessCode(participant.codigo_acceso)} · Consérvalo privado.
+                  {participant.codigo_acceso && (
+                 <p className="text-xs text-blue-600 mt-1 font-semibold">
+                 Código de acceso: registrado y protegido. Consérvalo privado.
                 </p>
-               )}
+                 )}
               </div>
               <button
                 onClick={handleRefresh}
