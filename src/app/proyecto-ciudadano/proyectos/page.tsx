@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
@@ -24,7 +23,6 @@ type Project = {
   eligible_for_final_review?: boolean | null;
   leader: {
     alias: string;
-    full_name: string;
   } | null;
 };
 
@@ -39,14 +37,19 @@ function getBudgetCategoryLabel(category: string | null | undefined): string {
 
 function getRequestedBudgetLabel(value: number | null | undefined): string {
   if (value == null) return 'No especificado';
+
   return `S/${Number(value).toLocaleString('es-PE', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}`;
 }
 
+function getLeaderPublicName(project: Project): string {
+  const alias = String(project.leader?.alias || '').trim();
+  return alias || 'No publicado';
+}
+
 export default function ProyectosActivosPage() {
-  const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -56,10 +59,32 @@ export default function ProyectosActivosPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const departments = [
-    'todos', 'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho',
-    'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica',
-    'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios',
-    'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali',
+    'todos',
+    'Amazonas',
+    'Áncash',
+    'Apurímac',
+    'Arequipa',
+    'Ayacucho',
+    'Cajamarca',
+    'Callao',
+    'Cusco',
+    'Huancavelica',
+    'Huánuco',
+    'Ica',
+    'Junín',
+    'La Libertad',
+    'Lambayeque',
+    'Lima',
+    'Loreto',
+    'Madre de Dios',
+    'Moquegua',
+    'Pasco',
+    'Piura',
+    'Puno',
+    'San Martín',
+    'Tacna',
+    'Tumbes',
+    'Ucayali',
   ];
 
   useEffect(() => {
@@ -90,8 +115,7 @@ export default function ProyectosActivosPage() {
           minimum_supports_required,
           eligible_for_final_review,
           leader:project_participants!leader_id (
-            alias,
-            full_name
+            alias
           )
         `)
         .eq('status', 'active')
@@ -118,7 +142,9 @@ export default function ProyectosActivosPage() {
       selectedDepartment === 'todos' || project.department === selectedDepartment;
 
     const q = searchTerm.toLowerCase().trim();
+
     const matchesSearch =
+      q.length === 0 ||
       project.name.toLowerCase().includes(q) ||
       project.category.toLowerCase().includes(q) ||
       project.district.toLowerCase().includes(q);
@@ -127,9 +153,14 @@ export default function ProyectosActivosPage() {
   });
 
   useEffect(() => {
-    const visibleTitles = filteredProjects.slice(0, 8).map((project) => project.name).filter(Boolean);
+    const visibleTitles = filteredProjects
+      .slice(0, 8)
+      .map((project) => project.name)
+      .filter(Boolean);
+
     const highlightedProject = filteredProjects[0] || null;
     const hasSearch = searchTerm.trim().length > 0;
+
     const selectedDepartmentLabel =
       selectedDepartment === 'todos' ? 'Todos los departamentos' : selectedDepartment;
 
@@ -170,7 +201,7 @@ export default function ProyectosActivosPage() {
     visibleParts.push(`Filtro de departamento visible: ${selectedDepartmentLabel}.`);
 
     if (hasSearch) {
-      visibleParts.push(`Búsqueda visible: ${searchTerm.trim()}.`);
+      visibleParts.push('Hay una búsqueda escrita en el campo de búsqueda, sin exponer su contenido completo al asistente.');
     } else {
       visibleParts.push('No hay texto de búsqueda escrito.');
     }
@@ -179,15 +210,18 @@ export default function ProyectosActivosPage() {
     visibleParts.push(`Cantidad de proyectos visibles con los filtros actuales: ${filteredProjects.length}.`);
 
     if (highlightedProject) {
-      const minSupports = highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+      const minSupports =
+        highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+
       const currentSupports = highlightedProject.beneficiary_count || 0;
       const supportsRemaining = Math.max(minSupports - currentSupports, 0);
+
       const eligible =
         highlightedProject.eligible_for_final_review != null
           ? Boolean(highlightedProject.eligible_for_final_review)
           : currentSupports >= minSupports;
 
-      visibleParts.push(`Primer proyecto visible: ${highlightedProject.name}.`);
+      visibleParts.push('Hay un primer proyecto visible en la lista, sin exponer su descripción completa al asistente.');
       visibleParts.push(`Categoría temática visible del primer proyecto: ${highlightedProject.category}.`);
       visibleParts.push(`Departamento visible del primer proyecto: ${highlightedProject.department}.`);
       visibleParts.push(`Distrito visible del primer proyecto: ${highlightedProject.district}.`);
@@ -201,17 +235,25 @@ export default function ProyectosActivosPage() {
       visibleParts.push(`Apoyos faltantes del primer proyecto para evaluación final: ${supportsRemaining}.`);
       visibleParts.push(
         eligible
-          ? 'El primer proyecto visible ya es elegible para evaluación final.'
-          : 'El primer proyecto visible todavía no es elegible para evaluación final.'
+          ? 'El primer proyecto visible alcanza el umbral referencial para evaluación final, sujeto a validación.'
+          : 'El primer proyecto visible todavía no alcanza el umbral referencial de apoyos para evaluación final.'
       );
     }
 
     if (visibleTitles.length) {
-      visibleParts.push(`Títulos visibles: ${visibleTitles.join(', ')}.`);
+      visibleParts.push(`Títulos visibles de proyectos: ${visibleTitles.join(', ')}.`);
     }
 
     visibleParts.push(
       `Regla visible del programa: cada proyecto necesita al menos ${DEFAULT_MIN_SUPPORTS_REQUIRED} apoyos válidos para entrar a evaluación final.`
+    );
+
+    visibleParts.push(
+      'Los apoyos ciudadanos no son votos oficiales ni resultados electorales; son respaldos internos de participación ciudadana dentro de la plataforma.'
+    );
+
+    visibleParts.push(
+      'La elegibilidad para evaluación final queda sujeta a validación de la organización, reglas de la convocatoria y revisión administrativa.'
     );
 
     if (!loading && !error && filteredProjects.length === 0) {
@@ -292,13 +334,13 @@ export default function ProyectosActivosPage() {
           },
           {
             id: 'pc-proyectos-4',
-            label: '¿Qué categoría presupuestal tiene el primero?',
+            label: 'Categoría presupuestal',
             question: '¿Qué categoría presupuestal y qué monto tiene el primer proyecto visible?',
           },
           {
             id: 'pc-proyectos-5',
-            label: '¿Ya es elegible el primero?',
-            question: '¿El primer proyecto visible ya es elegible para evaluación final?',
+            label: 'Evaluación final',
+            question: '¿El primer proyecto visible ya alcanza el umbral para evaluación final?',
           },
         ];
 
@@ -308,7 +350,7 @@ export default function ProyectosActivosPage() {
       ? 'Pantalla de proyectos ciudadanos con error visible al cargar la lista.'
       : filteredProjects.length === 0
       ? 'Pantalla de proyectos ciudadanos sin resultados visibles con los filtros actuales.'
-      : 'Pantalla de proyectos ciudadanos con filtros, búsqueda, apoyos visibles, categoría presupuestal y elegibilidad para evaluación final.';
+      : 'Pantalla de proyectos ciudadanos con filtros, búsqueda, apoyos internos visibles, categoría presupuestal y umbral referencial para evaluación final.';
 
     setPageContext({
       pageId: 'proyecto-ciudadano-proyectos',
@@ -335,7 +377,7 @@ export default function ProyectosActivosPage() {
       visibleActions: availableActions,
       availableActions,
       visibleText: visibleParts.join('\n'),
-      selectedItemTitle: highlightedProject?.name || undefined,
+      selectedItemTitle: highlightedProject ? 'Proyecto visible en lista' : undefined,
       status: loading ? 'loading' : error ? 'error' : 'ready',
       resultsSummary: loading
         ? 'La lista de proyectos sigue cargando.'
@@ -350,14 +392,14 @@ export default function ProyectosActivosPage() {
         visibleProjects: filteredProjects.length,
         selectedDepartment,
         selectedDepartmentLabel,
-        searchTerm: searchTerm.trim() || null,
         searchActive: hasSearch,
+        searchTermProtected: hasSearch,
         minimumSupportsRequired: DEFAULT_MIN_SUPPORTS_REQUIRED,
         visibleProjectTitles: visibleTitles,
         highlightedProject: highlightedProject
           ? {
               id: highlightedProject.id,
-              name: highlightedProject.name,
+              nameVisible: !!highlightedProject.name,
               category: highlightedProject.category,
               department: highlightedProject.department,
               district: highlightedProject.district,
@@ -372,10 +414,12 @@ export default function ProyectosActivosPage() {
                   ? Boolean(highlightedProject.eligible_for_final_review)
                   : (highlightedProject.beneficiary_count || 0) >=
                     (highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED),
+              eligibilityRule:
+                'Alcanzar el umbral de apoyos no garantiza premio ni aprobación automática; queda sujeto a validación.',
             }
           : null,
       },
-      contextVersion: 'pc-proyectos-v2',
+      contextVersion: 'pc-proyectos-v3',
     });
   }, [setPageContext, projects, filteredProjects, loading, error, selectedDepartment, searchTerm]);
 
@@ -385,7 +429,6 @@ export default function ProyectosActivosPage() {
     };
   }, [clearPageContext]);
 
-  
   const handleOpenDetails = (projectId: string) => {
     window.location.href = `/proyecto-ciudadano/proyectos/${projectId}`;
   };
@@ -397,20 +440,23 @@ export default function ProyectosActivosPage() {
           <h1 className="text-2xl font-bold text-slate-900">Proyectos Ciudadanos Activos</h1>
 
           <button
-  type="button"
-  onClick={() => {
-    window.location.href = '/proyecto-ciudadano';
-  }}
-  className="self-start text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
->
-  ← Volver
-</button>
+            type="button"
+            onClick={() => {
+              window.location.href = '/proyecto-ciudadano';
+            }}
+            className="self-start text-sm text-slate-600 hover:underline cursor-pointer relative z-10"
+          >
+            ← Volver
+          </button>
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
           <p className="text-slate-700">
-            Estos son los proyectos ciudadanos que han sido aprobados y están recibiendo apoyo vecinal.
-            Cada proyecto necesita al menos <strong>100 apoyos válidos</strong> para entrar a evaluación final.
+            Estos son los proyectos ciudadanos que han sido aprobados para publicación y están recibiendo apoyo vecinal interno dentro de la plataforma.
+            Cada proyecto necesita al menos <strong>{DEFAULT_MIN_SUPPORTS_REQUIRED} apoyos válidos</strong> para entrar a evaluación final, sujeto a revisión y validación de la organización.
+          </p>
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-xl p-3 mt-3">
+            ⚠️ Los apoyos ciudadanos no son votos oficiales, no representan resultados electorales y no garantizan premio, financiamiento ni aprobación automática.
           </p>
         </div>
 
@@ -460,7 +506,7 @@ export default function ProyectosActivosPage() {
             <p className="text-slate-500 text-sm mt-2">
               {selectedDepartment !== 'todos'
                 ? `No hay proyectos para el departamento de ${selectedDepartment}.`
-                : 'Sé el primero en presentar un proyecto ciudadano.'}
+                : 'Puedes presentar un proyecto ciudadano para revisión.'}
             </p>
 
             <Link
@@ -473,9 +519,12 @@ export default function ProyectosActivosPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => {
-              const minSupports = project.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+              const minSupports =
+                project.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
+
               const currentSupports = project.beneficiary_count || 0;
               const supportsRemaining = Math.max(minSupports - currentSupports, 0);
+
               const eligible =
                 project.eligible_for_final_review != null
                   ? Boolean(project.eligible_for_final_review)
@@ -516,11 +565,11 @@ export default function ProyectosActivosPage() {
                     </p>
 
                     <div className="text-xs text-slate-500 mb-2">
-                      📍 {project.district} | 👤 {project.leader?.alias || project.leader?.full_name?.split(' ')[0] || 'Anónimo'}
+                      📍 {project.district} | 👤 {getLeaderPublicName(project)}
                     </div>
 
                     <div className="text-xs text-slate-500 mb-3">
-                      🤝 {currentSupports} / {minSupports} apoyos
+                      🤝 {currentSupports} / {minSupports} apoyos internos
                     </div>
 
                     <div
@@ -531,9 +580,15 @@ export default function ProyectosActivosPage() {
                       }`}
                     >
                       {eligible
-                        ? '✅ Elegible para evaluación final'
+                        ? '✅ Alcanza umbral para evaluación final'
                         : `⏳ Faltan ${supportsRemaining} apoyos`}
                     </div>
+
+                    {eligible && (
+                      <p className="text-[11px] text-slate-500 mb-3">
+                        Sujeto a validación final. No implica premio ni aprobación automática.
+                      </p>
+                    )}
 
                     <div className="flex items-center justify-between mt-4 relative z-10">
                       <div className="text-sm font-semibold text-slate-700">
