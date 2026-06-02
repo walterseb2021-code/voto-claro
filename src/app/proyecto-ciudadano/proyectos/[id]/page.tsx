@@ -26,8 +26,6 @@ type Project = {
   leader: {
     id: string;
     alias: string;
-    full_name: string;
-    email: string;
   } | null;
 };
 
@@ -41,6 +39,7 @@ type ForumPost = {
 };
 
 const DEFAULT_MIN_SUPPORTS_REQUIRED = 100;
+
 const EVALUATION_WEIGHTS = {
   citizenSupport: 40,
   projectQuality: 60,
@@ -58,6 +57,46 @@ function getBudgetCategoryLabel(category: string | null | undefined): string {
   if (category === 'hasta_20000') return 'Hasta S/20,000';
   if (category === 'hasta_30000') return 'Hasta S/30,000';
   return 'Sin categoría presupuestal';
+}
+
+function getRequestedBudgetLabel(value: number | null | undefined): string {
+  if (value == null) return 'No especificado';
+
+  return `S/${Number(value).toLocaleString('es-PE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function getLeaderPublicName(project: Project | null): string {
+  const alias = String(project?.leader?.alias || '').trim();
+  return alias || 'No publicado';
+}
+
+function hasForbiddenForumContent(text: string): boolean {
+  const value = String(text || '').toLowerCase();
+
+  const forbiddenWords = [
+    'mierda',
+    'carajo',
+    'puta',
+    'puto',
+    'imbecil',
+    'idiota',
+    'cojudo',
+    'cojuda',
+    'pendejo',
+    'pendeja',
+    'verga',
+    'cabron',
+    'cabrona',
+  ];
+
+  return forbiddenWords.some((word) => value.includes(word));
+}
+
+function hasLinks(text: string): boolean {
+  return /https?:\/\/|www\./i.test(text);
 }
 
 export default function ProjectDetailPage() {
@@ -81,7 +120,10 @@ export default function ProjectDetailPage() {
   const [uiMessage, setUiMessage] = useState<string | null>(null);
   const [uiMessageType, setUiMessageType] = useState<'success' | 'warning' | 'error'>('warning');
 
-  const showMessage = (message: string, type: 'success' | 'warning' | 'error' = 'warning') => {
+  const showMessage = (
+    message: string,
+    type: 'success' | 'warning' | 'error' = 'warning'
+  ) => {
     setUiMessage(message);
     setUiMessageType(type);
   };
@@ -94,10 +136,11 @@ export default function ProjectDetailPage() {
       try {
         const deviceId = localStorage.getItem('vc_device_id');
         let currentParticipant = null;
+
         if (deviceId) {
           const { data: pData } = await supabase
             .from('project_participants')
-            .select('*')
+            .select('id, alias, device_id')
             .eq('device_id', deviceId)
             .maybeSingle();
 
@@ -107,7 +150,7 @@ export default function ProjectDetailPage() {
 
         const { data: cycleData } = await supabase
           .from('project_cycles')
-          .select('*')
+          .select('id, is_active')
           .eq('is_active', true)
           .maybeSingle();
 
@@ -134,9 +177,7 @@ export default function ProjectDetailPage() {
             eligible_for_final_review,
             leader:project_participants!leader_id (
               id,
-              alias,
-              full_name,
-              email
+              alias
             )
           `)
           .eq('id', projectId)
@@ -144,7 +185,7 @@ export default function ProjectDetailPage() {
 
         if (projectError) throw projectError;
 
-        const transformedProject = {
+        const transformedProject: Project = {
           ...projectData,
           leader:
             projectData.leader && projectData.leader.length > 0
@@ -179,7 +220,7 @@ export default function ProjectDetailPage() {
           .eq('project_id', projectId)
           .order('created_at', { ascending: true });
 
-        const transformedForum = (forumData || []).map((post: any) => ({
+        const transformedForum: ForumPost[] = (forumData || []).map((post: any) => ({
           ...post,
           participant:
             post.participant && post.participant.length > 0
@@ -233,6 +274,7 @@ export default function ProjectDetailPage() {
     }
 
     setSupportLoading(true);
+
     try {
       const { error } = await supabase
         .from('project_supports')
@@ -274,7 +316,7 @@ export default function ProjectDetailPage() {
           : null
       );
 
-      showMessage('¡Gracias por apoyar este proyecto!', 'success');
+      showMessage('¡Gracias por apoyar este proyecto! Tu apoyo será considerado dentro de las reglas del ciclo activo.', 'success');
     } catch (err: any) {
       console.error('Error al apoyar:', err);
       showMessage(err.message || 'Error al apoyar el proyecto', 'error');
@@ -292,23 +334,46 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    if (!newPost.trim()) return;
+    const cleanPost = newPost.trim();
+
+    if (!cleanPost) return;
+
+    if (cleanPost.length < 5) {
+      showMessage('El comentario debe tener al menos 5 caracteres.', 'warning');
+      return;
+    }
+
+    if (cleanPost.length > 800) {
+      showMessage('El comentario no debe superar los 800 caracteres.', 'warning');
+      return;
+    }
+
+    if (hasLinks(cleanPost)) {
+      showMessage('No está permitido incluir enlaces en el foro.', 'warning');
+      return;
+    }
+
+    if (hasForbiddenForumContent(cleanPost)) {
+      showMessage('Tu comentario contiene palabras no permitidas.', 'warning');
+      return;
+    }
 
     setSendingPost(true);
+
     try {
       const { error } = await supabase
         .from('project_forum_posts')
         .insert({
           project_id: projectId,
           participant_id: participant.id,
-          content: newPost.trim(),
+          content: cleanPost,
         });
 
       if (error) throw error;
 
       const newPostObj: ForumPost = {
         id: Date.now().toString(),
-        content: newPost.trim(),
+        content: cleanPost,
         created_at: new Date().toISOString(),
         participant: { alias: participant.alias || 'Anónimo' },
       };
@@ -336,19 +401,14 @@ export default function ProjectDetailPage() {
     const beneficiaryCount = project?.beneficiary_count || 0;
     const supportsRemaining = Math.max(minSupportsRequired - beneficiaryCount, 0);
     const meetsMinimumSupports = beneficiaryCount >= minSupportsRequired;
+
     const eligibleForFinalReview =
       project?.eligible_for_final_review != null
         ? Boolean(project.eligible_for_final_review)
         : meetsMinimumSupports;
 
     const budgetCategoryLabel = getBudgetCategoryLabel(project?.budget_category);
-    const requestedBudgetLabel =
-      project?.requested_budget != null
-        ? `S/${Number(project.requested_budget).toLocaleString('es-PE', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2,
-          })}`
-        : 'No especificado';
+    const requestedBudgetLabel = getRequestedBudgetLabel(project?.requested_budget);
 
     const activeSection = loading
       ? 'proyecto-detalle-cargando'
@@ -387,32 +447,30 @@ export default function ProjectDetailPage() {
     }
 
     if (project) {
-      visibleParts.push(`Proyecto visible: ${project.name}.`);
+      visibleParts.push('Hay un proyecto ciudadano visible en esta pantalla.');
       visibleParts.push(`Categoría temática visible: ${project.category}.`);
       visibleParts.push(`Ubicación visible: ${project.department} - ${project.district}.`);
-      visibleParts.push(`Objetivo visible: ${project.objective}.`);
       visibleParts.push(`Estado visible del proyecto: ${project.status}.`);
-      visibleParts.push(`Apoyos visibles: ${beneficiaryCount}.`);
+      visibleParts.push(`Apoyos internos visibles: ${beneficiaryCount}.`);
       visibleParts.push(`Apoyos mínimos requeridos: ${minSupportsRequired}.`);
       visibleParts.push(`Apoyos faltantes para evaluación final: ${supportsRemaining}.`);
       visibleParts.push(
         eligibleForFinalReview
-          ? 'El proyecto ya es elegible para evaluación final.'
-          : 'El proyecto todavía no es elegible para evaluación final.'
+          ? 'El proyecto alcanza el umbral referencial para evaluación final, sujeto a validación.'
+          : 'El proyecto todavía no alcanza el umbral referencial para evaluación final.'
       );
       visibleParts.push(`Monto solicitado visible: ${requestedBudgetLabel}.`);
       visibleParts.push(`Categoría presupuestal visible: ${budgetCategoryLabel}.`);
       visibleParts.push(
-        `Ponderación visible: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto.`
+        `Ponderación referencial visible: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto, sujeta a validación.`
       );
       visibleParts.push(`Criterios visibles de calidad: ${EVALUATION_CRITERIA.join(', ')}.`);
+      visibleParts.push('El objetivo y la descripción del proyecto están visibles para el usuario, pero no se envían completos al contexto del asistente.');
 
-      if (project.leader?.alias || project.leader?.full_name) {
-        visibleParts.push(`Líder visible: ${project.leader?.alias || project.leader?.full_name}.`);
-      }
-
-      if (project.leader?.email) {
-        visibleParts.push(`Correo visible del líder: ${project.leader.email}.`);
+      if (project.leader?.alias) {
+        visibleParts.push(`Alias público del líder visible: ${project.leader.alias}.`);
+      } else {
+        visibleParts.push('El líder del proyecto no tiene alias público visible.');
       }
 
       if (pdfVisible) {
@@ -433,7 +491,7 @@ export default function ProjectDetailPage() {
     }
 
     if (participant) {
-      visibleParts.push(`Participante visible en esta pantalla: ${participant.full_name || participant.alias}.`);
+      visibleParts.push('Hay un participante registrado en esta sesión, sin exponer sus datos personales completos al asistente.');
     } else if (!loading) {
       visibleParts.push('No aparece un participante registrado en esta pantalla.');
     }
@@ -441,12 +499,12 @@ export default function ProjectDetailPage() {
     visibleParts.push(`Cantidad de mensajes visibles en el foro: ${forumCount}.`);
 
     if (lastPost) {
-      visibleParts.push(`Último comentario visible: ${lastPost.content}.`);
+      visibleParts.push('Hay un último comentario visible en el foro, sin exponer su contenido completo al asistente.');
       visibleParts.push(`Autor visible del último comentario: ${lastPost.participant?.alias || 'Anónimo'}.`);
     }
 
     if (newPost.trim()) {
-      visibleParts.push(`Texto escrito en el foro: ${newPost.trim()}.`);
+      visibleParts.push('Hay texto escrito en el borrador del foro, sin exponer su contenido completo al asistente.');
     }
 
     if (supportLoading) {
@@ -456,6 +514,10 @@ export default function ProjectDetailPage() {
     if (sendingPost) {
       visibleParts.push('Se está publicando un comentario en el foro.');
     }
+
+    visibleParts.push('Los apoyos ciudadanos son apoyos internos de participación, no votos oficiales ni resultados electorales.');
+    visibleParts.push('Alcanzar el umbral de apoyos no garantiza premio, financiamiento ni aprobación automática.');
+    visibleParts.push('Cualquier reconocimiento, apoyo o premio queda sujeto a bases, validación y disponibilidad de la organización.');
 
     const availableActions = [
       'Volver a proyectos',
@@ -476,27 +538,27 @@ export default function ProjectDetailPage() {
         : [
             {
               id: 'pc-detalle-1',
-              label: '¿Qué proyecto estoy viendo?',
-              question: '¿Qué proyecto está abierto ahora en esta pantalla?',
+              label: 'Proyecto abierto',
+              question: '¿Qué información general muestra esta pantalla del proyecto?',
             },
             {
               id: 'pc-detalle-2',
-              label: '¿Cuántos apoyos tiene?',
-              question: '¿Cuántos apoyos visibles tiene este proyecto?',
+              label: 'Apoyos internos',
+              question: '¿Cuántos apoyos internos visibles tiene este proyecto?',
             },
             {
               id: 'pc-detalle-3',
-              label: '¿Cuántos apoyos faltan?',
-              question: '¿Cuántos apoyos le faltan a este proyecto para entrar a evaluación final?',
+              label: 'Apoyos faltantes',
+              question: '¿Cuántos apoyos le faltan a este proyecto para alcanzar el umbral de evaluación final?',
             },
             {
               id: 'pc-detalle-4',
-              label: '¿Ya es elegible?',
-              question: '¿Este proyecto ya es elegible para evaluación final?',
+              label: 'Evaluación final',
+              question: '¿Este proyecto ya alcanza el umbral referencial para evaluación final?',
             },
             {
               id: 'pc-detalle-5',
-              label: '¿Qué categoría presupuestal tiene?',
+              label: 'Categoría presupuestal',
               question: '¿Qué categoría presupuestal y qué monto solicitado tiene este proyecto?',
             },
           ];
@@ -505,18 +567,18 @@ export default function ProjectDetailPage() {
       ? 'Pantalla de detalle de proyecto ciudadano cargando información del proyecto, apoyos y foro.'
       : error || !project
       ? 'Pantalla de detalle de proyecto ciudadano con error visible o proyecto no encontrado.'
-      : 'Pantalla de detalle de proyecto ciudadano con información del proyecto, apoyos visibles, elegibilidad para evaluación final y foro visibles.';
+      : 'Pantalla de detalle de proyecto ciudadano con información pública del proyecto, apoyos internos visibles, umbral referencial para evaluación final y foro visible.';
 
     setPageContext({
       pageId: 'proyecto-ciudadano-proyecto-detalle',
-      pageTitle: project?.name || 'Detalle de proyecto ciudadano',
+      pageTitle: 'Detalle de proyecto ciudadano',
       route: projectId ? `/proyecto-ciudadano/proyectos/${projectId}` : '/proyecto-ciudadano/proyectos/[id]',
       summary,
       speakableSummary: summary,
       activeSection,
       activeViewId,
       activeViewTitle,
-      breadcrumb: ['Proyecto Ciudadano', 'Proyectos', project?.name || 'Detalle'],
+      breadcrumb: ['Proyecto Ciudadano', 'Proyectos', 'Detalle'],
       visibleSections: [
         'cabecera',
         'informacion-del-proyecto',
@@ -527,14 +589,14 @@ export default function ProjectDetailPage() {
       visibleActions: availableActions,
       availableActions,
       visibleText: visibleParts.join('\n'),
-      selectedItemTitle: project?.name || undefined,
+      selectedItemTitle: project ? 'Proyecto ciudadano visible' : undefined,
       status: loading ? 'loading' : error ? 'error' : 'ready',
       resultsSummary: `Foro visible con ${forumCount} comentario${forumCount === 1 ? '' : 's'}.`,
       suggestedPrompts,
       dynamicData: {
         projectId: project?.id || projectId || null,
         projectVisible: !!project,
-        projectName: project?.name || null,
+        projectNameVisible: !!project?.name,
         category: project?.category || null,
         department: project?.department || null,
         district: project?.district || null,
@@ -552,32 +614,30 @@ export default function ProjectDetailPage() {
         evaluationCriteria: EVALUATION_CRITERIA,
         leaderVisible: !!project?.leader,
         leaderAlias: project?.leader?.alias || null,
-        leaderFullName: project?.leader?.full_name || null,
-        leaderEmail: project?.leader?.email || null,
+        leaderPrivateDataProtected: true,
         pdfVisible,
         participantVisible: !!participant,
-        participantName: participant?.full_name || participant?.alias || null,
+        participantDataProtected: true,
         activeCycleVisible: !!activeCycle,
         supporting,
         supportBlockVisible,
         supportLoading,
         forumCount,
-        lastForumPost: lastPost
-          ? {
-              content: lastPost.content,
-              alias: lastPost.participant?.alias || 'Anónimo',
-              created_at: lastPost.created_at,
-            }
-          : null,
-        newPostDraft: newPost.trim() || null,
+        lastForumPostProtected: !!lastPost,
+        lastForumPostAuthorAlias: lastPost?.participant?.alias || null,
+        newPostDraftProtected: !!newPost.trim(),
         sendingPost,
         canSupport,
         canComment,
         uiMessage: uiMessage || null,
         uiMessageType,
         error: error || null,
+        supportRule:
+          'Los apoyos ciudadanos son apoyos internos, no votos oficiales ni resultados electorales.',
+        eligibilityRule:
+          'Alcanzar el umbral de apoyos no garantiza premio, financiamiento ni aprobación automática.',
       },
-      contextVersion: 'pc-proyecto-detalle-v3',
+      contextVersion: 'pc-proyecto-detalle-v4',
     });
   }, [
     setPageContext,
@@ -634,18 +694,14 @@ export default function ProjectDetailPage() {
   const minSupportsRequired = project.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
   const beneficiaryCount = project.beneficiary_count || 0;
   const supportsRemaining = Math.max(minSupportsRequired - beneficiaryCount, 0);
+
   const eligibleForFinalReview =
     project.eligible_for_final_review != null
       ? Boolean(project.eligible_for_final_review)
       : beneficiaryCount >= minSupportsRequired;
+
   const budgetCategoryLabel = getBudgetCategoryLabel(project.budget_category);
-  const requestedBudgetLabel =
-    project.requested_budget != null
-      ? `S/${Number(project.requested_budget).toLocaleString('es-PE', {
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 2,
-        })}`
-      : 'No especificado';
+  const requestedBudgetLabel = getRequestedBudgetLabel(project.requested_budget);
 
   const uiMessageClasses =
     uiMessageType === 'success'
@@ -657,7 +713,7 @@ export default function ProjectDetailPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 gap-4">
           <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
           <button
             type="button"
@@ -679,12 +735,15 @@ export default function ProjectDetailPage() {
             <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded-full">
               {project.category}
             </span>
+
             <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
               {project.department} - {project.district}
             </span>
+
             <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-              {beneficiaryCount} apoyos
+              {beneficiaryCount} apoyos internos
             </span>
+
             <span className="text-xs font-semibold bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
               {budgetCategoryLabel}
             </span>
@@ -715,8 +774,12 @@ export default function ProjectDetailPage() {
               }`}
             >
               {eligibleForFinalReview
-                ? '✅ Este proyecto ya es elegible para evaluación final.'
-                : `⏳ A este proyecto le faltan ${supportsRemaining} apoyos para entrar a evaluación final.`}
+                ? '✅ Este proyecto alcanza el umbral referencial para evaluación final.'
+                : `⏳ A este proyecto le faltan ${supportsRemaining} apoyos para alcanzar el umbral de evaluación final.`}
+            </p>
+
+            <p className="text-xs text-slate-600 mt-2">
+              Alcanzar el umbral de apoyos no garantiza premio, financiamiento ni aprobación automática. Todo queda sujeto a validación de la organización y reglas de la convocatoria.
             </p>
           </div>
 
@@ -732,8 +795,10 @@ export default function ProjectDetailPage() {
 
           <div className="mb-4">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">Líder del proyecto</h2>
-            <p className="text-slate-800">{project.leader?.alias || project.leader?.full_name || 'Anónimo'}</p>
-            {project.leader?.email && <p className="text-sm text-slate-500">{project.leader.email}</p>}
+            <p className="text-slate-800">{getLeaderPublicName(project)}</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Por privacidad, no se muestran datos personales de contacto del líder.
+            </p>
           </div>
 
           {project.pdf_url && (
@@ -744,28 +809,37 @@ export default function ProjectDetailPage() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-slate-200 text-slate-800 px-4 py-2 rounded-xl font-semibold hover:bg-slate-300 transition"
               >
-                📄 Descargar documento del proyecto (PDF)
+                📄 Ver documento público del proyecto (PDF)
               </a>
             </div>
           )}
 
           <div className="mt-4 text-xs text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-300">
-            <strong>📊 Evaluación del proyecto:</strong> Para entrar a evaluación final, este proyecto necesita al menos <strong>{minSupportsRequired} apoyos válidos</strong>. La nota final combina <strong>{EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano</strong> y <strong>{EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto</strong>. La calidad se evalúa por impacto comunitario, claridad del problema y la solución, viabilidad técnica y presupuestal, y sostenibilidad del beneficio.
+            <strong>📊 Evaluación del proyecto:</strong> Para entrar a evaluación final, este proyecto necesita al menos{' '}
+            <strong>{minSupportsRequired} apoyos válidos</strong>. La evaluación referencial combina{' '}
+            <strong>{EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano</strong> y{' '}
+            <strong>{EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto</strong>. La calidad se evalúa por impacto comunitario,
+            claridad del problema y la solución, viabilidad técnica y presupuestal, y sostenibilidad del beneficio.
           </div>
 
           {project.status === 'active' && (
             <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-              <strong>🏆 Bases del premio:</strong> Los premios consisten en un <strong>fondo concursable</strong> para la ejecución del proyecto. El monto se entrega en <strong>materiales, herramientas e insumos</strong>, pagados directamente a proveedores. No se entrega dinero en efectivo al ganador. El proyecto debe ajustarse al monto otorgado.
+              <strong>⚠️ Aviso sobre reconocimientos:</strong> Cualquier premio, fondo, apoyo, reconocimiento o entrega de materiales
+              estará sujeto a las bases oficiales de la convocatoria, validación del proyecto, disponibilidad presupuestal y verificación
+              de la organización. No se garantiza entrega automática de dinero ni beneficio económico directo.
             </div>
           )}
 
           {project.status === 'active' && (
             <div className="mt-6 pt-4 border-t border-slate-200">
               <button
+                type="button"
                 onClick={handleSupport}
                 disabled={supportLoading || supporting}
                 className={`w-full py-3 rounded-xl font-semibold transition ${
-                  supporting ? 'bg-green-100 text-green-700 cursor-default' : 'bg-green-700 text-white hover:bg-green-800'
+                  supporting
+                    ? 'bg-green-100 text-green-700 cursor-default'
+                    : 'bg-green-700 text-white hover:bg-green-800'
                 }`}
               >
                 {supportLoading
@@ -775,12 +849,17 @@ export default function ProjectDetailPage() {
                   : '🤝 Apoyar este proyecto'}
               </button>
 
+              <p className="text-xs text-slate-500 mt-2 text-center">
+                El apoyo es interno de la plataforma. No es voto oficial ni resultado electoral.
+              </p>
+
               {!participant && (
                 <p className="text-xs text-slate-500 mt-2 text-center">
                   Para apoyar, primero debes{' '}
                   <Link href="/proyecto-ciudadano/registro" className="text-green-700 underline">
                     registrarte
-                  </Link>.
+                  </Link>
+                  .
                 </p>
               )}
             </div>
@@ -789,7 +868,9 @@ export default function ProjectDetailPage() {
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-4">Foro de discusión</h2>
-          <p className="text-sm text-slate-600 mb-4">Participa con ideas y preguntas sobre este proyecto.</p>
+          <p className="text-sm text-slate-600 mb-4">
+            Participa con ideas y preguntas sobre este proyecto. No publiques datos personales, enlaces ni contenido ofensivo.
+          </p>
 
           <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
             {forumPosts.length === 0 ? (
@@ -805,7 +886,7 @@ export default function ProjectDetailPage() {
                       {new Date(post.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-800">{post.content}</p>
+                  <p className="text-sm text-slate-800 whitespace-pre-wrap">{post.content}</p>
                 </div>
               ))
             )}
@@ -813,27 +894,36 @@ export default function ProjectDetailPage() {
 
           {participant ? (
             <div className="flex flex-col gap-3 sm:flex-row">
-  <textarea
-    value={newPost}
-    onChange={(e) => setNewPost(e.target.value)}
-    placeholder="Escribe tu comentario o pregunta..."
-    rows={2}
-    className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-  />
-  <button
-    onClick={handlePost}
-    disabled={sendingPost || !newPost.trim()}
-    className="w-full sm:w-auto bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50"
-  >
-    {sendingPost ? 'Enviando...' : 'Publicar'}
-  </button>
-</div>
+              <textarea
+                value={newPost}
+                onChange={(e) => setNewPost(e.target.value)}
+                placeholder="Escribe tu comentario o pregunta..."
+                rows={2}
+                maxLength={800}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={handlePost}
+                disabled={sendingPost || !newPost.trim()}
+                className="w-full sm:w-auto bg-green-700 text-white px-4 py-2 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50"
+              >
+                {sendingPost ? 'Enviando...' : 'Publicar'}
+              </button>
+            </div>
           ) : (
             <p className="text-sm text-slate-500 text-center">
               <Link href="/proyecto-ciudadano/registro" className="text-green-700 underline">
                 Regístrate
               </Link>{' '}
               para participar en el foro.
+            </p>
+          )}
+
+          {participant && (
+            <p className="text-xs text-slate-500 mt-3">
+              Máximo 800 caracteres. No incluyas enlaces, datos personales ni expresiones ofensivas.
             </p>
           )}
         </div>

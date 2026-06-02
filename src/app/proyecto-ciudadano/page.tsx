@@ -482,7 +482,7 @@ const speakableSummary =
               onClick={handleRefresh}
               className={btnSecondary}
             >
-              🔄 Recargar
+              🔄 Actualizar mi registro
             </button>
               <button
   type="button"
