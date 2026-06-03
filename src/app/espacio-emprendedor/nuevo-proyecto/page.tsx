@@ -48,6 +48,18 @@ const DEPARTAMENTOS = [
   'Ucayali',
 ];
 
+function parseInvestmentAmount(value: string): number | null {
+  const clean = value.trim();
+
+  if (!clean) return null;
+
+  const parsed = Number(clean);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+
+  return Math.round(parsed);
+}
+
 export default function NuevoProyectoEmprendedorPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
@@ -58,6 +70,7 @@ export default function NuevoProyectoEmprendedorPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
   const [form, setForm] = useState({
     title: '',
     category: '',
@@ -67,12 +80,18 @@ export default function NuevoProyectoEmprendedorPage() {
     summary: '',
     investment_min: '',
     investment_max: '',
+    data_truth_confirmed: false,
   });
+
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+
+  const investmentMinNumber = parseInvestmentAmount(form.investment_min);
+  const investmentMaxNumber = parseInvestmentAmount(form.investment_max);
 
   useEffect(() => {
     async function loadData() {
       const deviceId = localStorage.getItem('vc_device_id');
+
       if (!deviceId) {
         router.push('/proyecto-ciudadano/registro');
         return;
@@ -80,7 +99,7 @@ export default function NuevoProyectoEmprendedorPage() {
 
       const { data: participantData, error: participantError } = await supabase
         .from('project_participants')
-        .select('*')
+        .select('id, alias, device_id')
         .eq('device_id', deviceId)
         .maybeSingle();
 
@@ -112,7 +131,14 @@ export default function NuevoProyectoEmprendedorPage() {
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const target = e.target;
+
+    const value =
+      target instanceof HTMLInputElement && target.type === 'checkbox'
+        ? target.checked
+        : target.value;
+
+    setForm({ ...form, [target.name]: value });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,8 +152,55 @@ export default function NuevoProyectoEmprendedorPage() {
     setSubmitting(true);
     setError(null);
 
-    if (!form.title || !form.category || !form.department || !form.district || !form.summary) {
+    const titleValue = form.title.trim();
+    const provinceValue = form.province.trim();
+    const districtValue = form.district.trim();
+    const summaryValue = form.summary.trim();
+
+    if (!titleValue || !form.category || !form.department || !districtValue || !summaryValue) {
       setError('Todos los campos obligatorios deben estar llenos.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (titleValue.length < 5) {
+      setError('El título del proyecto debe tener al menos 5 caracteres.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (summaryValue.length < 40) {
+      setError('El resumen ejecutivo debe tener al menos 40 caracteres.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (form.investment_min.trim() && investmentMinNumber == null) {
+      setError('La inversión mínima debe ser un número válido mayor que cero.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (form.investment_max.trim() && investmentMaxNumber == null) {
+      setError('La inversión máxima debe ser un número válido mayor que cero.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (
+      investmentMinNumber != null &&
+      investmentMaxNumber != null &&
+      investmentMaxNumber < investmentMinNumber
+    ) {
+      setError('La inversión máxima no puede ser menor que la inversión mínima.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (!form.data_truth_confirmed) {
+      setError(
+        'Debes declarar que la información presentada es verdadera, actualizada y de tu exclusiva responsabilidad.'
+      );
       setSubmitting(false);
       return;
     }
@@ -150,79 +223,58 @@ export default function NuevoProyectoEmprendedorPage() {
       return;
     }
 
+    if (!afiliado?.id) {
+      setError('No se pudo confirmar tu afiliación para publicar el proyecto.');
+      setSubmitting(false);
+      return;
+    }
+
     try {
-      console.log('👤 afiliado:', afiliado);
-      console.log('👤 afiliado.id:', afiliado?.id);
-
-      console.log('📦 Datos a insertar:', {
-        owner_id: afiliado?.id,
-        title: form.title,
-        category: form.category,
-        department: form.department,
-        province: form.province || null,
-        district: form.district,
-        summary: form.summary,
-        investment_min: form.investment_min ? parseInt(form.investment_min) : null,
-        investment_max: form.investment_max ? parseInt(form.investment_max) : null,
-        status: 'active',
-      });
-
       const fileExt = pdfFile.name.split('.').pop();
       const fileName = `espacio-emprendedor/${afiliado.id}/${Date.now()}.${fileExt}`;
-      console.log('📤 Subiendo PDF a:', fileName);
 
       const { error: uploadError } = await supabase.storage
         .from('project_pdfs')
         .upload(fileName, pdfFile);
 
       if (uploadError) {
-        console.error('❌ Error subiendo PDF:', uploadError);
         throw new Error(`Error al subir PDF: ${uploadError.message}`);
       }
 
       const { data: urlData } = supabase.storage.from('project_pdfs').getPublicUrl(fileName);
-
       const pdfUrl = urlData.publicUrl;
-      console.log('✅ PDF subido, URL:', pdfUrl);
 
-      console.log('💾 Insertando proyecto en BD...');
-
-      const { data: newProject, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('espacio_proyectos')
         .insert({
           owner_id: afiliado.id,
-          title: form.title,
+          title: titleValue,
           category: form.category,
           department: form.department,
-          province: form.province || null,
-          district: form.district,
-          summary: form.summary,
-          investment_min: form.investment_min ? parseInt(form.investment_min) : null,
-          investment_max: form.investment_max ? parseInt(form.investment_max) : null,
+          province: provinceValue || null,
+          district: districtValue,
+          summary: summaryValue,
+          investment_min: investmentMinNumber,
+          investment_max: investmentMaxNumber,
           pdf_url: pdfUrl,
           status: 'active',
         })
         .select();
 
       if (insertError) {
-        console.error('❌ Error insertando proyecto:', insertError);
-        console.error('❌ Código de error:', insertError.code);
-        console.error('❌ Mensaje detallado:', insertError.message);
         throw new Error(`Error al guardar: ${insertError.message} (Código: ${insertError.code})`);
       }
-
-      console.log('✅ Proyecto insertado correctamente:', newProject);
 
       try {
         await fetch('/api/espacio-emprendedor/notificar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            projectTitle: form.title,
+            projectTitle: titleValue,
             category: form.category,
             department: form.department,
-            investment_min: form.investment_min ? parseInt(form.investment_min) : null,
-            investment_max: form.investment_max ? parseInt(form.investment_max) : null,
+            investment_min: investmentMinNumber,
+            investment_max: investmentMaxNumber,
           }),
         });
       } catch (notifyErr) {
@@ -230,18 +282,19 @@ export default function NuevoProyectoEmprendedorPage() {
       }
 
       setSuccess(true);
+
       setTimeout(() => {
         router.push('/espacio-emprendedor');
       }, 3000);
     } catch (err: any) {
-      console.error('❌ Error completo:', err);
+      console.error('Error al guardar proyecto emprendedor:', err);
       setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
     } finally {
       setSubmitting(false);
     }
   };
 
-        useEffect(() => {
+  useEffect(() => {
     const visibleParts: string[] = [];
 
     const titleValue = form.title.trim();
@@ -284,15 +337,22 @@ export default function NuevoProyectoEmprendedorPage() {
 
     visibleParts.push(`Vista activa: ${activeViewTitle}.`);
     visibleParts.push('Pantalla visible: Publicar nuevo proyecto del Espacio Emprendedor.');
+    visibleParts.push(
+      'Esta pantalla permite publicar un proyecto emprendedor para que sea visible por posibles interesados o inversionistas.'
+    );
+    visibleParts.push(
+      'Voto Claro no garantiza inversión, financiamiento, rentabilidad, contacto efectivo, cierre de acuerdos ni aval financiero.'
+    );
+    visibleParts.push(
+      'Los montos de inversión son rangos referenciales declarados por el autor y no constituyen oferta pública ni recomendación financiera.'
+    );
 
     if (loading) {
       visibleParts.push('La pantalla está cargando el formulario para publicar un nuevo proyecto.');
     }
 
     if (participant && !loading) {
-      visibleParts.push(
-        `Participante con sesión activa: ${participant.full_name || participant.alias || 'participante'}.`
-      );
+      visibleParts.push('Hay un participante con sesión activa, sin exponer datos personales completos al asistente.');
     }
 
     if (!participant && !loading) {
@@ -306,7 +366,7 @@ export default function NuevoProyectoEmprendedorPage() {
     }
 
     if (hasTitle) {
-      visibleParts.push(`Título visible del proyecto: ${titleValue}.`);
+      visibleParts.push('Hay un título escrito para el proyecto, sin exponerlo completo al asistente.');
     } else {
       visibleParts.push('No hay título escrito todavía.');
     }
@@ -324,27 +384,27 @@ export default function NuevoProyectoEmprendedorPage() {
     }
 
     if (hasProvince) {
-      visibleParts.push(`Provincia visible: ${provinceValue}.`);
+      visibleParts.push('Hay una provincia escrita, sin exponerla completa al asistente.');
     }
 
     if (hasDistrict) {
-      visibleParts.push(`Distrito visible: ${districtValue}.`);
+      visibleParts.push('Hay un distrito escrito, sin exponerlo completo al asistente.');
     } else {
       visibleParts.push('No hay distrito escrito todavía.');
     }
 
     if (hasSummary) {
-      visibleParts.push('El resumen ejecutivo ya tiene contenido visible.');
+      visibleParts.push('El resumen ejecutivo ya tiene contenido visible, sin exponerlo completo al asistente.');
     } else {
       visibleParts.push('El resumen ejecutivo todavía no tiene contenido visible.');
     }
 
     if (form.investment_min) {
-      visibleParts.push(`Inversión mínima visible: ${form.investment_min}.`);
+      visibleParts.push('Hay inversión mínima referencial escrita.');
     }
 
     if (form.investment_max) {
-      visibleParts.push(`Inversión máxima visible: ${form.investment_max}.`);
+      visibleParts.push('Hay inversión máxima referencial escrita.');
     }
 
     if (!hasInvestment) {
@@ -352,10 +412,14 @@ export default function NuevoProyectoEmprendedorPage() {
     }
 
     visibleParts.push(
-      pdfFile
-        ? `PDF cargado: ${pdfFile.name}.`
-        : 'No hay PDF cargado todavía.'
+      pdfFile ? 'Hay un PDF cargado, sin exponer el nombre del archivo al asistente.' : 'No hay PDF cargado todavía.'
     );
+
+    if (form.data_truth_confirmed) {
+      visibleParts.push('La declaración obligatoria del autor está marcada.');
+    } else {
+      visibleParts.push('La declaración obligatoria del autor todavía no está marcada.');
+    }
 
     if (submitting) {
       visibleParts.push('El formulario del proyecto se está enviando.');
@@ -374,33 +438,32 @@ export default function NuevoProyectoEmprendedorPage() {
       'Seleccionar categoría',
       'Seleccionar ubicación',
       'Escribir resumen ejecutivo',
-      'Definir inversión',
+      'Definir inversión referencial',
       pdfFile ? 'Cambiar PDF' : 'Subir PDF',
+      'Marcar declaración obligatoria',
       'Publicar proyecto',
       'Volver',
     ];
 
-     const summary = loading
-  ? 'Pantalla para publicar nuevo proyecto cargando datos del emprendedor.'
-  : success
-  ? 'Pantalla de publicación de proyecto con confirmación exitosa.'
-  : error
-  ? 'Pantalla para publicar nuevo proyecto con error visible.'
-  : 'Formulario para publicar un nuevo proyecto emprendedor con datos, ubicación, inversión y PDF.';
+    const summary = loading
+      ? 'Pantalla para publicar nuevo proyecto cargando datos del emprendedor.'
+      : success
+      ? 'Pantalla de publicación de proyecto con confirmación exitosa.'
+      : error
+      ? 'Pantalla para publicar nuevo proyecto con error visible.'
+      : 'Formulario para publicar un nuevo proyecto emprendedor con datos, ubicación, inversión referencial, PDF y declaración obligatoria.';
 
-const speakableSummary = loading
-  ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor y la pantalla está cargando tus datos como emprendedor.'
-  : success
-  ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor y el proyecto ya fue enviado correctamente.'
-  : error
-  ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor, pero esta pantalla muestra un error.'
-  : `Estamos en Publicar nuevo proyecto del Espacio Emprendedor. Aquí puedes completar${
-      hasTitle ? ` el proyecto ${titleValue}, ` : ' '
-    }la categoría, la ubicación, el resumen ejecutivo, el rango de inversión y subir el PDF del proyecto.`;
+    const speakableSummary = loading
+      ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor y la pantalla está cargando tus datos como emprendedor.'
+      : success
+      ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor y el proyecto ya fue enviado correctamente.'
+      : error
+      ? 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor, pero esta pantalla muestra un error.'
+      : 'Estamos en Publicar nuevo proyecto del Espacio Emprendedor. Aquí puedes completar la categoría, la ubicación, el resumen ejecutivo, el rango referencial de inversión y subir el PDF del proyecto. Recuerda que Voto Claro no garantiza inversión, financiamiento ni rentabilidad.';
 
-const status = loading ? 'loading' : error ? 'error' : 'ready';
+    const status = loading ? 'loading' : error ? 'error' : 'ready';
 
-           setPageContext({
+    setPageContext({
       pageId: 'espacio-emprendedor-nuevo-proyecto',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/nuevo-proyecto',
@@ -414,14 +477,15 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
         'identidad-del-proyecto',
         'ubicacion',
         'resumen',
-        'inversion',
+        'inversion-referencial',
         'pdf',
+        'declaracion-obligatoria',
         'envio',
       ],
       suggestedPrompts: [
         {
           id: 'ee-new-1',
-          label: '¿Qué me falta para publicar?',
+          label: '¿Qué me falta?',
           question: 'Según esta pantalla, ¿qué me falta para publicar el proyecto?',
         },
         {
@@ -448,18 +512,20 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
       visibleActions: availableActions,
       visibleText: visibleParts.join('\n'),
       availableActions,
-      selectedItemTitle: titleValue || participant?.full_name || undefined,
+      selectedItemTitle: hasTitle ? 'Proyecto emprendedor en edición' : undefined,
       status,
       dynamicData: {
         participantLogueado: !!participant,
+        participantDataProtected: true,
         afiliadoVerificado: !!afiliado,
         submittingProject: submitting,
         success,
-        title: titleValue,
+        titleProtected: hasTitle,
         category: form.category,
         department: form.department,
-        province: provinceValue,
-        district: districtValue,
+        provinceProtected: hasProvince,
+        districtProtected: hasDistrict,
+        summaryProtected: hasSummary,
         hasTitle,
         hasCategory,
         hasDepartment,
@@ -468,15 +534,37 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
         hasSummary,
         hasLocation,
         hasInvestment,
-        investmentMin: form.investment_min,
-        investmentMax: form.investment_max,
+        investmentMinProtected: !!form.investment_min,
+        investmentMaxProtected: !!form.investment_max,
         pdfLoaded: !!pdfFile,
-        pdfName: pdfFile?.name || '',
+        pdfNameProtected: !!pdfFile,
+        dataTruthConfirmed: form.data_truth_confirmed,
         errorVisible: error || '',
-        canPublishProject: !!participant && !!afiliado && !!pdfFile,
+        canPublishProject:
+          !!participant &&
+          !!afiliado &&
+          !!pdfFile &&
+          form.data_truth_confirmed &&
+          hasTitle &&
+          hasCategory &&
+          hasDepartment &&
+          hasDistrict &&
+          hasSummary,
+        investmentDisclaimer:
+          'Voto Claro no garantiza inversión, financiamiento, rentabilidad, contacto efectivo ni cierre de acuerdos.',
       },
     });
-  }, [setPageContext, loading, participant, afiliado, submitting, success, error, form, pdfFile]);
+  }, [
+    setPageContext,
+    loading,
+    participant,
+    afiliado,
+    submitting,
+    success,
+    error,
+    form,
+    pdfFile,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -500,10 +588,14 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
         <div className="max-w-3xl mx-auto text-center">
           <div className="bg-white rounded-2xl border-2 border-green-600 p-8 shadow-sm">
             <div className="text-6xl mb-4">📄✅</div>
+
             <h1 className="text-2xl font-bold text-slate-900 mb-2">¡Proyecto enviado!</h1>
+
             <p className="text-slate-600 mb-4">
-              Tu proyecto ha sido publicado. Los inversionistas interesados podrán contactarte.
+              Tu proyecto ha sido publicado como información proporcionada por el autor. Los usuarios interesados podrían contactarte,
+              pero Voto Claro no garantiza inversión, financiamiento, rentabilidad ni cierre de acuerdos.
             </p>
+
             <Link
               href="/espacio-emprendedor"
               className="inline-block bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
@@ -520,7 +612,10 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-3xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Presentar nuevo proyecto emprendedor</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Presentar nuevo proyecto emprendedor
+          </h1>
+
           <Link href="/espacio-emprendedor" className="text-sm text-slate-600 hover:underline">
             ← Volver
           </Link>
@@ -528,13 +623,14 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
           <p className="text-slate-600 mb-4 text-sm">
-            Completa la información de tu proyecto. Los inversionistas interesados podrán contactarte.
+            Completa la información de tu proyecto. Los usuarios interesados podrían contactarte desde la plataforma.
           </p>
 
           <div className="mb-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
             <strong>⚠️ Importante:</strong> La información proporcionada es de exclusiva responsabilidad del autor.
-            Voto Claro no verifica la veracidad de los proyectos ni actúa como intermediario financiero.
-            Los inversionistas deben realizar su propia evaluación antes de tomar decisiones.
+            Voto Claro no verifica la veracidad económica, técnica ni financiera de los proyectos, no actúa como intermediario financiero
+            y no garantiza inversión, financiamiento, rentabilidad, contacto efectivo ni cierre de acuerdos. Los interesados deben realizar
+            su propia evaluación antes de tomar cualquier decisión.
           </div>
 
           {error && (
@@ -548,6 +644,7 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Título del proyecto *
               </label>
+
               <input
                 type="text"
                 name="title"
@@ -562,6 +659,7 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Categoría *
               </label>
+
               <select
                 name="category"
                 value={form.category}
@@ -582,6 +680,7 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Departamento *
               </label>
+
               <select
                 name="department"
                 value={form.department}
@@ -602,6 +701,7 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Provincia (opcional)
               </label>
+
               <input
                 type="text"
                 name="province"
@@ -615,6 +715,7 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Distrito *
               </label>
+
               <input
                 type="text"
                 name="district"
@@ -629,6 +730,7 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Resumen ejecutivo *
               </label>
+
               <textarea
                 name="summary"
                 value={form.summary}
@@ -640,27 +742,32 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
-                  Inversión mínima (S/)
+                  Inversión mínima referencial (S/)
                 </label>
+
                 <input
                   type="number"
                   name="investment_min"
+                  min="1"
                   value={form.investment_min}
                   onChange={handleChange}
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                   placeholder="Ej: 5000"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
-                  Inversión máxima (S/)
+                  Inversión máxima referencial (S/)
                 </label>
+
                 <input
                   type="number"
                   name="investment_max"
+                  min="1"
                   value={form.investment_max}
                   onChange={handleChange}
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
@@ -669,10 +776,15 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
               </div>
             </div>
 
+            <p className="text-xs text-slate-500">
+              Estos montos son rangos referenciales declarados por el autor. No constituyen oferta pública, recomendación financiera ni garantía de inversión.
+            </p>
+
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Archivo PDF del proyecto *
               </label>
+
               <input
                 type="file"
                 accept=".pdf"
@@ -680,9 +792,41 @@ const status = loading ? 'loading' : error ? 'error' : 'ready';
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
                 required
               />
+
               <p className="text-xs text-slate-500 mt-1">
-                Máximo 10 MB. Solo PDF. Incluye plan de negocio, proyecciones, etc.
+                Máximo 10 MB. Solo PDF. Puedes incluir información del proyecto, plan de negocio y sustento referencial.
               </p>
+            </div>
+
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+              <h3 className="text-sm font-bold text-amber-900 mb-2">
+                Declaración obligatoria del autor
+              </h3>
+
+              <div className="space-y-2 text-sm text-amber-900">
+                <p>
+                  Declaro que la información del proyecto es verdadera, actualizada y de mi exclusiva responsabilidad.
+                </p>
+
+                <p>
+                  Reconozco que Voto Claro no verifica la viabilidad económica, técnica ni financiera del proyecto,
+                  no garantiza inversión, financiamiento, rentabilidad ni contacto efectivo, y no actúa como intermediario financiero.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2 mt-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="data_truth_confirmed"
+                  checked={form.data_truth_confirmed}
+                  onChange={handleChange}
+                  className="mt-1"
+                />
+
+                <span>
+                  Acepto esta declaración y autorizo la publicación del proyecto bajo mi responsabilidad.
+                </span>
+              </label>
             </div>
 
             <div className="pt-4">
