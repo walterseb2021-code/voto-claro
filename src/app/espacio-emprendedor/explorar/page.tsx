@@ -60,6 +60,17 @@ const DEPARTAMENTOS = [
   'Ucayali',
 ];
 
+function formatInvestment(min: number | null, max: number | null) {
+  if (min && max) return `S/ ${min.toLocaleString('es-PE')} - S/ ${max.toLocaleString('es-PE')}`;
+  if (min) return `Desde S/ ${min.toLocaleString('es-PE')}`;
+  if (max) return `Hasta S/ ${max.toLocaleString('es-PE')}`;
+  return 'No especificado';
+}
+
+function goToPath(path: string) {
+  window.location.href = path;
+}
+
 export default function ExplorarProyectosPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
@@ -78,15 +89,19 @@ export default function ExplorarProyectosPage() {
 
   const cargarParticipante = async () => {
     const deviceId = localStorage.getItem('vc_device_id');
-    if (deviceId) {
-      const { data } = await supabase
-        .from('project_participants')
-        .select('id, alias, full_name')
-        .eq('device_id', deviceId)
-        .maybeSingle();
 
-      setParticipant(data);
+    if (!deviceId) {
+      setParticipant(null);
+      return;
     }
+
+    const { data } = await supabase
+      .from('project_participants')
+      .select('id, alias')
+      .eq('device_id', deviceId)
+      .maybeSingle();
+
+    setParticipant(data || null);
   };
 
   const cargarProyectos = async () => {
@@ -124,6 +139,8 @@ export default function ExplorarProyectosPage() {
   };
 
   const filteredProjects = projects.filter((project) => {
+    const q = searchTerm.toLowerCase().trim();
+
     const matchesCategory =
       selectedCategory === 'Todas' || project.category === selectedCategory;
 
@@ -131,24 +148,14 @@ export default function ExplorarProyectosPage() {
       selectedDepartment === 'Todos' || project.department === selectedDepartment;
 
     const matchesSearch =
-      project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.summary.toLowerCase().includes(searchTerm.toLowerCase());
+      q.length === 0 ||
+      project.title.toLowerCase().includes(q) ||
+      project.summary.toLowerCase().includes(q);
 
     return matchesCategory && matchesDepartment && matchesSearch;
   });
 
-   const formatInvestment = (min: number | null, max: number | null) => {
-  if (min && max) return `S/ ${min.toLocaleString()} - S/ ${max.toLocaleString()}`;
-  if (min) return `Desde S/ ${min.toLocaleString()}`;
-  if (max) return `Hasta S/ ${max.toLocaleString()}`;
-  return 'No especificado';
-};
-
-const goToPath = (path: string) => {
-  window.location.href = path;
-};
-
-      useEffect(() => {
+  useEffect(() => {
     const visibleTitles = filteredProjects
       .slice(0, 5)
       .map((p) => p.title)
@@ -171,21 +178,21 @@ const goToPath = (path: string) => {
       ? 'explorar-sin-resultados'
       : 'explorar-resultados';
 
-     const resultsFingerprint = [
-  hasCategoryFilter ? `cat:${selectedCategory}` : 'cat:all',
-  hasDepartmentFilter ? `dep:${selectedDepartment}` : 'dep:all',
-  hasSearchFilter ? `q:${normalizedSearch}` : 'q:none',
-  `count:${filteredProjects.length}`,
-  filteredProjects[0]?.id ? `first:${filteredProjects[0].id}` : 'first:none',
-].join('|');
+    const resultsFingerprint = [
+      hasCategoryFilter ? `cat:${selectedCategory}` : 'cat:all',
+      hasDepartmentFilter ? `dep:${selectedDepartment}` : 'dep:all',
+      hasSearchFilter ? 'q:protected' : 'q:none',
+      `count:${filteredProjects.length}`,
+      filteredProjects[0]?.id ? `first:${filteredProjects[0].id}` : 'first:none',
+    ].join('|');
 
-const activeViewId = loading
-  ? 'loading-results'
-  : error
-  ? 'error-results'
-  : filteredProjects.length === 0
-  ? `empty-results|${resultsFingerprint}`
-  : `project-results|${resultsFingerprint}`;
+    const activeViewId = loading
+      ? 'loading-results'
+      : error
+      ? 'error-results'
+      : filteredProjects.length === 0
+      ? `empty-results|${resultsFingerprint}`
+      : `project-results|${resultsFingerprint}`;
 
     const activeViewTitle = loading
       ? 'Explorar proyectos cargando'
@@ -196,8 +203,13 @@ const activeViewId = loading
       : 'Resultados de proyectos';
 
     const visibleParts: string[] = [];
+
     visibleParts.push(`Vista activa: ${activeViewTitle}.`);
     visibleParts.push('Pantalla visible: Explorar proyectos del Espacio Emprendedor.');
+    visibleParts.push('Esta pantalla permite revisar proyectos emprendedores publicados dentro de la plataforma.');
+    visibleParts.push('Voto Claro no garantiza inversión, financiamiento, rentabilidad, retorno económico, contacto efectivo ni cierre de acuerdos.');
+    visibleParts.push('Los montos de inversión mostrados son rangos referenciales declarados por los autores del proyecto.');
+    visibleParts.push('La información debe ser evaluada independientemente por cada usuario antes de cualquier contacto o decisión.');
 
     if (loading) {
       visibleParts.push('La pantalla está cargando proyectos emprendedores para explorar.');
@@ -209,9 +221,7 @@ const activeViewId = loading
     }
 
     if (participant) {
-      visibleParts.push(
-        `Hay un participante con sesión activa: ${participant.full_name || participant.alias || 'participante'}.`
-      );
+      visibleParts.push('Hay un participante con sesión activa, sin exponer datos personales completos al asistente.');
     } else if (!loading) {
       visibleParts.push('No hay participante con sesión activa visible en esta pantalla.');
     }
@@ -229,13 +239,14 @@ const activeViewId = loading
     }
 
     if (hasSearchFilter) {
-      visibleParts.push(`Texto de búsqueda visible: ${normalizedSearch}.`);
+      visibleParts.push('Hay texto escrito en la búsqueda, sin exponerlo completo al asistente.');
     } else {
       visibleParts.push('No hay texto de búsqueda activo.');
     }
 
     if (visibleTitles.length) {
-      visibleParts.push(`Proyectos visibles en pantalla: ${visibleTitles.join(', ')}.`);
+      visibleParts.push(`Cantidad de títulos visibles en contexto: ${visibleTitles.length}.`);
+      visibleParts.push('Los títulos completos visibles se muestran al usuario en pantalla, pero se limitan en el contexto del asistente.');
     }
 
     if (!loading && !error && filteredProjects.length === 0) {
@@ -256,36 +267,32 @@ const activeViewId = loading
     ].filter(Boolean) as string[];
 
     const summary = loading
-  ? 'Pantalla de exploración de proyectos emprendedores cargando resultados.'
-  : error
-  ? 'Pantalla de exploración de proyectos con error de carga.'
-  : filteredProjects.length === 0
-  ? 'Pantalla de exploración sin resultados visibles para los filtros actuales.'
-  : 'Pantalla de exploración de proyectos emprendedores con filtros y tarjetas de proyectos visibles.';
+      ? 'Pantalla de exploración de proyectos emprendedores cargando resultados.'
+      : error
+      ? 'Pantalla de exploración de proyectos con error de carga.'
+      : filteredProjects.length === 0
+      ? 'Pantalla de exploración sin resultados visibles para los filtros actuales.'
+      : 'Pantalla de exploración de proyectos emprendedores con filtros y tarjetas de proyectos visibles.';
 
-   const speakableSummary = loading
-  ? 'Estamos en Explorar proyectos del Espacio Emprendedor y la pantalla está cargando los proyectos disponibles.'
-  : error
-  ? 'Estamos en Explorar proyectos del Espacio Emprendedor, pero esta pantalla muestra un error al cargar los resultados.'
-  : filteredProjects.length === 0
-  ? `Estamos en Explorar proyectos del Espacio Emprendedor. Ahora mismo no hay resultados visibles para los filtros actuales${
-      hasCategoryFilter ? ` en la categoría ${selectedCategory}` : ''
-    }${
-      hasDepartmentFilter ? ` y el departamento ${selectedDepartment}` : ''
-    }${
-      hasSearchFilter ? ` con la búsqueda ${normalizedSearch}` : ''
-    }.`
-  : `Estamos en Explorar proyectos del Espacio Emprendedor. Aquí puedes revisar proyectos disponibles${
-      hasCategoryFilter ? ` filtrados por la categoría ${selectedCategory}` : ''
-    }${
-      hasDepartmentFilter ? ` en el departamento ${selectedDepartment}` : ''
-    }${
-      hasSearchFilter ? ` y con la búsqueda ${normalizedSearch}` : ''
-    }.`;
+    const speakableSummary = loading
+      ? 'Estamos en Explorar proyectos del Espacio Emprendedor y la pantalla está cargando los proyectos disponibles.'
+      : error
+      ? 'Estamos en Explorar proyectos del Espacio Emprendedor, pero esta pantalla muestra un error al cargar los resultados.'
+      : filteredProjects.length === 0
+      ? `Estamos en Explorar proyectos del Espacio Emprendedor. Ahora mismo no hay resultados visibles para los filtros actuales${
+          hasCategoryFilter ? ` en la categoría ${selectedCategory}` : ''
+        }${
+          hasDepartmentFilter ? ` y el departamento ${selectedDepartment}` : ''
+        }.`
+      : `Estamos en Explorar proyectos del Espacio Emprendedor. Aquí puedes revisar proyectos disponibles${
+          hasCategoryFilter ? ` filtrados por la categoría ${selectedCategory}` : ''
+        }${
+          hasDepartmentFilter ? ` en el departamento ${selectedDepartment}` : ''
+        }. Recuerda que Voto Claro no garantiza inversión, financiamiento ni rentabilidad.`;
 
-     const status = loading ? 'loading' : error ? 'error' : 'ready';
+    const status = loading ? 'loading' : error ? 'error' : 'ready';
 
-          setPageContext({
+    setPageContext({
       pageId: 'espacio-emprendedor-explorar',
       pageTitle: 'Espacio Emprendedor',
       route: '/espacio-emprendedor/explorar',
@@ -295,11 +302,11 @@ const activeViewId = loading
       activeViewId,
       activeViewTitle,
       breadcrumb: ['Espacio Emprendedor', 'Explorar proyectos', activeViewTitle],
-      visibleSections: ['filtros', 'busqueda', 'resultados'],
+      visibleSections: ['filtros', 'busqueda', 'resultados', 'aviso-responsabilidad'],
       suggestedPrompts: [
         {
           id: 'ee-explore-1',
-          label: '¿Qué filtros tengo aplicados?',
+          label: '¿Qué filtros tengo?',
           question: '¿Qué filtros tengo aplicados en esta pantalla?',
         },
         {
@@ -327,29 +334,32 @@ const activeViewId = loading
       visibleText: visibleParts.join('\n'),
       availableActions,
       selectedCategory: hasCategoryFilter ? selectedCategory : undefined,
-      selectedItemTitle: undefined,
+      selectedItemTitle: filteredProjects.length > 0 ? 'Proyecto emprendedor visible' : undefined,
       status,
       dynamicData: {
-  participantLogueado: !!participant,
-  projectsCount: projects.length,
-  filteredProjectsCount: filteredProjects.length,
-  visibleProjectTitles: visibleTitles,
-  selectedCategory,
-  selectedDepartment,
-  searchTerm: normalizedSearch,
-  hasCategoryFilter,
-  hasDepartmentFilter,
-  hasSearchFilter,
-  hasActiveFilters,
-  emptyResults: !loading && !error && filteredProjects.length === 0,
-  firstProjectId: filteredProjects[0]?.id || '',
-  firstProjectTitle: filteredProjects[0]?.title || '',
-  exploreResultsFingerprint: resultsFingerprint,
-  canOpenProjectDetail: filteredProjects.length > 0,
-  canFilterByCategory: true,
-  canFilterByDepartment: true,
-  canSearchProjects: true,
-},
+        participantLogueado: !!participant,
+        participantDataProtected: true,
+        projectsCount: projects.length,
+        filteredProjectsCount: filteredProjects.length,
+        visibleProjectTitlesProtected: visibleTitles.length > 0,
+        selectedCategory,
+        selectedDepartment,
+        searchTermProtected: hasSearchFilter,
+        hasCategoryFilter,
+        hasDepartmentFilter,
+        hasSearchFilter,
+        hasActiveFilters,
+        emptyResults: !loading && !error && filteredProjects.length === 0,
+        firstProjectId: filteredProjects[0]?.id || '',
+        firstProjectTitleProtected: !!filteredProjects[0]?.title,
+        exploreResultsFingerprint: resultsFingerprint,
+        canOpenProjectDetail: filteredProjects.length > 0,
+        canFilterByCategory: true,
+        canFilterByDepartment: true,
+        canSearchProjects: true,
+        investmentDisclaimer:
+          'Voto Claro no garantiza inversión, financiamiento, rentabilidad, contacto efectivo ni cierre de acuerdos.',
+      },
     });
   }, [
     setPageContext,
@@ -362,6 +372,7 @@ const activeViewId = loading
     selectedDepartment,
     searchTerm,
   ]);
+
   useEffect(() => {
     return () => {
       clearPageContext();
@@ -373,12 +384,13 @@ const activeViewId = loading
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Explorar proyectos emprendedores</h1>
-            <button
+
+          <button
             type="button"
             onClick={() => goToPath('/espacio-emprendedor')}
             className="vc-ee-explorar-link text-sm text-slate-600 hover:underline cursor-pointer"
-            >
-           ← Volver
+          >
+            ← Volver
           </button>
         </div>
 
@@ -415,7 +427,7 @@ const activeViewId = loading
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Buscar por título</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Buscar por título o resumen</label>
               <input
                 type="text"
                 placeholder="Ej: app, construcción, turismo..."
@@ -425,6 +437,11 @@ const activeViewId = loading
               />
             </div>
           </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-300 text-amber-800 rounded-2xl p-4 mb-6 text-xs">
+          <strong>⚠️ Aviso importante:</strong> Los proyectos son publicados por sus autores y deben ser evaluados de manera independiente.
+          Voto Claro no garantiza inversión, financiamiento, rentabilidad, contacto efectivo ni cierre de acuerdos. Los montos mostrados son rangos referenciales declarados por los autores.
         </div>
 
         {loading ? (
@@ -438,7 +455,9 @@ const activeViewId = loading
             <p className="text-slate-600">
               No hay proyectos que coincidan con los filtros seleccionados.
             </p>
+
             <button
+              type="button"
               onClick={() => {
                 setSelectedCategory('Todas');
                 setSelectedDepartment('Todos');
@@ -453,15 +472,15 @@ const activeViewId = loading
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => (
               <div
-                
-              key={project.id}
-  className="vc-ee-explorar-card bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
->
+                key={project.id}
+                className="vc-ee-explorar-card bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
+              >
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold bg-gradient-to-r from-green-600 to-green-700 text-black px-3 py-1 rounded-full shadow-sm">
+                    <span className="text-xs font-semibold bg-green-100 text-green-800 px-3 py-1 rounded-full shadow-sm">
                       {project.category}
                     </span>
+
                     <span className="text-xs text-slate-500 flex items-center gap-1">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -471,7 +490,7 @@ const activeViewId = loading
                           d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                       </svg>
-                      {new Date(project.created_at).toLocaleDateString()}
+                      {new Date(project.created_at).toLocaleDateString('es-PE')}
                     </span>
                   </div>
 
@@ -499,17 +518,22 @@ const activeViewId = loading
                       </svg>
                       {project.district}, {project.department}
                     </span>
+
                     <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">
-                      💰 {formatInvestment(project.investment_min, project.investment_max)}
+                      💰 Rango referencial: {formatInvestment(project.investment_min, project.investment_max)}
                     </span>
                   </div>
 
+                  <p className="text-[11px] text-slate-500 mb-3">
+                    Este rango fue declarado por el autor. No constituye oferta, recomendación ni garantía de inversión.
+                  </p>
+
                   <div className="flex justify-end mt-4 pt-3 border-t border-slate-100">
-                     <button
-                     type="button"
-                     onClick={() => goToPath(`/espacio-emprendedor/proyectos/${project.id}`)}
-                     className="vc-ee-explorar-link bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm cursor-pointer"
-                     >
+                    <button
+                      type="button"
+                      onClick={() => goToPath(`/espacio-emprendedor/proyectos/${project.id}`)}
+                      className="vc-ee-explorar-link bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm cursor-pointer"
+                    >
                       Ver detalles
                     </button>
                   </div>
