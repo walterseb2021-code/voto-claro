@@ -93,6 +93,8 @@ export default function ProfesionalesApoyoPage() {
       'Pantalla visible: Profesionales asesores del Centro de Apoyo al Emprendedor.',
       'Esta pantalla muestra áreas profesionales que pueden ayudar a mejorar un proyecto emprendedor.',
       'La información es orientativa y no constituye recomendación directa de contratación.',
+      'Hay un acceso visible para que una persona pueda registrarse como profesional asesor.',
+      'Para participar como profesional asesor, el usuario debe llenar su ficha profesional y obtener su código profesional único.',
       'Voto Claro no certifica profesionales, no garantiza resultados, honorarios, cumplimiento de servicios ni idoneidad profesional.',
       'Cada usuario debe revisar credenciales, experiencia, costos, condiciones y alcance antes de contratar.',
     ];
@@ -102,15 +104,16 @@ export default function ProfesionalesApoyoPage() {
       pageTitle: 'Profesionales asesores',
       route: '/espacio-emprendedor/apoyo/profesionales',
       summary:
-        'Pantalla orientativa sobre profesionales asesores que pueden apoyar a emprendedores en temas legales, contables, financieros, comerciales y de formulación de proyectos.',
+        'Pantalla orientativa sobre profesionales asesores que pueden apoyar a emprendedores en temas legales, contables, financieros, comerciales y de formulación de proyectos, con acceso al registro de ficha profesional.',
       speakableSummary:
-        'Estás en Profesionales asesores. Aquí puedes revisar qué tipo de asesoría podría ayudarte a mejorar tu proyecto, como legal, contable, financiera, formulación de proyectos, marketing o propiedad intelectual. Voto Claro no certifica profesionales ni garantiza resultados.',
+        'Estás en Profesionales asesores. Aquí puedes revisar qué tipo de asesoría podría ayudarte a mejorar tu proyecto, como legal, contable, financiera, formulación de proyectos, marketing o propiedad intelectual. También puedes registrarte como profesional asesor llenando tu ficha profesional. Voto Claro no certifica profesionales ni garantiza resultados.',
       activeSection: 'profesionales-asesores',
       activeViewId: 'professional-advisors',
       activeViewTitle: 'Profesionales asesores',
       breadcrumb: ['Espacio Emprendedor', 'Centro de Apoyo', 'Profesionales'],
       visibleSections: [
         'presentacion',
+        'registro-profesional',
         'areas-profesionales',
         'checklist-contratacion',
         'advertencia-responsabilidad',
@@ -118,12 +121,14 @@ export default function ProfesionalesApoyoPage() {
       visibleActions: [
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
+        'Registrarme como profesional asesor',
         'Revisar áreas profesionales',
         'Revisar checklist antes de contratar',
       ],
       availableActions: [
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
+        'Registrarme como profesional asesor',
         'Revisar áreas profesionales',
         'Revisar checklist antes de contratar',
       ],
@@ -156,16 +161,26 @@ export default function ProfesionalesApoyoPage() {
           label: 'Responsabilidad',
           question: '¿Voto Claro garantiza el trabajo de los profesionales?',
         },
+        {
+          id: 'ee-prof-6',
+          label: 'Registrarme como asesor',
+          question: '¿Dónde puedo registrarme como profesional asesor?',
+        },
       ],
       dynamicData: {
         professionalGuideVisible: true,
         professionalAreasCount: PROFESSIONAL_AREAS.length,
         checklistCount: CHECKLIST.length,
         directoryModeEnabled: false,
+        professionalRegistrationVisible: true,
+        canOpenProfessionalRegistration: true,
+        professionalRegistrationRoute:
+          '/espacio-emprendedor/apoyo/profesionales/registro',
+        professionalCodeRequired: true,
         disclaimer:
           'Voto Claro no certifica profesionales, no garantiza contratación, honorarios, resultados ni cumplimiento de servicios.',
       },
-      contextVersion: 'ee-apoyo-profesionales-v1',
+      contextVersion: 'ee-apoyo-profesionales-v2',
     });
 
     return () => {
@@ -209,6 +224,33 @@ export default function ProfesionalesApoyoPage() {
             Un proyecto puede necesitar apoyo legal, contable, financiero, comercial o técnico antes
             de presentarse a posibles interesados, inversionistas o aliados.
           </p>
+
+          <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+            <h2 className="text-sm font-bold text-emerald-900 mb-2">
+              ¿Eres profesional y deseas participar como asesor?
+            </h2>
+
+            <p className="text-sm text-emerald-900 mb-3">
+              Registra tu ficha profesional, declara tus especialidades, servicios ofrecidos,
+              modalidad de atención y sube un documento PDF de respaldo. Al guardar tu ficha,
+              obtendrás un código profesional único.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                router.push('/espacio-emprendedor/apoyo/profesionales/registro')
+              }
+              className="bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
+            >
+              Registrarme como profesional asesor →
+            </button>
+
+            <p className="text-xs text-emerald-800 mt-3">
+              El registro no significa certificación, validación o aval de Voto Claro. La información será
+              declarada por el propio profesional y deberá ser verificada por cada usuario interesado.
+            </p>
+          </div>
 
           <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
             <strong>⚠️ Aviso importante:</strong> Esta sección es orientativa. Voto Claro no certifica profesionales,
