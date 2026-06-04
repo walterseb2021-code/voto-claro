@@ -118,6 +118,9 @@ function shortText(value: string | null, max = 180) {
 }
 
 export default function ProfesionalesApoyoPage() {
+      const goToPath = (path: string) => {
+    window.location.href = path;
+  };
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
@@ -379,8 +382,8 @@ export default function ProfesionalesApoyoPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => router.push('/espacio-emprendedor/apoyo')}
-              className="bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
+               onClick={() => goToPath('/espacio-emprendedor/apoyo')}
+className="relative z-20 cursor-pointer bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
             >
               ← Centro de Apoyo
             </button>
@@ -418,10 +421,10 @@ export default function ProfesionalesApoyoPage() {
 
             <button
               type="button"
-              onClick={() =>
-                router.push('/espacio-emprendedor/apoyo/profesionales/registro')
-              }
-              className="bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
+             onClick={() =>
+  goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
+}
+className="relative z-20 cursor-pointer bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
             >
               Registrarme como profesional asesor →
             </button>
@@ -453,9 +456,9 @@ export default function ProfesionalesApoyoPage() {
             <button
               type="button"
               onClick={() =>
-                router.push('/espacio-emprendedor/apoyo/profesionales/registro')
-              }
-              className="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
+  goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
+}
+className="relative z-20 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
             >
               Registrar mi ficha
             </button>
@@ -537,6 +540,9 @@ export default function ProfesionalesApoyoPage() {
                     <span className="text-[11px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full px-2 py-1 whitespace-nowrap">
                       {professional.codigo_profesional}
                     </span>
+                    <p className="text-[10px] text-slate-500 mt-1">
+  Código público de identificación, no es clave de acceso.
+</p>
                   </div>
 
                   <div className="mt-3 text-xs text-slate-500">
