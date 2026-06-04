@@ -500,50 +500,76 @@ export default function EspacioEmprendedorPage() {
         : 'Panel del emprendedor';
 
     const visibleSections = [
-      'bienvenida',
-      'proyectos-mas-contactados',
-      activeSection,
-      'bloque-inversionista',
-      participant && afiliado ? 'mis-proyectos' : null,
-      participant && afiliado ? 'mensajes-recibidos' : null,
-    ].filter(Boolean) as string[];
+  'bienvenida',
+  'proyectos-mas-contactados',
+  'centro-apoyo-emprendedor',
+  activeSection,
+  'bloque-inversionista',
+  participant && afiliado ? 'mis-proyectos' : null,
+  participant && afiliado ? 'mensajes-recibidos' : null,
+].filter(Boolean) as string[];
 
     const availableActions = !participant
-      ? ['Registrarme ahora', 'Iniciar sesión con código', 'Explorar proyectos', 'Configurar mi perfil']
-      : !afiliado
-      ? ['Verificar DNI', 'Explorar proyectos', 'Configurar mi perfil']
-      : ['Publicar nuevo proyecto', 'Ver detalles de proyecto', 'Responder mensajes', 'Explorar proyectos', 'Configurar mi perfil'];
+  ? [
+      'Registrarme ahora',
+      'Iniciar sesión con código',
+      'Explorar proyectos',
+      'Configurar mi perfil',
+      'Abrir Centro de Apoyo al Emprendedor',
+      'Ver instituciones de apoyo',
+      'Buscar profesionales asesores',
+      'Ver guía para preparar proyecto',
+    ]
+  : !afiliado
+  ? [
+      'Verificar DNI',
+      'Explorar proyectos',
+      'Configurar mi perfil',
+      'Abrir Centro de Apoyo al Emprendedor',
+      'Ver instituciones de apoyo',
+      'Buscar profesionales asesores',
+      'Ver guía para preparar proyecto',
+    ]
+  : [
+      'Publicar nuevo proyecto',
+      'Ver detalles de proyecto',
+      'Responder mensajes',
+      'Explorar proyectos',
+      'Configurar mi perfil',
+      'Abrir Centro de Apoyo al Emprendedor',
+      'Ver instituciones de apoyo',
+      'Buscar profesionales asesores',
+      'Ver guía para preparar proyecto',
+    ];
+     const summary =
+  entrepreneurViewMode === 'guest-access'
+    ? 'Acceso al Espacio Emprendedor con registro, inicio de sesión por código, exploración de proyectos y Centro de Apoyo al Emprendedor.'
+    : entrepreneurViewMode === 'dni-verification-checking'
+    ? 'Verificación de afiliación en curso, con acceso visible al Centro de Apoyo al Emprendedor.'
+    : entrepreneurViewMode === 'dni-verification'
+    ? 'Verificación de afiliación pendiente para habilitar la publicación de proyectos, con acceso a instituciones, profesionales y guía de preparación.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
+    ? 'Panel emprendedor cargando proyectos y mensajes, con Centro de Apoyo al Emprendedor disponible.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
+    ? 'Panel emprendedor con proyectos propios, mensajes recibidos y acceso a apoyo externo y profesional.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
+    ? 'Panel emprendedor con proyectos propios visibles y acceso al Centro de Apoyo al Emprendedor.'
+    : 'Panel emprendedor listo para publicar el primer proyecto, con apoyo para preparar, mejorar y orientar el proyecto.';
 
-    const summary =
-      entrepreneurViewMode === 'guest-access'
-        ? 'Acceso al Espacio Emprendedor con registro e inicio de sesión por código.'
-        : entrepreneurViewMode === 'dni-verification-checking'
-        ? 'Verificación de afiliación en curso.'
-        : entrepreneurViewMode === 'dni-verification'
-        ? 'Verificación de afiliación pendiente para habilitar la publicación de proyectos.'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
-        ? 'Panel emprendedor cargando proyectos y mensajes.'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
-        ? 'Panel emprendedor con proyectos propios y mensajes recibidos.'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
-        ? 'Panel emprendedor con proyectos propios visibles.'
-        : 'Panel emprendedor listo para publicar el primer proyecto.';
-
-    const speakableSummary =
-      entrepreneurViewMode === 'guest-access'
-        ? 'Estamos en Espacio Emprendedor. Desde aquí puedes registrarte, ingresar con tu código y explorar proyectos antes de publicar el tuyo.'
-        : entrepreneurViewMode === 'dni-verification-checking'
-        ? 'Estamos en Espacio Emprendedor y ahora se está verificando la afiliación para habilitar la publicación de proyectos.'
-        : entrepreneurViewMode === 'dni-verification'
-        ? 'Estamos en Espacio Emprendedor. Ya entraste como participante, pero todavía falta verificar afiliación para poder publicar proyectos.'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
-        ? 'Estamos en tu panel del Espacio Emprendedor. La pantalla está cargando tus proyectos y mensajes.'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
-        ? 'Estamos en tu panel del Espacio Emprendedor. Aquí puedes revisar tus proyectos y tus mensajes recibidos, sin exponer datos privados al asistente.'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
-        ? 'Estamos en tu panel del Espacio Emprendedor. Aquí puedes revisar tus proyectos publicados y publicar uno nuevo.'
-        : 'Estamos en tu panel del Espacio Emprendedor. Ya tienes acceso como emprendedor y desde aquí puedes publicar tu primer proyecto.';
-
+     const speakableSummary =
+  entrepreneurViewMode === 'guest-access'
+    ? 'Estamos en Espacio Emprendedor. Desde aquí puedes registrarte, ingresar con tu código, explorar proyectos y acceder al Centro de Apoyo al Emprendedor para encontrar instituciones, profesionales y guías.'
+    : entrepreneurViewMode === 'dni-verification-checking'
+    ? 'Estamos en Espacio Emprendedor y ahora se está verificando la afiliación para habilitar la publicación de proyectos. También puedes revisar el Centro de Apoyo al Emprendedor.'
+    : entrepreneurViewMode === 'dni-verification'
+    ? 'Estamos en Espacio Emprendedor. Ya entraste como participante, pero todavía falta verificar afiliación para publicar proyectos. Mientras tanto, puedes revisar instituciones, profesionales asesores y guías para preparar mejor tu proyecto.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
+    ? 'Estamos en tu panel del Espacio Emprendedor. La pantalla está cargando tus proyectos y mensajes. También tienes acceso al Centro de Apoyo al Emprendedor.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
+    ? 'Estamos en tu panel del Espacio Emprendedor. Aquí puedes revisar tus proyectos, tus mensajes recibidos y acceder a apoyo profesional o institucional, sin exponer datos privados al asistente.'
+    : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
+    ? 'Estamos en tu panel del Espacio Emprendedor. Aquí puedes revisar tus proyectos publicados, publicar uno nuevo y acceder al Centro de Apoyo al Emprendedor.'
+    : 'Estamos en tu panel del Espacio Emprendedor. Ya tienes acceso como emprendedor y desde aquí puedes publicar tu primer proyecto o buscar apoyo para prepararlo mejor.';
     const visibleParts: string[] = [];
 
     visibleParts.push(`Vista activa: ${activeViewTitle}.`);
@@ -551,6 +577,9 @@ export default function EspacioEmprendedorPage() {
     visibleParts.push('Mensaje principal visible: conecta tu proyecto emprendedor con posibles interesados o inversionistas.');
     visibleParts.push('Voto Claro no garantiza inversión, financiamiento, rentabilidad, contacto efectivo ni cierre de acuerdos.');
     visibleParts.push('Bloque visible para inversionistas: explorar proyectos y configurar perfil.');
+    visibleParts.push('Bloque visible: Centro de Apoyo al Emprendedor.');
+visibleParts.push('El Centro de Apoyo permite acceder a instituciones, programas, profesionales asesores y guías para preparar mejor un proyecto.');
+visibleParts.push('Voto Claro muestra información orientativa y espacios de contacto, pero no garantiza financiamiento, contratación de servicios profesionales ni resultados económicos.');
 
     if (loading) {
       visibleParts.push('La pantalla está cargando datos del Espacio Emprendedor.');
@@ -722,11 +751,18 @@ export default function EspacioEmprendedorPage() {
           : '',
         latestInvestorThreadKeyProtected: !!latestReceived?.thread_key,
         canExploreProjects: true,
-        canOpenInvestorProfile: true,
-        canPublishProject: !!participant && !!afiliado,
-        canVerifyDni: !!participant && !afiliado,
-        investmentDisclaimer:
-          'Voto Claro no garantiza inversión, financiamiento, rentabilidad, contacto efectivo ni cierre de acuerdos.',
+canOpenInvestorProfile: true,
+canPublishProject: !!participant && !!afiliado,
+canVerifyDni: !!participant && !afiliado,
+supportCenterVisible: true,
+canOpenSupportCenter: true,
+canOpenInstitutionsSupport: true,
+canOpenProfessionalAdvisors: true,
+canOpenProjectGuide: true,
+supportCenterDisclaimer:
+  'Voto Claro muestra información orientativa y espacios de contacto, pero no garantiza financiamiento, contratación profesional ni resultados económicos.',
+investmentDisclaimer:
+  'Voto Claro no garantiza inversión, financiamiento, rentabilidad, contacto efectivo ni cierre de acuerdos.',
       },
     });
   }, [
@@ -850,7 +886,77 @@ export default function EspacioEmprendedorPage() {
             )}
           </div>
         </div>
+                 <div className="bg-white rounded-2xl border-2 border-indigo-600 p-6 shadow-sm mt-6 vc-fade-up vc-delay-1">
+          <div className="flex items-start gap-3">
+            <div className="text-3xl leading-none">🤝</div>
 
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
+                Centro de Apoyo al Emprendedor
+              </h2>
+
+              <p className="text-slate-700 text-sm mb-3">
+                Encuentra instituciones, programas, profesionales asesores y guías que pueden ayudarte a preparar,
+                mejorar o revisar tu proyecto antes de contactar posibles inversionistas o aliados.
+              </p>
+
+              <div className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300 mb-4">
+                <strong>⚠️ Aviso:</strong> Voto Claro muestra información orientativa y espacios de contacto.
+                No garantiza financiamiento, aprobación de proyectos, contratación de servicios profesionales ni resultados económicos.
+                Cada usuario debe verificar requisitos, credenciales, costos y condiciones directamente con cada institución o profesional.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => router.push('/espacio-emprendedor/apoyo/instituciones')}
+                  className="rounded-xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3 text-left hover:bg-indigo-100 transition vc-btn-wave vc-btn-pulse"
+                >
+                  <div className="text-sm font-extrabold text-slate-900">
+                    🏛️ Instituciones
+                  </div>
+                  <div className="text-xs text-slate-600 mt-1">
+                    Programas, fondos, incubadoras y oportunidades externas.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => router.push('/espacio-emprendedor/apoyo/profesionales')}
+                  className="rounded-xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-left hover:bg-emerald-100 transition vc-btn-wave vc-btn-pulse"
+                >
+                  <div className="text-sm font-extrabold text-slate-900">
+                    👩‍💼 Profesionales
+                  </div>
+                  <div className="text-xs text-slate-600 mt-1">
+                    Asesoría legal, contable, financiera y de proyectos.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => router.push('/espacio-emprendedor/apoyo/guia')}
+                  className="rounded-xl border-2 border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100 transition vc-btn-wave vc-btn-pulse"
+                >
+                  <div className="text-sm font-extrabold text-slate-900">
+                    📘 Guía práctica
+                  </div>
+                  <div className="text-xs text-slate-600 mt-1">
+                    Aprende a ordenar tu idea y preparar mejor tu proyecto.
+                  </div>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => router.push('/espacio-emprendedor/apoyo')}
+                className="mt-4 inline-flex items-center rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800 transition vc-btn-wave vc-btn-pulse"
+              >
+                Abrir Centro de Apoyo →
+              </button>
+            </div>
+          </div>
+        </div>
         {!participant ? (
           <>
             <div className={`bg-white ${card} mt-6`}>
