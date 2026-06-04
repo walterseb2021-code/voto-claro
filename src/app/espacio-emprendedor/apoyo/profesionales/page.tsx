@@ -1,8 +1,24 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
+
+type Professional = {
+  id: string;
+  codigo_profesional: string;
+  public_name: string;
+  professional_type: string;
+  specialties: string[];
+  services: string[];
+  department: string | null;
+  province: string | null;
+  district: string | null;
+  attention_mode: string | null;
+  experience_summary: string | null;
+  public_message: string | null;
+  created_at: string;
+};
 
 const PROFESSIONAL_AREAS = [
   {
@@ -84,17 +100,141 @@ const CHECKLIST = [
   '¿Entiendes qué documentos o información le entregarás?',
 ];
 
+function getLocationLabel(professional: Professional) {
+  const parts = [
+    professional.department,
+    professional.province,
+    professional.district,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(' - ') : 'Ubicación no especificada';
+}
+
+function shortText(value: string | null, max = 180) {
+  const clean = String(value || '').trim();
+  if (!clean) return '';
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max).trim()}...`;
+}
+
 export default function ProfesionalesApoyoPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [loadingProfessionals, setLoadingProfessionals] = useState(true);
+  const [professionalsError, setProfessionalsError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedType, setSelectedType] = useState('Todos');
+
   useEffect(() => {
+    async function loadProfessionals() {
+      setLoadingProfessionals(true);
+      setProfessionalsError(null);
+
+      try {
+        const res = await fetch('/api/espacio-emprendedor/profesionales/list', {
+          cache: 'no-store',
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data?.error || 'No se pudo cargar el directorio.');
+        }
+
+        setProfessionals(data.professionals || []);
+      } catch (err: any) {
+        console.error('Error cargando profesionales:', err);
+        setProfessionalsError(
+          err.message || 'No se pudo cargar el directorio de profesionales.'
+        );
+      } finally {
+        setLoadingProfessionals(false);
+      }
+    }
+
+    loadProfessionals();
+  }, []);
+
+  const professionalTypes = [
+    'Todos',
+    ...Array.from(
+      new Set(
+        professionals
+          .map((item) => item.professional_type)
+          .filter(Boolean)
+      )
+    ),
+  ];
+
+  const filteredProfessionals = professionals.filter((professional) => {
+    const q = searchTerm.trim().toLowerCase();
+
+    const matchesType =
+      selectedType === 'Todos' || professional.professional_type === selectedType;
+
+    const searchableText = [
+      professional.public_name,
+      professional.codigo_profesional,
+      professional.professional_type,
+      professional.department,
+      professional.province,
+      professional.district,
+      professional.attention_mode,
+      ...(professional.specialties || []),
+      ...(professional.services || []),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    const matchesSearch = !q || searchableText.includes(q);
+
+    return matchesType && matchesSearch;
+  });
+
+  useEffect(() => {
+    const visibleProfessionalNames = filteredProfessionals
+      .slice(0, 6)
+      .map((item) => item.public_name)
+      .filter(Boolean);
+
+    const visibleProfessionalCodes = filteredProfessionals
+      .slice(0, 6)
+      .map((item) => item.codigo_profesional)
+      .filter(Boolean);
+
+    const hasSearch = searchTerm.trim().length > 0;
+    const hasTypeFilter = selectedType !== 'Todos';
+
     const visibleParts = [
       'Pantalla visible: Profesionales asesores del Centro de Apoyo al Emprendedor.',
       'Esta pantalla muestra áreas profesionales que pueden ayudar a mejorar un proyecto emprendedor.',
-      'La información es orientativa y no constituye recomendación directa de contratación.',
       'Hay un acceso visible para que una persona pueda registrarse como profesional asesor.',
       'Para participar como profesional asesor, el usuario debe llenar su ficha profesional y obtener su código profesional único.',
+      'La pantalla incluye un directorio de profesionales registrados con información declarada por cada profesional.',
+      `Cantidad total de profesionales cargados: ${professionals.length}.`,
+      `Cantidad de profesionales visibles con filtros actuales: ${filteredProfessionals.length}.`,
+      hasSearch
+        ? `Búsqueda visible: ${searchTerm.trim()}.`
+        : 'No hay búsqueda activa en el directorio.',
+      hasTypeFilter
+        ? `Filtro de tipo profesional seleccionado: ${selectedType}.`
+        : 'No hay filtro específico de tipo profesional.',
+      loadingProfessionals
+        ? 'El directorio de profesionales está cargando.'
+        : 'El directorio de profesionales ya terminó de cargar.',
+      professionalsError
+        ? `Error visible del directorio: ${professionalsError}.`
+        : 'No hay error visible en el directorio.',
+      visibleProfessionalNames.length
+        ? `Profesionales visibles: ${visibleProfessionalNames.join(', ')}.`
+        : 'No hay nombres de profesionales visibles con los filtros actuales.',
+      visibleProfessionalCodes.length
+        ? `Códigos profesionales visibles: ${visibleProfessionalCodes.join(', ')}.`
+        : 'No hay códigos profesionales visibles con los filtros actuales.',
+      'La información es orientativa y no constituye recomendación directa de contratación.',
       'Voto Claro no certifica profesionales, no garantiza resultados, honorarios, cumplimiento de servicios ni idoneidad profesional.',
       'Cada usuario debe revisar credenciales, experiencia, costos, condiciones y alcance antes de contratar.',
     ];
@@ -104,16 +244,29 @@ export default function ProfesionalesApoyoPage() {
       pageTitle: 'Profesionales asesores',
       route: '/espacio-emprendedor/apoyo/profesionales',
       summary:
-        'Pantalla orientativa sobre profesionales asesores que pueden apoyar a emprendedores en temas legales, contables, financieros, comerciales y de formulación de proyectos, con acceso al registro de ficha profesional.',
+        'Pantalla orientativa y directorio inicial de profesionales asesores registrados que pueden apoyar a emprendedores en temas legales, contables, financieros, comerciales y de formulación de proyectos.',
       speakableSummary:
-        'Estás en Profesionales asesores. Aquí puedes revisar qué tipo de asesoría podría ayudarte a mejorar tu proyecto, como legal, contable, financiera, formulación de proyectos, marketing o propiedad intelectual. También puedes registrarte como profesional asesor llenando tu ficha profesional. Voto Claro no certifica profesionales ni garantiza resultados.',
-      activeSection: 'profesionales-asesores',
-      activeViewId: 'professional-advisors',
+        'Estás en Profesionales asesores. Aquí puedes revisar áreas de asesoría, registrarte como profesional asesor y consultar un directorio de profesionales registrados. La información del directorio es declarada por cada profesional. Voto Claro no certifica profesionales ni garantiza resultados.',
+      activeSection: loadingProfessionals
+        ? 'directorio-profesionales-cargando'
+        : professionalsError
+        ? 'directorio-profesionales-error'
+        : filteredProfessionals.length === 0
+        ? 'directorio-profesionales-sin-resultados'
+        : 'directorio-profesionales-visible',
+      activeViewId: loadingProfessionals
+        ? 'loading-directory'
+        : professionalsError
+        ? 'error-directory'
+        : filteredProfessionals.length === 0
+        ? 'empty-directory'
+        : 'professional-directory',
       activeViewTitle: 'Profesionales asesores',
       breadcrumb: ['Espacio Emprendedor', 'Centro de Apoyo', 'Profesionales'],
       visibleSections: [
         'presentacion',
         'registro-profesional',
+        'directorio-profesionales',
         'areas-profesionales',
         'checklist-contratacion',
         'advertencia-responsabilidad',
@@ -122,6 +275,8 @@ export default function ProfesionalesApoyoPage() {
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
         'Registrarme como profesional asesor',
+        'Buscar profesional',
+        'Filtrar por tipo profesional',
         'Revisar áreas profesionales',
         'Revisar checklist antes de contratar',
       ],
@@ -129,12 +284,15 @@ export default function ProfesionalesApoyoPage() {
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
         'Registrarme como profesional asesor',
+        'Buscar profesional',
+        'Filtrar por tipo profesional',
         'Revisar áreas profesionales',
         'Revisar checklist antes de contratar',
       ],
       visibleText: visibleParts.join('\n'),
-      selectedItemTitle: 'Profesionales asesores',
-      status: 'ready',
+      selectedItemTitle:
+        filteredProfessionals[0]?.public_name || 'Profesionales asesores',
+      status: loadingProfessionals ? 'loading' : professionalsError ? 'error' : 'ready',
       suggestedPrompts: [
         {
           id: 'ee-prof-1',
@@ -166,27 +324,49 @@ export default function ProfesionalesApoyoPage() {
           label: 'Registrarme como asesor',
           question: '¿Dónde puedo registrarme como profesional asesor?',
         },
+        {
+          id: 'ee-prof-7',
+          label: 'Directorio',
+          question: '¿Cuántos profesionales registrados se ven en el directorio?',
+        },
       ],
       dynamicData: {
         professionalGuideVisible: true,
         professionalAreasCount: PROFESSIONAL_AREAS.length,
         checklistCount: CHECKLIST.length,
-        directoryModeEnabled: false,
+        directoryModeEnabled: true,
         professionalRegistrationVisible: true,
         canOpenProfessionalRegistration: true,
         professionalRegistrationRoute:
           '/espacio-emprendedor/apoyo/profesionales/registro',
         professionalCodeRequired: true,
+        professionalsLoading: loadingProfessionals,
+        professionalsError: professionalsError || null,
+        professionalsCount: professionals.length,
+        filteredProfessionalsCount: filteredProfessionals.length,
+        searchTerm: searchTerm.trim() || null,
+        selectedType,
+        visibleProfessionalNames,
+        visibleProfessionalCodes,
         disclaimer:
           'Voto Claro no certifica profesionales, no garantiza contratación, honorarios, resultados ni cumplimiento de servicios.',
       },
-      contextVersion: 'ee-apoyo-profesionales-v2',
+      contextVersion: 'ee-apoyo-profesionales-v3-directorio',
     });
 
     return () => {
       clearPageContext();
     };
-  }, [setPageContext, clearPageContext]);
+  }, [
+    setPageContext,
+    clearPageContext,
+    professionals,
+    filteredProfessionals,
+    loadingProfessionals,
+    professionalsError,
+    searchTerm,
+    selectedType,
+  ]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -259,6 +439,174 @@ export default function ProfesionalesApoyoPage() {
           </div>
         </section>
 
+        <section className="mt-6 bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm vc-fade-up">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">
+                📚 Directorio de profesionales registrados
+              </h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Revisa profesionales que han registrado una ficha dentro de la plataforma. La información es declarada por cada profesional.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                router.push('/espacio-emprendedor/apoyo/profesionales/registro')
+              }
+              className="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
+            >
+              Registrar mi ficha
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Buscar por nombre, código, especialidad o servicio
+              </label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Ej: contrato, contador, PRO-2026..."
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Tipo profesional
+              </label>
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+              >
+                {professionalTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {loadingProfessionals ? (
+            <p className="text-slate-600 text-sm">Cargando profesionales registrados...</p>
+          ) : professionalsError ? (
+            <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4 text-sm">
+              {professionalsError}
+            </div>
+          ) : filteredProfessionals.length === 0 ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center">
+              <p className="text-slate-600 text-sm">
+                No hay profesionales visibles con los filtros actuales.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedType('Todos');
+                }}
+                className="mt-3 text-green-700 hover:underline text-sm font-semibold"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredProfessionals.map((professional) => (
+                <div
+                  key={professional.id}
+                  className="rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm vc-card-hover"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900">
+                        {professional.public_name}
+                      </h3>
+
+                      <p className="text-sm font-semibold text-blue-700 mt-1">
+                        {professional.professional_type}
+                      </p>
+                    </div>
+
+                    <span className="text-[11px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full px-2 py-1 whitespace-nowrap">
+                      {professional.codigo_profesional}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 text-xs text-slate-500">
+                    📍 {getLocationLabel(professional)}
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-500">
+                    🧭 Atención: {professional.attention_mode || 'No especificada'}
+                  </div>
+
+                  {professional.specialties?.length ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-bold text-slate-700 mb-1">
+                        Especialidades
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {professional.specialties.slice(0, 5).map((item) => (
+                          <span
+                            key={item}
+                            className="text-[11px] bg-green-50 text-green-800 border border-green-200 rounded-full px-2 py-1"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {professional.services?.length ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-bold text-slate-700 mb-1">
+                        Servicios
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {professional.services.slice(0, 5).map((item) => (
+                          <span
+                            key={item}
+                            className="text-[11px] bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2 py-1"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {professional.public_message ? (
+                    <p className="mt-3 text-sm text-slate-700">
+                      “{shortText(professional.public_message, 160)}”
+                    </p>
+                  ) : professional.experience_summary ? (
+                    <p className="mt-3 text-sm text-slate-700">
+                      {shortText(professional.experience_summary, 160)}
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-500">
+                      Este profesional aún no agregó un mensaje público.
+                    </p>
+                  )}
+
+                  <div className="mt-4 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
+                    Información declarada por el profesional. Verifica credenciales,
+                    honorarios y condiciones antes de contratar.
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-5">
           {PROFESSIONAL_AREAS.map((item, index) => (
             <div
@@ -318,9 +666,9 @@ export default function ProfesionalesApoyoPage() {
 
           <div className="space-y-2 text-sm text-slate-700">
             <p>
-              Más adelante, esta pantalla podrá convertirse en un directorio de profesionales registrados,
-              con especialidad, ciudad, atención virtual, experiencia declarada, documentos de respaldo,
-              calificaciones y reportes.
+              Más adelante, esta pantalla podrá convertirse en un directorio más avanzado,
+              con perfil público individual, calificaciones internas, reportes, disponibilidad,
+              atención virtual, documentos de respaldo y filtros por especialidad.
             </p>
 
             <p>
