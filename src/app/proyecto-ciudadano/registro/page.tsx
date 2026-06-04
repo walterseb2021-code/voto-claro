@@ -8,8 +8,8 @@ import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeCont
 
 // Función para obtener o crear device_id
 function getOrCreateDeviceId(): string {
-  if (typeof window === "undefined") return "";
-  const KEY = "vc_device_id";
+  if (typeof window === 'undefined') return '';
+  const KEY = 'vc_device_id';
   const existing = localStorage.getItem(KEY);
   if (existing && existing.length > 10) return existing;
 
@@ -52,6 +52,17 @@ function maskPhone(phone: string) {
   return `••••••${clean.slice(-3)}`;
 }
 
+function isRetoReturn(normalizedReturnTo: string) {
+  return (
+    normalizedReturnTo === '/reto-ciudadano' ||
+    normalizedReturnTo === 'reto-ciudadano' ||
+    normalizedReturnTo === '/reto-ciudadano/principal' ||
+    normalizedReturnTo === 'reto-ciudadano/principal' ||
+    normalizedReturnTo === '/reto-ciudadano/camino' ||
+    normalizedReturnTo === 'reto-ciudadano/camino'
+  );
+}
+
 // Componente interno que usa useSearchParams
 function RegistroForm() {
   const searchParams = useSearchParams();
@@ -60,7 +71,7 @@ function RegistroForm() {
   const returnTo = searchParams.get('returnTo');
   const normalizedReturnTo = (returnTo || '').trim();
 
-  const [deviceId, setDeviceId] = useState<string>("");
+  const [deviceId, setDeviceId] = useState<string>('');
 
   const [form, setForm] = useState({
     full_name: '',
@@ -106,22 +117,41 @@ function RegistroForm() {
       return `/espacio-emprendedor${suffix}`;
     }
 
+    if (normalizedReturnTo === 'profesional-asesor') {
+      return registered
+        ? '/espacio-emprendedor/apoyo/profesionales/registro?registered=true'
+        : '/espacio-emprendedor/apoyo/profesionales';
+    }
+
     if (normalizedReturnTo === 'comentarios') {
       return `/comentarios${suffix}`;
     }
 
-    if (
-      normalizedReturnTo === '/reto-ciudadano' ||
-      normalizedReturnTo === 'reto-ciudadano' ||
-      normalizedReturnTo === '/reto-ciudadano/principal' ||
-      normalizedReturnTo === 'reto-ciudadano/principal' ||
-      normalizedReturnTo === '/reto-ciudadano/camino' ||
-      normalizedReturnTo === 'reto-ciudadano/camino'
-    ) {
+    if (isRetoReturn(normalizedReturnTo)) {
       return `/reto-ciudadano${suffix}`;
     }
 
     return `/proyecto-ciudadano${suffix}`;
+  };
+
+  const getDestinationLabel = () => {
+    if (normalizedReturnTo === 'espacio-emprendedor') {
+      return 'Espacio Emprendedor';
+    }
+
+    if (normalizedReturnTo === 'profesional-asesor') {
+      return 'Registro de Profesional Asesor';
+    }
+
+    if (normalizedReturnTo === 'comentarios') {
+      return 'Comentarios Ciudadanos';
+    }
+
+    if (isRetoReturn(normalizedReturnTo)) {
+      return 'Reto Ciudadano';
+    }
+
+    return 'Proyecto Ciudadano';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -168,7 +198,6 @@ function RegistroForm() {
     }
 
     try {
-      // Generar código de acceso
       const codigo = await generarCodigoAcceso();
 
       const { error } = await supabase
@@ -203,20 +232,7 @@ function RegistroForm() {
   };
 
   useEffect(() => {
-    const normalizedReturnTo = (returnTo || '').trim();
-
-    const destinationLabel =
-      normalizedReturnTo === 'espacio-emprendedor'
-        ? 'Espacio Emprendedor'
-        : normalizedReturnTo === 'comentarios'
-        ? 'Comentarios Ciudadanos'
-        : normalizedReturnTo === '/reto-ciudadano' || normalizedReturnTo === 'reto-ciudadano'
-        ? 'Reto Ciudadano'
-        : normalizedReturnTo === '/reto-ciudadano/principal' || normalizedReturnTo === 'reto-ciudadano/principal'
-        ? 'Reto Ciudadano'
-        : normalizedReturnTo === '/reto-ciudadano/camino' || normalizedReturnTo === 'reto-ciudadano/camino'
-        ? 'Reto Ciudadano'
-        : 'Proyecto Ciudadano';
+    const destinationLabel = getDestinationLabel();
 
     const filledFields = [
       form.full_name ? 'nombres completos' : null,
@@ -258,17 +274,16 @@ function RegistroForm() {
 
     const visibleParts: string[] = [];
 
-    if (
-      normalizedReturnTo === '/reto-ciudadano' ||
-      normalizedReturnTo === 'reto-ciudadano' ||
-      normalizedReturnTo === '/reto-ciudadano/principal' ||
-      normalizedReturnTo === 'reto-ciudadano/principal' ||
-      normalizedReturnTo === '/reto-ciudadano/camino' ||
-      normalizedReturnTo === 'reto-ciudadano/camino'
-    ) {
+    if (isRetoReturn(normalizedReturnTo)) {
       visibleParts.push('Esta pantalla de registro fue abierta desde Reto Ciudadano.');
       visibleParts.push('Este registro general permite participar en modalidades habilitadas dentro de Reto Ciudadano, según reglas y validación aplicables.');
       visibleParts.push('Al completar el formulario, el participante recibirá un código de acceso personal para iniciar sesión rápidamente.');
+    }
+
+    if (normalizedReturnTo === 'profesional-asesor') {
+      visibleParts.push('Esta pantalla de registro fue abierta desde Profesionales Asesores.');
+      visibleParts.push('Este registro general permite crear una base de participante antes de llenar la ficha profesional de asesor.');
+      visibleParts.push('Al completar el formulario, el usuario podrá continuar hacia el registro de ficha profesional.');
     }
 
     if (success) {
@@ -379,14 +394,9 @@ function RegistroForm() {
 
     const summary = success
       ? 'Pantalla de registro completado con código de acceso visible para el usuario, sin exponerlo completo al asistente.'
-      : (
-          normalizedReturnTo === '/reto-ciudadano' ||
-          normalizedReturnTo === 'reto-ciudadano' ||
-          normalizedReturnTo === '/reto-ciudadano/principal' ||
-          normalizedReturnTo === 'reto-ciudadano/principal' ||
-          normalizedReturnTo === '/reto-ciudadano/camino' ||
-          normalizedReturnTo === 'reto-ciudadano/camino'
-        )
+      : normalizedReturnTo === 'profesional-asesor'
+      ? 'Pantalla de registro general abierta desde Profesionales Asesores para crear un participante antes de llenar la ficha profesional.'
+      : isRetoReturn(normalizedReturnTo)
       ? 'Pantalla de registro general abierta desde Reto Ciudadano para habilitar acceso con código y participación en modalidades habilitadas, sujetas a reglas, validación y tratamiento de datos.'
       : 'Pantalla de registro de participante con formulario visible, validaciones, aviso de datos personales y acción para completar el registro.';
 
@@ -399,7 +409,7 @@ function RegistroForm() {
       activeSection,
       activeViewId,
       activeViewTitle,
-      breadcrumb: ['Proyecto Ciudadano', 'Registro', activeViewTitle],
+      breadcrumb: ['Registro de participante', destinationLabel, activeViewTitle],
       visibleSections: success
         ? ['resultado-registro', 'codigo-acceso', 'continuacion']
         : ['cabecera', 'descripcion', 'aviso-datos-personales', 'formulario', 'aceptacion-datos', 'aviso-importante'],
@@ -412,6 +422,8 @@ function RegistroForm() {
       dynamicData: {
         returnTo: returnTo || 'proyecto-ciudadano',
         returnDestinationLabel: destinationLabel,
+        returnHrefBeforeRegister: getReturnHref(false),
+        returnHrefAfterRegister: getReturnHref(true),
         deviceReady: !!deviceId,
         success,
         loading,
@@ -434,11 +446,12 @@ function RegistroForm() {
           aliasFilled: !!form.alias,
         },
       },
-      contextVersion: 'pc-registro-v2',
+      contextVersion: 'pc-registro-v3-profesional-asesor',
     });
   }, [
     setPageContext,
     returnTo,
+    normalizedReturnTo,
     deviceId,
     form,
     loading,
@@ -469,7 +482,6 @@ function RegistroForm() {
               Tu perfil ha sido creado correctamente. Guarda tu código de acceso en un lugar seguro. No lo compartas públicamente.
             </p>
 
-            {/* Mostrar código de acceso */}
             <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 mb-6">
               <p className="text-sm font-semibold text-amber-800 mb-1">
                 Tu código de acceso personal:
@@ -517,6 +529,13 @@ function RegistroForm() {
             Completa tus datos para poder registrarte y participar en las dinámicas habilitadas.
             Al finalizar, recibirás un código personal para iniciar sesión rápidamente.
           </p>
+
+          {normalizedReturnTo === 'profesional-asesor' && (
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs leading-relaxed">
+              <strong>👩‍💼 Registro para profesional asesor:</strong> primero debes crear tu registro general como participante.
+              Luego continuarás a la ficha profesional, donde podrás declarar tus especialidades, servicios y documento de respaldo.
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
