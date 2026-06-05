@@ -819,11 +819,22 @@ if (professionalData) {
               Máximo 10 MB. Puedes subir CV, presentación profesional, constancia, portafolio o documento de respaldo.
             </p>
 
-            {form.document_url && !pdfFile && (
-              <p className="text-xs text-green-700 mt-2">
-                Ya existe un PDF cargado. Si subes otro, se reemplazará para esta ficha.
-              </p>
-            )}
+             {form.document_url && !pdfFile && (
+  <div className="mt-2 rounded-xl border border-green-300 bg-green-50 p-3">
+    <p className="text-xs text-green-800 mb-2">
+      Ya existe un PDF cargado para esta ficha. Si subes otro, se reemplazará para esta ficha.
+    </p>
+
+    <a
+      href={form.document_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-block text-xs font-semibold text-green-700 underline"
+    >
+      Ver PDF actual de respaldo profesional →
+    </a>
+  </div>
+)}
 
             {pdfFile && (
               <p className="text-xs text-blue-700 mt-2">

@@ -60,6 +60,7 @@ export async function GET(req: Request) {
         attention_mode,
         experience_summary,
         public_message,
+        document_url,
         is_active,
         status,
         created_at
@@ -83,6 +84,7 @@ export async function GET(req: Request) {
       attention_mode: item.attention_mode,
       experience_summary: item.experience_summary,
       public_message: item.public_message,
+      document_url: item.document_url,
       created_at: item.created_at,
       is_mine:
         !!currentParticipantId &&

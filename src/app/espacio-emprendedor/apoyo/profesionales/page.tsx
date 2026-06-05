@@ -16,9 +16,10 @@ type Professional = {
   attention_mode: string | null;
   experience_summary: string | null;
   public_message: string | null;
+  document_url?: string | null;
   created_at: string;
   is_mine?: boolean;
-};
+  };
 
 const PROFESSIONAL_AREAS = [
   {
@@ -616,6 +617,16 @@ const res = await fetch(url, {
                       Este profesional aún no agregó un mensaje público.
                     </p>
                   )}
+                  {professional.document_url && (
+  <a
+    href={professional.document_url}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="relative z-20 cursor-pointer mt-4 block w-full text-center bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition"
+  >
+    📄 Ver currículo / respaldo PDF
+  </a>
+)}
                    {professional.is_mine && (
   <button
     type="button"
