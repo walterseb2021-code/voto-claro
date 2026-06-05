@@ -83,7 +83,15 @@ export default function MisMensajesProfesionalesPage() {
   useEffect(() => {
     loadConversations();
   }, []);
+     useEffect(() => {
+    const interval = window.setInterval(() => {
+      loadConversations();
+    }, 5000);
 
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, []);
   const handleReplyConversation = async (conversation: ProfessionalConversation) => {
     const reply = String(replyDrafts[conversation.thread_key] || '').trim();
 

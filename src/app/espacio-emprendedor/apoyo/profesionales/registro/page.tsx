@@ -449,7 +449,17 @@ export default function RegistroProfesionalPage() {
     messagesError,
     replyLoadingKey,
   ]);
+      useEffect(() => {
+    if (!existingProfile) return;
 
+    const interval = window.setInterval(() => {
+      loadProfessionalMessages();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [existingProfile]);
   const handleChangeText = (
     field: keyof typeof form,
     value: string | boolean | string[]

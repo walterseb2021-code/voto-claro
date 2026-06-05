@@ -217,7 +217,7 @@ export async function POST(req: Request) {
 
     if (!thread_key || !receiver_participant_id) {
       return NextResponse.json(
-        { error: 'No se pudo identificar la conversación.' },
+        { error: 'No se pudo identificar la conversación o el destinatario.' },
         { status: 400 }
       );
     }
@@ -281,6 +281,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (String(professional.participant_id) === String(receiver_participant_id)) {
+      return NextResponse.json(
+        { error: 'No puedes responderte a ti mismo en esta conversación.' },
+        { status: 400 }
+      );
+    }
+
     const { data: conversationCheck, error: checkError } = await admin
       .from('espacio_profesional_mensajes')
       .select('id')
@@ -293,14 +300,14 @@ export async function POST(req: Request) {
 
     if (checkError) throw checkError;
 
-    if (!conversationCheck?.length) {
+    if (!conversationCheck || conversationCheck.length === 0) {
       return NextResponse.json(
         { error: 'No se encontró una conversación válida para responder.' },
         { status: 404 }
       );
     }
 
-    const { error: insertError } = await admin
+    const { data: inserted, error: insertError } = await admin
       .from('espacio_profesional_mensajes')
       .insert({
         professional_id: professional.id,
@@ -310,12 +317,15 @@ export async function POST(req: Request) {
         content,
         is_read: false,
         status: 'active',
-      });
+      })
+      .select('id, created_at')
+      .single();
 
     if (insertError) throw insertError;
 
     return NextResponse.json({
       ok: true,
+      inserted,
       message: 'Respuesta enviada correctamente.',
     });
   } catch (err: any) {
@@ -323,7 +333,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        error: 'No se pudo enviar la respuesta. Intenta nuevamente.',
+        error:
+          err?.message || 'No se pudo enviar la respuesta. Intenta nuevamente.',
       },
       { status: 500 }
     );
