@@ -84,7 +84,13 @@ const ATTENTION_MODES = [
   'Presencial',
   'Virtual y presencial',
 ];
-
+type ProfessionalMessage = {
+  id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  sender_alias: string;
+};
 function toggleValue(list: string[], value: string) {
   return list.includes(value)
     ? list.filter((item) => item !== value)
@@ -95,7 +101,11 @@ function getDeviceId(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('vc_device_id') || '';
 }
-
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleString('es-PE', {
+    timeZone: 'America/Lima',
+  });
+}
 export default function RegistroProfesionalPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
@@ -108,7 +118,9 @@ export default function RegistroProfesionalPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [codigoProfesional, setCodigoProfesional] = useState<string | null>(null);
-
+  const [messages, setMessages] = useState<ProfessionalMessage[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
   const [form, setForm] = useState({
     public_name: '',
     professional_type: '',
@@ -125,7 +137,38 @@ export default function RegistroProfesionalPage() {
     terms_accepted: false,
   });
 
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
+       const [pdfFile, setPdfFile] = useState<File | null>(null);
+
+  const loadProfessionalMessages = async () => {
+    const deviceId = getDeviceId();
+
+    if (!deviceId) return;
+
+    setLoadingMessages(true);
+    setMessagesError(null);
+
+    try {
+      const res = await fetch(
+        `/api/espacio-emprendedor/profesionales/mensajes?device_id=${encodeURIComponent(deviceId)}`,
+        {
+          cache: 'no-store',
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'No se pudieron cargar los mensajes.');
+      }
+
+      setMessages(data.messages || []);
+    } catch (err: any) {
+      console.error('Error cargando mensajes profesionales:', err);
+      setMessagesError(err.message || 'No se pudieron cargar los mensajes.');
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
 
   const filledFields = useMemo(() => {
     return [
@@ -170,18 +213,18 @@ export default function RegistroProfesionalPage() {
           return;
         }
 
-         const res = await fetch(
-  `/api/espacio-emprendedor/profesionales/me?device_id=${encodeURIComponent(deviceId)}`,
-  {
-    cache: 'no-store',
-  }
-);
+                 const res = await fetch(
+          `/api/espacio-emprendedor/profesionales/me?device_id=${encodeURIComponent(deviceId)}`,
+          {
+            cache: 'no-store',
+          }
+        );
 
-const data = await res.json();
+        const data = await res.json();
 
-if (!res.ok) {
-  throw new Error(data?.error || 'No se pudo cargar tu ficha profesional.');
-}
+        if (!res.ok) {
+          throw new Error(data?.error || 'No se pudo cargar tu ficha profesional.');
+        }
 
 if (!data.participant) {
   router.push('/proyecto-ciudadano/registro?returnTo=profesional-asesor');
@@ -211,6 +254,7 @@ if (professionalData) {
     data_truth_confirmed: Boolean(professionalData.data_truth_confirmed),
     terms_accepted: Boolean(professionalData.terms_accepted),
   });
+  await loadProfessionalMessages();
 } else {
   setExistingProfile(null);
   setCodigoProfesional(null);
@@ -530,13 +574,16 @@ if (professionalData) {
         document_url: documentUrl,
       }));
 
-      setPdfFile(null);
+             setPdfFile(null);
       setCodigoProfesional(data.codigo_profesional || null);
       setSuccessMessage(data.message || 'Ficha profesional guardada correctamente.');
+
       setExistingProfile((prev: any) => ({
         ...(prev || {}),
         codigo_profesional: data.codigo_profesional || prev?.codigo_profesional,
       }));
+
+      await loadProfessionalMessages();
     } catch (err: any) {
       console.error('Error guardando ficha profesional:', err);
       setError(err.message || 'No se pudo guardar la ficha profesional.');
@@ -624,7 +671,73 @@ if (professionalData) {
             {error}
           </div>
         )}
+                  {existingProfile && (
+          <section className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  💬 Mensajes recibidos como profesional
+                </h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  Aquí verás los mensajes enviados por usuarios interesados en tus servicios profesionales.
+                </p>
+              </div>
 
+              <button
+                type="button"
+                onClick={loadProfessionalMessages}
+                disabled={loadingMessages}
+                className="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-50"
+              >
+                {loadingMessages ? 'Actualizando...' : 'Recargar mensajes'}
+              </button>
+            </div>
+
+            {messagesError && (
+              <div className="mb-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
+                {messagesError}
+              </div>
+            )}
+
+            {loadingMessages ? (
+              <p className="text-sm text-slate-500">Cargando mensajes...</p>
+            ) : messages.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm text-slate-600">
+                  Todavía no tienes mensajes recibidos como profesional.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 mb-2">
+                      <p className="text-sm font-semibold text-slate-800">
+                        De: {msg.sender_alias}
+                      </p>
+
+                      <p className="text-xs text-slate-500">
+                        {formatDate(msg.created_at)}
+                      </p>
+                    </div>
+
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {msg.content}
+                    </p>
+
+                    <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2 mt-3">
+                      Este mensaje fue enviado dentro de Voto Claro. Evalúa la solicitud antes de compartir datos personales,
+                      firmar documentos o asumir compromisos.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border-2 border-slate-300 p-6 shadow-sm space-y-5">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">
