@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Professional = {
@@ -118,11 +117,11 @@ function shortText(value: string | null, max = 180) {
 }
 
 export default function ProfesionalesApoyoPage() {
-      const goToPath = (path: string) => {
+  const { setPageContext, clearPageContext } = useAssistantRuntime();
+
+  const goToPath = (path: string) => {
     window.location.href = path;
   };
-  const router = useRouter();
-  const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loadingProfessionals, setLoadingProfessionals] = useState(true);
@@ -214,8 +213,9 @@ export default function ProfesionalesApoyoPage() {
     const visibleParts = [
       'Pantalla visible: Profesionales asesores del Centro de Apoyo al Emprendedor.',
       'Esta pantalla muestra áreas profesionales que pueden ayudar a mejorar un proyecto emprendedor.',
-      'Hay un acceso visible para que una persona pueda registrarse como profesional asesor.',
+      'Hay un acceso visible para que una persona pueda registrar o editar su ficha profesional.',
       'Para participar como profesional asesor, el usuario debe llenar su ficha profesional y obtener su código profesional único.',
+      'El código profesional es identificador público, no clave de acceso.',
       'La pantalla incluye un directorio de profesionales registrados con información declarada por cada profesional.',
       `Cantidad total de profesionales cargados: ${professionals.length}.`,
       `Cantidad de profesionales visibles con filtros actuales: ${filteredProfessionals.length}.`,
@@ -249,7 +249,7 @@ export default function ProfesionalesApoyoPage() {
       summary:
         'Pantalla orientativa y directorio inicial de profesionales asesores registrados que pueden apoyar a emprendedores en temas legales, contables, financieros, comerciales y de formulación de proyectos.',
       speakableSummary:
-        'Estás en Profesionales asesores. Aquí puedes revisar áreas de asesoría, registrarte como profesional asesor y consultar un directorio de profesionales registrados. La información del directorio es declarada por cada profesional. Voto Claro no certifica profesionales ni garantiza resultados.',
+        'Estás en Profesionales asesores. Aquí puedes revisar áreas de asesoría, registrar o editar tu ficha profesional y consultar un directorio de profesionales registrados. La información del directorio es declarada por cada profesional. Voto Claro no certifica profesionales ni garantiza resultados.',
       activeSection: loadingProfessionals
         ? 'directorio-profesionales-cargando'
         : professionalsError
@@ -277,7 +277,7 @@ export default function ProfesionalesApoyoPage() {
       visibleActions: [
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
-        'Registrarme como profesional asesor',
+        'Registrar o editar ficha profesional',
         'Buscar profesional',
         'Filtrar por tipo profesional',
         'Revisar áreas profesionales',
@@ -286,7 +286,7 @@ export default function ProfesionalesApoyoPage() {
       availableActions: [
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
-        'Registrarme como profesional asesor',
+        'Registrar o editar ficha profesional',
         'Buscar profesional',
         'Filtrar por tipo profesional',
         'Revisar áreas profesionales',
@@ -324,8 +324,8 @@ export default function ProfesionalesApoyoPage() {
         },
         {
           id: 'ee-prof-6',
-          label: 'Registrarme como asesor',
-          question: '¿Dónde puedo registrarme como profesional asesor?',
+          label: 'Registrar o editar',
+          question: '¿Dónde puedo registrar o editar mi ficha profesional?',
         },
         {
           id: 'ee-prof-7',
@@ -343,6 +343,7 @@ export default function ProfesionalesApoyoPage() {
         professionalRegistrationRoute:
           '/espacio-emprendedor/apoyo/profesionales/registro',
         professionalCodeRequired: true,
+        professionalCodeIsPublicIdentifier: true,
         professionalsLoading: loadingProfessionals,
         professionalsError: professionalsError || null,
         professionalsCount: professionals.length,
@@ -354,7 +355,7 @@ export default function ProfesionalesApoyoPage() {
         disclaimer:
           'Voto Claro no certifica profesionales, no garantiza contratación, honorarios, resultados ni cumplimiento de servicios.',
       },
-      contextVersion: 'ee-apoyo-profesionales-v3-directorio',
+      contextVersion: 'ee-apoyo-profesionales-v4-botones-edicion',
     });
 
     return () => {
@@ -382,16 +383,16 @@ export default function ProfesionalesApoyoPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-               onClick={() => goToPath('/espacio-emprendedor/apoyo')}
-className="relative z-20 cursor-pointer bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
+              onClick={() => goToPath('/espacio-emprendedor/apoyo')}
+              className="relative z-20 cursor-pointer bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
             >
               ← Centro de Apoyo
             </button>
 
             <button
               type="button"
-              onClick={() => router.push('/espacio-emprendedor')}
-              className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse"
+              onClick={() => goToPath('/espacio-emprendedor')}
+              className="relative z-20 cursor-pointer bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse"
             >
               Espacio Emprendedor
             </button>
@@ -414,24 +415,25 @@ className="relative z-20 cursor-pointer bg-slate-200 text-slate-800 px-4 py-2 ro
             </h2>
 
             <p className="text-sm text-emerald-900 mb-3">
-              Registra tu ficha profesional, declara tus especialidades, servicios ofrecidos,
+              Registra o edita tu ficha profesional, declara tus especialidades, servicios ofrecidos,
               modalidad de atención y sube un documento PDF de respaldo. Al guardar tu ficha,
               obtendrás un código profesional único.
             </p>
 
             <button
               type="button"
-             onClick={() =>
-  goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
-}
-className="relative z-20 cursor-pointer bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
+              onClick={() =>
+                goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
+              }
+              className="relative z-20 cursor-pointer bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
             >
-              Registrarme como profesional asesor →
+              Registrar o editar mi ficha profesional →
             </button>
 
             <p className="text-xs text-emerald-800 mt-3">
-              El registro no significa certificación, validación o aval de Voto Claro. La información será
-              declarada por el propio profesional y deberá ser verificada por cada usuario interesado.
+              El registro no significa certificación, validación o aval de Voto Claro.
+              El código profesional es un identificador público, no una clave de acceso.
+              Para editar tu ficha debes ingresar con tu sesión o código de participante.
             </p>
           </div>
 
@@ -456,11 +458,11 @@ className="relative z-20 cursor-pointer bg-emerald-700 text-white px-5 py-2 roun
             <button
               type="button"
               onClick={() =>
-  goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
-}
-className="relative z-20 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
+                goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
+              }
+              className="relative z-20 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
             >
-              Registrar mi ficha
+              Editar o registrar mi ficha
             </button>
           </div>
 
@@ -537,12 +539,14 @@ className="relative z-20 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded
                       </p>
                     </div>
 
-                    <span className="text-[11px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full px-2 py-1 whitespace-nowrap">
-                      {professional.codigo_profesional}
-                    </span>
-                    <p className="text-[10px] text-slate-500 mt-1">
-  Código público de identificación, no es clave de acceso.
-</p>
+                    <div className="text-right">
+                      <span className="inline-block text-[11px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full px-2 py-1 whitespace-nowrap">
+                        {professional.codigo_profesional}
+                      </span>
+                      <p className="text-[10px] text-slate-500 mt-1 max-w-[150px]">
+                        Código público, no es clave de acceso.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="mt-3 text-xs text-slate-500">
