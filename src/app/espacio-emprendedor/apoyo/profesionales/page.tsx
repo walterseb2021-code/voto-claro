@@ -17,6 +17,7 @@ type Professional = {
   experience_summary: string | null;
   public_message: string | null;
   created_at: string;
+  is_mine?: boolean;
 };
 
 const PROFESSIONAL_AREAS = [
@@ -135,9 +136,18 @@ export default function ProfesionalesApoyoPage() {
       setProfessionalsError(null);
 
       try {
-        const res = await fetch('/api/espacio-emprendedor/profesionales/list', {
-          cache: 'no-store',
-        });
+          const deviceId =
+  typeof window !== 'undefined'
+    ? localStorage.getItem('vc_device_id') || ''
+    : '';
+
+const url = deviceId
+  ? `/api/espacio-emprendedor/profesionales/list?device_id=${encodeURIComponent(deviceId)}`
+  : '/api/espacio-emprendedor/profesionales/list';
+
+const res = await fetch(url, {
+  cache: 'no-store',
+});
 
         const data = await res.json();
 
@@ -606,7 +616,17 @@ export default function ProfesionalesApoyoPage() {
                       Este profesional aún no agregó un mensaje público.
                     </p>
                   )}
-
+                   {professional.is_mine && (
+  <button
+    type="button"
+    onClick={() =>
+      goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
+    }
+    className="relative z-20 cursor-pointer mt-4 w-full bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
+  >
+    ✏️ Editar mi ficha profesional
+  </button>
+)}
                   <div className="mt-4 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
                     Información declarada por el profesional. Verifica credenciales,
                     honorarios y condiciones antes de contratar.

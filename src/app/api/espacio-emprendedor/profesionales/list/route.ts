@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -25,10 +25,30 @@ export async function GET() {
       },
     });
 
+    const { searchParams } = new URL(req.url);
+    const deviceId = String(searchParams.get('device_id') || '').trim();
+
+    let currentParticipantId: string | null = null;
+
+    if (deviceId) {
+      const { data: participantData, error: participantError } = await admin
+        .from('project_participants')
+        .select('id')
+        .eq('device_id', deviceId)
+        .maybeSingle();
+
+      if (participantError) {
+        console.error('Error ubicando participante actual:', participantError);
+      }
+
+      currentParticipantId = participantData?.id || null;
+    }
+
     const { data, error } = await admin
       .from('espacio_profesionales')
       .select(`
         id,
+        participant_id,
         codigo_profesional,
         public_name,
         professional_type,
@@ -64,10 +84,14 @@ export async function GET() {
       experience_summary: item.experience_summary,
       public_message: item.public_message,
       created_at: item.created_at,
+      is_mine:
+        !!currentParticipantId &&
+        String(item.participant_id || '') === String(currentParticipantId),
     }));
 
     return NextResponse.json({
       ok: true,
+      currentParticipantDetected: !!currentParticipantId,
       professionals,
     });
   } catch (err: any) {
