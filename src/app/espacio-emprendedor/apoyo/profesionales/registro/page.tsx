@@ -170,51 +170,51 @@ export default function RegistroProfesionalPage() {
           return;
         }
 
-        const { data: participantData, error: participantError } = await supabase
-          .from('project_participants')
-          .select('id, alias, codigo_acceso, device_id')
-          .eq('device_id', deviceId)
-          .maybeSingle();
+         const res = await fetch(
+  `/api/espacio-emprendedor/profesionales/me?device_id=${encodeURIComponent(deviceId)}`,
+  {
+    cache: 'no-store',
+  }
+);
 
-        if (participantError) throw participantError;
+const data = await res.json();
 
-        if (!participantData) {
-          router.push('/proyecto-ciudadano/registro?returnTo=profesional-asesor');
-          return;
-        }
+if (!res.ok) {
+  throw new Error(data?.error || 'No se pudo cargar tu ficha profesional.');
+}
 
-        setParticipant(participantData);
+if (!data.participant) {
+  router.push('/proyecto-ciudadano/registro?returnTo=profesional-asesor');
+  return;
+}
 
-        const { data: professionalData, error: professionalError } = await supabase
-          .from('espacio_profesionales')
-          .select('*')
-          .eq('participant_id', participantData.id)
-          .maybeSingle();
+setParticipant(data.participant);
 
-        if (professionalError) {
-          console.warn('No se pudo leer ficha profesional por RLS o porque aún no existe:', professionalError);
-        }
+const professionalData = data.profile;
 
-        if (professionalData) {
-          setExistingProfile(professionalData);
-          setCodigoProfesional(professionalData.codigo_profesional || null);
+if (professionalData) {
+  setExistingProfile(professionalData);
+  setCodigoProfesional(professionalData.codigo_profesional || null);
 
-          setForm({
-            public_name: professionalData.public_name || '',
-            professional_type: professionalData.professional_type || '',
-            specialties: professionalData.specialties || [],
-            services: professionalData.services || [],
-            department: professionalData.department || '',
-            province: professionalData.province || '',
-            district: professionalData.district || '',
-            attention_mode: professionalData.attention_mode || 'Virtual y presencial',
-            experience_summary: professionalData.experience_summary || '',
-            public_message: professionalData.public_message || '',
-            document_url: professionalData.document_url || '',
-            data_truth_confirmed: Boolean(professionalData.data_truth_confirmed),
-            terms_accepted: Boolean(professionalData.terms_accepted),
-          });
-        }
+  setForm({
+    public_name: professionalData.public_name || '',
+    professional_type: professionalData.professional_type || '',
+    specialties: professionalData.specialties || [],
+    services: professionalData.services || [],
+    department: professionalData.department || '',
+    province: professionalData.province || '',
+    district: professionalData.district || '',
+    attention_mode: professionalData.attention_mode || 'Virtual y presencial',
+    experience_summary: professionalData.experience_summary || '',
+    public_message: professionalData.public_message || '',
+    document_url: professionalData.document_url || '',
+    data_truth_confirmed: Boolean(professionalData.data_truth_confirmed),
+    terms_accepted: Boolean(professionalData.terms_accepted),
+  });
+} else {
+  setExistingProfile(null);
+  setCodigoProfesional(null);
+}
       } catch (err: any) {
         console.error('Error cargando registro profesional:', err);
         setError(err.message || 'No se pudo cargar la información del profesional.');
@@ -559,9 +559,9 @@ export default function RegistroProfesionalPage() {
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-          <h1 className="text-3xl font-bold text-slate-900">
-            Registro de profesional asesor
-          </h1>
+            <h1 className="text-3xl font-bold text-slate-900">
+  {existingProfile ? 'Editar ficha profesional' : 'Registro de profesional asesor'}
+</h1>
 
           <div className="flex flex-wrap gap-2">
             <Link
@@ -582,7 +582,9 @@ export default function RegistroProfesionalPage() {
 
         <section className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm mb-6">
           <p className="text-slate-700 text-lg font-semibold">
-            👩‍💼 Completa tu ficha para aparecer como profesional asesor registrado.
+            {existingProfile
+  ? '✏️ Modifica los datos de tu ficha profesional registrada.'
+  : '👩‍💼 Completa tu ficha para aparecer como profesional asesor registrado.'}
           </p>
 
           <p className="text-slate-600 text-sm mt-3">
