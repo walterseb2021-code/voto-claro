@@ -125,11 +125,17 @@ export default function ProfesionalesApoyoPage() {
     window.location.href = path;
   };
 
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [loadingProfessionals, setLoadingProfessionals] = useState(true);
-  const [professionalsError, setProfessionalsError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedType, setSelectedType] = useState('Todos');
+   const [professionals, setProfessionals] = useState<Professional[]>([]);
+const [loadingProfessionals, setLoadingProfessionals] = useState(true);
+const [professionalsError, setProfessionalsError] = useState<string | null>(null);
+const [searchTerm, setSearchTerm] = useState('');
+const [selectedType, setSelectedType] = useState('Todos');
+
+const [activeContactId, setActiveContactId] = useState<string | null>(null);
+const [contactMessages, setContactMessages] = useState<Record<string, string>>({});
+const [contactLoadingId, setContactLoadingId] = useState<string | null>(null);
+const [contactSuccess, setContactSuccess] = useState<Record<string, string>>({});
+const [contactError, setContactError] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function loadProfessionals() {
@@ -180,7 +186,71 @@ const res = await fetch(url, {
       )
     ),
   ];
+  const handleContactProfessional = async (professionalId: string) => {
+  const message = String(contactMessages[professionalId] || '').trim();
 
+  setContactSuccess((prev) => ({ ...prev, [professionalId]: '' }));
+  setContactError((prev) => ({ ...prev, [professionalId]: '' }));
+
+  if (message.length < 10) {
+    setContactError((prev) => ({
+      ...prev,
+      [professionalId]: 'Escribe un mensaje de al menos 10 caracteres.',
+    }));
+    return;
+  }
+
+  const deviceId =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('vc_device_id') || ''
+      : '';
+
+  if (!deviceId) {
+    goToPath('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor');
+    return;
+  }
+
+  setContactLoadingId(professionalId);
+
+  try {
+    const res = await fetch('/api/espacio-emprendedor/profesionales/contactar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: deviceId,
+        professional_id: professionalId,
+        content: message,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data?.error || 'No se pudo enviar el mensaje.');
+    }
+
+    setContactSuccess((prev) => ({
+      ...prev,
+      [professionalId]:
+        data?.message || 'Mensaje enviado correctamente al profesional.',
+    }));
+
+    setContactMessages((prev) => ({
+      ...prev,
+      [professionalId]: '',
+    }));
+
+    setActiveContactId(null);
+  } catch (err: any) {
+    setContactError((prev) => ({
+      ...prev,
+      [professionalId]:
+        err.message || 'No se pudo enviar el mensaje al profesional.',
+    }));
+  } finally {
+    setContactLoadingId(null);
+  }
+};
   const filteredProfessionals = professionals.filter((professional) => {
     const q = searchTerm.trim().toLowerCase();
 
@@ -289,6 +359,7 @@ const res = await fetch(url, {
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
         'Registrar o editar ficha profesional',
+        'Contactar profesional',
         'Buscar profesional',
         'Filtrar por tipo profesional',
         'Revisar áreas profesionales',
@@ -297,9 +368,10 @@ const res = await fetch(url, {
       availableActions: [
         'Volver al Centro de Apoyo',
         'Volver al Espacio Emprendedor',
-        'Registrar o editar ficha profesional',
-        'Buscar profesional',
-        'Filtrar por tipo profesional',
+         'Registrar o editar ficha profesional',
+         'Contactar profesional',
+         'Buscar profesional',
+         'Filtrar por tipo profesional',
         'Revisar áreas profesionales',
         'Revisar checklist antes de contratar',
       ],
@@ -355,6 +427,9 @@ const res = await fetch(url, {
           '/espacio-emprendedor/apoyo/profesionales/registro',
         professionalCodeRequired: true,
         professionalCodeIsPublicIdentifier: true,
+        contactProfessionalEnabled: true,
+        activeContactId,
+        contactLoadingId,
         professionalsLoading: loadingProfessionals,
         professionalsError: professionalsError || null,
         professionalsCount: professionals.length,
@@ -372,7 +447,7 @@ const res = await fetch(url, {
     return () => {
       clearPageContext();
     };
-  }, [
+       }, [
     setPageContext,
     clearPageContext,
     professionals,
@@ -381,6 +456,8 @@ const res = await fetch(url, {
     professionalsError,
     searchTerm,
     selectedType,
+    activeContactId,
+    contactLoadingId,
   ]);
 
   return (
@@ -617,7 +694,7 @@ const res = await fetch(url, {
                       Este profesional aún no agregó un mensaje público.
                     </p>
                   )}
-                  {professional.document_url && (
+                    {professional.document_url && (
   <a
     href={professional.document_url}
     target="_blank"
@@ -627,7 +704,68 @@ const res = await fetch(url, {
     📄 Ver currículo / respaldo PDF
   </a>
 )}
-                   {professional.is_mine && (
+
+{!professional.is_mine && (
+  <div className="mt-4">
+    <button
+      type="button"
+      onClick={() =>
+        setActiveContactId((prev) =>
+          prev === professional.id ? null : professional.id
+        )
+      }
+      className="relative z-20 cursor-pointer w-full bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
+    >
+      💬 Contactar profesional
+    </button>
+
+    {activeContactId === professional.id && (
+      <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+        <p className="text-xs text-blue-900 mb-2">
+          Escribe un mensaje breve. No compartas datos sensibles ni realices pagos fuera de una evaluación responsable.
+        </p>
+
+        <textarea
+          value={contactMessages[professional.id] || ''}
+          onChange={(e) =>
+            setContactMessages((prev) => ({
+              ...prev,
+              [professional.id]: e.target.value,
+            }))
+          }
+          rows={3}
+          placeholder="Ej: Buen día, deseo consultar sobre revisión de contrato para mi proyecto..."
+          className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+        />
+
+        {contactError[professional.id] && (
+          <p className="text-xs text-red-700 mt-2">
+            {contactError[professional.id]}
+          </p>
+        )}
+
+        {contactSuccess[professional.id] && (
+          <p className="text-xs text-green-700 mt-2">
+            {contactSuccess[professional.id]}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => handleContactProfessional(professional.id)}
+          disabled={contactLoadingId === professional.id}
+          className="relative z-20 cursor-pointer mt-3 w-full bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition disabled:opacity-50"
+        >
+          {contactLoadingId === professional.id
+            ? 'Enviando mensaje...'
+            : 'Enviar mensaje'}
+        </button>
+      </div>
+    )}
+  </div>
+)}
+
+{professional.is_mine && (
   <button
     type="button"
     onClick={() =>
