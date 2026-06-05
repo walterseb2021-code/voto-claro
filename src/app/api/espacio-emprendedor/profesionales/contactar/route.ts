@@ -7,6 +7,18 @@ function cleanText(value: unknown, max = 1000) {
   return String(value || '').trim().slice(0, max);
 }
 
+function buildThreadKey(
+  professionalId: string,
+  senderParticipantId: string,
+  receiverParticipantId: string
+) {
+  const a = String(senderParticipantId);
+  const b = String(receiverParticipantId);
+  const ordered = [a, b].sort();
+
+  return `${professionalId}:${ordered[0]}:${ordered[1]}`;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -88,18 +100,35 @@ export async function POST(req: Request) {
       );
     }
 
-    if (String(professional.participant_id) === String(sender.id)) {
+    const receiverParticipantId = String(professional.participant_id || '');
+
+    if (!receiverParticipantId) {
+      return NextResponse.json(
+        { error: 'No se pudo identificar al destinatario profesional.' },
+        { status: 400 }
+      );
+    }
+
+    if (String(receiverParticipantId) === String(sender.id)) {
       return NextResponse.json(
         { error: 'No puedes enviarte un mensaje a tu propia ficha profesional.' },
         { status: 400 }
       );
     }
 
+    const threadKey = buildThreadKey(
+      professional_id,
+      String(sender.id),
+      receiverParticipantId
+    );
+
     const { error: insertError } = await admin
       .from('espacio_profesional_mensajes')
       .insert({
         professional_id,
         sender_participant_id: sender.id,
+        receiver_participant_id: receiverParticipantId,
+        thread_key: threadKey,
         content,
         is_read: false,
         status: 'active',
@@ -109,8 +138,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      thread_key: threadKey,
       message:
-        'Mensaje enviado correctamente. El profesional podrá revisarlo dentro de la plataforma.',
+        'Mensaje enviado correctamente. El profesional podrá responderte dentro de la plataforma.',
     });
   } catch (err: any) {
     console.error('Error contactando profesional:', err);

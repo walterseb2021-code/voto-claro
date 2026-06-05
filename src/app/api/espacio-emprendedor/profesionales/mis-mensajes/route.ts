@@ -3,21 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
-function cleanText(value: unknown, max = 1000) {
+function cleanText(value: unknown, max = 1200) {
   return String(value || '').trim().slice(0, max);
 }
 
-function buildThreadKey(
-  professionalId: string,
-  participantA: string,
-  participantB: string
-) {
-  const ordered = [String(participantA), String(participantB)].sort();
-  return `${professionalId}:${ordered[0]}:${ordered[1]}`;
-}
-
-function getSafeSenderName(sender: any) {
-  return sender?.alias || sender?.full_name?.split(' ')[0] || 'Participante';
+function getSafeName(value: unknown, fallback = 'Profesional') {
+  const clean = String(value || '').trim();
+  return clean || fallback;
 }
 
 export async function GET(req: Request) {
@@ -40,7 +32,7 @@ export async function GET(req: Request) {
 
     if (!deviceId) {
       return NextResponse.json(
-        { error: 'No se recibió device_id para identificar al profesional.' },
+        { error: 'No se recibió device_id para identificar al participante.' },
         { status: 400 }
       );
     }
@@ -62,25 +54,9 @@ export async function GET(req: Request) {
 
     if (!participant) {
       return NextResponse.json(
-        { error: 'Debes iniciar sesión para ver tus mensajes profesionales.' },
+        { error: 'Debes iniciar sesión para ver tus conversaciones.' },
         { status: 401 }
       );
-    }
-
-    const { data: professional, error: professionalError } = await admin
-      .from('espacio_profesionales')
-      .select('id, codigo_profesional, public_name, participant_id')
-      .eq('participant_id', participant.id)
-      .maybeSingle();
-
-    if (professionalError) throw professionalError;
-
-    if (!professional) {
-      return NextResponse.json({
-        ok: true,
-        professional: null,
-        conversations: [],
-      });
     }
 
     const { data: messages, error: messagesError } = await admin
@@ -96,19 +72,35 @@ export async function GET(req: Request) {
         status,
         created_at
       `)
-      .eq('professional_id', professional.id)
       .eq('status', 'active')
+      .or(
+        `sender_participant_id.eq.${participant.id},receiver_participant_id.eq.${participant.id}`
+      )
       .order('created_at', { ascending: true });
 
     if (messagesError) throw messagesError;
 
+    const professionalIds = Array.from(
+      new Set((messages || []).map((m: any) => m.professional_id).filter(Boolean))
+    );
+
+    const { data: professionals } = professionalIds.length
+      ? await admin
+          .from('espacio_profesionales')
+          .select('id, public_name, professional_type, codigo_profesional, participant_id')
+          .in('id', professionalIds)
+      : { data: [] as any[] };
+
+    const professionalMap = new Map<string, any>();
+
+    (professionals || []).forEach((item: any) => {
+      professionalMap.set(item.id, item);
+    });
+
     const participantIds = Array.from(
       new Set(
         (messages || [])
-          .flatMap((m: any) => [
-            m.sender_participant_id,
-            m.receiver_participant_id,
-          ])
+          .flatMap((m: any) => [m.sender_participant_id, m.receiver_participant_id])
           .filter(Boolean)
       )
     );
@@ -129,44 +121,36 @@ export async function GET(req: Request) {
     const conversationMap = new Map<string, any>();
 
     for (const msg of messages || []) {
+      const professional = professionalMap.get(msg.professional_id);
       const threadKey =
         msg.thread_key ||
-        buildThreadKey(
-          professional.id,
-          msg.sender_participant_id,
-          msg.receiver_participant_id || professional.participant_id
-        );
-
-      const otherParticipantId =
-        String(msg.sender_participant_id) === String(professional.participant_id)
-          ? msg.receiver_participant_id
-          : msg.sender_participant_id;
-
-      const otherParticipant = participantMap.get(otherParticipantId);
+        `${msg.professional_id}:${msg.sender_participant_id}:${msg.receiver_participant_id}`;
 
       if (!conversationMap.has(threadKey)) {
         conversationMap.set(threadKey, {
           thread_key: threadKey,
-          professional_id: professional.id,
-          other_participant_id: otherParticipantId,
-          other_participant_alias: getSafeSenderName(otherParticipant),
+          professional_id: msg.professional_id,
+          professional_name: getSafeName(professional?.public_name),
+          professional_type: professional?.professional_type || '',
+          codigo_profesional: professional?.codigo_profesional || '',
           last_message_at: msg.created_at,
           messages: [],
         });
       }
 
       const conversation = conversationMap.get(threadKey);
+      const sender = participantMap.get(msg.sender_participant_id);
 
       conversation.messages.push({
         id: msg.id,
         content: msg.content,
         is_read: msg.is_read,
         created_at: msg.created_at,
-        sender_participant_id: msg.sender_participant_id,
-        receiver_participant_id: msg.receiver_participant_id,
-        sender_alias: getSafeSenderName(participantMap.get(msg.sender_participant_id)),
-        is_from_me:
-          String(msg.sender_participant_id) === String(professional.participant_id),
+        sender_alias:
+          sender?.alias ||
+          sender?.full_name?.split(' ')[0] ||
+          'Participante',
+        is_from_me: String(msg.sender_participant_id) === String(participant.id),
       });
 
       conversation.last_message_at = msg.created_at;
@@ -180,19 +164,18 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      professional: {
-        id: professional.id,
-        codigo_profesional: professional.codigo_profesional,
-        public_name: professional.public_name,
+      participant: {
+        id: participant.id,
+        alias: participant.alias || null,
       },
       conversations,
     });
   } catch (err: any) {
-    console.error('Error cargando conversaciones del profesional:', err);
+    console.error('Error cargando conversaciones del usuario:', err);
 
     return NextResponse.json(
       {
-        error: 'No se pudieron cargar los mensajes recibidos.',
+        error: 'No se pudieron cargar tus conversaciones con profesionales.',
       },
       { status: 500 }
     );
@@ -205,17 +188,17 @@ export async function POST(req: Request) {
 
     const device_id = cleanText(body.device_id, 120);
     const thread_key = cleanText(body.thread_key, 300);
-    const receiver_participant_id = cleanText(body.receiver_participant_id, 120);
+    const professional_id = cleanText(body.professional_id, 120);
     const content = cleanText(body.content, 1200);
 
     if (!device_id) {
       return NextResponse.json(
-        { error: 'Debes iniciar sesión para responder mensajes.' },
+        { error: 'Debes iniciar sesión para responder.' },
         { status: 400 }
       );
     }
 
-    if (!thread_key || !receiver_participant_id) {
+    if (!thread_key || !professional_id) {
       return NextResponse.json(
         { error: 'No se pudo identificar la conversación.' },
         { status: 400 }
@@ -259,7 +242,7 @@ export async function POST(req: Request) {
 
     if (!participant) {
       return NextResponse.json(
-        { error: 'Debes iniciar sesión para responder mensajes.' },
+        { error: 'Debes iniciar sesión para responder.' },
         { status: 401 }
       );
     }
@@ -267,7 +250,7 @@ export async function POST(req: Request) {
     const { data: professional, error: professionalError } = await admin
       .from('espacio_profesionales')
       .select('id, participant_id, is_active, status')
-      .eq('participant_id', participant.id)
+      .eq('id', professional_id)
       .eq('is_active', true)
       .eq('status', 'active')
       .maybeSingle();
@@ -276,18 +259,18 @@ export async function POST(req: Request) {
 
     if (!professional) {
       return NextResponse.json(
-        { error: 'Solo el profesional dueño de la ficha puede responder esta conversación.' },
-        { status: 403 }
+        { error: 'No se encontró el profesional asociado a esta conversación.' },
+        { status: 404 }
       );
     }
 
     const { data: conversationCheck, error: checkError } = await admin
       .from('espacio_profesional_mensajes')
       .select('id')
-      .eq('professional_id', professional.id)
+      .eq('professional_id', professional_id)
       .eq('thread_key', thread_key)
       .or(
-        `sender_participant_id.eq.${receiver_participant_id},receiver_participant_id.eq.${receiver_participant_id}`
+        `sender_participant_id.eq.${participant.id},receiver_participant_id.eq.${participant.id}`
       )
       .limit(1);
 
@@ -300,12 +283,19 @@ export async function POST(req: Request) {
       );
     }
 
+    if (String(participant.id) === String(professional.participant_id)) {
+      return NextResponse.json(
+        { error: 'Esta bandeja es para el usuario interesado. El profesional debe responder desde su ficha.' },
+        { status: 400 }
+      );
+    }
+
     const { error: insertError } = await admin
       .from('espacio_profesional_mensajes')
       .insert({
-        professional_id: professional.id,
-        sender_participant_id: professional.participant_id,
-        receiver_participant_id,
+        professional_id,
+        sender_participant_id: participant.id,
+        receiver_participant_id: professional.participant_id,
         thread_key,
         content,
         is_read: false,
@@ -319,7 +309,7 @@ export async function POST(req: Request) {
       message: 'Respuesta enviada correctamente.',
     });
   } catch (err: any) {
-    console.error('Error respondiendo conversación profesional:', err);
+    console.error('Error respondiendo como usuario interesado:', err);
 
     return NextResponse.json(
       {

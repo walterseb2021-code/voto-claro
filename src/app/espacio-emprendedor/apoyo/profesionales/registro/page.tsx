@@ -84,12 +84,22 @@ const ATTENTION_MODES = [
   'Presencial',
   'Virtual y presencial',
 ];
-type ProfessionalMessage = {
+type ProfessionalConversationMessage = {
   id: string;
   content: string;
   is_read: boolean;
   created_at: string;
   sender_alias: string;
+  is_from_me: boolean;
+};
+
+type ProfessionalConversation = {
+  thread_key: string;
+  professional_id: string;
+  other_participant_id: string;
+  other_participant_alias: string;
+  last_message_at: string;
+  messages: ProfessionalConversationMessage[];
 };
 function toggleValue(list: string[], value: string) {
   return list.includes(value)
@@ -118,9 +128,13 @@ export default function RegistroProfesionalPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [codigoProfesional, setCodigoProfesional] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ProfessionalMessage[]>([]);
+  const [conversations, setConversations] = useState<ProfessionalConversation[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replyLoadingKey, setReplyLoadingKey] = useState<string | null>(null);
+  const [replyError, setReplyError] = useState<Record<string, string>>({});
+  const [replySuccess, setReplySuccess] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     public_name: '',
     professional_type: '',
@@ -137,7 +151,7 @@ export default function RegistroProfesionalPage() {
     terms_accepted: false,
   });
 
-       const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   const loadProfessionalMessages = async () => {
     const deviceId = getDeviceId();
@@ -161,7 +175,7 @@ export default function RegistroProfesionalPage() {
         throw new Error(data?.error || 'No se pudieron cargar los mensajes.');
       }
 
-      setMessages(data.messages || []);
+    setConversations(data.conversations || []);
     } catch (err: any) {
       console.error('Error cargando mensajes profesionales:', err);
       setMessagesError(err.message || 'No se pudieron cargar los mensajes.');
@@ -213,7 +227,7 @@ export default function RegistroProfesionalPage() {
           return;
         }
 
-                 const res = await fetch(
+                const res = await fetch(
           `/api/espacio-emprendedor/profesionales/me?device_id=${encodeURIComponent(deviceId)}`,
           {
             cache: 'no-store',
@@ -226,16 +240,16 @@ export default function RegistroProfesionalPage() {
           throw new Error(data?.error || 'No se pudo cargar tu ficha profesional.');
         }
 
-if (!data.participant) {
-  router.push('/proyecto-ciudadano/registro?returnTo=profesional-asesor');
-  return;
-}
+        if (!data.participant) {
+          router.push('/proyecto-ciudadano/registro?returnTo=profesional-asesor');
+          return;
+        }
 
-setParticipant(data.participant);
+        setParticipant(data.participant);
 
-const professionalData = data.profile;
+        const professionalData = data.profile;
 
-if (professionalData) {
+        if (professionalData) {
   setExistingProfile(professionalData);
   setCodigoProfesional(professionalData.codigo_profesional || null);
 
@@ -253,12 +267,14 @@ if (professionalData) {
     document_url: professionalData.document_url || '',
     data_truth_confirmed: Boolean(professionalData.data_truth_confirmed),
     terms_accepted: Boolean(professionalData.terms_accepted),
-  });
-  await loadProfessionalMessages();
-} else {
-  setExistingProfile(null);
-  setCodigoProfesional(null);
-}
+             });
+
+          await loadProfessionalMessages();
+        } else {
+          setExistingProfile(null);
+          setCodigoProfesional(null);
+          setConversations([]);
+        }
       } catch (err: any) {
         console.error('Error cargando registro profesional:', err);
         setError(err.message || 'No se pudo cargar la información del profesional.');
@@ -396,6 +412,10 @@ if (professionalData) {
         filledFields,
         missingFields,
         pdfLoaded: !!pdfFile || !!form.document_url,
+        professionalConversationsCount: conversations.length,
+        professionalMessagesLoading: loadingMessages,
+        professionalMessagesError: messagesError || null,
+        replyLoadingKey,
         saving,
         uploadingPdf,
         successMessage: successMessage || null,
@@ -424,6 +444,10 @@ if (professionalData) {
     filledFields,
     missingFields,
     pdfFile,
+    conversations,
+    loadingMessages,
+    messagesError,
+    replyLoadingKey,
   ]);
 
   const handleChangeText = (
@@ -496,7 +520,77 @@ if (professionalData) {
       setUploadingPdf(false);
     }
   };
+      const handleReplyConversation = async (conversation: ProfessionalConversation) => {
+    const reply = String(replyDrafts[conversation.thread_key] || '').trim();
 
+    setReplyError((prev) => ({
+      ...prev,
+      [conversation.thread_key]: '',
+    }));
+
+    setReplySuccess((prev) => ({
+      ...prev,
+      [conversation.thread_key]: '',
+    }));
+
+    if (reply.length < 10) {
+      setReplyError((prev) => ({
+        ...prev,
+        [conversation.thread_key]: 'La respuesta debe tener al menos 10 caracteres.',
+      }));
+      return;
+    }
+
+    const deviceId = getDeviceId();
+
+    if (!deviceId) {
+      setReplyError((prev) => ({
+        ...prev,
+        [conversation.thread_key]: 'No se pudo identificar tu sesión. Inicia sesión nuevamente.',
+      }));
+      return;
+    }
+
+    setReplyLoadingKey(conversation.thread_key);
+
+    try {
+      const res = await fetch('/api/espacio-emprendedor/profesionales/mensajes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_id: deviceId,
+          thread_key: conversation.thread_key,
+          receiver_participant_id: conversation.other_participant_id,
+          content: reply,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'No se pudo enviar la respuesta.');
+      }
+
+      setReplyDrafts((prev) => ({
+        ...prev,
+        [conversation.thread_key]: '',
+      }));
+
+      setReplySuccess((prev) => ({
+        ...prev,
+        [conversation.thread_key]: data?.message || 'Respuesta enviada correctamente.',
+      }));
+
+      await loadProfessionalMessages();
+    } catch (err: any) {
+      setReplyError((prev) => ({
+        ...prev,
+        [conversation.thread_key]: err.message || 'No se pudo enviar la respuesta.',
+      }));
+    } finally {
+      setReplyLoadingKey(null);
+    }
+  };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -578,8 +672,21 @@ if (professionalData) {
       setCodigoProfesional(data.codigo_profesional || null);
       setSuccessMessage(data.message || 'Ficha profesional guardada correctamente.');
 
-      setExistingProfile((prev: any) => ({
+             setExistingProfile((prev: any) => ({
         ...(prev || {}),
+        public_name: form.public_name,
+        professional_type: form.professional_type,
+        specialties: form.specialties,
+        services: form.services,
+        department: form.department,
+        province: form.province,
+        district: form.district,
+        attention_mode: form.attention_mode,
+        experience_summary: form.experience_summary,
+        public_message: form.public_message,
+        document_url: documentUrl,
+        data_truth_confirmed: form.data_truth_confirmed,
+        terms_accepted: form.terms_accepted,
         codigo_profesional: data.codigo_profesional || prev?.codigo_profesional,
       }));
 
@@ -606,9 +713,9 @@ if (professionalData) {
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-            <h1 className="text-3xl font-bold text-slate-900">
-  {existingProfile ? 'Editar ficha profesional' : 'Registro de profesional asesor'}
-</h1>
+          <h1 className="text-3xl font-bold text-slate-900">
+            {existingProfile ? 'Editar ficha profesional' : 'Registro de profesional asesor'}
+          </h1>
 
           <div className="flex flex-wrap gap-2">
             <Link
@@ -671,15 +778,15 @@ if (professionalData) {
             {error}
           </div>
         )}
-                  {existingProfile && (
+                          {existingProfile && (
           <section className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">
-                  💬 Mensajes recibidos como profesional
+                  💬 Conversaciones como profesional
                 </h2>
                 <p className="text-sm text-slate-600 mt-1">
-                  Aquí verás los mensajes enviados por usuarios interesados en tus servicios profesionales.
+                  Aquí puedes ver y responder los mensajes enviados por usuarios interesados en tus servicios profesionales.
                 </p>
               </div>
 
@@ -689,7 +796,7 @@ if (professionalData) {
                 disabled={loadingMessages}
                 className="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-50"
               >
-                {loadingMessages ? 'Actualizando...' : 'Recargar mensajes'}
+                {loadingMessages ? 'Actualizando...' : 'Recargar conversaciones'}
               </button>
             </div>
 
@@ -700,37 +807,98 @@ if (professionalData) {
             )}
 
             {loadingMessages ? (
-              <p className="text-sm text-slate-500">Cargando mensajes...</p>
-            ) : messages.length === 0 ? (
+              <p className="text-sm text-slate-500">Cargando conversaciones...</p>
+            ) : conversations.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-sm text-slate-600">
-                  Todavía no tienes mensajes recibidos como profesional.
+                  Todavía no tienes conversaciones recibidas como profesional.
                 </p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {messages.map((msg) => (
+              <div className="space-y-4">
+                {conversations.map((conversation) => (
                   <div
-                    key={msg.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    key={conversation.thread_key}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
                   >
-                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 mb-2">
-                      <p className="text-sm font-semibold text-slate-800">
-                        De: {msg.sender_alias}
-                      </p>
-
-                      <p className="text-xs text-slate-500">
-                        {formatDate(msg.created_at)}
-                      </p>
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 mb-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          Conversación con: {conversation.other_participant_alias}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Último movimiento: {formatDate(conversation.last_message_at)}
+                        </p>
+                      </div>
                     </div>
 
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                      {msg.content}
-                    </p>
+                    <div className="space-y-2 max-h-72 overflow-y-auto rounded-xl bg-white border border-slate-200 p-3">
+                      {conversation.messages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={`rounded-xl p-3 text-sm ${
+                            msg.is_from_me
+                              ? 'bg-green-50 border border-green-200'
+                              : 'bg-blue-50 border border-blue-200'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:justify-between gap-1 mb-1">
+                            <p className="font-semibold text-slate-800">
+                              {msg.is_from_me ? 'Tú' : msg.sender_alias}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              {formatDate(msg.created_at)}
+                            </p>
+                          </div>
+
+                          <p className="text-slate-700 whitespace-pre-wrap">
+                            {msg.content}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {replyError[conversation.thread_key] && (
+                      <p className="text-xs text-red-700 mt-2">
+                        {replyError[conversation.thread_key]}
+                      </p>
+                    )}
+
+                    {replySuccess[conversation.thread_key] && (
+                      <p className="text-xs text-green-700 mt-2">
+                        {replySuccess[conversation.thread_key]}
+                      </p>
+                    )}
+
+                    <div className="mt-3">
+                      <textarea
+                        value={replyDrafts[conversation.thread_key] || ''}
+                        onChange={(e) =>
+                          setReplyDrafts((prev) => ({
+                            ...prev,
+                            [conversation.thread_key]: e.target.value,
+                          }))
+                        }
+                        rows={3}
+                        placeholder="Escribe tu respuesta al usuario interesado..."
+                        className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleReplyConversation(conversation)}
+                        disabled={replyLoadingKey === conversation.thread_key}
+                        className="mt-2 w-full bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition disabled:opacity-50"
+                      >
+                        {replyLoadingKey === conversation.thread_key
+                          ? 'Enviando respuesta...'
+                          : 'Responder'}
+                      </button>
+                    </div>
 
                     <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2 mt-3">
-                      Este mensaje fue enviado dentro de Voto Claro. Evalúa la solicitud antes de compartir datos personales,
-                      firmar documentos o asumir compromisos.
+                      Esta conversación es interna entre las partes. Evalúa la solicitud antes de compartir datos personales,
+                      firmar documentos, realizar pagos o asumir compromisos.
                     </p>
                   </div>
                 ))}
