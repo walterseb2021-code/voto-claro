@@ -264,56 +264,88 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: conversationCheck, error: checkError } = await admin
+    const { data: threadMessages, error: threadError } = await admin
       .from('espacio_profesional_mensajes')
-      .select('id')
+      .select('id, sender_participant_id, receiver_participant_id')
       .eq('professional_id', professional_id)
       .eq('thread_key', thread_key)
-      .or(
-        `sender_participant_id.eq.${participant.id},receiver_participant_id.eq.${participant.id}`
-      )
-      .limit(1);
+      .eq('status', 'active');
 
-    if (checkError) throw checkError;
+    if (threadError) throw threadError;
 
-    if (!conversationCheck?.length) {
+    if (!threadMessages?.length) {
       return NextResponse.json(
         { error: 'No se encontró una conversación válida para responder.' },
         { status: 404 }
       );
     }
 
-    if (String(participant.id) === String(professional.participant_id)) {
+    const currentParticipantId = String(participant.id);
+
+    const isPartOfThread = threadMessages.some((msg: any) => {
+      return (
+        String(msg.sender_participant_id) === currentParticipantId ||
+        String(msg.receiver_participant_id) === currentParticipantId
+      );
+    });
+
+    if (!isPartOfThread) {
       return NextResponse.json(
-        { error: 'Esta bandeja es para el usuario interesado. El profesional debe responder desde su ficha.' },
+        { error: 'No tienes permiso para responder esta conversación.' },
+        { status: 403 }
+      );
+    }
+
+    const participantIds = new Set<string>();
+
+    threadMessages.forEach((msg: any) => {
+      if (msg.sender_participant_id) {
+        participantIds.add(String(msg.sender_participant_id));
+      }
+
+      if (msg.receiver_participant_id) {
+        participantIds.add(String(msg.receiver_participant_id));
+      }
+    });
+
+    const receiverParticipantId = Array.from(participantIds).find(
+      (id) => id !== currentParticipantId
+    );
+
+    if (!receiverParticipantId) {
+      return NextResponse.json(
+        { error: 'No se pudo identificar al destinatario de la respuesta.' },
         { status: 400 }
       );
     }
 
-    const { error: insertError } = await admin
+    const { data: inserted, error: insertError } = await admin
       .from('espacio_profesional_mensajes')
       .insert({
         professional_id,
-        sender_participant_id: participant.id,
-        receiver_participant_id: professional.participant_id,
+        sender_participant_id: currentParticipantId,
+        receiver_participant_id: receiverParticipantId,
         thread_key,
         content,
         is_read: false,
         status: 'active',
-      });
+      })
+      .select('id, created_at')
+      .single();
 
     if (insertError) throw insertError;
 
     return NextResponse.json({
       ok: true,
+      inserted,
       message: 'Respuesta enviada correctamente.',
     });
   } catch (err: any) {
-    console.error('Error respondiendo como usuario interesado:', err);
+    console.error('Error respondiendo conversación:', err);
 
     return NextResponse.json(
       {
-        error: 'No se pudo enviar la respuesta. Intenta nuevamente.',
+        error: err?.message || 'No se pudo enviar la respuesta. Intenta nuevamente.',
       },
       { status: 500 }
     );
