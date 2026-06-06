@@ -45,16 +45,21 @@ export default function MisMensajesProfesionalesPage() {
   const [replyError, setReplyError] = useState<Record<string, string>>({});
   const [replySuccess, setReplySuccess] = useState<Record<string, string>>({});
 
-  const loadConversations = async () => {
-    const deviceId = getDeviceId();
+  const loadConversations = async (options?: { silent?: boolean }) => {
+  const silent = options?.silent === true;
+  const deviceId = getDeviceId();
 
     if (!deviceId) {
-      setError('Debes registrarte o iniciar sesión para ver tus conversaciones.');
-      setLoading(false);
-      return;
-    }
+  if (!silent) {
+    setError('Debes registrarte o iniciar sesión para ver tus conversaciones.');
+    setLoading(false);
+  }
+  return;
+}
 
+    if (!silent) {
     setLoading(true);
+    }
     setError(null);
 
     try {
@@ -73,25 +78,30 @@ export default function MisMensajesProfesionalesPage() {
 
       setConversations(data.conversations || []);
     } catch (err: any) {
-      console.error('Error cargando conversaciones:', err);
-      setError(err.message || 'No se pudieron cargar tus conversaciones.');
-    } finally {
-      setLoading(false);
-    }
+  console.error('Error cargando conversaciones:', err);
+
+  if (!silent) {
+    setError(err.message || 'No se pudieron cargar tus conversaciones.');
+  }
+} finally {
+  if (!silent) {
+    setLoading(false);
+  }
+}
   };
 
   useEffect(() => {
     loadConversations();
   }, []);
-     useEffect(() => {
-    const interval = window.setInterval(() => {
-      loadConversations();
-    }, 5000);
+    useEffect(() => {
+  const interval = window.setInterval(() => {
+    loadConversations({ silent: true });
+  }, 5000);
 
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, []);
+  return () => {
+    window.clearInterval(interval);
+  };
+}, []);
   const handleReplyConversation = async (conversation: ProfessionalConversation) => {
     const reply = String(replyDrafts[conversation.thread_key] || '').trim();
 
@@ -228,13 +238,9 @@ export default function MisMensajesProfesionalesPage() {
       clearPageContext();
     };
   }, [
-    setPageContext,
-    clearPageContext,
-    conversations,
-    loading,
-    error,
-    replyLoadingKey,
-  ]);
+  setPageContext,
+  clearPageContext,
+]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
@@ -253,13 +259,13 @@ export default function MisMensajesProfesionalesPage() {
             </Link>
 
             <button
-              type="button"
-              onClick={loadConversations}
-              disabled={loading}
-              className="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-50"
-            >
-              {loading ? 'Actualizando...' : 'Recargar'}
-            </button>
+  type="button"
+  onClick={() => loadConversations()}
+  disabled={loading}
+  className="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-50"
+>
+  {loading ? 'Actualizando...' : 'Recargar'}
+</button>
           </div>
         </div>
 

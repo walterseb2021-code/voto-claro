@@ -449,17 +449,7 @@ export default function RegistroProfesionalPage() {
     messagesError,
     replyLoadingKey,
   ]);
-      useEffect(() => {
-    if (!existingProfile) return;
-
-    const interval = window.setInterval(() => {
-      loadProfessionalMessages();
-    }, 5000);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [existingProfile]);
+      
   const handleChangeText = (
     field: keyof typeof form,
     value: string | boolean | string[]
@@ -788,135 +778,8 @@ export default function RegistroProfesionalPage() {
             {error}
           </div>
         )}
-                          {existingProfile && (
-          <section className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  💬 Conversaciones como profesional
-                </h2>
-                <p className="text-sm text-slate-600 mt-1">
-                  Aquí puedes ver y responder los mensajes enviados por usuarios interesados en tus servicios profesionales.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={loadProfessionalMessages}
-                disabled={loadingMessages}
-                className="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-50"
-              >
-                {loadingMessages ? 'Actualizando...' : 'Recargar conversaciones'}
-              </button>
-            </div>
-
-            {messagesError && (
-              <div className="mb-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm">
-                {messagesError}
-              </div>
-            )}
-
-            {loadingMessages ? (
-              <p className="text-sm text-slate-500">Cargando conversaciones...</p>
-            ) : conversations.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm text-slate-600">
-                  Todavía no tienes conversaciones recibidas como profesional.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {conversations.map((conversation) => (
-                  <div
-                    key={conversation.thread_key}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 mb-3">
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">
-                          Conversación con: {conversation.other_participant_alias}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Último movimiento: {formatDate(conversation.last_message_at)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 max-h-72 overflow-y-auto rounded-xl bg-white border border-slate-200 p-3">
-                      {conversation.messages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={`rounded-xl p-3 text-sm ${
-                            msg.is_from_me
-                              ? 'bg-green-50 border border-green-200'
-                              : 'bg-blue-50 border border-blue-200'
-                          }`}
-                        >
-                          <div className="flex flex-col sm:flex-row sm:justify-between gap-1 mb-1">
-                            <p className="font-semibold text-slate-800">
-                              {msg.is_from_me ? 'Tú' : msg.sender_alias}
-                            </p>
-                            <p className="text-[11px] text-slate-500">
-                              {formatDate(msg.created_at)}
-                            </p>
-                          </div>
-
-                          <p className="text-slate-700 whitespace-pre-wrap">
-                            {msg.content}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {replyError[conversation.thread_key] && (
-                      <p className="text-xs text-red-700 mt-2">
-                        {replyError[conversation.thread_key]}
-                      </p>
-                    )}
-
-                    {replySuccess[conversation.thread_key] && (
-                      <p className="text-xs text-green-700 mt-2">
-                        {replySuccess[conversation.thread_key]}
-                      </p>
-                    )}
-
-                    <div className="mt-3">
-                      <textarea
-                        value={replyDrafts[conversation.thread_key] || ''}
-                        onChange={(e) =>
-                          setReplyDrafts((prev) => ({
-                            ...prev,
-                            [conversation.thread_key]: e.target.value,
-                          }))
-                        }
-                        rows={3}
-                        placeholder="Escribe tu respuesta al usuario interesado..."
-                        className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleReplyConversation(conversation)}
-                        disabled={replyLoadingKey === conversation.thread_key}
-                        className="mt-2 w-full bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition disabled:opacity-50"
-                      >
-                        {replyLoadingKey === conversation.thread_key
-                          ? 'Enviando respuesta...'
-                          : 'Responder'}
-                      </button>
-                    </div>
-
-                    <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2 mt-3">
-                      Esta conversación es interna entre las partes. Evalúa la solicitud antes de compartir datos personales,
-                      firmar documentos, realizar pagos o asumir compromisos.
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border-2 border-slate-300 p-6 shadow-sm space-y-5">
+           
+                <form onSubmit={handleSubmit} className="bg-white rounded-2xl border-2 border-slate-300 p-6 shadow-sm space-y-5">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">
               Nombre público o nombre profesional *

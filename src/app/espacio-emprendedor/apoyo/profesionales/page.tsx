@@ -497,7 +497,7 @@ export default function ProfesionalesApoyoPage() {
               }
               className="relative z-20 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
             >
-              💬 Mis mensajes
+              💬 Mis conversaciones
             </button>
 
             <button
@@ -520,22 +520,7 @@ export default function ProfesionalesApoyoPage() {
             de presentarse a posibles interesados, inversionistas o aliados.
           </p>
 
-          <div className="mt-4 rounded-xl border border-blue-300 bg-blue-50 p-3">
-            <p className="text-sm text-blue-900">
-              Si ya contactaste a un profesional, puedes revisar sus respuestas desde tu bandeja privada.
-            </p>
-
-            <button
-              type="button"
-              onClick={() =>
-                goToPath('/espacio-emprendedor/apoyo/profesionales/mis-mensajes')
-              }
-              className="relative z-20 cursor-pointer mt-3 bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
-            >
-              💬 Ver mis mensajes con profesionales
-            </button>
-          </div>
-
+          
           <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4">
             <h2 className="text-sm font-bold text-emerald-900 mb-2">
               ¿Eres profesional y deseas participar como asesor?
@@ -582,16 +567,7 @@ export default function ProfesionalesApoyoPage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
-              }
-              className="relative z-20 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
-            >
-              Editar o registrar mi ficha
-            </button>
-          </div>
+            </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
             <div>
