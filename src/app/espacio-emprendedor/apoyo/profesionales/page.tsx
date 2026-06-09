@@ -172,6 +172,7 @@ export default function ProfesionalesApoyoPage() {
   const [professionalsError, setProfessionalsError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('Todos');
+  const [selectedServiceMode, setSelectedServiceMode] = useState('Todos');
 
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   const [contactMessages, setContactMessages] = useState<Record<string, string>>({});
@@ -228,6 +229,15 @@ export default function ProfesionalesApoyoPage() {
       )
     ),
   ];
+   
+  const serviceModeOptions = [
+  'Todos',
+  'Gratuito',
+  'Pago',
+  'Mixto',
+  'Pro bono',
+  'No especificado',
+];
 
   const handleContactProfessional = async (professionalId: string) => {
     const message = String(contactMessages[professionalId] || '').trim();
@@ -300,6 +310,13 @@ export default function ProfesionalesApoyoPage() {
 
     const matchesType =
       selectedType === 'Todos' || professional.professional_type === selectedType;
+      const serviceMode = String(professional.service_mode || 'No especificado');
+
+  const matchesServiceMode =
+  selectedServiceMode === 'Todos' ||
+  (selectedServiceMode === 'Mixto' && serviceMode.startsWith('Mixto')) ||
+  (selectedServiceMode === 'Pro bono' && serviceMode.startsWith('Pro bono')) ||
+  serviceMode === selectedServiceMode;
 
     const searchableText = [
       professional.public_name,
@@ -320,7 +337,7 @@ export default function ProfesionalesApoyoPage() {
 
     const matchesSearch = !q || searchableText.includes(q);
 
-    return matchesType && matchesSearch;
+    return matchesType && matchesServiceMode && matchesSearch;
   });
 
   useEffect(() => {
@@ -336,6 +353,7 @@ export default function ProfesionalesApoyoPage() {
 
     const hasSearch = searchTerm.trim().length > 0;
     const hasTypeFilter = selectedType !== 'Todos';
+    const hasServiceModeFilter = selectedServiceMode !== 'Todos';
 
     const visibleParts = [
       'Pantalla visible: Profesionales asesores del Centro de Apoyo al Emprendedor.',
@@ -353,6 +371,9 @@ export default function ProfesionalesApoyoPage() {
       hasTypeFilter
         ? `Filtro de tipo profesional seleccionado: ${selectedType}.`
         : 'No hay filtro específico de tipo profesional.',
+        hasServiceModeFilter
+  ? `Filtro de modalidad económica seleccionado: ${selectedServiceMode}.`
+  : 'No hay filtro específico de modalidad económica.',
       loadingProfessionals
         ? 'El directorio de profesionales está cargando.'
         : 'El directorio de profesionales ya terminó de cargar.',
@@ -493,7 +514,8 @@ export default function ProfesionalesApoyoPage() {
         filteredProfessionalsCount: filteredProfessionals.length,
         searchTerm: searchTerm.trim() || null,
         selectedType,
-                visibleProfessionalNames,
+        selectedServiceMode,
+        visibleProfessionalNames,
         visibleProfessionalCodes,
         serviceModesVisible: filteredProfessionals
           .slice(0, 6)
@@ -516,6 +538,7 @@ export default function ProfesionalesApoyoPage() {
     professionalsError,
     searchTerm,
     selectedType,
+    selectedServiceMode,
     activeContactId,
     contactLoadingId,
   ]);
@@ -616,7 +639,7 @@ export default function ProfesionalesApoyoPage() {
 
             </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Buscar por nombre, código, especialidad o servicio
@@ -646,6 +669,22 @@ export default function ProfesionalesApoyoPage() {
                 ))}
               </select>
             </div>
+            <div>
+  <label className="block text-sm font-semibold text-slate-700 mb-1">
+    Modalidad del servicio
+  </label>
+  <select
+    value={selectedServiceMode}
+    onChange={(e) => setSelectedServiceMode(e.target.value)}
+    className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+  >
+    {serviceModeOptions.map((mode) => (
+      <option key={mode} value={mode}>
+        {mode}
+      </option>
+    ))}
+  </select>
+</div>
           </div>
                     {loadingProfessionals ? (
             <p className="text-slate-600 text-sm">Cargando profesionales registrados...</p>
@@ -662,9 +701,10 @@ export default function ProfesionalesApoyoPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setSearchTerm('');
-                  setSelectedType('Todos');
-                }}
+              setSearchTerm('');
+              setSelectedType('Todos');
+              setSelectedServiceMode('Todos');
+               }}
                 className="mt-3 text-green-700 hover:underline text-sm font-semibold"
               >
                 Limpiar filtros
