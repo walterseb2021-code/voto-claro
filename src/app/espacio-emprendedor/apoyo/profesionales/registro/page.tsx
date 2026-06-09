@@ -84,6 +84,13 @@ const ATTENTION_MODES = [
   'Presencial',
   'Virtual y presencial',
 ];
+const SERVICE_MODES = [
+  'Gratuito',
+  'Pago',
+  'Mixto: primera orientación gratuita y servicios especializados de pago',
+  'Pro bono sujeto a evaluación del caso',
+  'No especificado',
+];
 type ProfessionalConversationMessage = {
   id: string;
   content: string;
@@ -143,7 +150,9 @@ export default function RegistroProfesionalPage() {
     department: '',
     province: '',
     district: '',
-    attention_mode: 'Virtual y presencial',
+        attention_mode: 'Virtual y presencial',
+    service_mode: 'No especificado',
+    service_mode_note: '',
     experience_summary: '',
     public_message: '',
     document_url: '',
@@ -193,7 +202,11 @@ export default function RegistroProfesionalPage() {
       form.department ? 'departamento' : null,
       form.province ? 'provincia' : null,
       form.district ? 'distrito' : null,
-      form.attention_mode ? 'modalidad de atención' : null,
+            form.attention_mode ? 'modalidad de atención' : null,
+      form.service_mode && form.service_mode !== 'No especificado'
+        ? 'modalidad económica del servicio'
+        : null,
+      form.service_mode_note ? 'condiciones del servicio' : null,
       form.experience_summary ? 'experiencia resumida' : null,
       form.public_message ? 'mensaje público' : null,
       form.document_url || pdfFile ? 'documento PDF de respaldo' : null,
@@ -207,7 +220,10 @@ export default function RegistroProfesionalPage() {
       !form.public_name ? 'nombre público' : null,
       !form.professional_type ? 'tipo profesional' : null,
       !form.specialties.length ? 'al menos una especialidad' : null,
-      !form.services.length ? 'al menos un servicio' : null,
+            !form.services.length ? 'al menos un servicio' : null,
+      !form.service_mode || form.service_mode === 'No especificado'
+        ? 'modalidad económica del servicio'
+        : null,
       !form.document_url && !pdfFile ? 'PDF de respaldo profesional' : null,
       !form.data_truth_confirmed ? 'declaración de veracidad' : null,
       !form.terms_accepted ? 'aceptación de condiciones' : null,
@@ -261,7 +277,9 @@ export default function RegistroProfesionalPage() {
     department: professionalData.department || '',
     province: professionalData.province || '',
     district: professionalData.district || '',
-    attention_mode: professionalData.attention_mode || 'Virtual y presencial',
+        attention_mode: professionalData.attention_mode || 'Virtual y presencial',
+    service_mode: professionalData.service_mode || 'No especificado',
+    service_mode_note: professionalData.service_mode_note || '',
     experience_summary: professionalData.experience_summary || '',
     public_message: professionalData.public_message || '',
     document_url: professionalData.document_url || '',
@@ -301,7 +319,7 @@ export default function RegistroProfesionalPage() {
       `Vista activa: ${activeViewTitle}.`,
       'Pantalla visible: Registro de profesional asesor.',
       'Esta pantalla permite registrar o actualizar una ficha profesional declarada por el propio usuario.',
-      'El profesional debe indicar nombre público, tipo profesional, especialidades, servicios, modalidad de atención, experiencia resumida y documento PDF de respaldo.',
+      'El profesional debe indicar nombre público, tipo profesional, especialidades, servicios, modalidad de atención, modalidad económica del servicio, experiencia resumida y documento PDF de respaldo.',
       'Voto Claro no certifica, avala ni garantiza la capacidad profesional, honorarios, resultados ni cumplimiento del servicio.',
       participant
         ? 'Hay participante registrado con sesión activa.'
@@ -361,7 +379,8 @@ export default function RegistroProfesionalPage() {
         'datos-profesionales',
         'especialidades',
         'servicios',
-        'ubicacion-atencion',
+                'ubicacion-atencion',
+        'modalidad-economica-servicio',
         'experiencia',
         'documento-respaldo',
         'declaraciones',
@@ -411,7 +430,9 @@ export default function RegistroProfesionalPage() {
         codigoProfesional: codigoProfesional || null,
         filledFields,
         missingFields,
-        pdfLoaded: !!pdfFile || !!form.document_url,
+                pdfLoaded: !!pdfFile || !!form.document_url,
+        serviceMode: form.service_mode,
+        serviceModeNoteFilled: !!form.service_mode_note,
         professionalConversationsCount: conversations.length,
         professionalMessagesLoading: loadingMessages,
         professionalMessagesError: messagesError || null,
@@ -616,8 +637,13 @@ export default function RegistroProfesionalPage() {
       return;
     }
 
-    if (form.services.length === 0) {
+        if (form.services.length === 0) {
       setError('Debes seleccionar al menos un servicio ofrecido.');
+      return;
+    }
+
+    if (!form.service_mode || form.service_mode === 'No especificado') {
+      setError('Debes indicar si tu asesoría será gratuita, pagada, mixta o pro bono sujeto a evaluación.');
       return;
     }
 
@@ -648,7 +674,9 @@ export default function RegistroProfesionalPage() {
           department: form.department,
           province: form.province,
           district: form.district,
-          attention_mode: form.attention_mode,
+                   attention_mode: form.attention_mode,
+          service_mode: form.service_mode,
+          service_mode_note: form.service_mode_note,
           experience_summary: form.experience_summary,
           public_message: form.public_message,
           document_url: documentUrl,
@@ -681,7 +709,9 @@ export default function RegistroProfesionalPage() {
         department: form.department,
         province: form.province,
         district: form.district,
-        attention_mode: form.attention_mode,
+                attention_mode: form.attention_mode,
+        service_mode: form.service_mode,
+        service_mode_note: form.service_mode_note,
         experience_summary: form.experience_summary,
         public_message: form.public_message,
         document_url: documentUrl,
@@ -932,7 +962,44 @@ export default function RegistroProfesionalPage() {
               ))}
             </select>
           </div>
+                     <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4">
+            <h2 className="text-sm font-bold text-emerald-900 mb-2">
+              Modalidad económica del servicio *
+            </h2>
 
+            <p className="text-xs text-emerald-900 mb-3">
+              Indica si brindarás asesoría gratuita, pagada, mixta o pro bono. Esta información será visible para los emprendedores.
+            </p>
+
+            <select
+              value={form.service_mode}
+              onChange={(e) => handleChangeText('service_mode', e.target.value)}
+              className="w-full border-2 border-emerald-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none bg-white"
+              required
+            >
+              {SERVICE_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
+
+            <label className="block text-sm font-semibold text-emerald-900 mt-4 mb-1">
+              Condiciones del servicio
+            </label>
+
+            <textarea
+              value={form.service_mode_note}
+              onChange={(e) => handleChangeText('service_mode_note', e.target.value)}
+              rows={3}
+              className="w-full border-2 border-emerald-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none bg-white"
+              placeholder="Ej: Primera orientación gratuita de 20 minutos. Si requiere revisión completa de contrato, se coordina aparte."
+            />
+
+            <p className="text-xs text-emerald-800 mt-2">
+              Voto Claro no fija honorarios, no cobra comisiones ni garantiza condiciones económicas. La modalidad es declarada por cada profesional.
+            </p>
+          </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">
               Experiencia resumida

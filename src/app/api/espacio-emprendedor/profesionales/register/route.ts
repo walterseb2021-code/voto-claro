@@ -28,9 +28,11 @@ export async function POST(req: Request) {
     const province = cleanText(body.province, 80) || null;
     const district = cleanText(body.district, 80) || null;
     const attention_mode = cleanText(body.attention_mode, 80) || 'Virtual y presencial';
-    const experience_summary = cleanText(body.experience_summary, 1200) || null;
-    const public_message = cleanText(body.public_message, 500) || null;
-    const document_url = cleanText(body.document_url, 1000) || null;
+const service_mode = cleanText(body.service_mode, 180) || 'No especificado';
+const service_mode_note = cleanText(body.service_mode_note, 500) || null;
+const experience_summary = cleanText(body.experience_summary, 1200) || null;
+const public_message = cleanText(body.public_message, 500) || null;
+const document_url = cleanText(body.document_url, 1000) || null;
     const data_truth_confirmed = Boolean(body.data_truth_confirmed);
     const terms_accepted = Boolean(body.terms_accepted);
 
@@ -62,14 +64,24 @@ export async function POST(req: Request) {
       );
     }
 
-    if (services.length === 0) {
-      return NextResponse.json(
-        { error: 'Debes seleccionar al menos un servicio ofrecido.' },
-        { status: 400 }
-      );
-    }
+      if (services.length === 0) {
+  return NextResponse.json(
+    { error: 'Debes seleccionar al menos un servicio ofrecido.' },
+    { status: 400 }
+  );
+}
 
-    if (!document_url) {
+if (!service_mode || service_mode === 'No especificado') {
+  return NextResponse.json(
+    {
+      error:
+        'Debes indicar si tu asesoría será gratuita, pagada, mixta o pro bono sujeto a evaluación.',
+    },
+    { status: 400 }
+  );
+}
+
+if (!document_url) {
       return NextResponse.json(
         { error: 'Debes subir un documento PDF de respaldo profesional.' },
         { status: 400 }
@@ -136,10 +148,12 @@ export async function POST(req: Request) {
       province,
       district,
       attention_mode,
-      experience_summary,
-      public_message,
-      document_url,
-      data_truth_confirmed,
+service_mode,
+service_mode_note,
+experience_summary,
+public_message,
+document_url,
+data_truth_confirmed,
       terms_accepted,
       is_active: true,
       status: 'active',

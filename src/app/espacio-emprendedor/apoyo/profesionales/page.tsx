@@ -13,7 +13,9 @@ type Professional = {
   department: string | null;
   province: string | null;
   district: string | null;
-  attention_mode: string | null;
+    attention_mode: string | null;
+  service_mode: string | null;
+  service_mode_note: string | null;
   experience_summary: string | null;
   public_message: string | null;
   document_url?: string | null;
@@ -117,7 +119,47 @@ function shortText(value: string | null, max = 180) {
   if (clean.length <= max) return clean;
   return `${clean.slice(0, max).trim()}...`;
 }
+function getServiceModeLabel(serviceMode: string | null | undefined) {
+  const mode = String(serviceMode || 'No especificado').trim();
 
+  if (mode === 'Gratuito') {
+    return {
+      icon: '💚',
+      label: 'Asesoría gratuita',
+      className: 'bg-green-50 text-green-800 border-green-300',
+    };
+  }
+
+  if (mode === 'Pago') {
+    return {
+      icon: '💼',
+      label: 'Asesoría pagada',
+      className: 'bg-slate-50 text-slate-800 border-slate-300',
+    };
+  }
+
+  if (mode.startsWith('Mixto')) {
+    return {
+      icon: '🤝',
+      label: 'Mixto / primera orientación gratuita',
+      className: 'bg-blue-50 text-blue-800 border-blue-300',
+    };
+  }
+
+  if (mode.startsWith('Pro bono')) {
+    return {
+      icon: '🫶',
+      label: 'Pro bono sujeto a evaluación',
+      className: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+    };
+  }
+
+  return {
+    icon: 'ℹ️',
+    label: 'Modalidad no especificada',
+    className: 'bg-amber-50 text-amber-800 border-amber-300',
+  };
+}
 export default function ProfesionalesApoyoPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
@@ -266,7 +308,9 @@ export default function ProfesionalesApoyoPage() {
       professional.department,
       professional.province,
       professional.district,
-      professional.attention_mode,
+            professional.attention_mode,
+      professional.service_mode,
+      professional.service_mode_note,
       ...(professional.specialties || []),
       ...(professional.services || []),
     ]
@@ -300,7 +344,7 @@ export default function ProfesionalesApoyoPage() {
       'El usuario interesado puede revisar sus mensajes privados con profesionales desde la bandeja de mensajes.',
       'Para participar como profesional asesor, el usuario debe llenar su ficha profesional y obtener su código profesional único.',
       'El código profesional es identificador público, no clave de acceso.',
-      'La pantalla incluye un directorio de profesionales registrados con información declarada por cada profesional.',
+      'La pantalla incluye un directorio de profesionales registrados con información declarada por cada profesional, incluyendo la modalidad económica del servicio.',
       `Cantidad total de profesionales cargados: ${professionals.length}.`,
       `Cantidad de profesionales visibles con filtros actuales: ${filteredProfessionals.length}.`,
       hasSearch
@@ -323,7 +367,7 @@ export default function ProfesionalesApoyoPage() {
         : 'No hay códigos profesionales visibles con los filtros actuales.',
       'La información es orientativa y no constituye recomendación directa de contratación.',
       'Voto Claro no certifica profesionales, no garantiza resultados, honorarios, cumplimiento de servicios ni idoneidad profesional.',
-      'Cada usuario debe revisar credenciales, experiencia, costos, condiciones y alcance antes de contratar.',
+      'Cada usuario debe revisar credenciales, experiencia, modalidad gratuita o pagada, costos, condiciones y alcance antes de contratar.',      'Cada usuario debe revisar credenciales, experiencia, costos, condiciones y alcance antes de contratar.',
     ];
 
     setPageContext({
@@ -449,8 +493,11 @@ export default function ProfesionalesApoyoPage() {
         filteredProfessionalsCount: filteredProfessionals.length,
         searchTerm: searchTerm.trim() || null,
         selectedType,
-        visibleProfessionalNames,
+                visibleProfessionalNames,
         visibleProfessionalCodes,
+        serviceModesVisible: filteredProfessionals
+          .slice(0, 6)
+          .map((item) => item.service_mode || 'No especificado'),
         disclaimer:
           'Voto Claro no certifica profesionales, no garantiza contratación, honorarios, resultados ni cumplimiento de servicios.',
       },
@@ -658,7 +705,25 @@ export default function ProfesionalesApoyoPage() {
                   <div className="mt-1 text-xs text-slate-500">
                     🧭 Atención: {professional.attention_mode || 'No especificada'}
                   </div>
+                                    {(() => {
+                    const serviceMode = getServiceModeLabel(professional.service_mode);
 
+                    return (
+                      <div
+                        className={`mt-3 rounded-xl border px-3 py-2 text-xs font-semibold ${serviceMode.className}`}
+                      >
+                        <p>
+                          {serviceMode.icon} {serviceMode.label}
+                        </p>
+
+                        {professional.service_mode_note && (
+                          <p className="mt-1 font-normal">
+                            {shortText(professional.service_mode_note, 180)}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {professional.specialties?.length ? (
                     <div className="mt-3">
                       <p className="text-xs font-bold text-slate-700 mb-1">
@@ -792,9 +857,10 @@ export default function ProfesionalesApoyoPage() {
                     </button>
                   )}
 
-                  <div className="mt-4 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
+                                    <div className="mt-4 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
                     Información declarada por el profesional. Verifica credenciales,
-                    honorarios y condiciones antes de contratar.
+                    modalidad gratuita o pagada, honorarios, alcance y condiciones antes de contratar.
+                    Voto Claro no fija precios ni cobra comisiones.
                   </div>
                 </div>
               ))}
