@@ -126,6 +126,9 @@ export default function CentroApoyoEmprendedorPage() {
             resultados económicos, rentabilidad ni cumplimiento de acuerdos. Cada usuario debe verificar
             requisitos, credenciales, costos y condiciones directamente con cada institución o profesional.
           </div>
+          <div className="mt-3 text-xs text-slate-700 bg-slate-50 border border-slate-300 rounded-lg p-3">
+  Los datos compartidos entre usuarios y profesionales serán utilizados únicamente para fines de contacto y coordinación de servicios dentro de la plataforma. Cada usuario es responsable de la información que decide compartir voluntariamente.
+</div>
         </div>
 
         <section className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-5">

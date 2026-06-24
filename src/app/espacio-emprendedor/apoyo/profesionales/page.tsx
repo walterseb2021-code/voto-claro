@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Professional = {
@@ -163,10 +164,11 @@ function getServiceModeLabel(serviceMode: string | null | undefined) {
 export default function ProfesionalesApoyoPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
-  const goToPath = (path: string) => {
-    window.location.href = path;
-  };
+  const router = useRouter();
 
+  const goToPath = (path: string) => {
+    router.push(path);
+  };
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loadingProfessionals, setLoadingProfessionals] = useState(true);
   const [professionalsError, setProfessionalsError] = useState<string | null>(null);
@@ -325,9 +327,11 @@ export default function ProfesionalesApoyoPage() {
       professional.department,
       professional.province,
       professional.district,
-            professional.attention_mode,
+      professional.attention_mode,
       professional.service_mode,
       professional.service_mode_note,
+      professional.public_message,
+      professional.experience_summary,
       ...(professional.specialties || []),
       ...(professional.services || []),
     ]
@@ -388,7 +392,7 @@ export default function ProfesionalesApoyoPage() {
         : 'No hay códigos profesionales visibles con los filtros actuales.',
       'La información es orientativa y no constituye recomendación directa de contratación.',
       'Voto Claro no certifica profesionales, no garantiza resultados, honorarios, cumplimiento de servicios ni idoneidad profesional.',
-      'Cada usuario debe revisar credenciales, experiencia, modalidad gratuita o pagada, costos, condiciones y alcance antes de contratar.',      'Cada usuario debe revisar credenciales, experiencia, costos, condiciones y alcance antes de contratar.',
+      'Cada usuario debe revisar credenciales, experiencia, modalidad gratuita o pagada, costos, condiciones y alcance antes de contratar.',
     ];
 
     setPageContext({
@@ -632,6 +636,11 @@ export default function ProfesionalesApoyoPage() {
               <h2 className="text-xl font-bold text-slate-900">
                 📚 Directorio de profesionales registrados
               </h2>
+              <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+  Los profesionales publicados son responsables exclusivos de la información declarada en sus perfiles.
+  La contratación, negociación, ejecución de servicios y pagos se realizan directamente entre las partes.
+  Voto Claro no participa en dichas operaciones ni recibe comisiones por ellas.
+</div>
               <p className="text-sm text-slate-600 mt-1">
                 Revisa profesionales que han registrado una ficha dentro de la plataforma. La información es declarada por cada profesional.
               </p>
@@ -745,6 +754,19 @@ export default function ProfesionalesApoyoPage() {
                   <div className="mt-1 text-xs text-slate-500">
                     🧭 Atención: {professional.attention_mode || 'No especificada'}
                   </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+  {professional.document_url && (
+    <span className="text-[11px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-1">
+      📄 Documento adjunto
+    </span>
+  )}
+
+  {professional.service_mode === 'Gratuito' && (
+    <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
+      Gratuito
+    </span>
+  )}
+</div>
                                     {(() => {
                     const serviceMode = getServiceModeLabel(professional.service_mode);
 
@@ -815,15 +837,22 @@ export default function ProfesionalesApoyoPage() {
                   )}
 
                   {professional.document_url && (
-                    <a
-                      href={professional.document_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative z-20 cursor-pointer mt-4 block w-full text-center bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition"
-                    >
-                      📄 Ver currículo / respaldo PDF
-                    </a>
-                  )}
+  <>
+    <a
+      href={professional.document_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="relative z-20 cursor-pointer mt-4 block w-full text-center bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition"
+    >
+      📄 Ver currículo / respaldo PDF
+    </a>
+
+    <p className="mt-2 text-[11px] text-slate-500">
+      Documento cargado directamente por el profesional.
+      Voto Claro no certifica ni verifica el contenido del archivo publicado.
+    </p>
+  </>
+)}
 
                   {!professional.is_mine && (
                     <div className="mt-4">
@@ -844,7 +873,7 @@ export default function ProfesionalesApoyoPage() {
                           <p className="text-xs text-blue-900 mb-2">
                             Escribe un mensaje breve. No compartas datos sensibles ni realices pagos fuera de una evaluación responsable.
                           </p>
-
+                          
                           <textarea
                             value={contactMessages[professional.id] || ''}
                             onChange={(e) =>
@@ -869,7 +898,10 @@ export default function ProfesionalesApoyoPage() {
                               {contactSuccess[professional.id]}
                             </p>
                           )}
-
+                           <div className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
+                             Al enviar este mensaje aceptas compartir voluntariamente la información que incluyas con el profesional seleccionado.
+                             Evita enviar contraseñas, datos bancarios, documentos sensibles, información médica o información confidencial de terceros.
+                           </div>
                           <button
                             type="button"
                             onClick={() => handleContactProfessional(professional.id)}
