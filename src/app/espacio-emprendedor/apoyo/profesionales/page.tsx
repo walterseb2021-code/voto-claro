@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
@@ -14,9 +15,11 @@ type Professional = {
   department: string | null;
   province: string | null;
   district: string | null;
-    attention_mode: string | null;
+  attention_mode: string | null;
   service_mode: string | null;
   service_mode_note: string | null;
+  educational_activities: string[];
+  training_categories: string[];
   experience_summary: string | null;
   public_message: string | null;
   document_url?: string | null;
@@ -104,6 +107,15 @@ const CHECKLIST = [
   '¿Entiendes qué documentos o información le entregarás?',
 ];
 
+const SERVICE_MODE_OPTIONS = [
+  'Todos',
+  'Gratuito',
+  'Pago',
+  'Mixto',
+  'Pro bono',
+  'No especificado',
+];
+
 function getLocationLabel(professional: Professional) {
   const parts = [
     professional.department,
@@ -116,10 +128,13 @@ function getLocationLabel(professional: Professional) {
 
 function shortText(value: string | null, max = 180) {
   const clean = String(value || '').trim();
+
   if (!clean) return '';
   if (clean.length <= max) return clean;
+
   return `${clean.slice(0, max).trim()}...`;
 }
+
 function getServiceModeLabel(serviceMode: string | null | undefined) {
   const mode = String(serviceMode || 'No especificado').trim();
 
@@ -161,25 +176,29 @@ function getServiceModeLabel(serviceMode: string | null | undefined) {
     className: 'bg-amber-50 text-amber-800 border-amber-300',
   };
 }
+
 export default function ProfesionalesApoyoPage() {
+  const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
-  const router = useRouter();
-
-  const goToPath = (path: string) => {
-    router.push(path);
-  };
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loadingProfessionals, setLoadingProfessionals] = useState(true);
-  const [professionalsError, setProfessionalsError] = useState<string | null>(null);
+  const [professionalsError, setProfessionalsError] = useState<string | null>(
+    null
+  );
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('Todos');
   const [selectedServiceMode, setSelectedServiceMode] = useState('Todos');
 
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
-  const [contactMessages, setContactMessages] = useState<Record<string, string>>({});
+  const [contactMessages, setContactMessages] = useState<
+    Record<string, string>
+  >({});
   const [contactLoadingId, setContactLoadingId] = useState<string | null>(null);
-  const [contactSuccess, setContactSuccess] = useState<Record<string, string>>({});
+  const [contactSuccess, setContactSuccess] = useState<Record<string, string>>(
+    {}
+  );
   const [contactError, setContactError] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -194,7 +213,9 @@ export default function ProfesionalesApoyoPage() {
             : '';
 
         const url = deviceId
-          ? `/api/espacio-emprendedor/profesionales/list?device_id=${encodeURIComponent(deviceId)}`
+          ? `/api/espacio-emprendedor/profesionales/list?device_id=${encodeURIComponent(
+              deviceId
+            )}`
           : '/api/espacio-emprendedor/profesionales/list';
 
         const res = await fetch(url, {
@@ -221,25 +242,65 @@ export default function ProfesionalesApoyoPage() {
     loadProfessionals();
   }, []);
 
-  const professionalTypes = [
-    'Todos',
-    ...Array.from(
-      new Set(
-        professionals
-          .map((item) => item.professional_type)
-          .filter(Boolean)
-      )
-    ),
-  ];
-   
-  const serviceModeOptions = [
-  'Todos',
-  'Gratuito',
-  'Pago',
-  'Mixto',
-  'Pro bono',
-  'No especificado',
-];
+  const professionalTypes = useMemo(
+    () => [
+      'Todos',
+      ...Array.from(
+        new Set(
+          professionals
+            .map((item) => item.professional_type)
+            .filter(Boolean)
+        )
+      ),
+    ],
+    [professionals]
+  );
+
+  const filteredProfessionals = useMemo(() => {
+    return professionals.filter((professional) => {
+      const q = searchTerm.trim().toLowerCase();
+
+      const matchesType =
+        selectedType === 'Todos' ||
+        professional.professional_type === selectedType;
+
+      const serviceMode = String(
+        professional.service_mode || 'No especificado'
+      );
+
+      const matchesServiceMode =
+        selectedServiceMode === 'Todos' ||
+        (selectedServiceMode === 'Mixto' && serviceMode.startsWith('Mixto')) ||
+        (selectedServiceMode === 'Pro bono' &&
+          serviceMode.startsWith('Pro bono')) ||
+        serviceMode === selectedServiceMode;
+
+      const searchableText = [
+        professional.public_name,
+        professional.codigo_profesional,
+        professional.professional_type,
+        professional.department,
+        professional.province,
+        professional.district,
+        professional.attention_mode,
+        professional.service_mode,
+        professional.service_mode_note,
+        professional.public_message,
+        professional.experience_summary,
+        ...(professional.specialties || []),
+        ...(professional.services || []),
+        ...(professional.educational_activities || []),
+        ...(professional.training_categories || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      const matchesSearch = !q || searchableText.includes(q);
+
+      return matchesType && matchesServiceMode && matchesSearch;
+    });
+  }, [professionals, searchTerm, selectedType, selectedServiceMode]);
 
   const handleContactProfessional = async (professionalId: string) => {
     const message = String(contactMessages[professionalId] || '').trim();
@@ -261,7 +322,7 @@ export default function ProfesionalesApoyoPage() {
         : '';
 
     if (!deviceId) {
-      goToPath('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor');
+      router.push('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor');
       return;
     }
 
@@ -307,43 +368,6 @@ export default function ProfesionalesApoyoPage() {
     }
   };
 
-  const filteredProfessionals = professionals.filter((professional) => {
-    const q = searchTerm.trim().toLowerCase();
-
-    const matchesType =
-      selectedType === 'Todos' || professional.professional_type === selectedType;
-      const serviceMode = String(professional.service_mode || 'No especificado');
-
-  const matchesServiceMode =
-  selectedServiceMode === 'Todos' ||
-  (selectedServiceMode === 'Mixto' && serviceMode.startsWith('Mixto')) ||
-  (selectedServiceMode === 'Pro bono' && serviceMode.startsWith('Pro bono')) ||
-  serviceMode === selectedServiceMode;
-
-    const searchableText = [
-      professional.public_name,
-      professional.codigo_profesional,
-      professional.professional_type,
-      professional.department,
-      professional.province,
-      professional.district,
-      professional.attention_mode,
-      professional.service_mode,
-      professional.service_mode_note,
-      professional.public_message,
-      professional.experience_summary,
-      ...(professional.specialties || []),
-      ...(professional.services || []),
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-
-    const matchesSearch = !q || searchableText.includes(q);
-
-    return matchesType && matchesServiceMode && matchesSearch;
-  });
-
   useEffect(() => {
     const visibleProfessionalNames = filteredProfessionals
       .slice(0, 6)
@@ -375,9 +399,9 @@ export default function ProfesionalesApoyoPage() {
       hasTypeFilter
         ? `Filtro de tipo profesional seleccionado: ${selectedType}.`
         : 'No hay filtro específico de tipo profesional.',
-        hasServiceModeFilter
-  ? `Filtro de modalidad económica seleccionado: ${selectedServiceMode}.`
-  : 'No hay filtro específico de modalidad económica.',
+      hasServiceModeFilter
+        ? `Filtro de modalidad económica seleccionado: ${selectedServiceMode}.`
+        : 'No hay filtro específico de modalidad económica.',
       loadingProfessionals
         ? 'El directorio de profesionales está cargando.'
         : 'El directorio de profesionales ya terminó de cargar.',
@@ -436,6 +460,7 @@ export default function ProfesionalesApoyoPage() {
         'Contactar profesional',
         'Buscar profesional',
         'Filtrar por tipo profesional',
+        'Filtrar por modalidad económica',
         'Revisar áreas profesionales',
         'Revisar checklist antes de contratar',
       ],
@@ -447,23 +472,30 @@ export default function ProfesionalesApoyoPage() {
         'Contactar profesional',
         'Buscar profesional',
         'Filtrar por tipo profesional',
+        'Filtrar por modalidad económica',
         'Revisar áreas profesionales',
         'Revisar checklist antes de contratar',
       ],
       visibleText: visibleParts.join('\n'),
       selectedItemTitle:
         filteredProfessionals[0]?.public_name || 'Profesionales asesores',
-      status: loadingProfessionals ? 'loading' : professionalsError ? 'error' : 'ready',
+      status: loadingProfessionals
+        ? 'loading'
+        : professionalsError
+        ? 'error'
+        : 'ready',
       suggestedPrompts: [
         {
           id: 'ee-prof-1',
           label: '¿Qué hay aquí?',
-          question: '¿Qué puedo encontrar en esta pantalla de profesionales asesores?',
+          question:
+            '¿Qué puedo encontrar en esta pantalla de profesionales asesores?',
         },
         {
           id: 'ee-prof-2',
           label: '¿Qué asesor necesito?',
-          question: '¿Qué tipo de profesional podría necesitar para mejorar mi proyecto?',
+          question:
+            '¿Qué tipo de profesional podría necesitar para mejorar mi proyecto?',
         },
         {
           id: 'ee-prof-3',
@@ -473,7 +505,8 @@ export default function ProfesionalesApoyoPage() {
         {
           id: 'ee-prof-4',
           label: 'Contrato con inversionista',
-          question: '¿Qué profesional podría ayudarme si tengo dudas sobre un contrato con un inversionista?',
+          question:
+            '¿Qué profesional podría ayudarme si tengo dudas sobre un contrato con un inversionista?',
         },
         {
           id: 'ee-prof-5',
@@ -488,7 +521,8 @@ export default function ProfesionalesApoyoPage() {
         {
           id: 'ee-prof-7',
           label: 'Directorio',
-          question: '¿Cuántos profesionales registrados se ven en el directorio?',
+          question:
+            '¿Cuántos profesionales registrados se ven en el directorio?',
         },
         {
           id: 'ee-prof-8',
@@ -527,7 +561,7 @@ export default function ProfesionalesApoyoPage() {
         disclaimer:
           'Voto Claro no certifica profesionales, no garantiza contratación, honorarios, resultados ni cumplimiento de servicios.',
       },
-      contextVersion: 'ee-apoyo-profesionales-v5-mis-mensajes',
+      contextVersion: 'ee-apoyo-profesionales-v6-links-fijos',
     });
 
     return () => {
@@ -556,31 +590,26 @@ export default function ProfesionalesApoyoPage() {
           </h1>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => goToPath('/espacio-emprendedor/apoyo')}
-              className="relative z-20 cursor-pointer bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition vc-btn-wave vc-btn-pulse"
+            <Link
+              href="/espacio-emprendedor/apoyo"
+              className="relative z-50 cursor-pointer bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition"
             >
               ← Centro de Apoyo
-            </button>
+            </Link>
 
-            <button
-              type="button"
-              onClick={() =>
-                goToPath('/espacio-emprendedor/apoyo/profesionales/mis-mensajes')
-              }
-              className="relative z-20 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
+            <Link
+              href="/espacio-emprendedor/apoyo/profesionales/mis-mensajes"
+              className="relative z-50 cursor-pointer bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition"
             >
               💬 Mis conversaciones
-            </button>
+            </Link>
 
-            <button
-              type="button"
-              onClick={() => goToPath('/espacio-emprendedor')}
-              className="relative z-20 cursor-pointer bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition vc-btn-wave vc-btn-pulse"
+            <Link
+              href="/espacio-emprendedor"
+              className="relative z-50 cursor-pointer bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition"
             >
               Espacio Emprendedor
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -590,69 +619,73 @@ export default function ProfesionalesApoyoPage() {
           </p>
 
           <p className="text-slate-600 text-sm mt-3">
-            Un proyecto puede necesitar apoyo legal, contable, financiero, comercial o técnico antes
-            de presentarse a posibles interesados, inversionistas o aliados.
+            Un proyecto puede necesitar apoyo legal, contable, financiero,
+            comercial o técnico antes de presentarse a posibles interesados,
+            inversionistas o aliados.
           </p>
 
-          
           <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4">
             <h2 className="text-sm font-bold text-emerald-900 mb-2">
               ¿Eres profesional y deseas participar como asesor?
             </h2>
 
             <p className="text-sm text-emerald-900 mb-3">
-              Registra o edita tu ficha profesional, declara tus especialidades, servicios ofrecidos,
-              modalidad de atención y sube un documento PDF de respaldo. Al guardar tu ficha,
-              obtendrás un código profesional único.
+              Registra o edita tu ficha profesional, declara tus especialidades,
+              servicios ofrecidos, modalidad de atención, actividades educativas,
+              categorías de capacitación y sube un documento PDF de respaldo.
+              Al guardar tu ficha, obtendrás un código profesional único.
             </p>
 
-            <button
-              type="button"
-              onClick={() =>
-                goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
-              }
-              className="relative z-20 cursor-pointer bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
+            <Link
+              href="/espacio-emprendedor/apoyo/profesionales/registro"
+              className="relative z-50 inline-block cursor-pointer bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition"
             >
               Registrar o editar mi ficha profesional →
-            </button>
+            </Link>
 
             <p className="text-xs text-emerald-800 mt-3">
-              El registro no significa certificación, validación o aval de Voto Claro.
-              El código profesional es un identificador público, no una clave de acceso.
-              Para editar tu ficha debes ingresar con tu sesión o código de participante.
+              El registro no significa certificación, validación o aval de Voto
+              Claro. El código profesional es un identificador público, no una
+              clave de acceso. Para editar tu ficha debes ingresar con tu sesión
+              o código de participante.
             </p>
           </div>
 
           <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
-            <strong>⚠️ Aviso importante:</strong> Esta sección es orientativa. Voto Claro no certifica profesionales,
-            no garantiza calidad del servicio, honorarios, resultados, contratación ni cumplimiento de acuerdos.
-            Cada usuario debe revisar credenciales, experiencia, costos, condiciones y alcance antes de contratar.
+            <strong>⚠️ Aviso importante:</strong> Esta sección es orientativa.
+            Voto Claro no certifica profesionales, no garantiza calidad del
+            servicio, honorarios, resultados, contratación ni cumplimiento de
+            acuerdos. Cada usuario debe revisar credenciales, experiencia,
+            costos, condiciones y alcance antes de contratar.
           </div>
         </section>
 
         <section className="mt-6 bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm vc-fade-up">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                📚 Directorio de profesionales registrados
-              </h2>
-              <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-  Los profesionales publicados son responsables exclusivos de la información declarada en sus perfiles.
-  La contratación, negociación, ejecución de servicios y pagos se realizan directamente entre las partes.
-  Voto Claro no participa en dichas operaciones ni recibe comisiones por ellas.
-</div>
-              <p className="text-sm text-slate-600 mt-1">
-                Revisa profesionales que han registrado una ficha dentro de la plataforma. La información es declarada por cada profesional.
-              </p>
-            </div>
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-slate-900">
+              📚 Directorio de profesionales registrados
+            </h2>
 
-            </div>
+            <p className="text-sm text-slate-600 mt-1">
+              Revisa profesionales que han registrado una ficha dentro de la
+              plataforma. La información es declarada por cada profesional.
+            </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              Los profesionales publicados son responsables exclusivos de la
+              información declarada en sus perfiles. La contratación,
+              negociación, ejecución de servicios y pagos se realizan
+              directamente entre las partes. Voto Claro no participa en dichas
+              operaciones ni recibe comisiones por ellas.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Buscar por nombre, código, especialidad o servicio
               </label>
+
               <input
                 type="text"
                 value={searchTerm}
@@ -666,6 +699,7 @@ export default function ProfesionalesApoyoPage() {
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Tipo profesional
               </label>
+
               <select
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
@@ -678,25 +712,30 @@ export default function ProfesionalesApoyoPage() {
                 ))}
               </select>
             </div>
+
             <div>
-  <label className="block text-sm font-semibold text-slate-700 mb-1">
-    Modalidad del servicio
-  </label>
-  <select
-    value={selectedServiceMode}
-    onChange={(e) => setSelectedServiceMode(e.target.value)}
-    className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
-  >
-    {serviceModeOptions.map((mode) => (
-      <option key={mode} value={mode}>
-        {mode}
-      </option>
-    ))}
-  </select>
-</div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Modalidad del servicio
+              </label>
+
+              <select
+                value={selectedServiceMode}
+                onChange={(e) => setSelectedServiceMode(e.target.value)}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+              >
+                {SERVICE_MODE_OPTIONS.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-                    {loadingProfessionals ? (
-            <p className="text-slate-600 text-sm">Cargando profesionales registrados...</p>
+
+          {loadingProfessionals ? (
+            <p className="text-slate-600 text-sm">
+              Cargando profesionales registrados...
+            </p>
           ) : professionalsError ? (
             <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4 text-sm">
               {professionalsError}
@@ -710,10 +749,10 @@ export default function ProfesionalesApoyoPage() {
               <button
                 type="button"
                 onClick={() => {
-              setSearchTerm('');
-              setSelectedType('Todos');
-              setSelectedServiceMode('Todos');
-               }}
+                  setSearchTerm('');
+                  setSelectedType('Todos');
+                  setSelectedServiceMode('Todos');
+                }}
                 className="mt-3 text-green-700 hover:underline text-sm font-semibold"
               >
                 Limpiar filtros
@@ -721,221 +760,284 @@ export default function ProfesionalesApoyoPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredProfessionals.map((professional) => (
-                <div
-                  key={professional.id}
-                  className="rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm vc-card-hover"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900">
-                        {professional.public_name}
-                      </h3>
+              {filteredProfessionals.map((professional) => {
+                const serviceMode = getServiceModeLabel(
+                  professional.service_mode
+                );
 
-                      <p className="text-sm font-semibold text-blue-700 mt-1">
-                        {professional.professional_type}
-                      </p>
-                    </div>
+                return (
+                  <article
+                    key={professional.id}
+                    className="rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm vc-card-hover"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">
+                          {professional.public_name}
+                        </h3>
 
-                    <div className="text-right">
-                      <span className="inline-block text-[11px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full px-2 py-1 whitespace-nowrap">
-                        {professional.codigo_profesional}
-                      </span>
-                      <p className="text-[10px] text-slate-500 mt-1 max-w-[150px]">
-                        Código público, no es clave de acceso.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 text-xs text-slate-500">
-                    📍 {getLocationLabel(professional)}
-                  </div>
-
-                  <div className="mt-1 text-xs text-slate-500">
-                    🧭 Atención: {professional.attention_mode || 'No especificada'}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-  {professional.document_url && (
-    <span className="text-[11px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-1">
-      📄 Documento adjunto
-    </span>
-  )}
-
-  {professional.service_mode === 'Gratuito' && (
-    <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
-      Gratuito
-    </span>
-  )}
-</div>
-                                    {(() => {
-                    const serviceMode = getServiceModeLabel(professional.service_mode);
-
-                    return (
-                      <div
-                        className={`mt-3 rounded-xl border px-3 py-2 text-xs font-semibold ${serviceMode.className}`}
-                      >
-                        <p>
-                          {serviceMode.icon} {serviceMode.label}
+                        <p className="text-sm font-semibold text-blue-700 mt-1">
+                          {professional.professional_type}
                         </p>
-
-                        {professional.service_mode_note && (
-                          <p className="mt-1 font-normal">
-                            {shortText(professional.service_mode_note, 180)}
-                          </p>
-                        )}
                       </div>
-                    );
-                  })()}
-                  {professional.specialties?.length ? (
-                    <div className="mt-3">
-                      <p className="text-xs font-bold text-slate-700 mb-1">
-                        Especialidades
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {professional.specialties.slice(0, 5).map((item) => (
-                          <span
-                            key={item}
-                            className="text-[11px] bg-green-50 text-green-800 border border-green-200 rounded-full px-2 py-1"
-                          >
-                            {item}
-                          </span>
-                        ))}
+
+                      <div className="text-right">
+                        <span className="inline-block text-[11px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full px-2 py-1 whitespace-nowrap">
+                          {professional.codigo_profesional}
+                        </span>
+
+                        <p className="text-[10px] text-slate-500 mt-1 max-w-[150px]">
+                          Código público, no es clave de acceso.
+                        </p>
                       </div>
                     </div>
-                  ) : null}
 
-                  {professional.services?.length ? (
-                    <div className="mt-3">
-                      <p className="text-xs font-bold text-slate-700 mb-1">
-                        Servicios
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {professional.services.slice(0, 5).map((item) => (
-                          <span
-                            key={item}
-                            className="text-[11px] bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2 py-1"
-                          >
-                            {item}
-                          </span>
-                        ))}
-                      </div>
+                    <div className="mt-3 text-xs text-slate-500">
+                      📍 {getLocationLabel(professional)}
                     </div>
-                  ) : null}
 
-                  {professional.public_message ? (
-                    <p className="mt-3 text-sm text-slate-700">
-                      “{shortText(professional.public_message, 160)}”
-                    </p>
-                  ) : professional.experience_summary ? (
-                    <p className="mt-3 text-sm text-slate-700">
-                      {shortText(professional.experience_summary, 160)}
-                    </p>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500">
-                      Este profesional aún no agregó un mensaje público.
-                    </p>
-                  )}
+                    <div className="mt-1 text-xs text-slate-500">
+                      🧭 Atención:{' '}
+                      {professional.attention_mode || 'No especificada'}
+                    </div>
 
-                  {professional.document_url && (
-  <>
-    <a
-      href={professional.document_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="relative z-20 cursor-pointer mt-4 block w-full text-center bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition"
-    >
-      📄 Ver currículo / respaldo PDF
-    </a>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {professional.document_url && (
+                        <span className="text-[11px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-1">
+                          📄 Documento adjunto
+                        </span>
+                      )}
 
-    <p className="mt-2 text-[11px] text-slate-500">
-      Documento cargado directamente por el profesional.
-      Voto Claro no certifica ni verifica el contenido del archivo publicado.
-    </p>
-  </>
-)}
+                      {professional.service_mode === 'Gratuito' && (
+                        <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
+                          Gratuito
+                        </span>
+                      )}
 
-                  {!professional.is_mine && (
-                    <div className="mt-4">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveContactId((prev) =>
-                            prev === professional.id ? null : professional.id
-                          )
-                        }
-                        className="relative z-20 cursor-pointer w-full bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
-                      >
-                        💬 Contactar profesional
-                      </button>
-
-                      {activeContactId === professional.id && (
-                        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
-                          <p className="text-xs text-blue-900 mb-2">
-                            Escribe un mensaje breve. No compartas datos sensibles ni realices pagos fuera de una evaluación responsable.
-                          </p>
-                          
-                          <textarea
-                            value={contactMessages[professional.id] || ''}
-                            onChange={(e) =>
-                              setContactMessages((prev) => ({
-                                ...prev,
-                                [professional.id]: e.target.value,
-                              }))
-                            }
-                            rows={3}
-                            placeholder="Ej: Buen día, deseo consultar sobre revisión de contrato para mi proyecto..."
-                            className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                          />
-
-                          {contactError[professional.id] && (
-                            <p className="text-xs text-red-700 mt-2">
-                              {contactError[professional.id]}
-                            </p>
-                          )}
-
-                          {contactSuccess[professional.id] && (
-                            <p className="text-xs text-green-700 mt-2">
-                              {contactSuccess[professional.id]}
-                            </p>
-                          )}
-                           <div className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
-                             Al enviar este mensaje aceptas compartir voluntariamente la información que incluyas con el profesional seleccionado.
-                             Evita enviar contraseñas, datos bancarios, documentos sensibles, información médica o información confidencial de terceros.
-                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleContactProfessional(professional.id)}
-                            disabled={contactLoadingId === professional.id}
-                            className="relative z-20 cursor-pointer mt-3 w-full bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition disabled:opacity-50"
-                          >
-                            {contactLoadingId === professional.id
-                              ? 'Enviando mensaje...'
-                              : 'Enviar mensaje'}
-                          </button>
-                        </div>
+                      {professional.is_mine && (
+                        <span className="text-[11px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-1">
+                          Mi ficha
+                        </span>
                       )}
                     </div>
-                  )}
 
-                  {professional.is_mine && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        goToPath('/espacio-emprendedor/apoyo/profesionales/registro')
-                      }
-                      className="relative z-20 cursor-pointer mt-4 w-full bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition vc-btn-wave vc-btn-pulse"
+                    <div
+                      className={`mt-3 rounded-xl border px-3 py-2 text-xs font-semibold ${serviceMode.className}`}
                     >
-                      ✏️ Editar mi ficha profesional
-                    </button>
-                  )}
+                      <p>
+                        {serviceMode.icon} {serviceMode.label}
+                      </p>
 
-                                    <div className="mt-4 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
-                    Información declarada por el profesional. Verifica credenciales,
-                    modalidad gratuita o pagada, honorarios, alcance y condiciones antes de contratar.
-                    Voto Claro no fija precios ni cobra comisiones.
-                  </div>
-                </div>
-              ))}
+                      {professional.service_mode_note && (
+                        <p className="mt-1 font-normal">
+                          {shortText(professional.service_mode_note, 180)}
+                        </p>
+                      )}
+                    </div>
+
+                    {professional.specialties?.length ? (
+                      <div className="mt-3">
+                        <p className="text-xs font-bold text-slate-700 mb-1">
+                          Especialidades
+                        </p>
+
+                        <div className="flex flex-wrap gap-1">
+                          {professional.specialties.slice(0, 5).map((item) => (
+                            <span
+                              key={item}
+                              className="text-[11px] bg-green-50 text-green-800 border border-green-200 rounded-full px-2 py-1"
+                            >
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {professional.services?.length ? (
+                      <div className="mt-3">
+                        <p className="text-xs font-bold text-slate-700 mb-1">
+                          Servicios
+                        </p>
+
+                        <div className="flex flex-wrap gap-1">
+                          {professional.services.slice(0, 5).map((item) => (
+                            <span
+                              key={item}
+                              className="text-[11px] bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2 py-1"
+                            >
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {professional.educational_activities?.length ? (
+                      <div className="mt-3">
+                        <p className="text-xs font-bold text-slate-700 mb-1">
+                          Actividades educativas
+                        </p>
+
+                        <div className="flex flex-wrap gap-1">
+                          {professional.educational_activities
+                            .slice(0, 5)
+                            .map((item) => (
+                              <span
+                                key={item}
+                                className="text-[11px] bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-full px-2 py-1"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {professional.training_categories?.length ? (
+                      <div className="mt-3">
+                        <p className="text-xs font-bold text-slate-700 mb-1">
+                          Categorías de capacitación
+                        </p>
+
+                        <div className="flex flex-wrap gap-1">
+                          {professional.training_categories
+                            .slice(0, 5)
+                            .map((item) => (
+                              <span
+                                key={item}
+                                className="text-[11px] bg-purple-50 text-purple-800 border border-purple-200 rounded-full px-2 py-1"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {professional.public_message ? (
+                      <p className="mt-3 text-sm text-slate-700">
+                        “{shortText(professional.public_message, 160)}”
+                      </p>
+                    ) : professional.experience_summary ? (
+                      <p className="mt-3 text-sm text-slate-700">
+                        {shortText(professional.experience_summary, 160)}
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-500">
+                        Este profesional aún no agregó un mensaje público.
+                      </p>
+                    )}
+
+                    {professional.document_url && (
+                      <>
+                        <a
+                          href={professional.document_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative z-50 cursor-pointer mt-4 block w-full text-center bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300 transition"
+                        >
+                          📄 Ver currículo / respaldo PDF
+                        </a>
+
+                        <p className="mt-2 text-[11px] text-slate-500">
+                          Documento cargado directamente por el profesional.
+                          Voto Claro no certifica ni verifica el contenido del
+                          archivo publicado.
+                        </p>
+                      </>
+                    )}
+
+                    {!professional.is_mine && (
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActiveContactId((prev) =>
+                              prev === professional.id ? null : professional.id
+                            )
+                          }
+                          className="relative z-50 cursor-pointer w-full bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-800 transition"
+                        >
+                          💬 Contactar profesional
+                        </button>
+
+                        {activeContactId === professional.id && (
+                          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                            <p className="text-xs text-blue-900 mb-2">
+                              Escribe un mensaje breve. No compartas datos
+                              sensibles ni realices pagos fuera de una evaluación
+                              responsable.
+                            </p>
+
+                            <textarea
+                              value={contactMessages[professional.id] || ''}
+                              onChange={(e) =>
+                                setContactMessages((prev) => ({
+                                  ...prev,
+                                  [professional.id]: e.target.value,
+                                }))
+                              }
+                              rows={3}
+                              placeholder="Ej: Buen día, deseo consultar sobre revisión de contrato para mi proyecto..."
+                              className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                            />
+
+                            {contactError[professional.id] && (
+                              <p className="text-xs text-red-700 mt-2">
+                                {contactError[professional.id]}
+                              </p>
+                            )}
+
+                            {contactSuccess[professional.id] && (
+                              <p className="text-xs text-green-700 mt-2">
+                                {contactSuccess[professional.id]}
+                              </p>
+                            )}
+
+                            <div className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
+                              Al enviar este mensaje aceptas compartir
+                              voluntariamente la información que incluyas con el
+                              profesional seleccionado. Evita enviar contraseñas,
+                              datos bancarios, documentos sensibles, información
+                              médica o información confidencial de terceros.
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleContactProfessional(professional.id)
+                              }
+                              disabled={contactLoadingId === professional.id}
+                              className="relative z-50 cursor-pointer mt-3 w-full bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-800 transition disabled:opacity-50"
+                            >
+                              {contactLoadingId === professional.id
+                                ? 'Enviando mensaje...'
+                                : 'Enviar mensaje'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {professional.is_mine && (
+                      <Link
+                        href="/espacio-emprendedor/apoyo/profesionales/registro"
+                        className="relative z-50 cursor-pointer mt-4 block w-full text-center bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition"
+                      >
+                        ✏️ Editar mi ficha profesional
+                      </Link>
+                    )}
+
+                    <div className="mt-4 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-2">
+                      Información declarada por el profesional. Verifica
+                      credenciales, modalidad gratuita o pagada, honorarios,
+                      alcance y condiciones antes de contratar. Voto Claro no
+                      fija precios ni cobra comisiones.
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -977,7 +1079,8 @@ export default function ProfesionalesApoyoPage() {
           </h2>
 
           <p className="text-sm text-slate-600 mb-4">
-            Antes de pagar, firmar o entregar información sensible, revisa estos puntos.
+            Antes de pagar, firmar o entregar información sensible, revisa estos
+            puntos.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -994,24 +1097,26 @@ export default function ProfesionalesApoyoPage() {
 
         <section className="mt-6 bg-white rounded-2xl border-2 border-emerald-600 p-6 shadow-sm vc-fade-up">
           <h2 className="text-xl font-bold text-slate-900 mb-3">
-            🔎 Próxima etapa de esta sección
+            🔎 Recomendación final
           </h2>
 
           <div className="space-y-2 text-sm text-slate-700">
             <p>
-              Más adelante, esta pantalla podrá convertirse en un directorio más avanzado,
-              con perfil público individual, calificaciones internas, reportes, disponibilidad,
-              atención virtual, documentos de respaldo y filtros por especialidad.
+              Antes de contratar asesoría, compara alternativas, revisa
+              experiencia, solicita claridad sobre el alcance del servicio y deja
+              constancia escrita de lo acordado.
             </p>
 
             <p>
-              Para proteger a la plataforma, el perfil del profesional debe mostrarse como información declarada
-              por el propio profesional, no como certificación oficial de Voto Claro.
+              Para proteger a la plataforma, el perfil del profesional se muestra
+              como información declarada por el propio profesional, no como
+              certificación oficial de Voto Claro.
             </p>
 
             <p>
-              Si se crea un sistema de calificaciones, debe evaluar la experiencia dentro de la plataforma,
-              como claridad, respeto, puntualidad y utilidad del servicio, evitando acusaciones personales o afirmaciones no verificadas.
+              Si el servicio implica contratos, pagos, cesión de derechos,
+              participación en utilidades o entrega de información sensible,
+              evalúa el caso con cuidado antes de comprometerte.
             </p>
           </div>
         </section>
