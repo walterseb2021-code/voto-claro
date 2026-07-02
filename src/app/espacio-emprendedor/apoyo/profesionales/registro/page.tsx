@@ -91,6 +91,27 @@ const SERVICE_MODES = [
   'Pro bono sujeto a evaluación del caso',
   'No especificado',
 ];
+const EDUCATIONAL_ACTIVITIES = [
+  'Publicar cursos',
+  'Publicar talleres',
+  'Publicar webinars',
+  'Publicar videos educativos',
+  'Publicar material descargable',
+  'Participar en foros',
+];
+
+const TRAINING_CATEGORIES = [
+  'Marketing',
+  'Finanzas',
+  'Contabilidad',
+  'Tributación',
+  'Legal',
+  'Ventas',
+  'Inteligencia Artificial',
+  'Comercio electrónico',
+  'Formulación de proyectos',
+  'Liderazgo',
+];
 type ProfessionalConversationMessage = {
   id: string;
   content: string;
@@ -153,6 +174,8 @@ export default function RegistroProfesionalPage() {
         attention_mode: 'Virtual y presencial',
     service_mode: 'No especificado',
     service_mode_note: '',
+    educational_activities: [] as string[],
+    training_categories: [] as string[],
     experience_summary: '',
     public_message: '',
     document_url: '',
@@ -285,6 +308,11 @@ export default function RegistroProfesionalPage() {
     document_url: professionalData.document_url || '',
     data_truth_confirmed: Boolean(professionalData.data_truth_confirmed),
     terms_accepted: Boolean(professionalData.terms_accepted),
+    educational_activities:
+  professionalData.educational_activities || [],
+
+training_categories:
+  professionalData.training_categories || [],
              });
 
           await loadProfessionalMessages();
@@ -333,6 +361,12 @@ export default function RegistroProfesionalPage() {
       missingFields.length
         ? `Campos pendientes: ${missingFields.join(', ')}.`
         : 'No hay campos obligatorios pendientes.',
+        form.educational_activities.length
+        ? 'actividades educativas'
+        : null,
+        form.training_categories.length
+        ? 'categorías educativas'
+        : null,
     ];
 
     if (saving) {
@@ -384,6 +418,8 @@ export default function RegistroProfesionalPage() {
         'experiencia',
         'documento-respaldo',
         'declaraciones',
+        'actividades-educativas',
+        'categorias-capacitacion',
       ],
       visibleActions: [
         'Volver a profesionales',
@@ -398,6 +434,8 @@ export default function RegistroProfesionalPage() {
         'Subir PDF de respaldo',
         'Seleccionar especialidades',
         'Seleccionar servicios',
+        'Configurar actividades educativas',
+        'Seleccionar categorías de capacitación',
       ],
       visibleText: visibleParts.join('\n'),
       selectedItemTitle: form.public_name || codigoProfesional || undefined,
@@ -677,6 +715,8 @@ export default function RegistroProfesionalPage() {
                    attention_mode: form.attention_mode,
           service_mode: form.service_mode,
           service_mode_note: form.service_mode_note,
+          educational_activities: form.educational_activities,
+training_categories: form.training_categories,
           experience_summary: form.experience_summary,
           public_message: form.public_message,
           document_url: documentUrl,
@@ -709,7 +749,11 @@ export default function RegistroProfesionalPage() {
         department: form.department,
         province: form.province,
         district: form.district,
-                attention_mode: form.attention_mode,
+        attention_mode: form.attention_mode,
+        educational_activities:
+  form.educational_activities,
+training_categories:
+  form.training_categories,
         service_mode: form.service_mode,
         service_mode_note: form.service_mode_note,
         experience_summary: form.experience_summary,
@@ -962,11 +1006,90 @@ export default function RegistroProfesionalPage() {
               ))}
             </select>
           </div>
-                     <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4">
+                 <div className="rounded-2xl border border-blue-300 bg-blue-50 p-4">
+  <h2 className="text-sm font-bold text-blue-900 mb-3">
+    🎓 Actividades educativas
+  </h2>
+
+  <div className="flex flex-wrap gap-2">
+    {EDUCATIONAL_ACTIVITIES.map((item) => {
+      const active =
+        form.educational_activities.includes(item);
+
+      return (
+        <button
+          key={item}
+          type="button"
+          onClick={() =>
+            handleChangeText(
+              'educational_activities',
+              toggleValue(
+                form.educational_activities,
+                item
+              )
+            )
+          }
+          className={`px-3 py-2 rounded-full text-sm font-semibold border ${
+            active
+              ? 'bg-blue-700 text-white border-blue-700'
+              : 'bg-white text-slate-700 border-slate-300 hover:border-blue-500'
+          }`}
+        >
+          {item}
+        </button>
+      );
+    })}
+  </div>
+
+  <p className="text-xs text-blue-800 mt-3">
+    Selecciona las actividades educativas que deseas ofrecer dentro de la plataforma.
+  </p>
+</div>
+
+<div className="rounded-2xl border border-indigo-300 bg-indigo-50 p-4">
+  <h2 className="text-sm font-bold text-indigo-900 mb-3">
+    📚 Categorías de capacitación
+  </h2>
+
+  <div className="flex flex-wrap gap-2">
+    {TRAINING_CATEGORIES.map((item) => {
+      const active =
+        form.training_categories.includes(item);
+
+      return (
+        <button
+          key={item}
+          type="button"
+          onClick={() =>
+            handleChangeText(
+              'training_categories',
+              toggleValue(
+                form.training_categories,
+                item
+              )
+            )
+          }
+          className={`px-3 py-2 rounded-full text-sm font-semibold border ${
+            active
+              ? 'bg-indigo-700 text-white border-indigo-700'
+              : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-500'
+          }`}
+        >
+          {item}
+        </button>
+      );
+    })}
+  </div>
+
+  <p className="text-xs text-indigo-800 mt-3">
+    Estas categorías permitirán clasificar cursos, talleres y contenidos educativos.
+  </p>
+</div>
+          <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4">
             <h2 className="text-sm font-bold text-emerald-900 mb-2">
               Modalidad económica del servicio *
             </h2>
-
+             
             <p className="text-xs text-emerald-900 mb-3">
               Indica si brindarás asesoría gratuita, pagada, mixta o pro bono. Esta información será visible para los emprendedores.
             </p>

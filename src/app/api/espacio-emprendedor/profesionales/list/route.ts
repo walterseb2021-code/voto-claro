@@ -46,7 +46,8 @@ export async function GET(req: Request) {
 
     const { data, error } = await admin
       .from('espacio_profesionales')
-      .select(`
+      .select(
+        `
         id,
         participant_id,
         codigo_profesional,
@@ -60,13 +61,16 @@ export async function GET(req: Request) {
         attention_mode,
         service_mode,
         service_mode_note,
+        educational_activities,
+        training_categories,
         experience_summary,
         public_message,
         document_url,
         is_active,
         status,
         created_at
-      `)
+      `
+      )
       .eq('is_active', true)
       .eq('status', 'active')
       .order('created_at', { ascending: false });
@@ -86,6 +90,8 @@ export async function GET(req: Request) {
       attention_mode: item.attention_mode,
       service_mode: item.service_mode || 'No especificado',
       service_mode_note: item.service_mode_note || null,
+      educational_activities: item.educational_activities || [],
+      training_categories: item.training_categories || [],
       experience_summary: item.experience_summary,
       public_message: item.public_message,
       document_url: item.document_url,

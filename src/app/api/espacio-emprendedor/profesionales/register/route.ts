@@ -9,6 +9,7 @@ function cleanText(value: unknown, max = 500) {
 
 function cleanArray(value: unknown) {
   if (!Array.isArray(value)) return [];
+
   return value
     .map((item) => String(item || '').trim())
     .filter(Boolean)
@@ -27,12 +28,15 @@ export async function POST(req: Request) {
     const department = cleanText(body.department, 80) || null;
     const province = cleanText(body.province, 80) || null;
     const district = cleanText(body.district, 80) || null;
-    const attention_mode = cleanText(body.attention_mode, 80) || 'Virtual y presencial';
-const service_mode = cleanText(body.service_mode, 180) || 'No especificado';
-const service_mode_note = cleanText(body.service_mode_note, 500) || null;
-const experience_summary = cleanText(body.experience_summary, 1200) || null;
-const public_message = cleanText(body.public_message, 500) || null;
-const document_url = cleanText(body.document_url, 1000) || null;
+    const attention_mode =
+      cleanText(body.attention_mode, 80) || 'Virtual y presencial';
+    const service_mode = cleanText(body.service_mode, 180) || 'No especificado';
+    const service_mode_note = cleanText(body.service_mode_note, 500) || null;
+    const educational_activities = cleanArray(body.educational_activities);
+    const training_categories = cleanArray(body.training_categories);
+    const experience_summary = cleanText(body.experience_summary, 1200) || null;
+    const public_message = cleanText(body.public_message, 500) || null;
+    const document_url = cleanText(body.document_url, 1000) || null;
     const data_truth_confirmed = Boolean(body.data_truth_confirmed);
     const terms_accepted = Boolean(body.terms_accepted);
 
@@ -64,24 +68,24 @@ const document_url = cleanText(body.document_url, 1000) || null;
       );
     }
 
-      if (services.length === 0) {
-  return NextResponse.json(
-    { error: 'Debes seleccionar al menos un servicio ofrecido.' },
-    { status: 400 }
-  );
-}
+    if (services.length === 0) {
+      return NextResponse.json(
+        { error: 'Debes seleccionar al menos un servicio ofrecido.' },
+        { status: 400 }
+      );
+    }
 
-if (!service_mode || service_mode === 'No especificado') {
-  return NextResponse.json(
-    {
-      error:
-        'Debes indicar si tu asesoría será gratuita, pagada, mixta o pro bono sujeto a evaluación.',
-    },
-    { status: 400 }
-  );
-}
+    if (!service_mode || service_mode === 'No especificado') {
+      return NextResponse.json(
+        {
+          error:
+            'Debes indicar si tu asesoría será gratuita, pagada, mixta o pro bono sujeto a evaluación.',
+        },
+        { status: 400 }
+      );
+    }
 
-if (!document_url) {
+    if (!document_url) {
       return NextResponse.json(
         { error: 'Debes subir un documento PDF de respaldo profesional.' },
         { status: 400 }
@@ -90,7 +94,10 @@ if (!document_url) {
 
     if (!data_truth_confirmed || !terms_accepted) {
       return NextResponse.json(
-        { error: 'Debes aceptar las declaraciones obligatorias para registrar tu ficha profesional.' },
+        {
+          error:
+            'Debes aceptar las declaraciones obligatorias para registrar tu ficha profesional.',
+        },
         { status: 400 }
       );
     }
@@ -148,12 +155,14 @@ if (!document_url) {
       province,
       district,
       attention_mode,
-service_mode,
-service_mode_note,
-experience_summary,
-public_message,
-document_url,
-data_truth_confirmed,
+      service_mode,
+      service_mode_note,
+      educational_activities,
+      training_categories,
+      experience_summary,
+      public_message,
+      document_url,
+      data_truth_confirmed,
       terms_accepted,
       is_active: true,
       status: 'active',
@@ -191,11 +200,13 @@ data_truth_confirmed,
       );
     }
 
-    const { error: insertError } = await admin.from('espacio_profesionales').insert({
-      ...basePayload,
-      codigo_profesional,
-      created_at: new Date().toISOString(),
-    });
+    const { error: insertError } = await admin
+      .from('espacio_profesionales')
+      .insert({
+        ...basePayload,
+        codigo_profesional,
+        created_at: new Date().toISOString(),
+      });
 
     if (insertError) throw insertError;
 

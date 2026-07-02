@@ -11,9 +11,9 @@ export default function CentroApoyoEmprendedorPage() {
   useEffect(() => {
     const visibleParts = [
       'Pantalla visible: Centro de Apoyo al Emprendedor.',
-      'Esta pantalla reúne accesos a instituciones, programas, profesionales asesores y una guía práctica para preparar mejor un proyecto emprendedor.',
+      'Esta pantalla reúne accesos a instituciones, programas, profesionales asesores, capacitación gratuita y una guía práctica para preparar mejor un proyecto emprendedor.',
       'Voto Claro muestra información orientativa y espacios de contacto, pero no garantiza financiamiento, aprobación de proyectos, contratación profesional ni resultados económicos.',
-      'El usuario puede abrir instituciones de apoyo, profesionales asesores o una guía práctica para mejorar su proyecto.',
+      'El usuario puede abrir instituciones de apoyo, profesionales asesores, capacitación gratuita o una guía práctica para mejorar su proyecto.',
     ];
 
     setPageContext({
@@ -21,9 +21,9 @@ export default function CentroApoyoEmprendedorPage() {
       pageTitle: 'Centro de Apoyo al Emprendedor',
       route: '/espacio-emprendedor/apoyo',
       summary:
-        'Centro de Apoyo al Emprendedor con accesos a instituciones, profesionales asesores y guía práctica para mejorar proyectos.',
+        'Centro de Apoyo al Emprendedor con accesos a instituciones, profesionales asesores, capacitación gratuita y guía práctica para mejorar proyectos.',
       speakableSummary:
-        'Estás en el Centro de Apoyo al Emprendedor. Desde aquí puedes revisar instituciones y programas de apoyo, buscar profesionales asesores o usar una guía práctica para preparar mejor tu proyecto. Recuerda que Voto Claro solo orienta y no garantiza financiamiento ni resultados económicos.',
+        'Estás en el Centro de Apoyo al Emprendedor. Desde aquí puedes revisar instituciones y programas de apoyo, buscar profesionales asesores, explorar capacitación gratuita o usar una guía práctica para preparar mejor tu proyecto. Recuerda que Voto Claro solo orienta y no garantiza financiamiento, contratación ni resultados económicos.',
       activeSection: 'centro-apoyo-principal',
       activeViewId: 'support-center-home',
       activeViewTitle: 'Centro de Apoyo al Emprendedor',
@@ -32,6 +32,7 @@ export default function CentroApoyoEmprendedorPage() {
         'presentacion',
         'instituciones-programas',
         'profesionales-asesores',
+        'capacitacion-gratuita',
         'guia-practica',
         'aviso-responsabilidad',
       ],
@@ -39,12 +40,14 @@ export default function CentroApoyoEmprendedorPage() {
         'Volver al Espacio Emprendedor',
         'Ver instituciones y programas',
         'Buscar profesionales asesores',
+        'Explorar capacitación gratuita',
         'Abrir guía práctica',
       ],
       availableActions: [
         'Volver al Espacio Emprendedor',
         'Ver instituciones y programas',
         'Buscar profesionales asesores',
+        'Explorar capacitación gratuita',
         'Abrir guía práctica',
       ],
       visibleText: visibleParts.join('\n'),
@@ -68,11 +71,16 @@ export default function CentroApoyoEmprendedorPage() {
         },
         {
           id: 'ee-apoyo-4',
+          label: 'Capacitación',
+          question: '¿Dónde puedo encontrar cursos gratuitos para emprendedores?',
+        },
+        {
+          id: 'ee-apoyo-5',
           label: 'Preparar proyecto',
           question: '¿Dónde encuentro una guía para preparar mejor mi proyecto?',
         },
         {
-          id: 'ee-apoyo-5',
+          id: 'ee-apoyo-6',
           label: 'Responsabilidad',
           question: '¿Voto Claro garantiza financiamiento o contratación profesional?',
         },
@@ -81,11 +89,16 @@ export default function CentroApoyoEmprendedorPage() {
         supportCenterVisible: true,
         canOpenInstitutionsSupport: true,
         canOpenProfessionalAdvisors: true,
+        canOpenTrainingCenter: true,
         canOpenProjectGuide: true,
+        institutionsRoute: '/espacio-emprendedor/apoyo/instituciones',
+        professionalsRoute: '/espacio-emprendedor/apoyo/profesionales',
+        trainingRoute: '/espacio-emprendedor/apoyo/capacitacion',
+        guideRoute: '/espacio-emprendedor/apoyo/guia',
         disclaimer:
           'Voto Claro muestra información orientativa y espacios de contacto, pero no garantiza financiamiento, contratación profesional ni resultados económicos.',
       },
-      contextVersion: 'ee-apoyo-v1',
+      contextVersion: 'ee-apoyo-v2-capacitacion',
     });
 
     return () => {
@@ -96,7 +109,7 @@ export default function CentroApoyoEmprendedorPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
       <div className="max-w-5xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
           <h1 className="text-3xl font-bold text-slate-900">
             Centro de Apoyo al Emprendedor
           </h1>
@@ -110,14 +123,15 @@ export default function CentroApoyoEmprendedorPage() {
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm vc-fade-up">
+        <section className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm vc-fade-up">
           <p className="text-slate-700 text-lg font-semibold">
             🤝 Prepara mejor tu proyecto antes de buscar inversión, alianzas o apoyo profesional.
           </p>
 
           <p className="text-slate-600 text-sm mt-3">
             Este espacio reúne rutas de orientación para que un emprendedor pueda mejorar su idea,
-            revisar oportunidades externas, buscar asesoría y tomar decisiones con mayor cuidado.
+            revisar oportunidades externas, buscar asesoría, aprender mediante capacitación gratuita
+            y tomar decisiones con mayor cuidado.
           </p>
 
           <div className="mt-4 text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-300">
@@ -126,12 +140,15 @@ export default function CentroApoyoEmprendedorPage() {
             resultados económicos, rentabilidad ni cumplimiento de acuerdos. Cada usuario debe verificar
             requisitos, credenciales, costos y condiciones directamente con cada institución o profesional.
           </div>
-          <div className="mt-3 text-xs text-slate-700 bg-slate-50 border border-slate-300 rounded-lg p-3">
-  Los datos compartidos entre usuarios y profesionales serán utilizados únicamente para fines de contacto y coordinación de servicios dentro de la plataforma. Cada usuario es responsable de la información que decide compartir voluntariamente.
-</div>
-        </div>
 
-        <section className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="mt-3 text-xs text-slate-700 bg-slate-50 border border-slate-300 rounded-lg p-3">
+            Los datos compartidos entre usuarios y profesionales serán utilizados únicamente para fines
+            de contacto y coordinación de servicios dentro de la plataforma. Cada usuario es responsable
+            de la información que decide compartir voluntariamente.
+          </div>
+        </section>
+
+        <section className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           <div className="bg-white rounded-2xl border-2 border-indigo-600 p-6 shadow-sm vc-fade-up vc-card-hover">
             <div className="text-4xl mb-3">🏛️</div>
 
@@ -141,7 +158,7 @@ export default function CentroApoyoEmprendedorPage() {
 
             <p className="text-sm text-slate-600 mb-4">
               Revisa programas públicos, fondos concursables, incubadoras, aceleradoras,
-              universidades, cámaras de comercio u otras entidades que podrían brindar orientación o apoyo.
+              universidades, cámaras de comercio y otras entidades que pueden apoyar tu proyecto.
             </p>
 
             <button
@@ -161,8 +178,9 @@ export default function CentroApoyoEmprendedorPage() {
             </h2>
 
             <p className="text-sm text-slate-600 mb-4">
-              Encuentra orientación legal, contable, tributaria, financiera, comercial o de formulación
-              de proyectos. La contratación, honorarios y resultados dependen de las partes.
+              Encuentra asesoría legal, financiera, tributaria, comercial, contable
+              y de formulación de proyectos. La contratación, honorarios y resultados
+              dependen directamente de las partes.
             </p>
 
             <button
@@ -174,6 +192,27 @@ export default function CentroApoyoEmprendedorPage() {
             </button>
           </div>
 
+          <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm vc-fade-up vc-delay-2 vc-card-hover">
+            <div className="text-4xl mb-3">🎓</div>
+
+            <h2 className="text-xl font-bold text-slate-900 mb-2">
+              Capacitación gratuita
+            </h2>
+
+            <p className="text-sm text-slate-600 mb-4">
+              Cursos, talleres, videos, guías y materiales educativos compartidos
+              por profesionales registrados para fortalecer tus conocimientos como emprendedor.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => router.push('/espacio-emprendedor/apoyo/capacitacion')}
+              className="w-full rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 transition vc-btn-wave vc-btn-pulse"
+            >
+              Explorar capacitación →
+            </button>
+          </div>
+
           <div className="bg-white rounded-2xl border-2 border-amber-600 p-6 shadow-sm vc-fade-up vc-delay-2 vc-card-hover">
             <div className="text-4xl mb-3">📘</div>
 
@@ -182,8 +221,8 @@ export default function CentroApoyoEmprendedorPage() {
             </h2>
 
             <p className="text-sm text-slate-600 mb-4">
-              Aprende a ordenar una idea, preparar un resumen ejecutivo, calcular costos,
-              presentar un PDF serio y revisar puntos básicos antes de hablar con interesados.
+              Aprende a estructurar mejor tu proyecto antes de presentarlo a inversionistas,
+              aliados, instituciones o posibles colaboradores.
             </p>
 
             <button
@@ -196,7 +235,7 @@ export default function CentroApoyoEmprendedorPage() {
           </div>
         </section>
 
-        <div className="mt-6 bg-white rounded-2xl border-2 border-slate-300 p-5 shadow-sm">
+        <section className="mt-6 bg-white rounded-2xl border-2 border-slate-300 p-5 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900 mb-2">
             ¿Qué busca este centro?
           </h2>
@@ -207,15 +246,17 @@ export default function CentroApoyoEmprendedorPage() {
             </p>
 
             <p>
-              Reducir riesgos mediante información clara, documentación, orientación básica y acceso a asesoría externa.
+              Reducir riesgos mediante información clara, documentación, orientación básica,
+              capacitación gratuita y acceso a asesoría externa.
             </p>
 
             <p>
-              Recordar que cualquier decisión de inversión, contratación, alianza o firma de documentos debe ser evaluada
-              directamente por las partes y, cuando corresponda, con asesoría profesional independiente.
+              Recordar que cualquier decisión de inversión, contratación, alianza o firma de documentos
+              debe ser evaluada directamente por las partes y, cuando corresponda, con asesoría profesional
+              independiente.
             </p>
           </div>
-        </div>
+        </section>
       </div>
     </main>
   );

@@ -53,7 +53,8 @@ export async function GET(req: Request) {
 
     const { data: profile, error: profileError } = await admin
       .from('espacio_profesionales')
-      .select(`
+      .select(
+        `
         id,
         participant_id,
         codigo_profesional,
@@ -65,6 +66,10 @@ export async function GET(req: Request) {
         province,
         district,
         attention_mode,
+        service_mode,
+        service_mode_note,
+        educational_activities,
+        training_categories,
         experience_summary,
         public_message,
         document_url,
@@ -74,7 +79,8 @@ export async function GET(req: Request) {
         status,
         created_at,
         updated_at
-      `)
+      `
+      )
       .eq('participant_id', participant.id)
       .maybeSingle();
 
