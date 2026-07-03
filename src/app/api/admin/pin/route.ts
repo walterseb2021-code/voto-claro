@@ -1,6 +1,7 @@
 // src/app/api/admin/pin/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,12 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 

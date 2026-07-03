@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/adminAuth';
 
 const DEFAULT_MIN_SUPPORTS_REQUIRED = 100;
 
@@ -14,8 +15,13 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const gate = await requireAdmin(req);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
+    }
+
     const { projectId, impact, clarity, viability, sustainability, confirm } = await req.json();
 
     if (!projectId) {

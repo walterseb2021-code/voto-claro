@@ -1,7 +1,7 @@
 // src/app/api/admin/capacitaciones/update/route.ts
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
 
@@ -13,40 +13,11 @@ function cleanText(value: unknown, max = 1200) {
   return String(value || "").trim().slice(0, max);
 }
 
-async function assertAdminSession(req: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll() {
-          // No necesitamos escribir cookies en esta verificación.
-        },
-      },
-    }
-  );
-
-  const { data, error } = await supabase.auth.getUser();
-
-  if (error || !data?.user) {
-    return null;
-  }
-
-  return data.user;
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const user = await assertAdminSession(req);
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "No autorizado. Inicia sesión como administrador." },
-        { status: 401 }
-      );
+    const gate = await requireAdmin(req);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
 
     const body = await req.json();

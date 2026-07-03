@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/adminAuth";
 
 function supabaseAdmin() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -9,8 +10,13 @@ function supabaseAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
+    const gate = await requireAdmin(req);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
+    }
+
     const { searchParams } = new URL(req.url);
     const table = String(searchParams.get("table") ?? "").trim();
     if (!table) return NextResponse.json({ error: "TABLE_REQUIRED" }, { status: 400 });
