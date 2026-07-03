@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isConfiguredAdminEmail } from "@/lib/adminAuth";
 
 // POST /api/admin/session
 // Body: { access_token, refresh_token }
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Respuesta que vamos a devolver (aquí se “pegan” cookies en setAll)
-    const res = NextResponse.json({ ok: true }, { status: 200 });
+    let res: NextResponse = NextResponse.json({ ok: true }, { status: 200 });
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,6 +46,21 @@ export async function POST(req: NextRequest) {
         { error: "SET_SESSION_FAILED", detail: error.message },
         { status: 401 }
       );
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const user = userData?.user;
+
+    if (userError || !user) {
+      res = NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+      await supabase.auth.signOut();
+      return res;
+    }
+
+    if (!isConfiguredAdminEmail(user.email)) {
+      res = NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+      await supabase.auth.signOut();
+      return res;
     }
 
     return res;
