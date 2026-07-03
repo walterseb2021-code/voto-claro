@@ -28,8 +28,11 @@ export default function AdminHubPage() {
   const [checking, setChecking] = useState(true);
   const [devices, setDevices] = useState<Device[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [secretKey, setSecretKey] = useState('');
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [secretKey, setSecretKey] = useState("");
   const [showSecretInput, setShowSecretInput] = useState(false);
 
   const supabase = useMemo(() => {
@@ -38,13 +41,13 @@ export default function AdminHubPage() {
     return createClient(url, key);
   }, []);
 
-  // Verificar sesión al cargar
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
         const { data } = await supabase.auth.getSession();
+
         if (!alive) return;
 
         if (!data?.session) {
@@ -61,151 +64,155 @@ export default function AdminHubPage() {
     };
   }, [router, supabase.auth]);
 
-  // Cargar dispositivos - VERSIÓN CORREGIDA (con manejo de error tipo unknown)
-const loadDevices = async () => {
-  setLoadingDevices(true);
-  setMessage(null);
-
-  try {
-    // 1. Obtener todos los participantes
-    const { data: participants, error } = await supabase
-      .from('comment_access_participants')
-      .select(`
-        device_id,
-        created_at,
-        email,
-        celular,
-        forum_alias
-      `)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) throw error;
-
-    if (!participants || participants.length === 0) {
-      setDevices([]);
-      return;
-    }
-
-    // 2. Para cada dispositivo, obtener sus conteos por separado
-    const devicesWithCounts = await Promise.all(
-      participants.map(async (p) => {
-        // Conteo de intención de voto
-        const { count: voteCount } = await supabase
-          .from('vote_intention_answers')
-          .select('*', { count: 'exact', head: true })
-          .eq('device_id', p.device_id);
-
-        // Conteo de comentarios en foros
-        const { count: commentCount } = await supabase
-          .from('archived_topic_forum_comments')
-          .select('*', { count: 'exact', head: true })
-          .eq('device_id', p.device_id);
-
-        // Conteo de ganadores del reto
-        const { count: retoCount } = await supabase
-          .from('reto_ganadores')
-          .select('*', { count: 'exact', head: true })
-          .eq('device_id', p.device_id);
-
-        return {
-          ...p,
-          vote_intention_answers: [{ count: voteCount || 0 }],
-          archived_topic_forum_comments: [{ count: commentCount || 0 }],
-          reto_ganadores: [{ count: retoCount || 0 }]
-        };
-      })
-    );
-
-    setDevices(devicesWithCounts);
-  } catch (err) {
-    // CORRECCIÓN: Manejar error de tipo unknown
-    const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
-    console.error('Error cargando dispositivos:', err);
-    setMessage({ type: 'error', text: 'Error al cargar dispositivos: ' + errorMessage });
-  } finally {
-    setLoadingDevices(false);
-  }
-};
-
-  // Resetear un dispositivo específico
-  const resetDevice = async (deviceId: string) => {
-    if (!confirm(`¿Estás seguro de resetear el dispositivo ${deviceId}?\n\nEsto eliminará:\n- Respuestas de intención de voto\n- Comentarios en foros\n- Registro de acceso\n- Datos del reto ciudadano`)) {
-      return;
-    }
-
+  const loadDevices = async () => {
+    setLoadingDevices(true);
     setMessage(null);
 
     try {
-      // 1. Eliminar respuestas de intención de voto
-      await supabase
-        .from('vote_intention_answers')
-        .delete()
-        .eq('device_id', deviceId);
+      const { data: participants, error } = await supabase
+        .from("comment_access_participants")
+        .select(
+          `
+          device_id,
+          created_at,
+          email,
+          celular,
+          forum_alias
+        `
+        )
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-      // 2. Eliminar comentarios en foros
-      await supabase
-        .from('archived_topic_forum_comments')
-        .delete()
-        .eq('device_id', deviceId);
+      if (error) throw error;
 
-      // 3. Eliminar ganadores del reto
-      await supabase
-        .from('reto_ganadores')
-        .delete()
-        .eq('device_id', deviceId);
+      if (!participants || participants.length === 0) {
+        setDevices([]);
+        return;
+      }
 
-      // 4. Eliminar registro de acceso (este es el principal)
-      await supabase
-        .from('comment_access_participants')
-        .delete()
-        .eq('device_id', deviceId);
+      const devicesWithCounts = await Promise.all(
+        participants.map(async (p) => {
+          const { count: voteCount } = await supabase
+            .from("vote_intention_answers")
+            .select("*", { count: "exact", head: true })
+            .eq("device_id", p.device_id);
 
-      setMessage({ type: 'success', text: `✅ Dispositivo ${deviceId.slice(0, 8)}... reseteado correctamente` });
-      
-      // Recargar lista
-      loadDevices();
-    } catch (error) {
-      console.error('Error resetando dispositivo:', error);
-      setMessage({ type: 'error', text: 'Error al resetear dispositivo' });
+          const { count: commentCount } = await supabase
+            .from("archived_topic_forum_comments")
+            .select("*", { count: "exact", head: true })
+            .eq("device_id", p.device_id);
+
+          const { count: retoCount } = await supabase
+            .from("reto_ganadores")
+            .select("*", { count: "exact", head: true })
+            .eq("device_id", p.device_id);
+
+          return {
+            ...p,
+            vote_intention_answers: [{ count: voteCount || 0 }],
+            archived_topic_forum_comments: [{ count: commentCount || 0 }],
+            reto_ganadores: [{ count: retoCount || 0 }],
+          };
+        })
+      );
+
+      setDevices(devicesWithCounts);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Error desconocido";
+      console.error("Error cargando dispositivos:", err);
+      setMessage({
+        type: "error",
+        text: "Error al cargar dispositivos: " + errorMessage,
+      });
+    } finally {
+      setLoadingDevices(false);
     }
   };
 
-  // Resetear TODOS los datos de prueba
-  const resetAllTest = async () => {
-    if (!secretKey) {
-      setMessage({ type: 'error', text: 'Debes ingresar la clave secreta' });
-      return;
-    }
-
-    if (!confirm('⚠️ ¿Resetear TODOS los datos de prueba?\n\nEsto eliminará:\n- TODAS las respuestas de intención de voto\n- TODOS los comentarios en foros\n- TODOS los registros de acceso\n- TODOS los ganadores del reto\n\nEsta acción NO SE PUEDE DESHACER.')) {
+  const resetDevice = async (deviceId: string) => {
+    if (
+      !confirm(
+        `¿Estás seguro de resetear el dispositivo ${deviceId}?\n\nEsto eliminará:\n- Respuestas de intención de voto\n- Comentarios en foros\n- Registro de acceso\n- Datos del reto ciudadano`
+      )
+    ) {
       return;
     }
 
     setMessage(null);
 
     try {
-      // Llamar a la API que crearemos
-      const res = await fetch('/api/admin/reset-all-test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secretKey })
+      await supabase
+        .from("vote_intention_answers")
+        .delete()
+        .eq("device_id", deviceId);
+
+      await supabase
+        .from("archived_topic_forum_comments")
+        .delete()
+        .eq("device_id", deviceId);
+
+      await supabase
+        .from("reto_ganadores")
+        .delete()
+        .eq("device_id", deviceId);
+
+      await supabase
+        .from("comment_access_participants")
+        .delete()
+        .eq("device_id", deviceId);
+
+      setMessage({
+        type: "success",
+        text: `✅ Dispositivo ${deviceId.slice(0, 8)}... reseteado correctamente`,
+      });
+
+      loadDevices();
+    } catch (error) {
+      console.error("Error resetando dispositivo:", error);
+      setMessage({ type: "error", text: "Error al resetear dispositivo" });
+    }
+  };
+
+  const resetAllTest = async () => {
+    if (!secretKey) {
+      setMessage({ type: "error", text: "Debes ingresar la clave secreta" });
+      return;
+    }
+
+    if (
+      !confirm(
+        "⚠️ ¿Resetear TODOS los datos de prueba?\n\nEsto eliminará:\n- TODAS las respuestas de intención de voto\n- TODOS los comentarios en foros\n- TODOS los registros de acceso\n- TODOS los ganadores del reto\n\nEsta acción NO SE PUEDE DESHACER."
+      )
+    ) {
+      return;
+    }
+
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/admin/reset-all-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secretKey }),
       });
 
       const data = await res.json();
 
       if (data.success) {
-        setMessage({ type: 'success', text: '✅ Todos los datos de prueba fueron reseteados' });
-        loadDevices(); // Recargar lista (debería estar vacía)
+        setMessage({
+          type: "success",
+          text: "✅ Todos los datos de prueba fueron reseteados",
+        });
+        loadDevices();
       } else {
-        setMessage({ type: 'error', text: `❌ Error: ${data.error}` });
+        setMessage({ type: "error", text: `❌ Error: ${data.error}` });
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '❌ Error de conexión' });
+      setMessage({ type: "error", text: "❌ Error de conexión" });
     }
   };
 
-  // Cargar dispositivos al montar
   useEffect(() => {
     if (!checking) {
       loadDevices();
@@ -261,36 +268,41 @@ const loadDevices = async () => {
           <Link href="/" className={btnSm}>
             🏠 Inicio
           </Link>
+
           <button type="button" onClick={goBack} className={btnSm}>
             ← Volver
           </button>
         </div>
       </div>
 
-      {/* MENSAJES */}
       {message && (
-        <div className={`mt-4 p-3 rounded-lg border ${
-          message.type === 'success' 
-            ? 'bg-green-100 border-green-400 text-green-800' 
-            : 'bg-red-100 border-red-400 text-red-800'
-        }`}>
+        <div
+          className={`mt-4 p-3 rounded-lg border ${
+            message.type === "success"
+              ? "bg-green-100 border-green-400 text-green-800"
+              : "bg-red-100 border-red-400 text-red-800"
+          }`}
+        >
           {message.text}
         </div>
       )}
 
-      {/* SECCIÓN DE NAVEGACIÓN PRINCIPAL (tus cards existentes) */}
       <section className={sectionWrap}>
         <div className={inner}>
           <div className="text-sm font-extrabold text-slate-900">
             Panel único de administración
           </div>
+
           <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-            Desde aquí controlas módulos proactivos y (pronto) los tokens GRUPOA/B/C/D/E en Supabase.
+            Desde aquí controlas módulos proactivos, participación ciudadana,
+            Espacio Emprendedor, capacitaciones, tokens y datos de prueba.
           </div>
 
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">🔴 Cambio con Valentía</div>
+              <div className="text-sm font-extrabold text-slate-900">
+                🔴 Cambio con Valentía
+              </div>
               <div className="mt-1 text-xs text-slate-600">
                 Videos EN VIVO, historial y borrado (Supabase).
               </div>
@@ -300,15 +312,21 @@ const loadDevices = async () => {
             </div>
 
             <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">📊 Intención de Voto</div>
-              <div className="mt-1 text-xs text-slate-600">Crear/activar/cerrar rondas.</div>
+              <div className="text-sm font-extrabold text-slate-900">
+                📊 Intención de Voto
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Crear/activar/cerrar rondas.
+              </div>
               <Link href="/admin/vote-rounds" className={btn + " mt-3 w-full"}>
                 Abrir Admin Rondas
               </Link>
             </div>
 
             <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">🎯 Reto Ciudadano</div>
+              <div className="text-sm font-extrabold text-slate-900">
+                🎯 Reto Ciudadano
+              </div>
               <div className="mt-1 text-xs text-slate-600">
                 Gestión de preguntas, niveles y control.
               </div>
@@ -318,7 +336,9 @@ const loadDevices = async () => {
             </div>
 
             <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">💬 Comentarios Ciudadanos</div>
+              <div className="text-sm font-extrabold text-slate-900">
+                💬 Comentarios Ciudadanos
+              </div>
               <div className="mt-1 text-xs text-slate-600">
                 Moderación, modo anónimo, filtro anti-lisuras.
               </div>
@@ -338,8 +358,11 @@ const loadDevices = async () => {
                 Abrir Admin Tokens
               </Link>
             </div>
-                            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">👥 Afiliados APP</div>
+
+            <div className={card}>
+              <div className="text-sm font-extrabold text-slate-900">
+                👥 Afiliados APP
+              </div>
               <div className="mt-1 text-xs text-slate-600">
                 Gestionar afiliados manualmente para Espacio Emprendedor.
               </div>
@@ -347,30 +370,48 @@ const loadDevices = async () => {
                 Abrir Admin Afiliados
               </Link>
             </div>
-            <div className={card}>
-  <div className="text-sm font-extrabold text-slate-900">🏘️ Proyecto Ciudadano</div>
-  <div className="mt-1 text-xs text-slate-600">
-    Revisar y aprobar proyectos presentados por ciudadanos.
-  </div>
-  <Link href="/admin/proyectos" className={btn + " mt-3 w-full"}>
-    Abrir Admin Proyectos
-  </Link>
-</div>
 
-       <div className={card}>
-  <div className="text-sm font-extrabold text-slate-900">🏆 Solo para ganadores</div>
-  <div className="mt-1 text-xs text-slate-600">
-    Gestionar ganadores, evento del semestre, fotos, videos, entrevistas y reconocimientos.
-  </div>
-  <Link href="/admin/solo-ganadores" className={btn + " mt-3 w-full"}>
-    Abrir Admin Ganadores
-  </Link>
-</div>
+            <div className={card}>
+              <div className="text-sm font-extrabold text-slate-900">
+                🏘️ Proyecto Ciudadano
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Revisar y aprobar proyectos presentados por ciudadanos.
+              </div>
+              <Link href="/admin/proyectos" className={btn + " mt-3 w-full"}>
+                Abrir Admin Proyectos
+              </Link>
+            </div>
+
+            <div className={card}>
+              <div className="text-sm font-extrabold text-slate-900">
+                🏆 Solo para ganadores
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Gestionar ganadores, evento del semestre, fotos, videos,
+                entrevistas y reconocimientos.
+              </div>
+              <Link href="/admin/solo-ganadores" className={btn + " mt-3 w-full"}>
+                Abrir Admin Ganadores
+              </Link>
+            </div>
+
+            <div className={card}>
+              <div className="text-sm font-extrabold text-slate-900">
+                📚 Capacitaciones
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Revisar, aprobar, observar, desactivar o reactivar cursos,
+                talleres, videos y materiales publicados por profesionales.
+              </div>
+              <Link href="/admin/capacitaciones" className={btn + " mt-3 w-full"}>
+                Abrir Admin Capacitaciones
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ========== NUEVA SECCIÓN: RESET DE DATOS DE PRUEBA ========== */}
       <section className={sectionWrap + " mt-6"}>
         <div className={inner}>
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -389,24 +430,24 @@ const loadDevices = async () => {
                 className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-700"
                 disabled={loadingDevices}
               >
-                {loadingDevices ? 'Cargando...' : '↻ Refrescar'}
+                {loadingDevices ? "Cargando..." : "↻ Refrescar"}
               </button>
-              
+
               <button
                 onClick={() => setShowSecretInput(!showSecretInput)}
                 className="bg-yellow-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-yellow-700"
               >
-                {showSecretInput ? 'Ocultar' : 'Reset Masivo'}
+                {showSecretInput ? "Ocultar" : "Reset Masivo"}
               </button>
             </div>
           </div>
 
-          {/* Reset Masivo (requiere clave) */}
           {showSecretInput && (
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
               <label className="block text-xs font-bold mb-1">
                 Clave Secreta:
               </label>
+
               <div className="flex gap-2">
                 <input
                   type="password"
@@ -415,6 +456,7 @@ const loadDevices = async () => {
                   className="flex-1 border rounded px-3 py-2 text-sm"
                   placeholder="Ingresa la clave de admin"
                 />
+
                 <button
                   onClick={resetAllTest}
                   className="bg-red-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-red-700"
@@ -422,16 +464,16 @@ const loadDevices = async () => {
                   ⚠️ Resetear TODO
                 </button>
               </div>
+
               <p className="text-xs text-slate-600 mt-2">
                 Esta acción eliminará TODOS los datos de prueba de todas las tablas.
               </p>
             </div>
           )}
 
-          {/* Lista de dispositivos */}
           <div className="mt-4">
             <h3 className="text-sm font-bold mb-2">📱 Dispositivos registrados</h3>
-            
+
             {loadingDevices ? (
               <div className="text-sm text-slate-600">Cargando dispositivos...</div>
             ) : devices.length === 0 ? (
@@ -453,16 +495,15 @@ const loadDevices = async () => {
                       <th className="p-2 text-center">Acción</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {devices.map((d) => (
                       <tr key={d.device_id} className="border-t hover:bg-slate-50">
                         <td className="p-2 font-mono text-xs">
                           {d.device_id.slice(0, 8)}...
                         </td>
-                        <td className="p-2">
-                          {d.email || d.celular || '-'}
-                        </td>
-                        <td className="p-2">{d.forum_alias || '-'}</td>
+                        <td className="p-2">{d.email || d.celular || "-"}</td>
+                        <td className="p-2">{d.forum_alias || "-"}</td>
                         <td className="p-2 text-xs">
                           {new Date(d.created_at).toLocaleDateString()}
                         </td>
@@ -493,7 +534,8 @@ const loadDevices = async () => {
           </div>
 
           <div className="mt-4 text-xs text-slate-500">
-            * Al resetear un dispositivo, se eliminan sus datos de: Intención de Voto, Comentarios y Reto Ciudadano.
+            * Al resetear un dispositivo, se eliminan sus datos de: Intención de
+            Voto, Comentarios y Reto Ciudadano.
           </div>
         </div>
       </section>
