@@ -1,13 +1,28 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    if (process.env.VERCEL_ENV === 'production') {
+      return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    }
+
+    const gate = await requireAdmin(request)
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status })
+    }
+
+    const configuredSecret = process.env.ADMIN_SECRET_KEY
+    if (!configuredSecret || configuredSecret.trim().length === 0) {
+      return NextResponse.json({ error: 'Reset no configurado' }, { status: 403 })
+    }
+
     const { secretKey } = await request.json()
-    
+
     // Validar clave secreta (debe estar en .env.local)
-    if (secretKey !== process.env.ADMIN_SECRET_KEY) {
+    if (typeof secretKey !== 'string' || secretKey.length === 0 || secretKey !== configuredSecret) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
