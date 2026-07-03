@@ -342,7 +342,7 @@ export default function AdminProyectosPage() {
                           )}
 
                           <Link
-                            href={`/proyecto-ciudadano/proyectos/${project.id}`}
+                            href={`/admin/proyectos/${project.id}`}
                             className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
                           >
                             Ver detalles
@@ -363,7 +363,7 @@ export default function AdminProyectosPage() {
                             ❌ Rechazar
                           </button>
                           <Link
-                            href={`/proyecto-ciudadano/proyectos/${project.id}`}
+                            href={`/admin/proyectos/${project.id}`}
                             className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
                           >
                             Ver detalles
