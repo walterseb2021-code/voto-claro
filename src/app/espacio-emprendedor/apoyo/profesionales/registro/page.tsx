@@ -143,6 +143,25 @@ type ProfessionalConversation = {
   messages: ProfessionalConversationMessage[];
 };
 
+type TrainingPublication = {
+  id: string;
+  professional_id: string;
+  participant_id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  resource_type: string;
+  resource_url: string;
+  is_free: boolean;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  admin_note: string | null;
+  reviewed_at: string | null;
+  rejected_reason: string | null;
+  updated_by_admin: boolean;
+};
+
 function toggleValue(list: string[], value: string) {
   return list.includes(value)
     ? list.filter((item) => item !== value)
@@ -158,6 +177,22 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-PE', {
     timeZone: 'America/Lima',
   });
+}
+
+function getTrainingStatusLabel(status: string) {
+  if (status === 'active') return 'Activo / visible';
+  if (status === 'pending') return 'En revisión';
+  if (status === 'inactive') return 'Inactivo';
+  if (status === 'rejected') return 'Observado';
+  return status || 'Sin estado';
+}
+
+function getTrainingStatusClass(status: string) {
+  if (status === 'active') return 'bg-green-100 text-green-800 border-green-300';
+  if (status === 'pending') return 'bg-amber-100 text-amber-800 border-amber-300';
+  if (status === 'inactive') return 'bg-slate-100 text-slate-700 border-slate-300';
+  if (status === 'rejected') return 'bg-red-100 text-red-800 border-red-300';
+  return 'bg-slate-100 text-slate-700 border-slate-300';
 }
 
 export default function RegistroProfesionalPage() {
@@ -186,6 +221,21 @@ export default function RegistroProfesionalPage() {
   const [trainingError, setTrainingError] = useState<string | null>(null);
 
   const [trainingForm, setTrainingForm] = useState({
+    title: '',
+    category: TRAINING_CATEGORIES[0],
+    resource_type: 'Video educativo',
+    resource_url: '',
+    description: '',
+  });
+
+  const [myTrainings, setMyTrainings] = useState<TrainingPublication[]>([]);
+  const [loadingMyTrainings, setLoadingMyTrainings] = useState(false);
+  const [myTrainingsError, setMyTrainingsError] = useState<string | null>(null);
+  const [trainingActionMessage, setTrainingActionMessage] = useState<string | null>(null);
+  const [editingTrainingId, setEditingTrainingId] = useState<string | null>(null);
+  const [updatingTraining, setUpdatingTraining] = useState(false);
+  const [deactivatingTrainingId, setDeactivatingTrainingId] = useState<string | null>(null);
+  const [editTrainingForm, setEditTrainingForm] = useState({
     title: '',
     category: TRAINING_CATEGORIES[0],
     resource_type: 'Video educativo',
@@ -243,6 +293,39 @@ export default function RegistroProfesionalPage() {
       setMessagesError(err.message || 'No se pudieron cargar los mensajes.');
     } finally {
       setLoadingMessages(false);
+    }
+  };
+
+  const loadMyTrainings = async () => {
+    const deviceId = getDeviceId();
+
+    if (!deviceId) return;
+
+    setLoadingMyTrainings(true);
+    setMyTrainingsError(null);
+
+    try {
+      const res = await fetch(
+        `/api/espacio-emprendedor/capacitaciones/mine?device_id=${encodeURIComponent(deviceId)}`,
+        {
+          cache: 'no-store',
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'No se pudieron cargar tus capacitaciones.');
+      }
+
+      setMyTrainings(data?.capacitaciones || []);
+    } catch (err: any) {
+      console.error('Error cargando mis capacitaciones:', err);
+      setMyTrainingsError(
+        err.message || 'No se pudieron cargar tus capacitaciones publicadas.'
+      );
+    } finally {
+      setLoadingMyTrainings(false);
     }
   };
 
@@ -348,6 +431,7 @@ export default function RegistroProfesionalPage() {
           });
 
           await loadProfessionalMessages();
+          await loadMyTrainings();
         } else {
           setExistingProfile(null);
           setCodigoProfesional(null);
@@ -403,6 +487,9 @@ export default function RegistroProfesionalPage() {
       trainingForm.title
         ? `Título de capacitación en edición: ${trainingForm.title}.`
         : 'No hay título de capacitación en edición.',
+      myTrainings.length
+        ? `Capacitaciones publicadas por este profesional: ${myTrainings.length}.`
+        : 'No hay capacitaciones publicadas por este profesional visibles en esta pantalla.',
     ];
 
     if (saving) visibleParts.push('La ficha profesional se está guardando.');
@@ -453,6 +540,7 @@ export default function RegistroProfesionalPage() {
         'experiencia',
         'documento-respaldo',
         'declaraciones',
+        'mis-capacitaciones-publicadas',
         'publicar-capacitacion-gratuita',
       ],
       visibleActions: [
@@ -464,6 +552,8 @@ export default function RegistroProfesionalPage() {
         'Configurar actividades educativas',
         'Seleccionar categorías de capacitación',
         'Publicar capacitación gratuita',
+        'Editar capacitación publicada',
+        'Desactivar capacitación publicada',
       ],
       availableActions: [
         'Volver a profesionales',
@@ -474,6 +564,8 @@ export default function RegistroProfesionalPage() {
         'Configurar actividades educativas',
         'Seleccionar categorías de capacitación',
         'Publicar capacitación gratuita',
+        'Editar capacitación publicada',
+        'Desactivar capacitación publicada',
       ],
       visibleText: visibleParts.join('\n'),
       selectedItemTitle: form.public_name || codigoProfesional || undefined,
@@ -526,6 +618,13 @@ export default function RegistroProfesionalPage() {
         trainingPublicationAllowed: !!existingProfile,
         trainingPublicationCategory: trainingForm.category,
         trainingPublicationType: trainingForm.resource_type,
+        myTrainingsCount: myTrainings.length,
+        loadingMyTrainings,
+        myTrainingsError: myTrainingsError || null,
+        editingTrainingId: editingTrainingId || null,
+        updatingTraining,
+        deactivatingTrainingId: deactivatingTrainingId || null,
+        trainingActionMessage: trainingActionMessage || null,
         professionalConversationsCount: conversations.length,
         professionalMessagesLoading: loadingMessages,
         professionalMessagesError: messagesError || null,
@@ -562,6 +661,13 @@ export default function RegistroProfesionalPage() {
     codigoProfesional,
     form,
     trainingForm,
+    myTrainings.length,
+    loadingMyTrainings,
+    myTrainingsError,
+    editingTrainingId,
+    updatingTraining,
+    deactivatingTrainingId,
+    trainingActionMessage,
     filledFields,
     missingFields,
     pdfFile,
@@ -589,6 +695,151 @@ export default function RegistroProfesionalPage() {
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handleEditTrainingChange = (
+    field: keyof typeof editTrainingForm,
+    value: string
+  ) => {
+    setEditTrainingForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleStartEditTraining = (training: TrainingPublication) => {
+    setTrainingActionMessage(null);
+    setMyTrainingsError(null);
+    setEditingTrainingId(training.id);
+    setEditTrainingForm({
+      title: training.title || '',
+      category: training.category || TRAINING_CATEGORIES[0],
+      resource_type: training.resource_type || 'Video educativo',
+      resource_url: training.resource_url || '',
+      description: training.description || '',
+    });
+  };
+
+  const handleCancelEditTraining = () => {
+    setEditingTrainingId(null);
+    setEditTrainingForm({
+      title: '',
+      category: TRAINING_CATEGORIES[0],
+      resource_type: 'Video educativo',
+      resource_url: '',
+      description: '',
+    });
+  };
+
+  const handleUpdateTraining = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMyTrainingsError(null);
+    setTrainingActionMessage(null);
+
+    if (!editingTrainingId) {
+      setMyTrainingsError('No se pudo identificar la capacitación que deseas editar.');
+      return;
+    }
+
+    if (!editTrainingForm.title.trim() || editTrainingForm.title.trim().length < 4) {
+      setMyTrainingsError('Debes indicar un título válido para la capacitación.');
+      return;
+    }
+
+    if (!editTrainingForm.resource_url.trim().startsWith('http://') &&
+        !editTrainingForm.resource_url.trim().startsWith('https://')) {
+      setMyTrainingsError('Debes pegar un enlace válido que empiece con http:// o https://.');
+      return;
+    }
+
+    const deviceId = getDeviceId();
+
+    if (!deviceId) {
+      setMyTrainingsError('No se pudo identificar tu sesión. Inicia sesión nuevamente.');
+      return;
+    }
+
+    setUpdatingTraining(true);
+
+    try {
+      const res = await fetch('/api/espacio-emprendedor/capacitaciones/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_id: deviceId,
+          capacitacion_id: editingTrainingId,
+          title: editTrainingForm.title,
+          description: editTrainingForm.description,
+          category: editTrainingForm.category,
+          resource_type: editTrainingForm.resource_type,
+          resource_url: editTrainingForm.resource_url,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'No se pudo actualizar la capacitación.');
+      }
+
+      setTrainingActionMessage(data?.message || 'Capacitación actualizada correctamente.');
+      setEditingTrainingId(null);
+      await loadMyTrainings();
+    } catch (err: any) {
+      console.error('Error actualizando capacitación:', err);
+      setMyTrainingsError(err.message || 'No se pudo actualizar la capacitación.');
+    } finally {
+      setUpdatingTraining(false);
+    }
+  };
+
+  const handleDeactivateTraining = async (training: TrainingPublication) => {
+    const confirmed = window.confirm(
+      `¿Deseas desactivar esta capacitación?\n\n${training.title}\n\nYa no aparecerá en la página pública de capacitación.`
+    );
+
+    if (!confirmed) return;
+
+    const deviceId = getDeviceId();
+
+    if (!deviceId) {
+      setMyTrainingsError('No se pudo identificar tu sesión. Inicia sesión nuevamente.');
+      return;
+    }
+
+    setMyTrainingsError(null);
+    setTrainingActionMessage(null);
+    setDeactivatingTrainingId(training.id);
+
+    try {
+      const res = await fetch('/api/espacio-emprendedor/capacitaciones/deactivate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_id: deviceId,
+          capacitacion_id: training.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'No se pudo desactivar la capacitación.');
+      }
+
+      setTrainingActionMessage(data?.message || 'Capacitación desactivada correctamente.');
+
+      if (editingTrainingId === training.id) {
+        handleCancelEditTraining();
+      }
+
+      await loadMyTrainings();
+    } catch (err: any) {
+      console.error('Error desactivando capacitación:', err);
+      setMyTrainingsError(err.message || 'No se pudo desactivar la capacitación.');
+    } finally {
+      setDeactivatingTrainingId(null);
+    }
   };
 
   const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -795,6 +1046,9 @@ export default function RegistroProfesionalPage() {
         description: '',
         resource_url: '',
       }));
+
+
+      await loadMyTrainings();
     } catch (err: any) {
       console.error('Error publicando capacitación:', err);
       setTrainingError(err.message || 'No se pudo publicar la capacitación.');
@@ -1423,6 +1677,249 @@ export default function RegistroProfesionalPage() {
               : 'Registrar ficha profesional'}
           </button>
         </form>
+
+        <section className="mt-6 bg-white rounded-2xl border-2 border-indigo-600 p-6 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
+                📚 Mis capacitaciones publicadas
+              </h2>
+
+              <p className="text-sm text-slate-600">
+                Administra los cursos, talleres, videos, guías o materiales que ya publicaste.
+                Puedes corregir el título, cambiar la categoría, actualizar el enlace o desactivar
+                una publicación para que deje de mostrarse al público.
+              </p>
+            </div>
+
+            {existingProfile && (
+              <button
+                type="button"
+                onClick={loadMyTrainings}
+                disabled={loadingMyTrainings}
+                className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800 transition disabled:opacity-50"
+              >
+                {loadingMyTrainings ? 'Actualizando...' : 'Actualizar lista'}
+              </button>
+            )}
+          </div>
+
+          {!existingProfile ? (
+            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              Primero guarda tu ficha profesional. Después podrás ver y administrar tus
+              capacitaciones publicadas.
+            </div>
+          ) : (
+            <div className="mt-5 space-y-4">
+              {trainingActionMessage && (
+                <div className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+                  {trainingActionMessage}
+                </div>
+              )}
+
+              {myTrainingsError && (
+                <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                  {myTrainingsError}
+                </div>
+              )}
+
+              {loadingMyTrainings ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  Cargando tus capacitaciones publicadas...
+                </div>
+              ) : myTrainings.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  Todavía no has publicado capacitaciones gratuitas. Usa el formulario inferior
+                  para registrar tu primer curso, taller, video o material.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {myTrainings.map((training) => {
+                    const isEditing = editingTrainingId === training.id;
+                    const isInactive = training.status === 'inactive';
+
+                    return (
+                      <article
+                        key={training.id}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                          <div>
+                            <h3 className="font-bold text-slate-900">
+                              {training.title}
+                            </h3>
+
+                            <p className="text-xs text-slate-500 mt-1">
+                              {training.category} · {training.resource_type} · Actualizado: {formatDate(training.updated_at)}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`inline-flex w-fit rounded-full border px-3 py-1 text-xs font-bold ${getTrainingStatusClass(
+                              training.status
+                            )}`}
+                          >
+                            {getTrainingStatusLabel(training.status)}
+                          </span>
+                        </div>
+
+                        {training.description && (
+                          <p className="mt-3 text-sm text-slate-700">
+                            {training.description}
+                          </p>
+                        )}
+
+                        {training.admin_note && (
+                          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                            <strong>Nota de administración:</strong> {training.admin_note}
+                          </div>
+                        )}
+
+                        {training.rejected_reason && (
+                          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900">
+                            <strong>Observación:</strong> {training.rejected_reason}
+                          </div>
+                        )}
+
+                        {isEditing ? (
+                          <form onSubmit={handleUpdateTraining} className="mt-4 space-y-4 rounded-xl border border-indigo-200 bg-white p-4">
+                            <div>
+                              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                Título *
+                              </label>
+
+                              <input
+                                type="text"
+                                value={editTrainingForm.title}
+                                onChange={(e) => handleEditTrainingChange('title', e.target.value)}
+                                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                  Categoría *
+                                </label>
+
+                                <select
+                                  value={editTrainingForm.category}
+                                  onChange={(e) => handleEditTrainingChange('category', e.target.value)}
+                                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-indigo-500 focus:outline-none"
+                                >
+                                  {TRAINING_CATEGORIES.map((category) => (
+                                    <option key={category} value={category}>
+                                      {category}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                  Tipo de recurso *
+                                </label>
+
+                                <select
+                                  value={editTrainingForm.resource_type}
+                                  onChange={(e) => handleEditTrainingChange('resource_type', e.target.value)}
+                                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-indigo-500 focus:outline-none"
+                                >
+                                  {TRAINING_RESOURCE_TYPES.map((type) => (
+                                    <option key={type} value={type}>
+                                      {type}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                Enlace gratuito *
+                              </label>
+
+                              <input
+                                type="url"
+                                value={editTrainingForm.resource_url}
+                                onChange={(e) => handleEditTrainingChange('resource_url', e.target.value)}
+                                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                Descripción breve
+                              </label>
+
+                              <textarea
+                                value={editTrainingForm.description}
+                                onChange={(e) => handleEditTrainingChange('description', e.target.value)}
+                                rows={3}
+                                className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <button
+                                type="submit"
+                                disabled={updatingTraining}
+                                className="flex-1 rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800 transition disabled:opacity-50"
+                              >
+                                {updatingTraining ? 'Guardando cambios...' : 'Guardar cambios'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={handleCancelEditTraining}
+                                disabled={updatingTraining}
+                                className="flex-1 rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-300 transition disabled:opacity-50"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                            <a
+                              href={training.resource_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 rounded-xl bg-blue-700 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-blue-800 transition"
+                            >
+                              Ver recurso →
+                            </a>
+
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditTraining(training)}
+                              className="flex-1 rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800 transition"
+                            >
+                              Editar
+                            </button>
+
+                            {!isInactive && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeactivateTraining(training)}
+                                disabled={deactivatingTrainingId === training.id}
+                                className="flex-1 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 transition disabled:opacity-50"
+                              >
+                                {deactivatingTrainingId === training.id
+                                  ? 'Desactivando...'
+                                  : 'Desactivar'}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
 
         <section className="mt-6 bg-white rounded-2xl border-2 border-blue-600 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-2">
