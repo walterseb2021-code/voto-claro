@@ -8,6 +8,24 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: Request) {
   try {
+    if (process.env.VERCEL_ENV === 'production') {
+      return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+    }
+
+    const configuredSecret = process.env.ESPACIO_NOTIFY_SECRET;
+    if (!configuredSecret || configuredSecret.trim().length === 0) {
+      return NextResponse.json({ error: 'Notificación no configurada' }, { status: 403 });
+    }
+
+    const providedSecret = req.headers.get('x-espacio-notify-secret');
+    if (
+      typeof providedSecret !== 'string' ||
+      providedSecret.length === 0 ||
+      providedSecret !== configuredSecret
+    ) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const { projectTitle, category, department, investment_min, investment_max } = await req.json();
 
     const supabase = createClient(
@@ -105,9 +123,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      success: true,
-      matches: matches.length,
-      emailsSent,
+      ok: true,
+      matchedCount: matches.length,
+      sentCount: emailsSent.filter((item) => item.success).length,
     });
   } catch (error) {
     console.error('Error en notificación:', error);
