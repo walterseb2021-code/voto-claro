@@ -10,6 +10,8 @@ import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeCont
 
 type PlayMode = "sin_premio" | "con_premio";
 
+const PREMIO_ACTIVO = false;
+
 type CaminoWinner = {
   alias: string;
   created_at: string;
@@ -164,6 +166,8 @@ export default function CaminoCiudadanoPage() {
   }, [ganadoresFiltro]);
 
   async function registrarGanadorCamino() {
+    if (!PREMIO_ACTIVO) return;
+
     if (mode !== "con_premio") return;
 
     if (!participant) {
@@ -221,6 +225,13 @@ export default function CaminoCiudadanoPage() {
   }
 
   useEffect(() => {
+    if (!PREMIO_ACTIVO && mode === "con_premio") {
+      setMode("sin_premio");
+      setWinnerSaving(false);
+      setWinnerMessage(null);
+      return;
+    }
+
     const visibleParts: string[] = [];
 
     visibleParts.push("Bienvenido a Camino Ciudadano.");
@@ -471,9 +482,14 @@ export default function CaminoCiudadanoPage() {
 
           <button
             type="button"
-            onClick={() => setMode("con_premio")}
+            onClick={() => {
+              if (PREMIO_ACTIVO) setMode("con_premio");
+            }}
+            disabled={!PREMIO_ACTIVO}
             className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
-              mode === "con_premio"
+              !PREMIO_ACTIVO
+                ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                : mode === "con_premio"
                 ? "bg-green-100 text-green-900 border-green-300"
                 : "bg-white text-slate-800 hover:bg-slate-50"
             }`}
@@ -482,7 +498,11 @@ export default function CaminoCiudadanoPage() {
           </button>
         </div>
 
-        {mode === "con_premio" ? (
+        {!PREMIO_ACTIVO ? (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            La modalidad con premio está temporalmente en mantenimiento. Puedes participar en modo educativo sin premio.
+          </div>
+        ) : mode === "con_premio" ? (
           <div className="mt-3 rounded-xl border border-green-300 bg-green-50 p-3 text-xs text-green-800">
             🎉 <strong>Modalidad con premio:</strong> Si ganas en Camino
             Ciudadano, quedarás registrado como ganador de esta dinámica.
@@ -508,7 +528,7 @@ export default function CaminoCiudadanoPage() {
 
       <section className="mt-5 grid grid-cols-1 gap-3">
         <CaminoCiudadano
-          mode={mode}
+          mode={PREMIO_ACTIVO ? mode : "sin_premio"}
           onStateChange={setCaminoState}
           onGameWin={registrarGanadorCamino}
         />
@@ -521,8 +541,9 @@ export default function CaminoCiudadanoPage() {
               🏆 Ganadores de Camino Ciudadano
             </h2>
             <p className="text-xs text-slate-600">
-              Lista de ciudadanos registrados como ganadores en la modalidad con
-              premio.
+              {PREMIO_ACTIVO
+                ? "Lista de ciudadanos registrados como ganadores en la modalidad con premio."
+                : "La modalidad con premio está temporalmente en mantenimiento."}
             </p>
           </div>
 
@@ -550,12 +571,18 @@ export default function CaminoCiudadanoPage() {
           </div>
         </div>
 
+        {PREMIO_ACTIVO ? (
         <div className="mt-3 rounded-xl border border-green-300 bg-green-50 p-3 text-xs text-green-800">
           🏆 <strong>Aviso trimestral:</strong> de todos los ganadores acumulados
           durante el trimestre, VOTO CLARO escogerá a{" "}
           <strong>5 ganadores</strong> para el evento trimestral, según las reglas
           publicadas por la plataforma.
         </div>
+        ) : (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          Puedes seguir jugando Camino Ciudadano en modo educativo sin premio.
+        </div>
+        )}
 
         {winnerSaving ? (
           <div className="mt-3 rounded-xl border bg-slate-50 p-3 text-sm font-semibold text-slate-700">
@@ -610,4 +637,4 @@ export default function CaminoCiudadanoPage() {
       </section>
     </main>
   );
-} 
+}

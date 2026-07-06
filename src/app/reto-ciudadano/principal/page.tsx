@@ -7,6 +7,8 @@ import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeCont
 
 type PlayMode = "sin_premio" | "con_premio";
 
+const PREMIO_ACTIVO = false;
+
 /** Pregunta tipo Sí/No */
 type YesNoQuestion = {
   id: string;
@@ -720,7 +722,7 @@ function Nivel3Ruleta(props: {
       setSpinning(false);
 
       // ✅ Si es premio en modo con premio Y tenemos datos del ganador, guardar en BD
-      if (isPrize && mode === "con_premio" && winnerData) {
+      if (PREMIO_ACTIVO && isPrize && mode === "con_premio" && winnerData) {
         try {
           const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1764,6 +1766,13 @@ export default function RetoCiudadanoPrincipalPage() {
     }
   }
     async function validarPremioSilenciosamente() {
+    if (!PREMIO_ACTIVO) {
+      setPremioCheckLoading(false);
+      setPremioCheckError(null);
+      setPremioHabilitado(false);
+      return;
+    }
+
     if (!participant) {
       setPremioHabilitado(false);
       setPremioCheckError("No hay participante activo.");
@@ -1854,6 +1863,14 @@ export default function RetoCiudadanoPrincipalPage() {
   }, [deviceId]);
 
     useEffect(() => {
+    if (!PREMIO_ACTIVO && mode === "con_premio") {
+      setMode("sin_premio");
+      setPremioCheckLoading(false);
+      setPremioCheckError(null);
+      setPremioHabilitado(false);
+      return;
+    }
+
     if (mode !== "con_premio") {
       setPremioCheckLoading(false);
       setPremioCheckError(null);
@@ -2256,9 +2273,14 @@ export default function RetoCiudadanoPrincipalPage() {
 
           <button
   type="button"
-  onClick={() => setMode("con_premio")}
+  onClick={() => {
+    if (PREMIO_ACTIVO) setMode("con_premio");
+  }}
+  disabled={!PREMIO_ACTIVO}
   className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
-    mode === "con_premio"
+    !PREMIO_ACTIVO
+      ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+      : mode === "con_premio"
       ? "bg-green-100 text-green-900 border-green-300"
       : "bg-white text-slate-800 hover:bg-slate-50"
   }`}
@@ -2267,21 +2289,27 @@ export default function RetoCiudadanoPrincipalPage() {
 </button>
 
           {/* Descripción del premio */}
-          {mode === "con_premio" && (
+          {!PREMIO_ACTIVO ? (
+            <div className="mt-3 text-xs text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
+              La modalidad con premio está temporalmente en mantenimiento. Puedes participar en modo educativo sin premio.
+            </div>
+          ) : mode === "con_premio" ? (
             <div className="mt-3 text-xs text-green-700 bg-green-50 p-2 rounded-lg border border-green-300">
               🎉 <strong>Premio:</strong> Asistencia al Congreso Político "Democracia y Participación Ciudadana"
               con pasajes y estadía cubiertos (3 días, 2 noches). Incluye alimentación y materiales del evento.
               El ganador o ganadores podrán participar en mesas de diálogo con representantes políticos y líderes de opinión.
             </div>
-          )}
+          ) : null}
         </div>
 
         <p className="mt-3 text-xs text-slate-600">
-          Nota: para jugar con premio debes tener tu acceso habilitado desde la ventana principal de Reto Ciudadano.
+          {PREMIO_ACTIVO
+            ? "Nota: para jugar con premio debes tener tu acceso habilitado desde la ventana principal de Reto Ciudadano."
+            : "El reto principal sigue disponible en modo educativo sin premio."}
         </p>
       </section>
 
-                      {mode === "con_premio" && hasData && (
+                      {PREMIO_ACTIVO && mode === "con_premio" && hasData && (
         <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-2">
           <div className="text-sm font-extrabold text-slate-900">
             Modalidad con premio
@@ -2368,7 +2396,7 @@ export default function RetoCiudadanoPrincipalPage() {
           onRestartToLevel1={hardResetToLevel1}
           winnerData={winnerData}
           onFinishPick={async (pick) => {
-            if (mode !== "con_premio") return;
+            if (!PREMIO_ACTIVO || mode !== "con_premio") return;
 
             const celularPremio = String(
               participant?.phone ?? participant?.celular ?? winnerData?.celular ?? ""

@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
+const PREMIO_ACTIVO = false;
+
 function getOrCreateDeviceId() {
   if (typeof window === "undefined") return null;
   const key = "vc_device_id";
@@ -131,8 +133,10 @@ export default function RetoCiudadanoPage() {
       "Juegos visibles: Reto principal y Camino Ciudadano.",
       "Reto principal es un juego secuencial por niveles con conocimiento general, partido y ruleta.",
       "Camino Ciudadano es un juego de recorrido por casillas con preguntas y avance progresivo.",
-      "Si jugarás con premio, debes registrarte o iniciar sesión con tu código.",
-      "Si jugarás sin premio, puedes entrar libremente.",
+      PREMIO_ACTIVO
+        ? "Si jugarás con premio, debes registrarte o iniciar sesión con tu código."
+        : "La modalidad con premio está temporalmente en mantenimiento.",
+      "Puedes entrar libremente al modo educativo sin premio.",
     ];
 
     if (registered) {
@@ -164,15 +168,17 @@ export default function RetoCiudadanoPage() {
   pageTitle: "Reto ciudadano",
   route: "/reto-ciudadano",
   summary:
-    "Pantalla principal de Reto Ciudadano con acceso a sus juegos y a la lógica general de registro para premio.",
+    "Pantalla principal de Reto Ciudadano con acceso a sus juegos.",
   speakableSummary:
-    "Estás en Reto Ciudadano. Aquí puedes registrarte o iniciar sesión para participar en modalidades con premio, o entrar libremente a los juegos sin premio.",
+    PREMIO_ACTIVO
+      ? "Estás en Reto Ciudadano. Aquí puedes registrarte o iniciar sesión para participar en modalidades con premio, o entrar libremente a los juegos sin premio."
+      : "Estás en Reto Ciudadano. La modalidad con premio está temporalmente en mantenimiento, pero puedes participar en modo educativo sin premio.",
   activeSection: checkingData ? "verificando-acceso" : "hub-reto-ciudadano",
   visibleText: visibleParts.join("\n"),
        availableActions: hasData
     ? ["Entrar al Reto principal", "Entrar a Camino Ciudadano", "Volver al inicio"]
     : [
-        "Registrarme para jugar con premio",
+        "Registrarme para participar",
         "Iniciar sesión con código",
         "Entrar al Reto principal",
         "Entrar a Camino Ciudadano",
@@ -279,14 +285,15 @@ export default function RetoCiudadanoPage() {
 
       <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up">
         <div className="text-sm font-extrabold text-slate-900">
-          Acceso general para premio
+          Modalidad con premio
         </div>
         <p className="mt-2 text-sm text-slate-700">
-          Si jugarás con premio, debes registrarte o iniciar sesión con tu código.
-          Si jugarás sin premio, puedes entrar libremente.
+          {PREMIO_ACTIVO
+            ? "Si jugarás con premio, debes registrarte o iniciar sesión con tu código. Si jugarás sin premio, puedes entrar libremente."
+            : "La modalidad con premio está temporalmente en mantenimiento. Puedes participar en modo educativo sin premio."}
         </p>
 
-        {registered ? (
+        {PREMIO_ACTIVO && registered ? (
           <div className="mt-4 rounded-xl border bg-green-50 p-3 text-sm font-bold text-green-800">
             ✅ Registro completado. Ya puedes ingresar con tu código y participar
             en los juegos con premio.
@@ -322,7 +329,7 @@ export default function RetoCiudadanoPage() {
               </h3>
               <p className="text-sm text-slate-700 mb-3">
                 Si ya tienes tu código de acceso, ingrésalo aquí para habilitar
-                los juegos con premio.
+                tu participación en Reto Ciudadano.
               </p>
 
               {loginCodigoError ? (
@@ -372,8 +379,9 @@ export default function RetoCiudadanoPage() {
               Acceso habilitado
             </div>
             <div className="mt-1 text-sm text-slate-800 leading-relaxed">
-              Ya puedes ingresar a las modalidades con premio desde los juegos de
-              Reto Ciudadano.
+              {PREMIO_ACTIVO
+                ? "Ya puedes ingresar a las modalidades con premio desde los juegos de Reto Ciudadano."
+                : "Tu participación está registrada. Por ahora el premio está en mantenimiento y puedes jugar en modo educativo sin premio."}
             </div>
             <div className="mt-2 text-sm text-slate-800">
               Participante:{" "}
@@ -420,3 +428,5 @@ export default function RetoCiudadanoPage() {
     </main>
   );
 }
+
+
