@@ -13,6 +13,10 @@ function supabaseAdmin() {
 
 export async function POST(req: Request) {
   try {
+    if (process.env.VERCEL_ENV === "production") {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const celular = String(body?.celular ?? "").trim();
 
