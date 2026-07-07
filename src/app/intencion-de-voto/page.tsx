@@ -443,21 +443,23 @@ const introSpokenRef = useRef(false);
     setQuestionsError(null);
 
     try {
-      const { error } = await supabase
-        .from('vote_intention_answers')
-        .insert({
+      const res = await fetch("/api/vote/answers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
           device_id: deviceId,
-          round_id: globalRound.id,
-          party_id: confirmedPartyId,
-          party_slug: confirmedSlug,
-          questions_id: questions.id !== 'default' ? questions.id : null,
-          answer_1: answers.answer_1.trim() || null,
-          answer_2: answers.answer_2.trim() || null,
-          answer_3: answers.answer_3.trim() || null,
-          user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
-        });
+          answer_1: answers.answer_1.trim(),
+          answer_2: answers.answer_2.trim(),
+          answer_3: answers.answer_3.trim(),
+        }),
+      });
 
-      if (error) throw error;
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'Error al enviar las respuestas');
+      }
 
       setAnswersSubmitted(true);
       setShowQuestions(false);
