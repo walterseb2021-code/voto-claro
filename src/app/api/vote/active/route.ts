@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getCookieValue } from "@/lib/http/cookies";
 
 export const runtime = "nodejs";
+
+const GROUP_RE = /^GRUPO[A-Z]$/;
+
+function tokenToGroup(token: string) {
+  const m = token.match(/^(GRUPO[A-Z])-/);
+  return m ? m[1] : null;
+}
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -20,73 +28,121 @@ function getSupabaseAdmin() {
   });
 }
 
+function json(status: number, body: any) {
+  return NextResponse.json(body, { status });
+}
+
+function getRequestOrigin(req: Request) {
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
+
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(req.url).origin;
+}
+
+function isLocalOrigin(origin: string) {
+  try {
+    const hostname = new URL(origin).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedOrigin(req: Request) {
+  const origin = req.headers.get("origin");
+  if (!origin) return true;
+
+  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
+    return true;
+  }
+
+  try {
+    return new URL(origin).origin === getRequestOrigin(req);
+  } catch {
+    return false;
+  }
+}
+
+async function validatePitchToken(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  token: string,
+  group: string
+) {
+  const tokenGroup = tokenToGroup(token);
+  if (!tokenGroup || tokenGroup !== group) {
+    return false;
+  }
+
+  const { data, error } = await supabase
+    .from("votoclaro_public_links")
+    .select("token, route, is_active, expires_at")
+    .eq("token", token)
+    .eq("route", "/pitch")
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[vote/active] pitch token validation failed", error);
+    return false;
+  }
+
+  if (!data) return false;
+
+  if (data.expires_at) {
+    const exp = new Date(String(data.expires_at)).getTime();
+    if (Number.isFinite(exp) && Date.now() > exp) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export async function GET(req: Request) {
   try {
-    const supabase = getSupabaseAdmin();
+    const cookieHeader = req.headers.get("cookie");
+    const legalAccepted = getCookieValue(cookieHeader, "vc_legal_accepted") ?? "";
+    const group = (getCookieValue(cookieHeader, "vc_group") ?? "").trim();
+    const pitchToken = (getCookieValue(cookieHeader, "vc_pitch_token") ?? "").trim();
 
-    const cookieHeader = req.headers.get("cookie") ?? "";
-    const group =
-      cookieHeader
-        .split(";")
-        .map((c) => c.trim())
-        .find((c) => c.startsWith("vc_group="))
-        ?.split("=")[1] ?? null;
-
-    if (!group) {
-      return NextResponse.json(
-        { error: "Falta cookie vc_group" },
-        { status: 400 }
-      );
+    if (legalAccepted !== "true" || !group || !GROUP_RE.test(group) || !pitchToken) {
+      return json(401, { error: "No autorizado" });
     }
 
-    // =====================================================
-    // 1) Ronda activa GLOBAL (ya no filtramos por grupo)
-    // =====================================================
-    let { data: round, error: roundErr } = await supabase
+    if (!isAllowedOrigin(req)) {
+      return json(403, { error: "No autorizado" });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    const tokenOk = await validatePitchToken(supabase, pitchToken, group);
+    if (!tokenOk) {
+      return json(401, { error: "No autorizado" });
+    }
+
+    const { data: round, error: roundErr } = await supabase
       .from("vote_rounds")
       .select("id,name,is_active,created_at,group_code")
       .eq("is_active", true)
+      .eq("group_code", group)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (roundErr) {
-      return NextResponse.json(
-        { error: "Error leyendo vote_rounds", detail: roundErr.message },
-        { status: 500 }
-      );
+      console.error("[vote/active] active round lookup failed", roundErr);
+      return json(500, { error: "No disponible" });
     }
 
-    // Mantenemos el FALLBACK por si no hay ronda activa (por compatibilidad)
     if (!round) {
-      const { data: fallbackRound, error: fallbackErr } = await supabase
-        .from("vote_rounds")
-        .select("id,name,is_active,created_at,group_code")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (fallbackErr) {
-        return NextResponse.json(
-          { error: "Error leyendo fallback vote_rounds", detail: fallbackErr.message },
-          { status: 500 }
-        );
-      }
-
-      if (!fallbackRound) {
-        return NextResponse.json(
-          { error: "No hay ronda activa disponible." },
-          { status: 404 }
-        );
-      }
-
-      round = fallbackRound;
+      return json(404, { error: "No disponible" });
     }
 
-    // =====================================================
-    // 2) Partidos del GRUPO del usuario (activos)
-    // =====================================================
     const { data: parties, error: partiesErr } = await supabase
       .from("vote_parties")
       .select("id,round_id,slug,name,enabled,position,created_at,group_code")
@@ -95,15 +151,10 @@ export async function GET(req: Request) {
       .order("position", { ascending: true });
 
     if (partiesErr) {
-      return NextResponse.json(
-        { error: "Error leyendo vote_parties", detail: partiesErr.message },
-        { status: 500 }
-      );
+      console.error("[vote/active] parties lookup failed", partiesErr);
+      return json(500, { error: "No disponible" });
     }
 
-    // =====================================================
-    // 3) Conteo (vote_tally) para esta ronda y grupo
-    // =====================================================
     const { data: tallies, error: tallyErr } = await supabase
       .from("vote_tally")
       .select("party_id,total_votes,group_code")
@@ -111,10 +162,8 @@ export async function GET(req: Request) {
       .eq("group_code", group);
 
     if (tallyErr) {
-      return NextResponse.json(
-        { error: "Error leyendo vote_tally", detail: tallyErr.message },
-        { status: 500 }
-      );
+      console.error("[vote/active] tally lookup failed", tallyErr);
+      return json(500, { error: "No disponible" });
     }
 
     const tallyMap = new Map<string, number>();
@@ -141,9 +190,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: "Error interno", detail: e?.message ?? String(e) },
-      { status: 500 }
-    );
+    console.error("[vote/active] unexpected error", e);
+    return json(500, { error: "No disponible" });
   }
 }
