@@ -166,6 +166,7 @@ const introSpokenRef = useRef(false);
   // Flujo de votación
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [confirmedPartyId, setConfirmedPartyId] = useState<string | null>(null);
+  const [confirmedPartySlug, setConfirmedPartySlug] = useState<string | null>(null);
   const [confirmedPartyName, setConfirmedPartyName] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
@@ -399,11 +400,12 @@ const introSpokenRef = useRef(false);
     if (questionsError) setQuestionsError(null);
   }
      const confirmedSlug = useMemo(() => {
+  if (confirmedPartySlug) return confirmedPartySlug;
   if (!confirmedPartyId) return null;
 
   const opt = parties.find((o) => String(o.id) === String(confirmedPartyId));
   return opt?.slug ?? null;
-}, [confirmedPartyId, parties]);
+}, [confirmedPartySlug, confirmedPartyId, parties]);
   // ============================================
   // ENVÍO DE RESPUESTAS
   // ============================================
@@ -533,6 +535,7 @@ const introSpokenRef = useRef(false);
       // OK - Voto registrado
       setLocked(true);
       setConfirmedPartyId(String(data?.party?.id ?? ""));
+      setConfirmedPartySlug(String(data?.party?.slug ?? pendingSlug ?? "") || null);
       
       const party = parties.find(o => o.id === data?.party?.id);
       if (party) {
