@@ -4,7 +4,6 @@
  import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 // ============================================
@@ -145,11 +144,6 @@ function Pill({ children }: { children: ReactNode }) {
 // COMPONENTE PRINCIPAL
 // ============================================
 function IntencionDeVotoContent() {
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
    const { setPageContext, clearPageContext } = useAssistantRuntime();
 const searchParams = useSearchParams();
 const token = searchParams.get("token");
@@ -290,23 +284,11 @@ const introSpokenRef = useRef(false);
   // ============================================
   async function loadActiveQuestions() {
     try {
-      const { data, error } = await supabase
-        .rpc('get_active_questions');
-      
-      if (!error && data && data.length > 0) {
-        setQuestions(data[0]);
-        return;
-      }
+      const res = await fetch("/api/vote/questions", { cache: "no-store" });
+      const data = await res.json().catch(() => null);
 
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('vote_intention_questions')
-        .select('id, question_1, question_2, question_3')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (!questionsError && questionsData && questionsData.length > 0) {
-        setQuestions(questionsData[0]);
+      if (res.ok && data?.questions) {
+        setQuestions(data.questions);
       } else {
         setQuestions({
           id: 'default',
