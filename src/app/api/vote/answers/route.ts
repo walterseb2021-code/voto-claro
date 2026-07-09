@@ -192,6 +192,92 @@ async function getActiveQuestions(supabase: ReturnType<typeof getSupabaseAdmin>)
   return data?.[0] ?? null;
 }
 
+export async function GET(req: Request) {
+  try {
+    const cookieHeader = req.headers.get("cookie");
+    const legalAccepted = getCookieValue(cookieHeader, "vc_legal_accepted") ?? "";
+    const group = (getCookieValue(cookieHeader, "vc_group") ?? "").trim();
+    const pitchToken = (getCookieValue(cookieHeader, "vc_pitch_token") ?? "").trim();
+
+    if (legalAccepted !== "true" || !group || !GROUP_RE.test(group) || !pitchToken) {
+      return json(401, { error: "No autorizado" });
+    }
+
+    if (!isAllowedOrigin(req)) {
+      return json(403, { error: "No autorizado" });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const deviceId = String(searchParams.get("device_id") ?? "").trim();
+
+    if (!UUID_RE.test(deviceId)) {
+      return json(400, { error: "Solicitud invalida" });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    const tokenOk = await validatePitchToken(supabase, pitchToken, group);
+    if (!tokenOk) {
+      return json(401, { error: "No autorizado" });
+    }
+
+    const { data: round, error: roundErr } = await supabase
+      .from("vote_rounds")
+      .select("id")
+      .eq("is_active", true)
+      .eq("group_code", group)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (roundErr) {
+      console.error("[vote/answers] GET active round lookup failed", roundErr);
+      return json(500, { error: "No disponible" });
+    }
+
+    if (!round?.id) {
+      return json(404, { error: "No disponible" });
+    }
+
+    const { data: cast, error: castErr } = await supabase
+      .from("vote_casts")
+      .select("party_id")
+      .eq("round_id", round.id)
+      .eq("device_id", deviceId)
+      .eq("group_code", group)
+      .limit(1)
+      .maybeSingle();
+
+    if (castErr) {
+      console.error("[vote/answers] GET vote lookup failed", castErr);
+      return json(500, { error: "No disponible" });
+    }
+
+    if (!cast?.party_id) {
+      return json(200, { answered: false });
+    }
+
+    const { data: existing, error: existingErr } = await supabase
+      .from("vote_intention_answers")
+      .select("id")
+      .eq("device_id", deviceId)
+      .eq("round_id", round.id)
+      .eq("party_id", cast.party_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingErr) {
+      console.error("[vote/answers] GET answer lookup failed", existingErr);
+      return json(500, { error: "No disponible" });
+    }
+
+    return json(200, { answered: !!existing });
+  } catch (e: any) {
+    console.error("[vote/answers] GET unexpected error", e);
+    return json(500, { error: "No disponible" });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const cookieHeader = req.headers.get("cookie");

@@ -257,7 +257,7 @@ const introSpokenRef = useRef(false);
       setNotice(`Ya registraste tu participación en la ronda ${globalRound?.name || "actual"}.`);
 
       // Verificar si ya respondió las preguntas en ESTA ronda
-      await checkIfAlreadyAnswered(devId, roundId, partyId);
+      await checkIfAlreadyAnswered(devId);
     }
   } catch {
     // Silencio
@@ -326,19 +326,17 @@ const introSpokenRef = useRef(false);
     }
   }
 
-  async function checkIfAlreadyAnswered(devId: string, roundId: string, partyId: string) {
+  async function checkIfAlreadyAnswered(devId: string) {
     try {
-      const { data, error } = await supabase
-        .from('vote_intention_answers')
-        .select('id')
-        .eq('device_id', devId)
-        .eq('round_id', roundId)
-        .eq('party_id', partyId)
-        .maybeSingle();
+      const res = await fetch(
+        `/api/vote/answers?device_id=${encodeURIComponent(devId)}`,
+        { cache: "no-store" }
+      );
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) throw new Error(data?.error || "No disponible");
       
-      if (error) throw error;
-      
-      if (data) {
+      if (data?.answered === true) {
         setAnswersSubmitted(true);
       } else {
         await loadActiveQuestions();
