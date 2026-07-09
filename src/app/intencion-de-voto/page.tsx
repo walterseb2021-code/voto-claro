@@ -198,58 +198,27 @@ const introSpokenRef = useRef(false);
     setUserGroup(getGroupFromToken());
   }, []);
 
-  async function loadGlobalRound() {
-    try {
-      const { data, error } = await supabase
-        .from('vote_rounds')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (error) throw error;
-      setGlobalRound(data);
-      return data;
-    } catch (e) {
-      console.error('Error cargando ronda global:', e);
-      setError('No se pudo cargar la ronda actual');
-      return null;
-    }
-  }
-
-  async function loadParties(groupCode: string) {
-    try {
-      const { data, error } = await supabase
-        .from('vote_parties')
-        .select('*')
-        .eq('group_code', groupCode)
-        .eq('enabled', true)
-        .order('position');
-
-      if (error) throw error;
-      setParties(data || []);
-      
-      // Calcular total de votos (esto podría venir de otra tabla)
-      const total = (data || []).reduce((acc, p) => acc + (p.total_votes || 0), 0);
-      return total;
-    } catch (e) {
-      console.error('Error cargando partidos:', e);
-      setError('No se pudieron cargar los partidos');
-      return 0;
-    }
-  }
-
   async function loadActive() {
     setLoading(true);
     setError(null);
     
     try {
       // 1. Cargar ronda global activa
-      const round = await loadGlobalRound();
+      const res = await fetch("/api/vote/active", {
+        cache: "no-store",
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.round) {
+        throw new Error(data?.error || 'No se pudo cargar la ronda actual');
+      }
+
+      const round = data.round;
+      setGlobalRound(round);
       
       // 2. Cargar partidos del grupo del usuario
-      await loadParties(userGroup);
+      setParties(Array.isArray(data.options) ? data.options : []);
       
       // 3. Verificar si ya votó en esta ronda
       if (round?.id && deviceId) {
