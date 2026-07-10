@@ -2,9 +2,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 
 type Device = {
   device_id: string;
@@ -12,9 +11,9 @@ type Device = {
   email: string | null;
   celular: string | null;
   forum_alias: string | null;
-  vote_intention_answers: { count: number }[];
-  archived_topic_forum_comments: { count: number }[];
-  reto_ganadores?: { count: number }[];
+  voteCount: number;
+  commentCount: number;
+  retoCount: number;
 };
 
 export default function AdminHubPage() {
@@ -35,88 +34,23 @@ export default function AdminHubPage() {
   const [secretKey, setSecretKey] = useState("");
   const [showSecretInput, setShowSecretInput] = useState(false);
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
   useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-
-        if (!alive) return;
-
-        if (!data?.session) {
-          router.replace("/admin/login");
-          return;
-        }
-      } finally {
-        if (alive) setChecking(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [router, supabase.auth]);
+    setChecking(false);
+  }, []);
 
   const loadDevices = async () => {
     setLoadingDevices(true);
     setMessage(null);
 
     try {
-      const { data: participants, error } = await supabase
-        .from("comment_access_participants")
-        .select(
-          `
-          device_id,
-          created_at,
-          email,
-          celular,
-          forum_alias
-        `
-        )
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const res = await fetch("/api/admin/devices", { cache: "no-store" });
+      const data = await res.json().catch(() => null);
 
-      if (error) throw error;
-
-      if (!participants || participants.length === 0) {
-        setDevices([]);
-        return;
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudo cargar dispositivos");
       }
 
-      const devicesWithCounts = await Promise.all(
-        participants.map(async (p) => {
-          const { count: voteCount } = await supabase
-            .from("vote_intention_answers")
-            .select("*", { count: "exact", head: true })
-            .eq("device_id", p.device_id);
-
-          const { count: commentCount } = await supabase
-            .from("archived_topic_forum_comments")
-            .select("*", { count: "exact", head: true })
-            .eq("device_id", p.device_id);
-
-          const { count: retoCount } = await supabase
-            .from("reto_ganadores")
-            .select("*", { count: "exact", head: true })
-            .eq("device_id", p.device_id);
-
-          return {
-            ...p,
-            vote_intention_answers: [{ count: voteCount || 0 }],
-            archived_topic_forum_comments: [{ count: commentCount || 0 }],
-            reto_ganadores: [{ count: retoCount || 0 }],
-          };
-        })
-      );
-
-      setDevices(devicesWithCounts);
+      setDevices(Array.isArray(data?.devices) ? data.devices : []);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Error desconocido";
@@ -142,25 +76,18 @@ export default function AdminHubPage() {
     setMessage(null);
 
     try {
-      await supabase
-        .from("vote_intention_answers")
-        .delete()
-        .eq("device_id", deviceId);
+      const res = await fetch("/api/admin/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ action: "reset-device", device_id: deviceId }),
+      });
 
-      await supabase
-        .from("archived_topic_forum_comments")
-        .delete()
-        .eq("device_id", deviceId);
+      const data = await res.json().catch(() => null);
 
-      await supabase
-        .from("reto_ganadores")
-        .delete()
-        .eq("device_id", deviceId);
-
-      await supabase
-        .from("comment_access_participants")
-        .delete()
-        .eq("device_id", deviceId);
+      if (!res.ok || data?.ok !== true) {
+        throw new Error(data?.error || "No se pudo resetear dispositivo");
+      }
 
       setMessage({
         type: "success",
@@ -508,13 +435,13 @@ export default function AdminHubPage() {
                           {new Date(d.created_at).toLocaleDateString()}
                         </td>
                         <td className="p-2 text-center">
-                          {d.vote_intention_answers?.[0]?.count || 0}
+                          {d.voteCount || 0}
                         </td>
                         <td className="p-2 text-center">
-                          {d.archived_topic_forum_comments?.[0]?.count || 0}
+                          {d.commentCount || 0}
                         </td>
                         <td className="p-2 text-center">
-                          {d.reto_ganadores?.[0]?.count || 0}
+                          {d.retoCount || 0}
                         </td>
                         <td className="p-2 text-center">
                           <button
