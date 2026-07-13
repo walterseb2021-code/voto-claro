@@ -11,7 +11,10 @@ type Round = {
   name: string;
   is_active: boolean;
   created_at: string;
+  group_code: string;
 };
+
+const GROUP_OPTIONS = ["GRUPOA", "GRUPOB", "GRUPOC", "GRUPOD", "GRUPOE"];
 
 function Pill({ children }: { children: ReactNode }) {
   return (
@@ -66,6 +69,7 @@ export default function AdminVoteRoundsPage() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState("GRUPOB");
 
   const [newName, setNewName] = useState("");
 
@@ -73,10 +77,13 @@ export default function AdminVoteRoundsPage() {
     setLoading(true);
     setNotice(null);
     try {
-      const res = await fetch("/api/vote/admin/rounds", {
-        method: "GET",
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/vote/admin/rounds?group_code=${encodeURIComponent(selectedGroup)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
 
       const data = await res.json();
       if (!res.ok) {
@@ -97,7 +104,7 @@ export default function AdminVoteRoundsPage() {
     if (checking) return;
     void loadRounds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checking]);
+  }, [checking, selectedGroup]);
 
   const activeRound = useMemo(
     () => rounds.find((r) => r.is_active) ?? null,
@@ -118,7 +125,7 @@ export default function AdminVoteRoundsPage() {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, group_code: selectedGroup }),
       });
       const data = await res.json();
 
@@ -145,7 +152,7 @@ export default function AdminVoteRoundsPage() {
         method: "PUT",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ round_id }),
+        body: JSON.stringify({ round_id, group_code: selectedGroup }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -174,7 +181,7 @@ export default function AdminVoteRoundsPage() {
         method: "PATCH",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ round_id }),
+        body: JSON.stringify({ round_id, group_code: selectedGroup }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -211,6 +218,9 @@ export default function AdminVoteRoundsPage() {
   const input =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
+  const select =
+    "rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-extrabold " +
+    "text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
 
   if (checking) {
     return (
@@ -241,6 +251,9 @@ export default function AdminVoteRoundsPage() {
         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
           Admin – Rondas de Voto
         </h1>
+        <div className="text-xs font-extrabold text-slate-700">
+          Grupo seleccionado: {selectedGroup}
+        </div>
 
         <div className="flex gap-2 flex-wrap">
           <Link href="/admin/live" className={btnSm}>
@@ -270,13 +283,31 @@ export default function AdminVoteRoundsPage() {
                 )}
               </div>
               <div className="mt-2 text-xs text-slate-600">
-                El público nunca ve “rondas”. La encuesta usa internamente la ronda activa.
+                El público nunca ve “rondas”. La encuesta usa internamente la ronda activa de {selectedGroup}.
               </div>
             </div>
 
-            <button type="button" onClick={loadRounds} className={btnSm} disabled={loading}>
-              {loading ? "Cargando…" : "↻ Refrescar"}
-            </button>
+            <div className="flex items-end gap-2 flex-wrap">
+              <label className="text-xs font-extrabold text-slate-700">
+                Grupo
+                <select
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                  className={select + " block mt-1"}
+                  disabled={loading}
+                >
+                  {GROUP_OPTIONS.map((group) => (
+                    <option key={group} value={group}>
+                      {group}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button type="button" onClick={loadRounds} className={btnSm} disabled={loading}>
+                {loading ? "Cargando…" : "↻ Refrescar"}
+              </button>
+            </div>
           </div>
 
           {notice ? (
@@ -292,7 +323,7 @@ export default function AdminVoteRoundsPage() {
               Crear nueva ronda (recomendado para “reset”)
             </div>
             <div className="mt-1 text-xs text-slate-600">
-              Crea una ronda nueva y la activa. No borra historial.
+              Crea una ronda nueva y la activa solo para {selectedGroup}. No borra historial.
             </div>
 
             <input
@@ -334,7 +365,8 @@ export default function AdminVoteRoundsPage() {
                         {new Date(r.created_at).toLocaleString("es-PE")} · ID: {r.id}
                       </div>
                       <div className="mt-2">
-                        {r.is_active ? <Pill>Activa</Pill> : <Pill>Inactiva</Pill>}
+                        {r.is_active ? <Pill>Activa</Pill> : <Pill>Inactiva</Pill>}{" "}
+                        <Pill>{r.group_code}</Pill>
                       </div>
                     </div>
 
