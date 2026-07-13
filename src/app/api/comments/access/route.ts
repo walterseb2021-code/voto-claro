@@ -1,4 +1,3 @@
-// src/app/api/comments/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getCookieValue } from "@/lib/http/cookies";
@@ -6,7 +5,10 @@ import { getCookieValue } from "@/lib/http/cookies";
 export const runtime = "nodejs";
 
 const DEFAULT_GROUP_CODE = "GENERAL";
-const MAX_MESSAGE_LENGTH = 2000;
+
+function json(status: number, body: any) {
+  return NextResponse.json(body, { status });
+}
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
@@ -20,10 +22,6 @@ function getSupabaseAdmin() {
   return createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-}
-
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
 }
 
 function getRequestOrigin(req: Request) {
@@ -66,42 +64,8 @@ function cleanText(value: unknown, maxLength: number) {
     .slice(0, maxLength);
 }
 
-function safeMetadata(raw: unknown) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return {};
-  }
-
-  const input = raw as Record<string, unknown>;
-
-  return {
-    source_module: cleanText(input.source_module, 80),
-    source_section: cleanText(input.source_section, 80),
-    source_action: cleanText(input.source_action, 80),
-    page_title: cleanText(input.page_title, 120),
-    route: cleanText(input.route, 200),
-    topic_id: cleanText(input.topic_id, 120),
-    topic_title: cleanText(input.topic_title, 160),
-    user_alias: cleanText(input.user_alias, 80),
-    submitted_from: cleanText(input.submitted_from, 80),
-    client_timestamp: cleanText(input.client_timestamp, 80),
-  };
-}
-
 function isValidDeviceId(value: string) {
   return value.length > 0 && value.length <= 120;
-}
-
-function isValidTopicId(value: string) {
-  return value.length > 0 && value.length <= 120;
-}
-
-function normalizeGroupCode(value: unknown) {
-  const group = cleanText(value, 40);
-  return group || DEFAULT_GROUP_CODE;
-}
-
-function hasLinks(text: string) {
-  return /https?:\/\/|www\./i.test(text);
 }
 
 function toSafeForumAlias(input: unknown) {
@@ -118,12 +82,33 @@ function toSafeForumAlias(input: unknown) {
   return `Usuario_${crypto.randomUUID().slice(0, 8)}`;
 }
 
+function normalizeGroupCode(value: unknown) {
+  const group = cleanText(value, 40);
+  return group || DEFAULT_GROUP_CODE;
+}
+
 function isValidEmail(value: string) {
   return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function isValidPhone(value: string) {
   return !value || /^[0-9+()\-\s]{6,30}$/.test(value);
+}
+
+async function findParticipant(supabase: ReturnType<typeof getSupabaseAdmin>, deviceId: string) {
+  const { data, error } = await supabase
+    .from("project_participants")
+    .select("id, alias, full_name, email, phone")
+    .eq("device_id", deviceId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[comments/access] participant lookup failed", error);
+    throw new Error("participant lookup failed");
+  }
+
+  return data;
 }
 
 async function findAccessBy(
@@ -141,7 +126,7 @@ async function findAccessBy(
     .maybeSingle();
 
   if (error) {
-    console.error("[comments] access lookup failed", { column, error });
+    console.error("[comments/access] access lookup failed", { column, error });
     throw new Error("access lookup failed");
   }
 
@@ -151,33 +136,31 @@ async function findAccessBy(
 async function ensureAccess(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   deviceId: string,
-  groupCode: string
+  fallbackGroupCode: string
 ) {
-  const existingByDevice = await findAccessBy(supabase, "device_id", deviceId);
-  if (existingByDevice?.id) return existingByDevice.id as string;
-
-  const { data: participant, error: participantError } = await supabase
-    .from("project_participants")
-    .select("id, alias, full_name, email, phone")
-    .eq("device_id", deviceId)
-    .limit(1)
-    .maybeSingle();
-
-  if (participantError) {
-    console.error("[comments] participant lookup failed", participantError);
-    throw new Error("participant lookup failed");
-  }
-
+  const participant = await findParticipant(supabase, deviceId);
   if (!participant?.id) {
-    return null;
+    return { error: "NO_PARTICIPANT" as const };
   }
 
   const email = cleanText((participant as any).email, 160);
   const phone = cleanText((participant as any).phone, 30);
+  const groupCode = normalizeGroupCode(fallbackGroupCode);
   const forumAlias = toSafeForumAlias((participant as any).alias || (participant as any).full_name);
 
   if (!isValidEmail(email) || !isValidPhone(phone)) {
-    return null;
+    return { error: "INVALID_PARTICIPANT_DATA" as const };
+  }
+
+  const existingByDevice = await findAccessBy(supabase, "device_id", deviceId);
+  if (existingByDevice?.id) {
+    return {
+      access: {
+        id: existingByDevice.id,
+        forum_alias: existingByDevice.forum_alias || forumAlias,
+        group_code: existingByDevice.group_code || groupCode,
+      },
+    };
   }
 
   const existingByEmail = await findAccessBy(supabase, "email", email);
@@ -188,11 +171,13 @@ async function ensureAccess(
       .eq("id", existingByEmail.id);
 
     if (error) {
-      console.error("[comments] access update by email failed", error);
+      console.error("[comments/access] access update by email failed", error);
       throw new Error("access update failed");
     }
 
-    return existingByEmail.id as string;
+    return {
+      access: { id: existingByEmail.id, forum_alias: forumAlias, group_code: groupCode },
+    };
   }
 
   const existingByPhone = await findAccessBy(supabase, "celular", phone);
@@ -203,11 +188,13 @@ async function ensureAccess(
       .eq("id", existingByPhone.id);
 
     if (error) {
-      console.error("[comments] access update by phone failed", error);
+      console.error("[comments/access] access update by phone failed", error);
       throw new Error("access update failed");
     }
 
-    return existingByPhone.id as string;
+    return {
+      access: { id: existingByPhone.id, forum_alias: forumAlias, group_code: groupCode },
+    };
   }
 
   const payload: Record<string, unknown> = {
@@ -222,22 +209,22 @@ async function ensureAccess(
   const { data: inserted, error } = await supabase
     .from("comment_access_participants")
     .insert(payload)
-    .select("id")
+    .select("id, forum_alias, group_code")
     .single();
 
   if (error) {
-    console.error("[comments] access insert failed", error);
+    console.error("[comments/access] access insert failed", error);
     throw new Error("access insert failed");
   }
 
-  return inserted.id as string;
+  return { access: inserted };
 }
 
 export async function POST(req: Request) {
   try {
     const cookieHeader = req.headers.get("cookie");
     const legalAccepted = getCookieValue(cookieHeader, "vc_legal_accepted") ?? "";
-    const cookieGroup = getCookieValue(cookieHeader, "vc_group") ?? "";
+    const cookieGroup = getCookieValue(cookieHeader, "vc_group") ?? DEFAULT_GROUP_CODE;
 
     if (legalAccepted !== "true") {
       return json(401, { ok: false, error: "No autorizado" });
@@ -247,80 +234,30 @@ export async function POST(req: Request) {
       return json(403, { ok: false, error: "No autorizado" });
     }
 
-    const payload = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => null);
+    const deviceId = cleanText(body?.device_id, 120);
 
-    const message = cleanText(payload?.message, MAX_MESSAGE_LENGTH);
-    const deviceId = cleanText(payload?.device_id, 120);
-    const page = cleanText(payload?.page, 200) || "/comentarios";
-    const weeklyTopicId = cleanText(payload?.weekly_topic_id, 120);
-    const groupCode = normalizeGroupCode(cookieGroup);
-    const metadata = safeMetadata(payload?.metadata);
-
-    if (!isValidDeviceId(deviceId) || !isValidTopicId(weeklyTopicId)) {
+    if (!isValidDeviceId(deviceId)) {
       return json(400, { ok: false, error: "Solicitud invalida" });
-    }
-
-    if (!message || message.length < 3 || message.length > MAX_MESSAGE_LENGTH) {
-      return json(400, { ok: false, error: "Solicitud invalida" });
-    }
-
-    if (hasLinks(message)) {
-      return json(400, { ok: false, error: "Solicitud invalida", code: "LINKS_NOT_ALLOWED" });
     }
 
     const supabase = getSupabaseAdmin();
-    const accessParticipantId = await ensureAccess(supabase, deviceId, groupCode);
+    const result = await ensureAccess(supabase, deviceId, cookieGroup);
 
-    if (!accessParticipantId) {
-      return json(403, { ok: false, error: "No autorizado" });
-    }
-
-    const { count, error: countError } = await supabase
-      .from("user_comments")
-      .select("id", { count: "exact", head: true })
-      .eq("page", page)
-      .eq("weekly_topic_id", weeklyTopicId)
-      .eq("access_participant_id", accessParticipantId);
-
-    if (countError) {
-      console.error("[comments] count failed", countError);
-      return json(500, { ok: false, error: "No disponible" });
-    }
-
-    if ((count ?? 0) >= 3) {
-      return json(409, {
-        ok: false,
-        error: "No se pudo publicar",
-        code: "MAX_3_COMMENTS_PER_TOPIC",
-      });
-    }
-
-    const { data, error } = await supabase
-      .from("user_comments")
-      .insert({
-        group_code: groupCode,
-        device_id: deviceId,
-        access_participant_id: accessParticipantId,
-        weekly_topic_id: weeklyTopicId,
-        page,
-        message,
-        status: "published",
-        metadata,
-      })
-      .select("id, created_at, group_code, status")
-      .maybeSingle();
-
-    if (error) {
-      console.error("[comments] insert failed", error);
-      return json(500, { ok: false, error: "No se pudo publicar" });
+    if ("error" in result) {
+      return json(403, { ok: false, error: "No autorizado", status: result.error });
     }
 
     return json(200, {
       ok: true,
-      comment: data,
+      access: {
+        id: result.access.id,
+        forum_alias: result.access.forum_alias,
+        group_code: result.access.group_code,
+      },
     });
   } catch (e) {
-    console.error("[comments] unexpected error", e);
+    console.error("[comments/access] unexpected error", e);
     return json(500, { ok: false, error: "No disponible" });
   }
 }

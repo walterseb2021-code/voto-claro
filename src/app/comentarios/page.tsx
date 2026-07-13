@@ -438,104 +438,20 @@ export default function ComentariosPage() {
       throw new Error("Primero debes registrarte como participante.");
     }
 
-    const { data: existingByDevice, error: existingByDeviceError } = await supabase
-      .from("comment_access_participants")
-      .select("id")
-      .eq("device_id", deviceId)
-      .limit(1)
-      .maybeSingle();
+    const res = await fetch("/api/comments/access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ device_id: deviceId }),
+    });
 
-    if (existingByDeviceError) {
-      throw new Error(existingByDeviceError.message);
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || data?.ok !== true || !data?.access?.id) {
+      throw new Error(data?.error || "No se pudo habilitar el acceso a comentarios.");
     }
 
-    if (existingByDevice?.id) {
-      return existingByDevice.id as string;
-    }
-
-    const participantEmail = (participant.email ?? "").trim();
-    const participantPhone = (participant.phone ?? "").trim();
-
-    if (participantEmail) {
-      const { data: existingByEmail, error: existingByEmailError } = await supabase
-        .from("comment_access_participants")
-        .select("id")
-        .eq("email", participantEmail)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingByEmailError) {
-        throw new Error(existingByEmailError.message);
-      }
-
-      if (existingByEmail?.id) {
-        const { error: updateError } = await supabase
-          .from("comment_access_participants")
-                       .update({
-            device_id: deviceId,
-            forum_alias: toSafeForumAlias(participant.alias),
-            group_code: groupCode?.trim() || "GENERAL",
-          })
-          .eq("id", existingByEmail.id);
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
-
-        return existingByEmail.id as string;
-      }
-    }
-
-    if (participantPhone) {
-      const { data: existingByPhone, error: existingByPhoneError } = await supabase
-        .from("comment_access_participants")
-        .select("id")
-        .eq("celular", participantPhone)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingByPhoneError) {
-        throw new Error(existingByPhoneError.message);
-      }
-
-      if (existingByPhone?.id) {
-        const { error: updateError } = await supabase
-          .from("comment_access_participants")
-                      .update({
-            device_id: deviceId,
-            forum_alias: toSafeForumAlias(participant.alias),
-            group_code: groupCode?.trim() || "GENERAL",
-          })
-          .eq("id", existingByPhone.id);
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
-
-        return existingByPhone.id as string;
-      }
-    }
-
-          const payload: any = {
-      device_id: deviceId,
-      group_code: groupCode?.trim() || "GENERAL",
-      forum_alias: toSafeForumAlias(participant.alias),
-    };
-
-    if (participantEmail) payload.email = participantEmail;
-    if (participantPhone) payload.celular = participantPhone;
-
-    const { data: inserted, error: insertError } = await supabase
-      .from("comment_access_participants")
-      .insert(payload)
-      .select("id")
-      .single();
-
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
-
-    return inserted.id as string;
+    return String(data.access.id);
   }
   async function loadPublicReviewed() {
     setPublicLoading(true);
@@ -1232,30 +1148,11 @@ useEffect(() => {
   setSending(true);
 
   try {
-    const accessParticipantId = await ensureCommentAccessParticipant();
-
-    const { count, error: countError } = await supabase
-      .from("user_comments")
-      .select("id", { count: "exact", head: true })
-      .eq("page", "/comentarios")
-      .eq("weekly_topic_id", weeklyTopicId)
-      .eq("access_participant_id", accessParticipantId);
-
-    if (countError) throw new Error(countError.message);
-
-    if ((count ?? 0) >= 3) {
-      setErrMsg("Ya alcanzaste el máximo de 3 comentarios para este tema semanal.");
-      return;
-    }
-
     const payload: any = {
       message: text,
-      status: "published",
       page: "/comentarios",
       weekly_topic_id: weeklyTopicId,
       device_id: deviceId,
-      access_participant_id: accessParticipantId,
-      group_code: groupCode?.trim() || "GENERAL",
       metadata: {
         source_module: "comentarios-ciudadanos",
         source_section: "comentario-semanal",
@@ -1271,8 +1168,20 @@ useEffect(() => {
       },
     };
 
-    const { error } = await supabase.from("user_comments").insert(payload);
-    if (error) throw new Error(error.message);
+    const res = await fetch("/api/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || data?.ok !== true) {
+      const err = new Error(data?.error || "No se pudo publicar el comentario.");
+      (err as any).code = data?.code;
+      throw err;
+    }
 
     setMessage("");
     setOkMsg("¡Gracias! Tu comentario fue publicado correctamente.");
@@ -1283,8 +1192,10 @@ useEffect(() => {
   } catch (e: any) {
     const msg = (e?.message || "").toLowerCase();
 
-    if (msg.includes("max_3_comments_per_topic")) {
+    if (e?.code === "MAX_3_COMMENTS_PER_TOPIC" || msg.includes("max_3_comments_per_topic")) {
       setErrMsg("Ya alcanzaste el máximo de 3 comentarios para este tema semanal.");
+    } else if (e?.code === "LINKS_NOT_ALLOWED") {
+      setErrMsg("No esta permitido incluir enlaces en el comentario.");
     } else {
       setErrMsg(e?.message ?? String(e));
     }
