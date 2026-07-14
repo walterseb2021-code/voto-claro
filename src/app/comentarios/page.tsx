@@ -1033,39 +1033,30 @@ useEffect(() => {
     }
   }
 
-  async function loadMyWinnerQuestion(currentWinner: LatestOfficialWinner, currentDeviceId: string) {
+  async function loadMyWinnerQuestion(_currentWinner: LatestOfficialWinner, currentDeviceId: string) {
     setWinnerQuestionLoading(true);
     setWinnerQuestionError(null);
     setWinnerQuestionOk(null);
 
     try {
-      const winnerDeviceId =
-  currentWinner.video?.participant_device_id ??
-  currentWinner.video?.device_id ??
-  null;
-      const isWinner = !!winnerDeviceId && winnerDeviceId === currentDeviceId;
+      const res = await fetch("/api/comments/founder-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          action: "mine",
+          device_id: currentDeviceId,
+        }),
+      });
 
-      setIsOfficialWinnerUser(isWinner);
+      const data = await res.json().catch(() => null);
 
-      if (!isWinner) {
-        setMyWinnerQuestion(null);
-        return;
+      if (!res.ok || data?.ok !== true) {
+        throw new Error(data?.error || "No se pudo verificar tu pregunta.");
       }
 
-      const { data, error } = await supabase
-        .from("weekly_founder_questions")
-        .select(
-          "id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published"
-        )
-        .eq("weekly_topic_id", currentWinner.topicId)
-        .eq("weekly_video_entry_id", currentWinner.winnerVideoEntryId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw new Error(error.message);
-
-      setMyWinnerQuestion((data as WinnerFounderQuestionRow | null) ?? null);
+      setIsOfficialWinnerUser(Boolean(data.canAsk || data.hasQuestion));
+      setMyWinnerQuestion((data.question as WinnerFounderQuestionRow | null) ?? null);
     } catch (e: any) {
       setIsOfficialWinnerUser(false);
       setMyWinnerQuestion(null);
@@ -1429,50 +1420,28 @@ async function voteForVideo(videoId: string) {
     setWinnerQuestionSending(true);
 
     try {
-      const { data: existingQuestion, error: existingError } = await supabase
-        .from("weekly_founder_questions")
-        .select("id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published")
-        .eq("weekly_topic_id", latestOfficialWinner.topicId)
-        .eq("weekly_video_entry_id", latestOfficialWinner.winnerVideoEntryId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const res = await fetch("/api/comments/founder-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          action: "submit",
+          device_id: deviceId,
+          question_text: text,
+        }),
+      });
 
-      if (existingError) throw new Error(existingError.message);
+      const data = await res.json().catch(() => null);
 
-      if (existingQuestion) {
-        setMyWinnerQuestion(existingQuestion as WinnerFounderQuestionRow);
-        setWinnerQuestionError("Ya existe una pregunta registrada para este ganador.");
-        return;
+      if (!res.ok || data?.ok !== true) {
+        if (data?.code === "QUESTION_ALREADY_SUBMITTED") {
+          throw new Error("Ya existe una pregunta registrada para este ganador.");
+        }
+
+        throw new Error(data?.error || "No se pudo registrar la pregunta.");
       }
 
-      const payload = {
-        weekly_topic_id: latestOfficialWinner.topicId,
-        weekly_video_entry_id: latestOfficialWinner.winnerVideoEntryId,
-        group_code: latestOfficialWinner.video.group_code || groupCode?.trim() || "GENERAL",
-        question_text: text,
-        published: false,
-      };
-
-      const { data, error } = await supabase
-        .from("weekly_founder_questions")
-        .insert(payload)
-        .select(
-          "id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published"
-        )
-        .single();
-
-       if (error) {
-  const msg = error.message?.toLowerCase() || "";
-
-  if (msg.includes("duplicate") || msg.includes("unique")) {
-    throw new Error("Ya existe una pregunta registrada para este ganador.");
-  }
-
-  throw new Error(error.message);
-}
-
-      setMyWinnerQuestion(data as WinnerFounderQuestionRow);
+      setMyWinnerQuestion(data.question as WinnerFounderQuestionRow);
       setWinnerQuestionText("");
       setWinnerQuestionOk(
         "Tu pregunta fue registrada correctamente. Quedará pendiente hasta la respuesta oficial del fundador."
