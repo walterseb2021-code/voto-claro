@@ -5,12 +5,18 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
- type CommentRow = {
+type CommentRow = {
   id: string;
   created_at: string;
   group_code: string;
   message: string;
   status: "published" | "archived" | "blocked";
+};
+
+type ParticipantSummary = {
+  id: string;
+  alias: string | null;
+  display_name: string | null;
 };
 type PublicVideoRow = {
   id: string;
@@ -291,7 +297,7 @@ export default function ComentariosPage() {
     const [checkingData, setCheckingData] = useState(true);
   const [hasData, setHasData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [participant, setParticipant] = useState<any>(null);
+  const [participant, setParticipant] = useState<ParticipantSummary | null>(null);
 
   const [videoPlatform, setVideoPlatform] = useState("YOUTUBE");
   const [videoUrl, setVideoUrl] = useState("");
@@ -313,8 +319,8 @@ export default function ComentariosPage() {
   const [myWinnerQuestion, setMyWinnerQuestion] = useState<WinnerFounderQuestionRow | null>(null);
 
   useEffect(() => {
-    const g = readCookie("vc_group");
-    if (g) setGroupCode(g);
+    const g = readCookie("vc_group") || "GENERAL";
+    setGroupCode(g);
     setDeviceId(getOrCreateDeviceId());
 
     void loadWeeklyTopic();
@@ -343,25 +349,35 @@ export default function ComentariosPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  function applyParticipantResponse(data: any) {
+    const nextParticipant = data?.participant ?? null;
+    setParticipant(nextParticipant);
+    setHasData(Boolean(data?.hasData && nextParticipant?.id));
+    setGroupCode(data?.group_code || readCookie("vc_group") || "GENERAL");
+  }
+
      async function loadParticipant(currentDeviceId: string) {
     setCheckingData(true);
     setDataError(null);
 
     try {
-      const { data, error } = await supabase
-        .from("project_participants")
-        .select("*")
-        .eq("device_id", currentDeviceId)
-        .maybeSingle();
+      const res = await fetch("/api/comments/participant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          action: "lookup",
+          device_id: currentDeviceId,
+        }),
+      });
 
-      if (error) throw new Error(error.message);
+      const data = await res.json().catch(() => null);
 
-      setParticipant(data ?? null);
-      setHasData(!!data);
-
-      if (data?.alias) {
-        setGroupCode(data.alias);
+      if (!res.ok || data?.ok !== true) {
+        throw new Error(data?.error || "No se pudo verificar el participante.");
       }
+
+      applyParticipantResponse(data);
     } catch (e: any) {
       setParticipant(null);
       setHasData(false);
@@ -392,34 +408,34 @@ export default function ComentariosPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from("project_participants")
-        .select("*")
-        .eq("codigo_acceso", codigo)
-        .maybeSingle();
-
-      if (error) throw new Error(error.message);
-
-      if (!data) {
-        setLoginCodigoError("Código de acceso no válido");
-        setLoginCodigoLoading(false);
-        return;
-      }
-
       if (!deviceId) {
         setLoginCodigoError("No se pudo identificar tu dispositivo.");
         setLoginCodigoLoading(false);
         return;
       }
 
-      const { error: updateError } = await supabase
-        .from("project_participants")
-        .update({ device_id: deviceId })
-        .eq("id", data.id);
+      const res = await fetch("/api/comments/participant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          action: "login-code",
+          device_id: deviceId,
+          codigo_acceso: codigo,
+        }),
+      });
 
-      if (updateError) throw new Error(updateError.message);
+      const data = await res.json().catch(() => null);
 
-      await loadParticipant(deviceId);
+      if (!res.ok || data?.ok !== true) {
+        setLoginCodigoError(
+          res.status === 404 ? "Código de acceso no válido" : data?.error || "Código de acceso no válido"
+        );
+        setLoginCodigoLoading(false);
+        return;
+      }
+
+      applyParticipantResponse(data);
       setCodigoAcceso("");
       setLoginCodigoError("✅ Sesión iniciada correctamente");
       setTimeout(() => setLoginCodigoError(""), 3000);
@@ -1160,8 +1176,8 @@ useEffect(() => {
         page_title: "Comentarios Ciudadanos",
         route: "/comentarios",
         topic_id: weeklyTopicId,
-        user_alias: participant?.alias || participant?.full_name || "",
-        user_full_name: participant?.full_name || "",
+        user_alias: participant?.alias || participant?.display_name || "",
+        user_full_name: participant?.display_name || "",
         participant_id: participant?.id || "",
         submitted_from: "comentarios-page",
         client_timestamp: new Date().toISOString(),
@@ -1855,7 +1871,7 @@ const suggestedPrompts =
         votacionSemanalVisible: votingVideos.length > 0,
         historialSemanalVisible: archivedTopicsPublic.length > 0,
         historialForosVisible: forumTopics.length > 0,
-                participanteNombre: participant?.full_name ?? "",
+                participanteNombre: participant?.display_name ?? "",
         participanteAlias: participant?.alias ?? "",
         registroUnicoApp: true,
         codigoUnicoPorParticipante: true,
@@ -1902,7 +1918,7 @@ const suggestedPrompts =
   founderQuestionsPublicLoading,
   commentAwardsPublicLoading,
      forumTopicsLoading,
-  participant?.full_name,
+  participant?.display_name,
   participant?.alias,
   archivedTopicsPublic.length,
 ]);
@@ -2056,7 +2072,7 @@ const suggestedPrompts =
             </div>
 
             <div className="mt-2 text-sm font-semibold text-slate-800">
-              Participante: <span className="font-extrabold">{participant?.full_name || "Participante activo"}</span>
+              Participante: <span className="font-extrabold">{participant?.display_name || "Participante activo"}</span>
             </div>
 
             {participant?.alias ? (
