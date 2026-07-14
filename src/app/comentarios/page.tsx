@@ -676,23 +676,28 @@ useEffect(() => {
 }
   async function loadMyVoteForWeeklyTopic() {
     try {
-      if (!deviceId || (!weeklyTopicId && !votingTopicId)) {
+      if (!deviceId || !votingTopicId) {
         setMyVotedVideoId(null);
         return;
       }
 
-      const { data, error } = await supabase
-        .from("weekly_video_votes")
-        .select("weekly_video_entry_id")
-        .eq("device_id", deviceId)
-        .eq("weekly_topic_id", votingTopicId || weeklyTopicId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const res = await fetch("/api/comments/video-votes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          action: "mine",
+          device_id: deviceId,
+        }),
+      });
 
-      if (error) throw new Error(error.message);
+      const data = await res.json().catch(() => null);
 
-      setMyVotedVideoId(data?.weekly_video_entry_id ?? null);
+      if (!res.ok || data?.ok !== true) {
+        throw new Error(data?.error || "No se pudo verificar tu voto.");
+      }
+
+      setMyVotedVideoId(data?.vote?.weekly_video_entry_id ?? null);
     } catch {
       setMyVotedVideoId(null);
     }
@@ -1350,37 +1355,31 @@ async function voteForVideo(videoId: string) {
 
   try {
     // 1️⃣ Buscar el participante verificado real
-    const accessParticipantId = await ensureCommentAccessParticipant();
+    const res = await fetch("/api/comments/video-votes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        action: "submit",
+        device_id: deviceId,
+        weekly_video_entry_id: videoId,
+      }),
+    });
+
+    const data = await res.json().catch(() => null);
 
     // 2️⃣ Verificar si ya votó en este tema
-        const { data: existingVote, error: existingVoteError } = await supabase
-      .from("weekly_video_votes")
-      .select("id")
-      .eq("weekly_topic_id", votingTopicId)
-      .eq("access_participant_id", accessParticipantId)
-      .limit(1)
-      .maybeSingle();
-    if (existingVoteError) throw new Error(existingVoteError.message);
+    if (!res.ok || data?.ok !== true) {
+      if (data?.code === "VOTE_ALREADY_SUBMITTED") {
+        throw new Error("Ya registraste tu voto en este tema semanal.");
+      }
 
-    if (existingVote) {
-      setErrMsg("Ya registraste tu voto en este tema semanal.");
-      return;
+      throw new Error(data?.error || "No se pudo registrar el voto.");
     }
 
     // 3️⃣ Registrar el voto
-          const payload = {
-      weekly_topic_id: votingTopicId,
-      weekly_video_entry_id: videoId,
-      device_id: deviceId,
-      access_participant_id: accessParticipantId,
-      group_code: groupCode?.trim() || "GENERAL",
-    };
-
-    const { error } = await supabase.from("weekly_video_votes").insert(payload);
-    if (error) throw new Error(error.message);
-
     setOkMsg("Tu voto fue registrado correctamente.");
-    setMyVotedVideoId(videoId);
+    setMyVotedVideoId(data?.vote?.weekly_video_entry_id ?? videoId);
 
     await loadVotingVideos();
   } catch (e: any) {
