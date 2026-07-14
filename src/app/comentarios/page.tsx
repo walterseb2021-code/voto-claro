@@ -1258,49 +1258,51 @@ useEffect(() => {
     return;
   }
 
-    let accessParticipantId = "";
-
-  try {
-    accessParticipantId = await ensureCommentAccessParticipant();
-  } catch (e: any) {
-    setErrMsg(e?.message ?? String(e));
-    return;
-  }
-
-  const { data: existingVideo, error: existingVideoError } = await supabase
-    .from("weekly_video_entries")
-    .select("id")
-    .eq("weekly_topic_id", weeklyTopicId)
-    .eq("access_participant_id", accessParticipantId)
-    .limit(1)
-    .maybeSingle();
-
-  if (existingVideoError) {
-    setErrMsg(existingVideoError.message);
-    return;
-  }
-
-  if (existingVideo) {
-    setErrMsg("Ya enviaste un video para este tema semanal.");
-    return;
-  }
-
   setSendingVideo(true);
   try {
-    const payload: any = {
-      weekly_topic_id: weeklyTopicId,
-      device_id: deviceId,
-      participant_device_id: deviceId,
-      access_participant_id: accessParticipantId,
-      group_code: groupCode?.trim() || "GENERAL",
-      platform: videoPlatform,
-      video_url: url,
-      title: title || null,
-      status: "new",
-    };
+    const mineRes = await fetch("/api/comments/videos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        action: "mine",
+        device_id: deviceId,
+      }),
+    });
 
-    const { error } = await supabase.from("weekly_video_entries").insert(payload);
-    if (error) throw new Error(error.message);
+    const mineData = await mineRes.json().catch(() => null);
+
+    if (!mineRes.ok || mineData?.ok !== true) {
+      throw new Error(mineData?.error || "No se pudo verificar tu video.");
+    }
+
+    if (mineData?.hasVideo) {
+      setErrMsg("Ya enviaste un video para este tema semanal.");
+      return;
+    }
+
+    const submitRes = await fetch("/api/comments/videos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        action: "submit",
+        device_id: deviceId,
+        platform: videoPlatform,
+        video_url: url,
+        title,
+      }),
+    });
+
+    const submitData = await submitRes.json().catch(() => null);
+
+    if (!submitRes.ok || submitData?.ok !== true) {
+      if (submitData?.code === "VIDEO_ALREADY_SUBMITTED") {
+        throw new Error("Ya enviaste un video para este tema semanal.");
+      }
+
+      throw new Error(submitData?.error || "No se pudo enviar el video.");
+    }
 
     setVideoUrl("");
     setVideoTitle("");
