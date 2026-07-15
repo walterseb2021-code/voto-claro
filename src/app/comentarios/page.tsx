@@ -81,18 +81,24 @@ type ArchivedTopicPublicItem = {
 
 type FounderQuestionPublicRow = {
   id: string;
-  created_at: string;
-  weekly_topic_id: string;
-  weekly_video_entry_id: string;
   group_code: string;
   question_text: string;
   founder_answer_text: string | null;
   founder_answer_video_url: string | null;
-  founder_answered_at: string | null;
-  published: boolean;
-  topicTitle: string | null;
-  videoTitle: string | null;
+  published_at: string | null;
+  topic_title: string | null;
+  video_title: string | null;
 };
+
+type PublicFounderQuestionsApiResponse =
+  | {
+      ok: true;
+      questions: FounderQuestionPublicRow[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 type CommentAwardPublicRow = {
   id: string;
@@ -896,65 +902,22 @@ useEffect(() => {
     setFounderQuestionsPublicError(null);
 
     try {
-      const { data: questionsData, error: questionsError } = await supabase
-        .from("weekly_founder_questions")
-        .select(
-          "id,created_at,weekly_topic_id,weekly_video_entry_id,group_code,question_text,founder_answer_text,founder_answer_video_url,founder_answered_at,published"
-        )
-        .eq("published", true)
-        .order("founder_answered_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const res = await fetch("/api/comments/public-founder-questions", {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (questionsError) throw new Error(questionsError.message);
+      const data = (await res.json().catch(() => null)) as
+        | PublicFounderQuestionsApiResponse
+        | null;
 
-      const rows = questionsData ?? [];
-      const topicIds = [...new Set(rows.map((row: any) => row.weekly_topic_id).filter(Boolean))];
-      const videoIds = [
-        ...new Set(rows.map((row: any) => row.weekly_video_entry_id).filter(Boolean)),
-      ];
-
-      let topicsMap: Record<string, string> = {};
-      let videosMap: Record<string, string | null> = {};
-
-      if (topicIds.length > 0) {
-        const { data: topicsData, error: topicsError } = await supabase
-          .from("weekly_topics")
-          .select("id,topic")
-          .in("id", topicIds);
-
-        if (topicsError) throw new Error(topicsError.message);
-
-        topicsMap = Object.fromEntries((topicsData ?? []).map((row: any) => [row.id, row.topic]));
+      if (!res.ok || !data || data.ok !== true) {
+        const message =
+          data && data.ok === false ? data.error : "No se pudo cargar preguntas al fundador.";
+        throw new Error(message || "No se pudo cargar preguntas al fundador.");
       }
 
-      if (videoIds.length > 0) {
-        const { data: videosData, error: videosError } = await supabase
-          .from("weekly_video_entries")
-          .select("id,title")
-          .in("id", videoIds);
-
-        if (videosError) throw new Error(videosError.message);
-
-        videosMap = Object.fromEntries((videosData ?? []).map((row: any) => [row.id, row.title]));
-      }
-
-      const normalized: FounderQuestionPublicRow[] = rows.map((row: any) => ({
-        id: row.id,
-        created_at: row.created_at,
-        weekly_topic_id: row.weekly_topic_id,
-        weekly_video_entry_id: row.weekly_video_entry_id,
-        group_code: row.group_code,
-        question_text: row.question_text,
-        founder_answer_text: row.founder_answer_text ?? null,
-        founder_answer_video_url: row.founder_answer_video_url ?? null,
-        founder_answered_at: row.founder_answered_at ?? null,
-        published: !!row.published,
-        topicTitle: topicsMap[row.weekly_topic_id] ?? null,
-        videoTitle: videosMap[row.weekly_video_entry_id] ?? null,
-      }));
-
-      setFounderQuestionsPublic(normalized);
+      setFounderQuestionsPublic(data.questions);
     } catch (e: any) {
       setFounderQuestionsPublic([]);
       setFounderQuestionsPublicError(e?.message ?? String(e));
@@ -2660,15 +2623,15 @@ const suggestedPrompts =
                 Grupo: {item.group_code}
               </div>
 
-              {item.topicTitle ? (
+              {item.topic_title ? (
                 <div className="mt-1 text-sm font-semibold text-slate-800">
-                  Tema: {item.topicTitle}
+                  Tema: {item.topic_title}
                 </div>
               ) : null}
 
-              {item.videoTitle ? (
+              {item.video_title ? (
                 <div className="mt-1 text-sm font-semibold text-slate-800">
-                  Video ganador: {item.videoTitle}
+                  Video ganador: {item.video_title}
                 </div>
               ) : null}
 
@@ -2701,9 +2664,9 @@ const suggestedPrompts =
                 </a>
               ) : null}
 
-              {item.founder_answered_at ? (
+              {item.published_at ? (
                 <div className="mt-3 text-xs font-semibold text-slate-600">
-                  Publicado: {new Date(item.founder_answered_at).toLocaleString()}
+                  Publicado: {new Date(item.published_at).toLocaleString()}
                 </div>
               ) : null}
             </div>
