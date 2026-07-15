@@ -79,6 +79,30 @@ type ArchivedTopicPublicItem = {
   } | null;
 };
 
+type PublicWinnerHistoryItem = {
+  id: string;
+  topic: string;
+  question: string;
+  winner_votes: number;
+  winner_published_at: string | null;
+  video: {
+    group_code: string;
+    platform: string;
+    video_url: string;
+    title: string | null;
+  } | null;
+};
+
+type PublicWinnerHistoryApiResponse =
+  | {
+      ok: true;
+      items: PublicWinnerHistoryItem[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
+
 type FounderQuestionPublicRow = {
   id: string;
   group_code: string;
@@ -295,7 +319,7 @@ export default function ComentariosPage() {
   const [latestOfficialWinnerLoading, setLatestOfficialWinnerLoading] = useState(false);
   const [latestOfficialWinnerError, setLatestOfficialWinnerError] = useState<string | null>(null);
 
-    const [archivedTopicsPublic, setArchivedTopicsPublic] = useState<ArchivedTopicPublicItem[]>([]);
+    const [archivedTopicsPublic, setArchivedTopicsPublic] = useState<PublicWinnerHistoryItem[]>([]);
   const [archivedTopicsPublicLoading, setArchivedTopicsPublicLoading] = useState(false);
   const [archivedTopicsPublicError, setArchivedTopicsPublicError] = useState<string | null>(null);
   const [selectedArchivedTopicId, setSelectedArchivedTopicId] = useState<string>("");
@@ -797,61 +821,20 @@ useEffect(() => {
     setArchivedTopicsPublicError(null);
 
     try {
-      const { data: topicsData, error: topicsError } = await supabase
-        .from("weekly_topics")
-        .select(
-          "id,topic,question,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
-        )
-        .eq("status", "archived")
-        .order("winner_published_at", { ascending: false })
-        .order("ends_at", { ascending: false })
-        .limit(12);
+      const res = await fetch("/api/comments/public-winner-history", {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (topicsError) throw new Error(topicsError.message);
+      const data = (await res.json().catch(() => null)) as PublicWinnerHistoryApiResponse | null;
 
-      const rows = topicsData ?? [];
-      const winnerIds = rows.map((row: any) => row.winner_video_entry_id).filter(Boolean);
-
-      let videosMap: Record<string, ArchivedTopicPublicItem["video"]> = {};
-
-      if (winnerIds.length > 0) {
-        const { data: videosData, error: videosError } = await supabase
-          .from("weekly_video_entries")
-          .select("id,created_at,weekly_topic_id,group_code,platform,video_url,title,status")
-          .in("id", winnerIds);
-
-        if (videosError) throw new Error(videosError.message);
-
-        videosMap = Object.fromEntries(
-          (videosData ?? []).map((video: any) => [
-            video.id,
-            {
-              id: video.id,
-              created_at: video.created_at,
-              weekly_topic_id: video.weekly_topic_id,
-              group_code: video.group_code,
-              platform: video.platform,
-              video_url: video.video_url,
-              title: video.title,
-              status: video.status,
-            },
-          ])
-        );
+      if (!res.ok || !data || data.ok !== true) {
+        const message =
+          data && data.ok === false ? data.error : "No se pudo cargar historial semanal.";
+        throw new Error(message || "No se pudo cargar historial semanal.");
       }
 
-      const normalized: ArchivedTopicPublicItem[] = rows.map((row: any) => ({
-        id: row.id,
-        topic: row.topic ?? "",
-        question: row.question ?? "",
-        starts_at: row.starts_at ?? null,
-        ends_at: row.ends_at ?? null,
-        winnerVideoEntryId: row.winner_video_entry_id ?? null,
-        winnerVotes: Number(row.winner_votes ?? 0),
-        winnerPublishedAt: row.winner_published_at ?? null,
-        video: row.winner_video_entry_id ? videosMap[row.winner_video_entry_id] ?? null : null,
-      }));
-
-      setArchivedTopicsPublic(normalized);
+      setArchivedTopicsPublic(data.items);
     } catch (e: any) {
       setArchivedTopicsPublic([]);
       setArchivedTopicsPublicError(e?.message ?? String(e));
@@ -2829,12 +2812,12 @@ const suggestedPrompts =
                 ) : null}
 
                 <div className="mt-3 text-sm font-extrabold text-slate-900">
-                  Votos oficiales: {selectedArchivedTopic.winnerVotes}
+                  Votos oficiales: {selectedArchivedTopic.winner_votes}
                 </div>
 
-                {selectedArchivedTopic.winnerPublishedAt ? (
+                {selectedArchivedTopic.winner_published_at ? (
                   <div className="mt-1 text-xs font-semibold text-slate-600">
-                    Publicado: {new Date(selectedArchivedTopic.winnerPublishedAt).toLocaleString()}
+                    Publicado: {new Date(selectedArchivedTopic.winner_published_at).toLocaleString()}
                   </div>
                 ) : null}
 
