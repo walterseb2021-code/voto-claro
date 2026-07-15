@@ -40,15 +40,23 @@ type LatestOfficialWinner = {
     id: string;
     created_at: string;
     weekly_topic_id: string;
-    device_id: string | null;
-    participant_device_id: string | null;
     group_code: string;
     platform: string;
     video_url: string;
     title: string | null;
-    status: "new" | "reviewed" | "archived" | "blocked";
   } | null;
 };
+
+type PublicWinnerApiResponse =
+  | {
+      ok: true;
+      hasWinner: boolean;
+      winner: LatestOfficialWinner | null;
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 type ArchivedTopicPublicItem = {
   id: string;
@@ -740,57 +748,28 @@ useEffect(() => {
     setLatestOfficialWinnerError(null);
 
     try {
-      const { data: topicData, error: topicError } = await supabase
-        .from("weekly_topics")
-        .select("id, topic, question, winner_video_entry_id, winner_votes, winner_published_at")
-        .eq("status", "archived")
-        .not("winner_video_entry_id", "is", null)
-        .order("winner_published_at", { ascending: false })
-        .order("ends_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const res = await fetch("/api/comments/public-winner", {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (topicError) throw new Error(topicError.message);
+      const data = (await res.json().catch(() => null)) as PublicWinnerApiResponse | null;
 
-      if (!topicData?.winner_video_entry_id) {
+      if (!res.ok || !data || data.ok !== true) {
+        const message =
+          data && data.ok === false ? data.error : "No se pudo cargar el ganador oficial.";
+        throw new Error(message || "No se pudo cargar el ganador oficial.");
+      }
+
+      if (!data.hasWinner || !data.winner) {
         setLatestOfficialWinner(null);
         return;
       }
 
-      const { data: videoData, error: videoError } = await supabase
-        .from("weekly_video_entries")
-        .select("id,created_at,weekly_topic_id,device_id,participant_device_id,group_code,platform,video_url,title,status")
-        .eq("id", topicData.winner_video_entry_id)
-        .limit(1)
-        .maybeSingle();
-
-      if (videoError) throw new Error(videoError.message);
-
-      setLatestOfficialWinner({
-        topicId: topicData.id,
-        topic: topicData.topic ?? "",
-        question: topicData.question ?? "",
-        winnerVideoEntryId: topicData.winner_video_entry_id,
-        winnerVotes: Number(topicData.winner_votes ?? 0),
-        winnerPublishedAt: topicData.winner_published_at ?? null,
-       video: videoData
-  ? ({
-      id: videoData.id,
-      created_at: videoData.created_at,
-      weekly_topic_id: videoData.weekly_topic_id,
-      device_id: videoData.device_id ?? null,
-      participant_device_id: videoData.participant_device_id ?? null,
-      group_code: videoData.group_code,
-      platform: videoData.platform,
-      video_url: videoData.video_url,
-      title: videoData.title,
-      status: videoData.status,
-    } as LatestOfficialWinner["video"])
-  : null,
-      });
-    } catch (e: any) {
+      setLatestOfficialWinner(data.winner);
+    } catch (e: unknown) {
       setLatestOfficialWinner(null);
-      setLatestOfficialWinnerError(e?.message ?? String(e));
+      setLatestOfficialWinnerError(e instanceof Error ? e.message : String(e));
     } finally {
       setLatestOfficialWinnerLoading(false);
     }
