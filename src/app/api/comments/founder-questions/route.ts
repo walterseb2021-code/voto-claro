@@ -326,6 +326,16 @@ export async function POST(req: Request) {
     const accessParticipantId = await ensureAccess(supabase, deviceId, cookieGroupCode);
 
     if (!accessParticipantId) {
+      if (action === "mine") {
+        return json(200, {
+          ok: true,
+          canAsk: false,
+          hasQuestion: false,
+          reason: "NO_ACCESS",
+          question: null,
+        });
+      }
+
       return json(403, { ok: false, error: "No autorizado" });
     }
 
