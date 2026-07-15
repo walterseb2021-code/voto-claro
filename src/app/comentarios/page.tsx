@@ -129,12 +129,6 @@ type VideoVoteCountRow = {
 
 type TimeFilter = "TODAY" | "D7" | "D30" | "ALL";
 
-function readCookie(name: string) {
-  if (typeof document === "undefined") return null;
-  const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-  return m ? decodeURIComponent(m[2]) : null;
-}
-
 function getOrCreateDeviceId() {
   if (typeof window === "undefined") return null;
   const key = "vc_device_id";
@@ -248,7 +242,6 @@ export default function ComentariosPage() {
     return createClient(url, key);
   }, []);
 
-  const [groupCode, setGroupCode] = useState<string>("");
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("");
 
@@ -327,8 +320,6 @@ export default function ComentariosPage() {
   const [myWinnerQuestion, setMyWinnerQuestion] = useState<WinnerFounderQuestionRow | null>(null);
 
   useEffect(() => {
-    const g = readCookie("vc_group") || "GENERAL";
-    setGroupCode(g);
     setDeviceId(getOrCreateDeviceId());
 
     void loadWeeklyTopic();
@@ -361,7 +352,6 @@ export default function ComentariosPage() {
     const nextParticipant = data?.participant ?? null;
     setParticipant(nextParticipant);
     setHasData(Boolean(data?.hasData && nextParticipant?.id));
-    setGroupCode(data?.group_code || readCookie("vc_group") || "GENERAL");
   }
 
      async function loadParticipant(currentDeviceId: string) {
@@ -2160,19 +2150,6 @@ const suggestedPrompts =
 
         {!checkingData && hasData ? (
           <form onSubmit={onSubmit} className="grid gap-4 mt-4">
-            <div>
-              <div className={label}>Grupo (opcional)</div>
-              <input
-                className={input}
-                value={groupCode}
-                onChange={(e) => setGroupCode(e.target.value)}
-                placeholder="Ej: GRUPOA"
-              />
-              <div className="mt-1 text-xs text-slate-600">
-                Casilla con tu alias.Esto se llena automáticamente.
-              </div>
-            </div>
-
             <div>
               <div className={label}>Comentario</div>
               <textarea
