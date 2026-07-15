@@ -129,9 +129,20 @@ type WinnerFounderQuestionRow = {
   published: boolean;
 };
 
-type VideoVoteCountRow = {
+type PublicVideoVoteCount = {
   weekly_video_entry_id: string;
+  vote_count: number;
 };
+
+type PublicVideoVoteCountsApiResponse =
+  | {
+      ok: true;
+      counts: PublicVideoVoteCount[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 type TimeFilter = "TODAY" | "D7" | "D30" | "ALL";
 
@@ -537,7 +548,7 @@ export default function ComentariosPage() {
   try {
     const ids =
       videoIds && videoIds.length > 0
-        ? videoIds
+        ? Array.from(new Set(videoIds.filter(Boolean)))
         : Array.from(
             new Set(
               [
@@ -552,23 +563,40 @@ export default function ComentariosPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("weekly_video_votes")
-      .select("weekly_video_entry_id")
-      .in("weekly_video_entry_id", ids);
+    const res = await fetch("/api/comments/public-video-votes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        weekly_video_entry_ids: ids,
+      }),
+    });
 
-    if (error) throw new Error(error.message);
+    const data = (await res.json().catch(() => null)) as PublicVideoVoteCountsApiResponse | null;
 
-    const counts: Record<string, number> = {};
+    if (!res.ok || !data || data.ok !== true) {
+      const message =
+        data && data.ok === false ? data.error : "No se pudo cargar el conteo de votos.";
+      throw new Error(message || "No se pudo cargar el conteo de votos.");
+    }
 
-      (data || []).forEach((row: { weekly_video_entry_id: string }) => {
-  counts[row.weekly_video_entry_id] =
-    (counts[row.weekly_video_entry_id] || 0) + 1;
-});
+    setVideoVoteCounts((previous) => {
+      const next = { ...previous };
 
-    setVideoVoteCounts(counts);
+      ids.forEach((id) => {
+        next[id] = 0;
+      });
+
+      data.counts.forEach((item) => {
+        if (ids.includes(item.weekly_video_entry_id)) {
+          next[item.weekly_video_entry_id] = item.vote_count;
+        }
+      });
+
+      return next;
+    });
   } catch {
-    setVideoVoteCounts({});
+    setVideoVoteCounts((previous) => ({ ...previous }));
   }
 }
 
@@ -648,8 +676,7 @@ useEffect(() => {
   group_code,
   platform,
   video_url,
-  title,
-  weekly_video_votes(count)
+  title
 `)
       .eq("weekly_topic_id", votingTopicId)
       .eq("status", "reviewed")
@@ -660,19 +687,7 @@ useEffect(() => {
     setVotingVideos(data ?? []);
     if (data && data.length > 0) {
   const ids = data.map(v => v.id);
-
-  const { data: votes } = await supabase
-  .from("weekly_video_votes")
-  .select("weekly_video_entry_id")
-  .in("weekly_video_entry_id", ids);
-  const counts: Record<string, number> = {};
-
-  votes?.forEach(v => {
-    counts[v.weekly_video_entry_id] =
-  (counts[v.weekly_video_entry_id] || 0) + 1;
-  });
-
-  setVideoVoteCounts(counts);
+  await loadVideoVoteCounts(ids);
 }
   } catch (e) {
     setVotingVideos([]);
