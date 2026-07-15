@@ -96,19 +96,25 @@ type FounderQuestionPublicRow = {
 
 type CommentAwardPublicRow = {
   id: string;
-  created_at: string;
-  user_comment_id: string;
   group_code: string;
   award_year: number;
   award_quarter: number;
   award_title: string | null;
   award_note: string | null;
-  contact_status: string;
   includes_companion: boolean;
-  published: boolean;
   published_at: string | null;
   commentMessage: string | null;
 };
+
+type PublicAwardsApiResponse =
+  | {
+      ok: true;
+      awards: CommentAwardPublicRow[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 type WinnerFounderQuestionRow = {
   id: string;
@@ -947,53 +953,20 @@ useEffect(() => {
     setCommentAwardsPublicError(null);
 
     try {
-      const { data: awardsData, error: awardsError } = await supabase
-        .from("comment_awards")
-        .select(
-          "id,created_at,user_comment_id,group_code,award_year,award_quarter,award_title,award_note,contact_status,includes_companion,published,published_at"
-        )
-        .eq("published", true)
-        .order("published_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(12);
+      const res = await fetch("/api/comments/public-awards", {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (awardsError) throw new Error(awardsError.message);
+      const data = (await res.json().catch(() => null)) as PublicAwardsApiResponse | null;
 
-      const rows = awardsData ?? [];
-      const commentIds = [...new Set(rows.map((row: any) => row.user_comment_id).filter(Boolean))];
-
-      let commentsMap: Record<string, string | null> = {};
-
-      if (commentIds.length > 0) {
-        const { data: commentsData, error: commentsError } = await supabase
-          .from("user_comments")
-          .select("id,message")
-          .in("id", commentIds);
-
-        if (commentsError) throw new Error(commentsError.message);
-
-        commentsMap = Object.fromEntries(
-          (commentsData ?? []).map((row: any) => [row.id, row.message ?? null])
-        );
+      if (!res.ok || !data || data.ok !== true) {
+        const message =
+          data && data.ok === false ? data.error : "No se pudo cargar los ganadores trimestrales.";
+        throw new Error(message || "No se pudo cargar los ganadores trimestrales.");
       }
 
-      const normalized: CommentAwardPublicRow[] = rows.map((row: any) => ({
-        id: row.id,
-        created_at: row.created_at,
-        user_comment_id: row.user_comment_id,
-        group_code: row.group_code,
-        award_year: Number(row.award_year ?? 0),
-        award_quarter: Number(row.award_quarter ?? 0),
-        award_title: row.award_title ?? null,
-        award_note: row.award_note ?? null,
-        contact_status: row.contact_status,
-        includes_companion: !!row.includes_companion,
-        published: !!row.published,
-        published_at: row.published_at ?? null,
-        commentMessage: commentsMap[row.user_comment_id] ?? null,
-      }));
-
-      setCommentAwardsPublic(normalized);
+      setCommentAwardsPublic(data.awards);
     } catch (e: any) {
       setCommentAwardsPublic([]);
       setCommentAwardsPublicError(e?.message ?? String(e));
