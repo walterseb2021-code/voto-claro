@@ -6,6 +6,8 @@ export const runtime = "nodejs";
 
 const DEFAULT_GROUP_CODE = "GENERAL";
 const MAX_MESSAGE_LENGTH = 500;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ParticipantRow = {
   id: string;
@@ -85,7 +87,7 @@ function normalizeGroupCode(value: unknown) {
 }
 
 function isValidTopicId(value: string) {
-  return value.length > 0 && value.length <= 120;
+  return UUID_RE.test(value);
 }
 
 function isValidDeviceId(value: string) {
@@ -341,7 +343,7 @@ export async function POST(req: Request) {
     const topicId = cleanText(body?.topic_id, 120);
 
     if (!isValidTopicId(topicId)) {
-      return json(400, { ok: false, error: "Solicitud invalida" });
+      return json(400, { ok: false, error: "Tema inválido" });
     }
 
     const supabase = getSupabaseAdmin();
