@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
@@ -48,15 +47,21 @@ type ParticipantSummary = {
   alias: string | null;
   display_name: string | null;
 };
-type PublicVideoRow = {
+type PublicActiveWeeklyVideo = {
   id: string;
   created_at: string;
-  weekly_topic_id: string;
   group_code: string;
   platform: string;
   video_url: string;
   title: string | null;
-  status: "new" | "reviewed" | "archived" | "blocked";
+};
+
+type PublicVotingWeeklyVideo = {
+  id: string;
+  created_at: string;
+  platform: string;
+  video_url: string;
+  title: string | null;
 };
 
 type LatestOfficialWinner = {
@@ -200,6 +205,16 @@ type PublicVideoVoteCountsApiResponse =
       error?: string;
     };
 
+type PublicWeeklyVideosApiResponse<T> =
+  | {
+      ok: true;
+      videos: T[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
+
 type TimeFilter = "TODAY" | "D7" | "D30" | "ALL";
 
 function getOrCreateDeviceId() {
@@ -288,12 +303,6 @@ export default function ComentariosPage() {
     else router.push("/");
   }
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("");
 
@@ -310,8 +319,8 @@ export default function ComentariosPage() {
   const [publicItems, setPublicItems] = useState<PublicCommentRow[]>([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
-  const [publicVideos, setPublicVideos] = useState<PublicVideoRow[]>([]);
-  const [votingVideos, setVotingVideos] = useState<any[]>([]);
+  const [publicVideos, setPublicVideos] = useState<PublicActiveWeeklyVideo[]>([]);
+  const [votingVideos, setVotingVideos] = useState<PublicVotingWeeklyVideo[]>([]);
   const [publicVideosLoading, setPublicVideosLoading] = useState(false);
   const [publicVideosError, setPublicVideosError] = useState<string | null>(null);
   const [votingVideoId, setVotingVideoId] = useState<string | null>(null);
@@ -560,22 +569,34 @@ export default function ComentariosPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("weekly_video_entries")
-      .select("id,created_at,weekly_topic_id,group_code,platform,video_url,title,status")
-      .eq("status", "reviewed")
-      .eq("weekly_topic_id", weeklyTopicId)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const res = await fetch("/api/comments/public-weekly-videos?scope=active", {
+      method: "GET",
+      cache: "no-store",
+    });
 
-    if (error) throw new Error(error.message);
+    const data = (await res.json().catch(() => null)) as
+      | PublicWeeklyVideosApiResponse<PublicActiveWeeklyVideo>
+      | null;
 
-    const rows = (data ?? []) as PublicVideoRow[];
-    setPublicVideos(rows);
+    if (!res.ok || !data || data.ok !== true) {
+      const message = data && data.ok === false ? data.error : undefined;
+      throw new Error(message || "No se pudieron cargar los videos.");
+    }
 
-    await loadVideoVoteCounts(rows.map((item) => item.id));
-  } catch (e: any) {
-    setPublicVideosError(e?.message ?? String(e));
+    setPublicVideos(data.videos);
+
+    await loadVideoVoteCounts(data.videos.map((item) => item.id));
+  } catch (e: unknown) {
+    const previousVideoIds = publicVideos.map((video) => video.id);
+    setPublicVideos([]);
+    setVideoVoteCounts((counts) => {
+      const next = { ...counts };
+      previousVideoIds.forEach((id) => {
+        delete next[id];
+      });
+      return next;
+    });
+    setPublicVideosError(e instanceof Error ? e.message : String(e));
   } finally {
     setPublicVideosLoading(false);
   }
@@ -589,7 +610,7 @@ export default function ComentariosPage() {
             new Set(
               [
                 ...publicVideos.map((v) => v.id),
-                ...votingVideos.map((v: any) => v.id),
+                ...votingVideos.map((v) => v.id),
               ].filter(Boolean)
             )
           );
@@ -704,25 +725,22 @@ useEffect(() => {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("weekly_video_entries")
-       .select(`
-  id,
-  created_at,
-  group_code,
-  platform,
-  video_url,
-  title
-`)
-      .eq("weekly_topic_id", votingTopicId)
-      .eq("status", "reviewed")
-      .order("created_at", { ascending: false });
+    const res = await fetch("/api/comments/public-weekly-videos?scope=voting", {
+      method: "GET",
+      cache: "no-store",
+    });
 
-    if (error) throw new Error(error.message);
+    const data = (await res.json().catch(() => null)) as
+      | PublicWeeklyVideosApiResponse<PublicVotingWeeklyVideo>
+      | null;
 
-    setVotingVideos(data ?? []);
-    if (data && data.length > 0) {
-  const ids = data.map(v => v.id);
+    if (!res.ok || !data || data.ok !== true) {
+      throw new Error(data && data.ok === false ? data.error : undefined);
+    }
+
+    setVotingVideos(data.videos);
+    if (data.videos.length > 0) {
+  const ids = data.videos.map((v) => v.id);
   await loadVideoVoteCounts(ids);
 }
   } catch (e) {
