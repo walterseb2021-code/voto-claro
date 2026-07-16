@@ -22,6 +22,27 @@ type PublicCommentsApiResponse =
       error?: string;
     };
 
+type PublicActiveTopic = {
+  id: string;
+  topic: string;
+  question: string;
+};
+
+type PublicVotingTopic = {
+  id: string;
+};
+
+type PublicTopicStateApiResponse =
+  | {
+      ok: true;
+      activeTopic: PublicActiveTopic | null;
+      votingTopic: PublicVotingTopic | null;
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
+
 type ParticipantSummary = {
   id: string;
   alias: string | null;
@@ -353,8 +374,7 @@ export default function ComentariosPage() {
   useEffect(() => {
     setDeviceId(getOrCreateDeviceId());
 
-    void loadWeeklyTopic();
-    void loadVotingTopic();
+    void loadPublicTopicState();
     void loadLatestOfficialWinner();
     void loadArchivedTopicsPublic();
     void loadFounderQuestionsPublic();
@@ -738,38 +758,34 @@ useEffect(() => {
     }
   }
 
-    async function loadWeeklyTopic() {
+    async function loadPublicTopicState() {
     try {
-      const { data, error } = await supabase
-        .from("weekly_topics")
-        .select("id, topic, question")
-        .eq("status", "active")
-        .limit(1)
-        .single();
+      const res = await fetch("/api/comments/public-topic-state", {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (error) return;
+      const data = (await res.json().catch(() => null)) as PublicTopicStateApiResponse | null;
 
-      if (data) {
-        setWeeklyTopicId(data.id);
-        setWeeklyTopic(data.topic);
-        setWeeklyQuestion(data.question);
+      if (!res.ok || !data || data.ok !== true) {
+        setWeeklyTopicId("");
+        setWeeklyTopic("");
+        setWeeklyQuestion("");
+        setVotingTopicId("");
+        return;
       }
-    } catch {}
+
+      setWeeklyTopicId(data.activeTopic?.id ?? "");
+      setWeeklyTopic(data.activeTopic?.topic ?? "");
+      setWeeklyQuestion(data.activeTopic?.question ?? "");
+      setVotingTopicId(data.votingTopic?.id ?? "");
+    } catch {
+      setWeeklyTopicId("");
+      setWeeklyTopic("");
+      setWeeklyQuestion("");
+      setVotingTopicId("");
+    }
   }
-    async function loadVotingTopic() {
-  try {
-    const { data, error } = await supabase
-      .from("weekly_topics")
-      .select("id")
-      .eq("status", "voting")
-      .limit(1)
-      .maybeSingle();
-
-    if (error) return;
-
-    setVotingTopicId(data?.id ?? "");
-  } catch {}
-}
   async function loadLatestOfficialWinner() {
     setLatestOfficialWinnerLoading(true);
     setLatestOfficialWinnerError(null);
