@@ -5,13 +5,22 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
-type CommentRow = {
+type PublicCommentRow = {
   id: string;
   created_at: string;
   group_code: string;
   message: string;
-  status: "published" | "archived" | "blocked";
 };
+
+type PublicCommentsApiResponse =
+  | {
+      ok: true;
+      comments: PublicCommentRow[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 type ParticipantSummary = {
   id: string;
@@ -249,27 +258,6 @@ function isValidVideoUrl(url: string) {
   }
 }
 
-function getSinceDate(filter: TimeFilter): Date | null {
-  const now = new Date();
-  if (filter === "ALL") return null;
-
-  if (filter === "TODAY") {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  if (filter === "D7") {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 7);
-    return d;
-  }
-
-  const d = new Date(now);
-  d.setDate(d.getDate() - 30);
-  return d;
-}
-
 export default function ComentariosPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
@@ -298,7 +286,7 @@ export default function ComentariosPage() {
   const [showPublic, setShowPublic] = useState(false);
   const [showPublicVideos, setShowPublicVideos] = useState(false);
   const [showVotingVideos, setShowVotingVideos] = useState(false);
-  const [publicItems, setPublicItems] = useState<CommentRow[]>([]);
+  const [publicItems, setPublicItems] = useState<PublicCommentRow[]>([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
   const [publicVideos, setPublicVideos] = useState<PublicVideoRow[]>([]);
@@ -515,25 +503,27 @@ export default function ComentariosPage() {
     setPublicError(null);
 
     try {
-      let q = supabase
-        .from("user_comments")
-        .select("id,created_at,group_code,message,status")
-        .eq("status", "published")
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const params = new URLSearchParams({
+        filter: timeFilter,
+        tz_offset_minutes: String(new Date().getTimezoneOffset()),
+      });
 
-      const since = getSinceDate(timeFilter);
-      if (since) {
-        q = q.gte("created_at", since.toISOString());
+      const res = await fetch(`/api/comments/public-comments?${params.toString()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = (await res.json().catch(() => null)) as PublicCommentsApiResponse | null;
+
+      if (!res.ok || !data || data.ok !== true) {
+        const errorMessage = data && "error" in data ? data.error : undefined;
+        throw new Error(errorMessage ?? "No se pudieron cargar los comentarios.");
       }
 
-      const { data, error } = await q;
-
-      if (error) throw new Error(error.message);
-
-      setPublicItems((data ?? []) as CommentRow[]);
-    } catch (e: any) {
-      setPublicError(e?.message ?? String(e));
+      setPublicItems(data.comments);
+    } catch (e: unknown) {
+      setPublicItems([]);
+      setPublicError(e instanceof Error ? e.message : String(e));
     } finally {
       setPublicLoading(false);
     }
