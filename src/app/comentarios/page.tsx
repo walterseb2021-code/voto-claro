@@ -58,26 +58,22 @@ type PublicWinnerApiResponse =
       error?: string;
     };
 
-type ArchivedTopicPublicItem = {
+type PublicForumTopic = {
   id: string;
   topic: string;
   question: string;
-  starts_at: string | null;
-  ends_at: string | null;
-  winnerVideoEntryId: string | null;
-  winnerVotes: number;
-  winnerPublishedAt: string | null;
-  video: {
-    id: string;
-    created_at: string;
-    weekly_topic_id: string;
-    group_code: string;
-    platform: string;
-    video_url: string;
-    title: string | null;
-    status: "new" | "reviewed" | "archived" | "blocked";
-  } | null;
+  winner_published_at: string | null;
 };
+
+type PublicForumTopicsApiResponse =
+  | {
+      ok: true;
+      topics: PublicForumTopic[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 type PublicWinnerHistoryItem = {
   id: string;
@@ -324,7 +320,7 @@ export default function ComentariosPage() {
   const [archivedTopicsPublicError, setArchivedTopicsPublicError] = useState<string | null>(null);
   const [selectedArchivedTopicId, setSelectedArchivedTopicId] = useState<string>("");
 
-  const [forumTopics, setForumTopics] = useState<ArchivedTopicPublicItem[]>([]);
+  const [forumTopics, setForumTopics] = useState<PublicForumTopic[]>([]);
   const [forumTopicsLoading, setForumTopicsLoading] = useState(false);
   const [forumTopicsError, setForumTopicsError] = useState<string | null>(null);
   const [selectedForumTopicId, setSelectedForumTopicId] = useState<string>("");
@@ -848,34 +844,25 @@ useEffect(() => {
   setForumTopicsError(null);
 
   try {
-    const { data, error } = await supabase
-      .from("weekly_topics")
-      .select(
-        "id,topic,question,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
-      )
-      .eq("status", "archived")
-      .order("winner_published_at", { ascending: false })
-      .order("ends_at", { ascending: false })
-      .limit(20);
+    const res = await fetch("/api/comments/public-forum-topics", {
+      method: "GET",
+      cache: "no-store",
+    });
 
-    if (error) throw new Error(error.message);
+    const data = (await res.json().catch(() => null)) as
+      | PublicForumTopicsApiResponse
+      | null;
 
-    const normalized: ArchivedTopicPublicItem[] = (data ?? []).map((row: any) => ({
-      id: row.id,
-      topic: row.topic ?? "",
-      question: row.question ?? "",
-      starts_at: row.starts_at ?? null,
-      ends_at: row.ends_at ?? null,
-      winnerVideoEntryId: row.winner_video_entry_id ?? null,
-      winnerVotes: Number(row.winner_votes ?? 0),
-      winnerPublishedAt: row.winner_published_at ?? null,
-      video: null,
-    }));
+    if (!res.ok || !data || data.ok !== true) {
+      const message =
+        data && data.ok === false ? data.error : "No se pudo cargar foros abiertos.";
+      throw new Error(message || "No se pudo cargar foros abiertos.");
+    }
 
-    setForumTopics(normalized);
-  } catch (e: any) {
+    setForumTopics(data.topics);
+  } catch (e: unknown) {
     setForumTopics([]);
-    setForumTopicsError(e?.message ?? String(e));
+    setForumTopicsError(e instanceof Error ? e.message : String(e));
   } finally {
     setForumTopicsLoading(false);
   }
@@ -2982,9 +2969,9 @@ const suggestedPrompts =
           </div>
         ) : null}
 
-        {selectedForumTopic.winnerPublishedAt ? (
+        {selectedForumTopic.winner_published_at ? (
           <div className="mt-2 text-xs font-semibold text-slate-600">
-            Semana cerrada: {new Date(selectedForumTopic.winnerPublishedAt).toLocaleString()}
+            Semana cerrada: {new Date(selectedForumTopic.winner_published_at).toLocaleString()}
           </div>
         ) : null}
 
