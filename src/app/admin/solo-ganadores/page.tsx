@@ -68,6 +68,18 @@ type AdminSoloGanadoresApiResponse =
       error?: string;
     };
 
+type AdminSaveResource = "event" | "post" | "media";
+
+type AdminSaveResponse =
+  | {
+      ok: true;
+      id: string;
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
+
 const emptyEvent = {
   id: "",
   title: "",
@@ -290,6 +302,46 @@ export default function AdminSoloGanadoresPage() {
     }
   }
 
+  async function saveAdminResource(
+    resource: AdminSaveResource,
+    id: string,
+    data: Record<string, string | boolean | null>
+  ) {
+    const isUpdate = Boolean(id);
+    const res = await fetch("/api/admin/solo-ganadores", {
+      method: isUpdate ? "PATCH" : "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        isUpdate
+          ? {
+              resource,
+              id,
+              data,
+            }
+          : {
+              resource,
+              data,
+            }
+      ),
+    });
+
+    const result = (await res.json().catch(() => null)) as AdminSaveResponse | null;
+
+    if (!res.ok || !result) {
+      throw new Error("No disponible");
+    }
+
+    if (result.ok !== true) {
+      throw new Error(result.error || "No disponible");
+    }
+
+    return result.id;
+  }
+
   useEffect(() => {
     let alive = true;
 
@@ -339,14 +391,9 @@ export default function AdminSoloGanadoresPage() {
         status: eventForm.status || "anunciado",
         published: Boolean(eventForm.published),
         featured: Boolean(eventForm.featured),
-        updated_at: new Date().toISOString(),
       };
 
-      const res = eventForm.id
-        ? await supabase.from("solo_ganadores_events").update(payload).eq("id", eventForm.id)
-        : await supabase.from("solo_ganadores_events").insert(payload);
-
-      if (res.error) throw res.error;
+      await saveAdminResource("event", eventForm.id, payload);
 
       setEventForm(emptyEvent);
       setMessage({ type: "success", text: "✅ Evento guardado correctamente." });
@@ -384,14 +431,9 @@ export default function AdminSoloGanadoresPage() {
         event_date: cleanNullable(postForm.event_date),
         published: Boolean(postForm.published),
         featured: Boolean(postForm.featured),
-        updated_at: new Date().toISOString(),
       };
 
-      const res = postForm.id
-        ? await supabase.from("solo_ganadores_posts").update(payload).eq("id", postForm.id)
-        : await supabase.from("solo_ganadores_posts").insert(payload);
-
-      if (res.error) throw res.error;
+      await saveAdminResource("post", postForm.id, payload);
 
       setPostForm(emptyPost);
       setMessage({ type: "success", text: "✅ Ganador guardado correctamente." });
@@ -428,14 +470,9 @@ export default function AdminSoloGanadoresPage() {
         related_winner_id: cleanNullable(mediaForm.related_winner_id),
         published: Boolean(mediaForm.published),
         featured: Boolean(mediaForm.featured),
-        updated_at: new Date().toISOString(),
       };
 
-      const res = mediaForm.id
-        ? await supabase.from("solo_ganadores_media").update(payload).eq("id", mediaForm.id)
-        : await supabase.from("solo_ganadores_media").insert(payload);
-
-      if (res.error) throw res.error;
+      await saveAdminResource("media", mediaForm.id, payload);
 
       setMediaForm(emptyMedia);
       setMessage({ type: "success", text: "✅ Contenido guardado correctamente." });

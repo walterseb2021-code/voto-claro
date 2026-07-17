@@ -101,6 +101,62 @@ type AdminMedia = {
   created_at: string | null;
 };
 
+type Resource = "event" | "post" | "media";
+
+type EventMutationPayload = {
+  title: string;
+  semester: string | null;
+  event_date: string | null;
+  location_name: string | null;
+  address: string | null;
+  city: string | null;
+  description: string | null;
+  recognitions: string | null;
+  main_image_url: string | null;
+  promo_video_url: string | null;
+  status: string;
+  published: boolean;
+  featured: boolean;
+  updated_at: string;
+};
+
+type PostMutationPayload = {
+  source_module: string;
+  source_winner_id: string | null;
+  winner_name: string | null;
+  winner_alias: string | null;
+  title: string;
+  prize_name: string | null;
+  description: string | null;
+  photo_url: string | null;
+  video_url: string | null;
+  interview_url: string | null;
+  event_date: string | null;
+  published: boolean;
+  featured: boolean;
+  updated_at: string;
+};
+
+type MediaMutationPayload = {
+  title: string;
+  media_type: string;
+  media_url: string;
+  description: string | null;
+  related_winner_id: string | null;
+  published: boolean;
+  featured: boolean;
+  updated_at: string;
+};
+
+type MutationPayload =
+  | EventMutationPayload
+  | PostMutationPayload
+  | MediaMutationPayload;
+
+type IdRow = {
+  id: string | null;
+};
+
 type SanitizeStats = {
   excludedEvents: number;
   excludedPosts: number;
@@ -108,8 +164,30 @@ type SanitizeStats = {
   invalidRelations: number;
 };
 
+type ValidationResult<T> = { ok: true; value: T } | { ok: false };
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const MAX_BODY_BYTES = 65536;
+
+const EVENT_STATUSES = new Set(["anunciado", "activo", "finalizado"]);
+const SOURCE_MODULES = new Set([
+  "manual",
+  "reto_ciudadano",
+  "comentarios_ciudadanos",
+  "proyecto_ciudadano",
+  "espacio_emprendedor",
+  "intencion_de_voto",
+]);
+const MEDIA_TYPES = new Set([
+  "foto",
+  "video",
+  "entrevista",
+  "ambiente",
+  "entrega",
+  "reconocimiento",
+]);
 
 function json(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
@@ -170,6 +248,21 @@ function isAllowedOrigin(req: NextRequest) {
   }
 }
 
+function isAllowedMutationOrigin(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+
+  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
+    return true;
+  }
+
+  try {
+    return new URL(origin).origin === getRequestOrigin(req);
+  } catch {
+    return false;
+  }
+}
+
 function nullableString(value: string | null) {
   const clean = typeof value === "string" ? value.trim() : "";
   return clean ? clean : null;
@@ -189,6 +282,371 @@ function optionalUuid(value: string | null, stats: SanitizeStats) {
   }
 
   return clean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => actual.includes(key));
+}
+
+function validateContentHeaders(req: NextRequest) {
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("application/json")) {
+    return false;
+  }
+
+  const contentLength = req.headers.get("content-length");
+  if (contentLength) {
+    if (!/^\d+$/.test(contentLength)) return false;
+    const size = Number(contentLength);
+    if (!Number.isSafeInteger(size) || size > MAX_BODY_BYTES) return false;
+  }
+
+  return true;
+}
+
+async function readLimitedJson(
+  req: NextRequest
+): Promise<ValidationResult<unknown>> {
+  try {
+    const raw = await req.text();
+
+    if (!raw || Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) {
+      return { ok: false };
+    }
+
+    const value: unknown = JSON.parse(raw);
+    return { ok: true, value };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function requiredText(
+  value: unknown,
+  maxLength: number
+): ValidationResult<string> {
+  if (typeof value !== "string") return { ok: false };
+
+  const clean = value.trim();
+  if (!clean || clean.length > maxLength) return { ok: false };
+
+  return { ok: true, value: clean };
+}
+
+function optionalText(
+  value: unknown,
+  maxLength: number
+): ValidationResult<string | null> {
+  if (value === null) return { ok: true, value: null };
+  if (typeof value !== "string") return { ok: false };
+
+  const clean = value.trim();
+  if (!clean) return { ok: true, value: null };
+  if (clean.length > maxLength) return { ok: false };
+
+  return { ok: true, value: clean };
+}
+
+function requiredBoolean(value: unknown): ValidationResult<boolean> {
+  if (typeof value !== "boolean") return { ok: false };
+  return { ok: true, value };
+}
+
+function optionalDate(value: unknown): ValidationResult<string | null> {
+  const text = optionalText(value, 10);
+  if (!text.ok || text.value === null) return text;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text.value)) return { ok: false };
+
+  return text;
+}
+
+function optionalUrl(value: unknown): ValidationResult<string | null> {
+  const text = optionalText(value, 2048);
+  if (!text.ok || text.value === null) return text;
+
+  try {
+    const url = new URL(text.value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { ok: false };
+    }
+
+    return text;
+  } catch {
+    return { ok: false };
+  }
+}
+
+function requiredUrl(value: unknown): ValidationResult<string> {
+  const text = requiredText(value, 2048);
+  if (!text.ok) return text;
+
+  try {
+    const url = new URL(text.value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { ok: false };
+    }
+
+    return text;
+  } catch {
+    return { ok: false };
+  }
+}
+
+function enumText(value: unknown, allowed: Set<string>): ValidationResult<string> {
+  const text = requiredText(value, 100);
+  if (!text.ok || !allowed.has(text.value)) return { ok: false };
+
+  return text;
+}
+
+function optionalUuidInput(value: unknown): ValidationResult<string | null> {
+  const text = optionalText(value, 36);
+  if (!text.ok || text.value === null) return text;
+  if (!UUID_RE.test(text.value)) return { ok: false };
+
+  return text;
+}
+
+function validateResource(value: unknown): ValidationResult<Resource> {
+  if (value === "event" || value === "post" || value === "media") {
+    return { ok: true, value };
+  }
+
+  return { ok: false };
+}
+
+function validateEventPayload(
+  data: Record<string, unknown>
+): ValidationResult<EventMutationPayload> {
+  if (
+    !hasExactKeys(data, [
+      "title",
+      "semester",
+      "event_date",
+      "location_name",
+      "address",
+      "city",
+      "description",
+      "recognitions",
+      "main_image_url",
+      "promo_video_url",
+      "status",
+      "published",
+      "featured",
+    ])
+  ) {
+    return { ok: false };
+  }
+
+  const title = requiredText(data.title, 200);
+  const semester = optionalText(data.semester, 50);
+  const eventDate = optionalDate(data.event_date);
+  const locationName = optionalText(data.location_name, 200);
+  const address = optionalText(data.address, 300);
+  const city = optionalText(data.city, 120);
+  const description = optionalText(data.description, 10000);
+  const recognitions = optionalText(data.recognitions, 10000);
+  const mainImageUrl = optionalUrl(data.main_image_url);
+  const promoVideoUrl = optionalUrl(data.promo_video_url);
+  const status = enumText(data.status, EVENT_STATUSES);
+  const published = requiredBoolean(data.published);
+  const featured = requiredBoolean(data.featured);
+
+  if (
+    !title.ok ||
+    !semester.ok ||
+    !eventDate.ok ||
+    !locationName.ok ||
+    !address.ok ||
+    !city.ok ||
+    !description.ok ||
+    !recognitions.ok ||
+    !mainImageUrl.ok ||
+    !promoVideoUrl.ok ||
+    !status.ok ||
+    !published.ok ||
+    !featured.ok
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      title: title.value,
+      semester: semester.value,
+      event_date: eventDate.value,
+      location_name: locationName.value,
+      address: address.value,
+      city: city.value,
+      description: description.value,
+      recognitions: recognitions.value,
+      main_image_url: mainImageUrl.value,
+      promo_video_url: promoVideoUrl.value,
+      status: status.value,
+      published: published.value,
+      featured: featured.value,
+      updated_at: new Date().toISOString(),
+    },
+  };
+}
+
+function validatePostPayload(
+  data: Record<string, unknown>
+): ValidationResult<PostMutationPayload> {
+  if (
+    !hasExactKeys(data, [
+      "source_module",
+      "source_winner_id",
+      "winner_name",
+      "winner_alias",
+      "title",
+      "prize_name",
+      "description",
+      "photo_url",
+      "video_url",
+      "interview_url",
+      "event_date",
+      "published",
+      "featured",
+    ])
+  ) {
+    return { ok: false };
+  }
+
+  const sourceModule = enumText(data.source_module, SOURCE_MODULES);
+  const sourceWinnerId = optionalText(data.source_winner_id, 300);
+  const winnerName = optionalText(data.winner_name, 200);
+  const winnerAlias = optionalText(data.winner_alias, 200);
+  const title = requiredText(data.title, 300);
+  const prizeName = optionalText(data.prize_name, 300);
+  const description = optionalText(data.description, 10000);
+  const photoUrl = optionalUrl(data.photo_url);
+  const videoUrl = optionalUrl(data.video_url);
+  const interviewUrl = optionalUrl(data.interview_url);
+  const eventDate = optionalDate(data.event_date);
+  const published = requiredBoolean(data.published);
+  const featured = requiredBoolean(data.featured);
+
+  if (
+    !sourceModule.ok ||
+    !sourceWinnerId.ok ||
+    !winnerName.ok ||
+    !winnerAlias.ok ||
+    !title.ok ||
+    !prizeName.ok ||
+    !description.ok ||
+    !photoUrl.ok ||
+    !videoUrl.ok ||
+    !interviewUrl.ok ||
+    !eventDate.ok ||
+    !published.ok ||
+    !featured.ok
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      source_module: sourceModule.value,
+      source_winner_id: sourceWinnerId.value,
+      winner_name: winnerName.value,
+      winner_alias: winnerAlias.value,
+      title: title.value,
+      prize_name: prizeName.value,
+      description: description.value,
+      photo_url: photoUrl.value,
+      video_url: videoUrl.value,
+      interview_url: interviewUrl.value,
+      event_date: eventDate.value,
+      published: published.value,
+      featured: featured.value,
+      updated_at: new Date().toISOString(),
+    },
+  };
+}
+
+function validateMediaPayload(
+  data: Record<string, unknown>
+): ValidationResult<MediaMutationPayload> {
+  if (
+    !hasExactKeys(data, [
+      "title",
+      "media_type",
+      "media_url",
+      "description",
+      "related_winner_id",
+      "published",
+      "featured",
+    ])
+  ) {
+    return { ok: false };
+  }
+
+  const title = requiredText(data.title, 300);
+  const mediaType = enumText(data.media_type, MEDIA_TYPES);
+  const mediaUrl = requiredUrl(data.media_url);
+  const description = optionalText(data.description, 10000);
+  const relatedWinnerId = optionalUuidInput(data.related_winner_id);
+  const published = requiredBoolean(data.published);
+  const featured = requiredBoolean(data.featured);
+
+  if (
+    !title.ok ||
+    !mediaType.ok ||
+    !mediaUrl.ok ||
+    !description.ok ||
+    !relatedWinnerId.ok ||
+    !published.ok ||
+    !featured.ok
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      title: title.value,
+      media_type: mediaType.value,
+      media_url: mediaUrl.value,
+      description: description.value,
+      related_winner_id: relatedWinnerId.value,
+      published: published.value,
+      featured: featured.value,
+      updated_at: new Date().toISOString(),
+    },
+  };
+}
+
+function validatePayload(
+  resource: Resource,
+  data: Record<string, unknown>
+): ValidationResult<MutationPayload> {
+  if (resource === "event") return validateEventPayload(data);
+  if (resource === "post") return validatePostPayload(data);
+  return validateMediaPayload(data);
+}
+
+function tableForResource(resource: Resource) {
+  if (resource === "event") return "solo_ganadores_events";
+  if (resource === "post") return "solo_ganadores_posts";
+  return "solo_ganadores_media";
+}
+
+function mutationBadRequest(gate: Awaited<ReturnType<typeof requireAdmin>>) {
+  return withAuthCookies(json(400, { ok: false, error: "Solicitud inválida" }), gate);
 }
 
 function toAdminEvent(row: EventDbRow, stats: SanitizeStats): AdminEvent | null {
@@ -276,6 +734,152 @@ function warnIfSanitized(stats: SanitizeStats) {
     media: stats.excludedMedia,
     relations: stats.invalidRelations,
   });
+}
+
+function validateMutationBody(
+  body: unknown,
+  operation: "insert" | "update"
+): ValidationResult<{
+  resource: Resource;
+  id: string | null;
+  payload: MutationPayload;
+}> {
+  if (!isRecord(body)) return { ok: false };
+
+  const expectedKeys =
+    operation === "insert" ? ["resource", "data"] : ["resource", "id", "data"];
+
+  if (!hasExactKeys(body, expectedKeys)) return { ok: false };
+
+  const resource = validateResource(body.resource);
+  if (!resource.ok) return { ok: false };
+
+  let id: string | null = null;
+  if (operation === "update") {
+    if (typeof body.id !== "string" || !UUID_RE.test(body.id)) {
+      return { ok: false };
+    }
+
+    id = body.id;
+  }
+
+  if (!isRecord(body.data)) return { ok: false };
+
+  const payload = validatePayload(resource.value, body.data);
+  if (!payload.ok) return { ok: false };
+
+  return {
+    ok: true,
+    value: {
+      resource: resource.value,
+      id,
+      payload: payload.value,
+    },
+  };
+}
+
+async function handleMutation(req: NextRequest, operation: "insert" | "update") {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return withAuthCookies(
+      json(gate.status, {
+        ok: false,
+        error: gate.error,
+      }),
+      gate
+    );
+  }
+
+  try {
+    if (!isAllowedMutationOrigin(req)) {
+      return withAuthCookies(json(403, { ok: false, error: "No autorizado" }), gate);
+    }
+
+    const { searchParams } = new URL(req.url);
+    if (Array.from(searchParams.keys()).length > 0) {
+      return mutationBadRequest(gate);
+    }
+
+    if (!validateContentHeaders(req)) {
+      return mutationBadRequest(gate);
+    }
+
+    const jsonBody = await readLimitedJson(req);
+    if (!jsonBody.ok) {
+      return mutationBadRequest(gate);
+    }
+
+    const mutation = validateMutationBody(jsonBody.value, operation);
+    if (!mutation.ok) {
+      return mutationBadRequest(gate);
+    }
+
+    const { resource, id, payload } = mutation.value;
+    const supabase = getSupabaseAdmin();
+    const table = tableForResource(resource);
+
+    if (operation === "insert") {
+      const result = await supabase
+        .from(table)
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (result.error) {
+        console.error("[admin/solo-ganadores] insert failed", {
+          resource,
+          code: result.error.code,
+        });
+        return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+      }
+
+      const row = result.data as IdRow | null;
+      if (!row?.id || !UUID_RE.test(row.id)) {
+        console.error("[admin/solo-ganadores] insert returned invalid id", {
+          resource,
+        });
+        return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+      }
+
+      return withAuthCookies(json(201, { ok: true, id: row.id }), gate);
+    }
+
+    if (!id) {
+      return mutationBadRequest(gate);
+    }
+
+    const result = await supabase
+      .from(table)
+      .update(payload)
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (result.error) {
+      console.error("[admin/solo-ganadores] update failed", {
+        resource,
+        code: result.error.code,
+      });
+      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    const row = result.data as IdRow | null;
+    if (!row) {
+      return withAuthCookies(json(404, { ok: false, error: "No encontrado" }), gate);
+    }
+
+    if (!row.id || !UUID_RE.test(row.id)) {
+      console.error("[admin/solo-ganadores] update returned invalid id", {
+        resource,
+      });
+      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    return withAuthCookies(json(200, { ok: true, id: row.id }), gate);
+  } catch {
+    console.error("[admin/solo-ganadores] mutation unexpected error", { operation });
+    return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -382,4 +986,12 @@ export async function GET(req: NextRequest) {
     console.error("[admin/solo-ganadores] unexpected error", error);
     return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
   }
+}
+
+export async function POST(req: NextRequest) {
+  return handleMutation(req, "insert");
+}
+
+export async function PATCH(req: NextRequest) {
+  return handleMutation(req, "update");
 }
