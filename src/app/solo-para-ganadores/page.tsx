@@ -140,18 +140,25 @@ function PublicMediaBox({
   title,
   type,
   emptyText = "Imagen o video por publicar.",
+  variant = "large",
 }: {
   url: string | null;
   title: string;
   type?: string | null;
   emptyText?: string;
+  variant?: "large" | "compact";
 }) {
   const clean = String(url || "").trim();
   const [failed, setFailed] = useState(false);
+  const isCompact = variant === "compact";
+  const radiusClass = isCompact ? "rounded-xl" : "rounded-2xl";
+  const sizeClass = isCompact ? "h-full w-full" : "h-full min-h-[220px] w-full";
 
   if (!clean || failed) {
     return (
-      <div className="h-full min-h-[220px] rounded-2xl border border-slate-300 bg-slate-50 flex items-center justify-center p-5 text-center text-sm font-semibold text-slate-600">
+      <div
+        className={`${sizeClass} ${radiusClass} border border-slate-300 bg-slate-50 flex items-center justify-center p-5 text-center text-sm font-semibold text-slate-600`}
+      >
         {emptyText}
       </div>
     );
@@ -165,7 +172,7 @@ function PublicMediaBox({
       <iframe
         src={embed}
         title={title}
-        className="h-full min-h-[220px] w-full rounded-2xl border border-slate-300 bg-black"
+        className={`${sizeClass} ${radiusClass} border border-slate-300 bg-black`}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
       />
@@ -177,7 +184,7 @@ function PublicMediaBox({
       <video
         src={clean}
         controls
-        className="h-full min-h-[220px] w-full rounded-2xl border border-slate-300 bg-black object-contain"
+        className={`${sizeClass} ${radiusClass} border border-slate-300 bg-black object-contain`}
         onError={() => setFailed(true)}
       />
     );
@@ -189,14 +196,16 @@ function PublicMediaBox({
       <img
         src={clean}
         alt={title}
-        className="h-full min-h-[220px] w-full rounded-2xl border border-slate-300 bg-slate-50 object-cover"
+        className={`${sizeClass} ${radiusClass} border border-slate-300 bg-slate-50 object-cover`}
         onError={() => setFailed(true)}
       />
     );
   }
 
   return (
-    <div className="h-full min-h-[220px] rounded-2xl border border-slate-300 bg-slate-50 flex items-center justify-center p-5 text-center">
+    <div
+      className={`${sizeClass} ${radiusClass} border border-slate-300 bg-slate-50 flex items-center justify-center p-5 text-center`}
+    >
       <a
         href={clean}
         target="_blank"
@@ -537,13 +546,14 @@ export default function SoloParaGanadoresPage() {
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {featuredPosts.map((post) => (
                 <div key={post.id} className={card}>
-                  <div className="h-44">
+                  <div className="h-32 sm:h-36 overflow-hidden rounded-xl bg-slate-100">
                     {post.photo_url ? (
                       <PublicMediaBox
                         url={post.photo_url}
                         title={post.title}
                         type="foto"
                         emptyText="Imagen del ganador por publicar."
+                        variant="compact"
                       />
                     ) : post.video_url ? (
                       <PublicMediaBox
@@ -551,6 +561,7 @@ export default function SoloParaGanadoresPage() {
                         title={post.title}
                         type="video"
                         emptyText="Video del ganador por publicar."
+                        variant="compact"
                       />
                     ) : (
                       <div className="h-full rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center">
@@ -637,12 +648,13 @@ export default function SoloParaGanadoresPage() {
                   key={item.id}
                   className="rounded-2xl border border-slate-300 bg-white overflow-hidden shadow-sm"
                 >
-                  <div className="h-44 bg-slate-100">
+                  <div className="h-32 sm:h-36 bg-slate-100 overflow-hidden">
                     <PublicMediaBox
                       url={item.media_url}
                       title={item.title}
                       type={item.media_type}
                       emptyText="Contenido no disponible."
+                      variant="compact"
                     />
                   </div>
 
