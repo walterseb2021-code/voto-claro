@@ -157,6 +157,11 @@ type IdRow = {
   id: string | null;
 };
 
+type DeleteInput = {
+  resource: Resource;
+  id: string;
+};
+
 type SanitizeStats = {
   excludedEvents: number;
   excludedPosts: number;
@@ -778,6 +783,25 @@ function validateMutationBody(
   };
 }
 
+function validateDeleteBody(value: unknown): ValidationResult<DeleteInput> {
+  if (!isRecord(value)) return { ok: false };
+  if (!hasExactKeys(value, ["resource", "id"])) return { ok: false };
+
+  const resource = validateResource(value.resource);
+  if (!resource.ok) return { ok: false };
+
+  const id = requiredText(value.id, 36);
+  if (!id.ok || !UUID_RE.test(id.value)) return { ok: false };
+
+  return {
+    ok: true,
+    value: {
+      resource: resource.value,
+      id: id.value,
+    },
+  };
+}
+
 async function handleMutation(req: NextRequest, operation: "insert" | "update") {
   const gate = await requireAdmin(req);
   if (!gate.ok) {
@@ -878,6 +902,80 @@ async function handleMutation(req: NextRequest, operation: "insert" | "update") 
     return withAuthCookies(json(200, { ok: true, id: row.id }), gate);
   } catch {
     console.error("[admin/solo-ganadores] mutation unexpected error", { operation });
+    return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return withAuthCookies(
+      json(gate.status, {
+        ok: false,
+        error: gate.error,
+      }),
+      gate
+    );
+  }
+
+  try {
+    if (!isAllowedMutationOrigin(req)) {
+      return withAuthCookies(json(403, { ok: false, error: "No autorizado" }), gate);
+    }
+
+    const { searchParams } = new URL(req.url);
+    if (Array.from(searchParams.keys()).length > 0) {
+      return mutationBadRequest(gate);
+    }
+
+    if (!validateContentHeaders(req)) {
+      return mutationBadRequest(gate);
+    }
+
+    const jsonBody = await readLimitedJson(req);
+    if (!jsonBody.ok) {
+      return mutationBadRequest(gate);
+    }
+
+    const input = validateDeleteBody(jsonBody.value);
+    if (!input.ok) {
+      return mutationBadRequest(gate);
+    }
+
+    const { resource, id } = input.value;
+    const supabase = getSupabaseAdmin();
+    const table = tableForResource(resource);
+
+    const result = await supabase
+      .from(table)
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (result.error) {
+      console.error("[admin/solo-ganadores] delete failed", {
+        resource,
+        code: result.error.code,
+      });
+      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    const row = result.data as IdRow | null;
+    if (!row) {
+      return withAuthCookies(json(404, { ok: false, error: "No encontrado" }), gate);
+    }
+
+    if (!row.id || !UUID_RE.test(row.id)) {
+      console.error("[admin/solo-ganadores] delete returned invalid id", {
+        resource,
+      });
+      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    return withAuthCookies(json(200, { ok: true, id: row.id }), gate);
+  } catch {
+    console.error("[admin/solo-ganadores] unexpected delete error");
     return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
   }
 }

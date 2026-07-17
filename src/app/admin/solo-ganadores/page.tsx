@@ -342,6 +342,33 @@ export default function AdminSoloGanadoresPage() {
     return result.id;
   }
 
+  async function deleteAdminResource(resource: AdminSaveResource, id: string) {
+    const res = await fetch("/api/admin/solo-ganadores", {
+      method: "DELETE",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        resource,
+        id,
+      }),
+    });
+
+    const result = (await res.json().catch(() => null)) as AdminSaveResponse | null;
+
+    if (!res.ok || !result) {
+      throw new Error("No disponible");
+    }
+
+    if (result.ok !== true) {
+      throw new Error(result.error || "No disponible");
+    }
+
+    return result.id;
+  }
+
   useEffect(() => {
     let alive = true;
 
@@ -486,15 +513,14 @@ export default function AdminSoloGanadoresPage() {
     }
   }
 
-  async function deleteRow(table: string, id: string) {
+  async function deleteRow(resource: AdminSaveResource, id: string) {
     if (!confirm("¿Seguro que deseas eliminar este registro?")) return;
 
     setSaving(true);
     setMessage(null);
 
     try {
-      const { error } = await supabase.from(table).delete().eq("id", id);
-      if (error) throw error;
+      await deleteAdminResource(resource, id);
 
       setMessage({ type: "success", text: "✅ Registro eliminado." });
       await loadAll();
@@ -958,7 +984,7 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}
-                        onClick={() => deleteRow("solo_ganadores_events", ev.id)}
+                        onClick={() => deleteRow("event", ev.id)}
                       >
                         Eliminar
                       </button>
@@ -1209,7 +1235,7 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}
-                        onClick={() => deleteRow("solo_ganadores_posts", p.id)}
+                        onClick={() => deleteRow("post", p.id)}
                       >
                         Eliminar
                       </button>
@@ -1384,7 +1410,7 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}
-                        onClick={() => deleteRow("solo_ganadores_media", m.id)}
+                        onClick={() => deleteRow("media", m.id)}
                       >
                         Eliminar
                       </button>
