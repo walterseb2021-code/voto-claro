@@ -2,11 +2,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { useEffect, useState } from "react";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
-type SoloGanadoresEvent = {
+type PublicEvent = {
   id: string;
   title: string;
   semester: string | null;
@@ -18,16 +17,11 @@ type SoloGanadoresEvent = {
   recognitions: string | null;
   main_image_url: string | null;
   promo_video_url: string | null;
-  status: string;
-  published: boolean;
-  featured: boolean;
-  created_at: string;
 };
 
-type SoloGanadoresPost = {
+type PublicPost = {
   id: string;
   source_module: string;
-  source_winner_id: string | null;
   winner_name: string | null;
   winner_alias: string | null;
   title: string;
@@ -37,22 +31,27 @@ type SoloGanadoresPost = {
   video_url: string | null;
   interview_url: string | null;
   event_date: string | null;
-  published: boolean;
-  featured: boolean;
-  created_at: string;
 };
 
-type SoloGanadoresMedia = {
+type PublicMedia = {
   id: string;
   title: string;
   media_type: string;
   media_url: string;
   description: string | null;
-  related_winner_id: string | null;
-  published: boolean;
-  featured: boolean;
-  created_at: string;
 };
+
+type PublicSoloGanadoresApiResponse =
+  | {
+      ok: true;
+      events: PublicEvent[];
+      posts: PublicPost[];
+      media: PublicMedia[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 function formatDate(value: string | null) {
   if (!value) return "Fecha por confirmar";
@@ -213,27 +212,15 @@ function PublicMediaBox({
 export default function SoloParaGanadoresPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
-  const [events, setEvents] = useState<SoloGanadoresEvent[]>([]);
-  const [posts, setPosts] = useState<SoloGanadoresPost[]>([]);
-  const [media, setMedia] = useState<SoloGanadoresMedia[]>([]);
+  const [events, setEvents] = useState<PublicEvent[]>([]);
+  const [posts, setPosts] = useState<PublicPost[]>([]);
+  const [media, setMedia] = useState<PublicMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
-  const featuredEvent = events.find((e) => e.featured) || events[0] || null;
-
-  const featuredPosts = posts.filter((p) => p.featured).length
-    ? posts.filter((p) => p.featured)
-    : posts.slice(0, 6);
-
-  const featuredMedia = media.filter((m) => m.featured).length
-    ? media.filter((m) => m.featured)
-    : media.slice(0, 9);
+  const featuredEvent = events[0] ?? null;
+  const featuredPosts = posts;
+  const featuredMedia = media;
 
   useEffect(() => {
     let alive = true;
@@ -243,41 +230,30 @@ export default function SoloParaGanadoresPage() {
       setLoadError("");
 
       try {
-        const [eventsRes, postsRes, mediaRes] = await Promise.all([
-          supabase
-            .from("solo_ganadores_events")
-            .select("*")
-            .eq("published", true)
-            .order("featured", { ascending: false })
-            .order("created_at", { ascending: false }),
+        const res = await fetch("/api/solo-ganadores/public", {
+          method: "GET",
+          cache: "no-store",
+        });
 
-          supabase
-            .from("solo_ganadores_posts")
-            .select("*")
-            .eq("published", true)
-            .order("featured", { ascending: false })
-            .order("created_at", { ascending: false }),
+        const data = (await res.json().catch(() => null)) as
+          | PublicSoloGanadoresApiResponse
+          | null;
 
-          supabase
-            .from("solo_ganadores_media")
-            .select("*")
-            .eq("published", true)
-            .order("featured", { ascending: false })
-            .order("created_at", { ascending: false }),
-        ]);
-
-        if (eventsRes.error) throw eventsRes.error;
-        if (postsRes.error) throw postsRes.error;
-        if (mediaRes.error) throw mediaRes.error;
+        if (!res.ok || !data || data.ok !== true) {
+          throw new Error("No disponible");
+        }
 
         if (!alive) return;
 
-        setEvents((eventsRes.data || []) as SoloGanadoresEvent[]);
-        setPosts((postsRes.data || []) as SoloGanadoresPost[]);
-        setMedia((mediaRes.data || []) as SoloGanadoresMedia[]);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Error desconocido";
-        if (alive) setLoadError(msg);
+        setEvents(data.events);
+        setPosts(data.posts);
+        setMedia(data.media);
+      } catch {
+        if (!alive) return;
+        setEvents([]);
+        setPosts([]);
+        setMedia([]);
+        setLoadError("No disponible");
       } finally {
         if (alive) setLoading(false);
       }
@@ -288,7 +264,7 @@ export default function SoloParaGanadoresPage() {
     return () => {
       alive = false;
     };
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     setPageContext({
