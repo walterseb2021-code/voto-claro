@@ -23,7 +23,7 @@ type SoloEvent = {
   status: string;
   published: boolean;
   featured: boolean;
-  created_at: string;
+  created_at: string | null;
 };
 
 type SoloPost = {
@@ -41,7 +41,7 @@ type SoloPost = {
   event_date: string | null;
   published: boolean;
   featured: boolean;
-  created_at: string;
+  created_at: string | null;
 };
 
 type SoloMedia = {
@@ -53,8 +53,20 @@ type SoloMedia = {
   related_winner_id: string | null;
   published: boolean;
   featured: boolean;
-  created_at: string;
+  created_at: string | null;
 };
+
+type AdminSoloGanadoresApiResponse =
+  | {
+      ok: true;
+      events: SoloEvent[];
+      posts: SoloPost[];
+      media: SoloMedia[];
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
 
 const emptyEvent = {
   id: "",
@@ -245,22 +257,33 @@ export default function AdminSoloGanadoresPage() {
     setMessage(null);
 
     try {
-      const [eventsRes, postsRes, mediaRes] = await Promise.all([
-        supabase.from("solo_ganadores_events").select("*").order("created_at", { ascending: false }),
-        supabase.from("solo_ganadores_posts").select("*").order("created_at", { ascending: false }),
-        supabase.from("solo_ganadores_media").select("*").order("created_at", { ascending: false }),
-      ]);
+      const res = await fetch("/api/admin/solo-ganadores", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
 
-      if (eventsRes.error) throw eventsRes.error;
-      if (postsRes.error) throw postsRes.error;
-      if (mediaRes.error) throw mediaRes.error;
+      const data = (await res.json().catch(() => null)) as
+        | AdminSoloGanadoresApiResponse
+        | null;
 
-      setEvents((eventsRes.data || []) as SoloEvent[]);
-      setPosts((postsRes.data || []) as SoloPost[]);
-      setMedia((mediaRes.data || []) as SoloMedia[]);
-    } catch (err: any) {
+      if (!res.ok || !data) {
+        throw new Error("No disponible");
+      }
+
+      if (data.ok !== true) {
+        throw new Error(data.error || "No disponible");
+      }
+
+      setEvents(data.events);
+      setPosts(data.posts);
+      setMedia(data.media);
+    } catch (err) {
       const text = errorText(err);
       console.error("Error al cargar datos:", err);
+      setEvents([]);
+      setPosts([]);
+      setMedia([]);
       setMessage({ type: "error", text: "Error al cargar datos: " + text });
     } finally {
       setLoading(false);
