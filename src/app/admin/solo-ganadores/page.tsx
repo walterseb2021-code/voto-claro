@@ -80,6 +80,25 @@ type AdminSaveResponse =
       error?: string;
     };
 
+type AdminImagePurpose =
+  | "event_main_image"
+  | "post_photo"
+  | "media_image";
+
+type AdminImageUploadResponse =
+  | {
+      ok: true;
+      url: string;
+      path: string;
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ADMIN_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const emptyEvent = {
   id: "",
   title: "",
@@ -257,6 +276,57 @@ export default function AdminSoloGanadoresPage() {
     } catch (err: any) {
       const text = errorText(err);
       console.error("Error al subir archivo:", err);
+      setMessage({ type: "error", text: "Error al subir archivo: " + text });
+      return "";
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function uploadAdminImage(file: File, purpose: AdminImagePurpose) {
+    setUploading(true);
+    setMessage(null);
+
+    try {
+      if (
+        file.size <= 0 ||
+        file.size > MAX_IMAGE_BYTES ||
+        !ADMIN_IMAGE_MIME_TYPES.has(file.type)
+      ) {
+        throw new Error("Solicitud inválida");
+      }
+
+      const body = new FormData();
+      body.append("purpose", purpose);
+      body.append("file", file);
+
+      const res = await fetch("/api/admin/solo-ganadores/upload", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        body,
+      });
+
+      const result = (await res
+        .json()
+        .catch(() => null)) as AdminImageUploadResponse | null;
+
+      if (!res.ok || !result) {
+        throw new Error("No disponible");
+      }
+
+      if (result.ok !== true) {
+        throw new Error(result.error || "No disponible");
+      }
+
+      if (!result.url || !result.path) {
+        throw new Error("No disponible");
+      }
+
+      setMessage({ type: "success", text: "✅ Archivo subido correctamente." });
+      return result.url;
+    } catch (err) {
+      const text = errorText(err);
       setMessage({ type: "error", text: "Error al subir archivo: " + text });
       return "";
     } finally {
@@ -870,7 +940,7 @@ export default function AdminSoloGanadoresPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const url = await uploadSoloGanadoresFile(file, "eventos");
+                        const url = await uploadAdminImage(file, "event_main_image");
                         if (url) setEventForm((p) => ({ ...p, main_image_url: url }));
                         e.currentTarget.value = "";
                       }}
@@ -1109,7 +1179,7 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const url = await uploadSoloGanadoresFile(file, "ganadores");
+                    const url = await uploadAdminImage(file, "post_photo");
                     if (url) setPostForm((p) => ({ ...p, photo_url: url }));
                     e.currentTarget.value = "";
                   }}
@@ -1308,7 +1378,19 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const url = await uploadSoloGanadoresFile(file, "galeria");
+                    let url = "";
+
+                    if (file.type.startsWith("image/")) {
+                      url = await uploadAdminImage(file, "media_image");
+                    } else if (file.type.startsWith("video/")) {
+                      url = await uploadSoloGanadoresFile(file, "galeria");
+                    } else {
+                      setMessage({
+                        type: "error",
+                        text: "Error al subir archivo: Solicitud inválida",
+                      });
+                    }
+
                     if (url) setMediaForm((p) => ({ ...p, media_url: url }));
                     e.currentTarget.value = "";
                   }}
