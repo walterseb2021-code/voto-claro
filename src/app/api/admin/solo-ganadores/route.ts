@@ -153,6 +153,67 @@ type MutationPayload =
   | PostMutationPayload
   | MediaMutationPayload;
 
+type AssetPurpose =
+  | "event_main_image"
+  | "event_promo_video"
+  | "post_photo"
+  | "post_video"
+  | "media_image"
+  | "media_video";
+
+type AssetKind = "image" | "video";
+
+type AssetField =
+  | "main_image_url"
+  | "promo_video_url"
+  | "photo_url"
+  | "video_url"
+  | "media_url";
+
+type MutationAssets =
+  | {
+      main_image_url: string | null;
+      promo_video_url: string | null;
+    }
+  | {
+      photo_url: string | null;
+      video_url: string | null;
+    }
+  | {
+      media_url: string | null;
+    };
+
+type AssetSpec = {
+  field: AssetField;
+  assetId: string;
+  purpose: AssetPurpose;
+  mediaKind: AssetKind;
+};
+
+type AssetDbRow = {
+  id: string | null;
+  bucket: string | null;
+  object_path: string | null;
+  public_url: string | null;
+  media_kind: string | null;
+  purpose: string | null;
+  status: string | null;
+  resource_type: string | null;
+  resource_id: string | null;
+  resource_field: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  expires_at: string | null;
+  deleting_at: string | null;
+  deleted_at: string | null;
+};
+
+type StorageInfo = {
+  size?: number;
+  contentType?: string;
+  metadata?: Record<string, unknown> | null;
+};
+
 type IdRow = {
   id: string | null;
 };
@@ -174,6 +235,10 @@ type ValidationResult<T> = { ok: true; value: T } | { ok: false };
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const BUCKET = "solo-ganadores";
+const ASSET_TABLE = "solo_ganadores_assets";
+const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
+const VIDEO_MIME = "video/mp4";
 const MAX_BODY_BYTES = 65536;
 
 const EVENT_STATUSES = new Set(["anunciado", "activo", "finalizado"]);
@@ -193,6 +258,19 @@ const MEDIA_TYPES = new Set([
   "entrega",
   "reconocimiento",
 ]);
+const IMAGE_MEDIA_TYPES = new Set(["foto", "ambiente", "entrega", "reconocimiento"]);
+const CONTROLLED_RPC_ERRORS = new Set([
+  "INVALID_PAYLOAD",
+  "ASSET_DUPLICATE",
+  "ASSET_NOT_FOUND",
+  "ASSET_INVALID_STATUS",
+  "ASSET_ALREADY_OWNED",
+  "ASSET_EXPIRED",
+  "ASSET_PURPOSE_MISMATCH",
+  "ASSET_KIND_MISMATCH",
+  "ASSET_CONFIRM_FAILED",
+  "CREATE_FAILED",
+]);
 
 function json(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
@@ -206,12 +284,20 @@ function withAuthCookies(response: NextResponse, gate: Awaited<ReturnType<typeof
   return response;
 }
 
-function getSupabaseAdmin() {
+function getSupabaseUrl() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  if (!url) {
+    throw new Error("Missing Supabase URL configuration");
+  }
+
+  return url;
+}
+
+function getSupabaseAdmin(url = getSupabaseUrl()) {
   const serviceKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
-  if (!url || !serviceKey) {
+  if (!serviceKey) {
     throw new Error("Missing Supabase admin configuration");
   }
 
@@ -296,6 +382,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+function hasOwnKey(value: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
@@ -423,12 +513,98 @@ function optionalUuidInput(value: unknown): ValidationResult<string | null> {
   return text;
 }
 
+function assetIdInput(value: unknown): ValidationResult<string | null> {
+  if (value === null) return { ok: true, value: null };
+  if (typeof value !== "string") return { ok: false };
+  if (!UUID_RE.test(value)) return { ok: false };
+
+  return { ok: true, value };
+}
+
 function validateResource(value: unknown): ValidationResult<Resource> {
   if (value === "event" || value === "post" || value === "media") {
     return { ok: true, value };
   }
 
   return { ok: false };
+}
+
+function defaultAssets(resource: Resource): MutationAssets {
+  if (resource === "event") {
+    return {
+      main_image_url: null,
+      promo_video_url: null,
+    };
+  }
+
+  if (resource === "post") {
+    return {
+      photo_url: null,
+      video_url: null,
+    };
+  }
+
+  return {
+    media_url: null,
+  };
+}
+
+function assetKeysForResource(resource: Resource) {
+  if (resource === "event") return ["main_image_url", "promo_video_url"];
+  if (resource === "post") return ["photo_url", "video_url"];
+  return ["media_url"];
+}
+
+function validateMutationAssets(
+  resource: Resource,
+  value: unknown
+): ValidationResult<MutationAssets> {
+  const defaults = defaultAssets(resource);
+  if (value === undefined) return { ok: true, value: defaults };
+  if (!isRecord(value)) return { ok: false };
+
+  const allowedKeys = assetKeysForResource(resource);
+  const actualKeys = Object.keys(value);
+  if (actualKeys.some((key) => !allowedKeys.includes(key))) return { ok: false };
+
+  const normalized: Record<string, string | null> = {};
+  for (const key of allowedKeys) {
+    if (!hasOwnKey(value, key)) {
+      normalized[key] = null;
+      continue;
+    }
+
+    const assetId = assetIdInput(value[key]);
+    if (!assetId.ok) return { ok: false };
+    normalized[key] = assetId.value;
+  }
+
+  if (resource === "event") {
+    return {
+      ok: true,
+      value: {
+        main_image_url: normalized.main_image_url,
+        promo_video_url: normalized.promo_video_url,
+      },
+    };
+  }
+
+  if (resource === "post") {
+    return {
+      ok: true,
+      value: {
+        photo_url: normalized.photo_url,
+        video_url: normalized.video_url,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      media_url: normalized.media_url,
+    },
+  };
 }
 
 function validateEventPayload(
@@ -644,6 +820,291 @@ function validatePayload(
   return validateMediaPayload(data);
 }
 
+function assetSpecsForMutation(
+  resource: Resource,
+  payload: MutationPayload,
+  assets: MutationAssets
+): ValidationResult<AssetSpec[]> {
+  const specs: AssetSpec[] = [];
+
+  if (resource === "event") {
+    const eventAssets = assets as Extract<
+      MutationAssets,
+      { main_image_url: string | null }
+    >;
+
+    if (
+      eventAssets.main_image_url &&
+      eventAssets.main_image_url === eventAssets.promo_video_url
+    ) {
+      return { ok: false };
+    }
+
+    if (eventAssets.main_image_url) {
+      specs.push({
+        field: "main_image_url",
+        assetId: eventAssets.main_image_url,
+        purpose: "event_main_image",
+        mediaKind: "image",
+      });
+    }
+
+    if (eventAssets.promo_video_url) {
+      specs.push({
+        field: "promo_video_url",
+        assetId: eventAssets.promo_video_url,
+        purpose: "event_promo_video",
+        mediaKind: "video",
+      });
+    }
+
+    return { ok: true, value: specs };
+  }
+
+  if (resource === "post") {
+    const postAssets = assets as Extract<MutationAssets, { photo_url: string | null }>;
+
+    if (postAssets.photo_url && postAssets.photo_url === postAssets.video_url) {
+      return { ok: false };
+    }
+
+    if (postAssets.photo_url) {
+      specs.push({
+        field: "photo_url",
+        assetId: postAssets.photo_url,
+        purpose: "post_photo",
+        mediaKind: "image",
+      });
+    }
+
+    if (postAssets.video_url) {
+      specs.push({
+        field: "video_url",
+        assetId: postAssets.video_url,
+        purpose: "post_video",
+        mediaKind: "video",
+      });
+    }
+
+    return { ok: true, value: specs };
+  }
+
+  const mediaPayload = payload as MediaMutationPayload;
+  const mediaAssets = assets as Extract<MutationAssets, { media_url: string | null }>;
+  if (!mediaAssets.media_url) return { ok: true, value: specs };
+
+  if (mediaPayload.media_type === "video") {
+    specs.push({
+      field: "media_url",
+      assetId: mediaAssets.media_url,
+      purpose: "media_video",
+      mediaKind: "video",
+    });
+    return { ok: true, value: specs };
+  }
+
+  if (IMAGE_MEDIA_TYPES.has(mediaPayload.media_type)) {
+    specs.push({
+      field: "media_url",
+      assetId: mediaAssets.media_url,
+      purpose: "media_image",
+      mediaKind: "image",
+    });
+    return { ok: true, value: specs };
+  }
+
+  return { ok: false };
+}
+
+function getUrlFieldValue(payload: MutationPayload, field: AssetField) {
+  if (field === "main_image_url") return (payload as EventMutationPayload).main_image_url;
+  if (field === "promo_video_url") return (payload as EventMutationPayload).promo_video_url;
+  if (field === "photo_url") return (payload as PostMutationPayload).photo_url;
+  if (field === "video_url") return (payload as PostMutationPayload).video_url;
+  return (payload as MediaMutationPayload).media_url;
+}
+
+function isOwnBucketPublicUrl(value: string | null, supabaseUrl: string) {
+  if (!value) return false;
+
+  try {
+    const input = new URL(value);
+    const configured = new URL(supabaseUrl);
+    const publicPrefix = `/storage/v1/object/public/${BUCKET}/`;
+
+    return (
+      input.origin === configured.origin &&
+      input.pathname.startsWith(publicPrefix) &&
+      input.pathname.length > publicPrefix.length
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasOwnBucketUrlWithoutAsset(
+  resource: Resource,
+  payload: MutationPayload,
+  assets: MutationAssets,
+  supabaseUrl: string
+) {
+  const specs = assetKeysForResource(resource);
+  for (const field of specs) {
+    const assetId = (assets as Record<string, string | null>)[field] ?? null;
+    const url = getUrlFieldValue(payload, field as AssetField);
+
+    if (!assetId && isOwnBucketPublicUrl(url, supabaseUrl)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isValidHttpUrl(value: string | null) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function getSafeErrorCode(error: unknown) {
+  if (!isRecord(error)) return "UNKNOWN";
+
+  for (const key of ["code", "statusCode", "name"]) {
+    const value = error[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim().slice(0, 80);
+    }
+  }
+
+  return "UNKNOWN";
+}
+
+function getControlledRpcError(error: unknown) {
+  if (!isRecord(error)) return null;
+
+  const message = error.message;
+  if (typeof message === "string" && CONTROLLED_RPC_ERRORS.has(message)) {
+    return message;
+  }
+
+  return null;
+}
+
+function metadataString(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string
+) {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function storageMime(info: StorageInfo) {
+  if (typeof info.contentType === "string" && info.contentType.trim()) {
+    return info.contentType.trim();
+  }
+
+  return (
+    metadataString(info.metadata, "mimetype") ??
+    metadataString(info.metadata, "mimeType") ??
+    metadataString(info.metadata, "contentType") ??
+    metadataString(info.metadata, "content_type")
+  );
+}
+
+async function validatePendingAsset(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  spec: AssetSpec
+): Promise<ValidationResult<AssetDbRow>> {
+  const result = await supabase
+    .from(ASSET_TABLE)
+    .select(
+      "id,bucket,object_path,public_url,media_kind,purpose,status,resource_type,resource_id,resource_field,mime_type,size_bytes,expires_at,deleting_at,deleted_at"
+    )
+    .eq("id", spec.assetId)
+    .maybeSingle();
+
+  if (result.error) {
+    console.error("[admin/solo-ganadores] asset lookup failed", {
+      field: spec.field,
+      code: getSafeErrorCode(result.error),
+    });
+    return { ok: false };
+  }
+
+  const row = result.data as AssetDbRow | null;
+  if (!row) return { ok: false };
+
+  const expiresAt = row.expires_at ? Date.parse(row.expires_at) : NaN;
+  const hasValidSize =
+    row.size_bytes === null ||
+    (Number.isSafeInteger(row.size_bytes) && row.size_bytes > 0);
+
+  if (
+    row.id !== spec.assetId ||
+    row.bucket !== BUCKET ||
+    !row.object_path ||
+    !row.public_url ||
+    !isValidHttpUrl(row.public_url) ||
+    row.media_kind !== spec.mediaKind ||
+    row.purpose !== spec.purpose ||
+    row.status !== "pending" ||
+    row.resource_type !== null ||
+    row.resource_id !== null ||
+    row.resource_field !== null ||
+    row.deleting_at !== null ||
+    row.deleted_at !== null ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= Date.now() ||
+    !hasValidSize
+  ) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: row };
+}
+
+async function verifyVideoAssetObject(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  asset: AssetDbRow,
+  spec: AssetSpec
+): Promise<"ok" | "invalid" | "unavailable"> {
+  if (!asset.object_path) return "invalid";
+
+  const infoResult = await supabase.storage.from(BUCKET).info(asset.object_path);
+  if (infoResult.error) {
+    console.error("[admin/solo-ganadores] video storage info failed", {
+      field: spec.field,
+      code: getSafeErrorCode(infoResult.error),
+    });
+    return "unavailable";
+  }
+
+  if (!infoResult.data) return "invalid";
+
+  const info = infoResult.data as StorageInfo;
+  const size = info.size;
+  const mime = storageMime(info);
+
+  if (
+    typeof size !== "number" ||
+    !Number.isSafeInteger(size) ||
+    size <= 0 ||
+    size > MAX_VIDEO_BYTES ||
+    (mime !== null && mime !== VIDEO_MIME) ||
+    (asset.size_bytes !== null && asset.size_bytes !== size)
+  ) {
+    return "invalid";
+  }
+
+  return "ok";
+}
+
 function tableForResource(resource: Resource) {
   if (resource === "event") return "solo_ganadores_events";
   if (resource === "post") return "solo_ganadores_posts";
@@ -748,13 +1209,17 @@ function validateMutationBody(
   resource: Resource;
   id: string | null;
   payload: MutationPayload;
+  assets: MutationAssets;
 }> {
   if (!isRecord(body)) return { ok: false };
 
-  const expectedKeys =
-    operation === "insert" ? ["resource", "data"] : ["resource", "id", "data"];
-
-  if (!hasExactKeys(body, expectedKeys)) return { ok: false };
+  if (operation === "insert") {
+    const hasAssets = hasOwnKey(body, "assets");
+    const expectedKeys = hasAssets ? ["resource", "data", "assets"] : ["resource", "data"];
+    if (!hasExactKeys(body, expectedKeys)) return { ok: false };
+  } else if (!hasExactKeys(body, ["resource", "id", "data"])) {
+    return { ok: false };
+  }
 
   const resource = validateResource(body.resource);
   if (!resource.ok) return { ok: false };
@@ -773,12 +1238,23 @@ function validateMutationBody(
   const payload = validatePayload(resource.value, body.data);
   if (!payload.ok) return { ok: false };
 
+  const assets =
+    operation === "insert"
+      ? validateMutationAssets(
+          resource.value,
+          hasOwnKey(body, "assets") ? body.assets : undefined
+        )
+      : ({ ok: true, value: defaultAssets(resource.value) } as const);
+
+  if (!assets.ok) return { ok: false };
+
   return {
     ok: true,
     value: {
       resource: resource.value,
       id,
       payload: payload.value,
+      assets: assets.value,
     },
   };
 }
@@ -800,6 +1276,101 @@ function validateDeleteBody(value: unknown): ValidationResult<DeleteInput> {
       id: id.value,
     },
   };
+}
+
+async function validateAssetsForCreate(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  specs: AssetSpec[]
+): Promise<"ok" | "invalid" | "unavailable"> {
+  const seen = new Set<string>();
+
+  for (const spec of specs) {
+    if (seen.has(spec.assetId)) return "invalid";
+    seen.add(spec.assetId);
+
+    const asset = await validatePendingAsset(supabase, spec);
+    if (!asset.ok) return "invalid";
+
+    if (spec.mediaKind === "video") {
+      const video = await verifyVideoAssetObject(supabase, asset.value, spec);
+      if (video !== "ok") return video;
+    }
+  }
+
+  return "ok";
+}
+
+async function createResourceWithRpc(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  resource: Resource,
+  payload: MutationPayload,
+  assets: MutationAssets
+): Promise<ValidationResult<string>> {
+  if (resource === "event") {
+    const eventAssets = assets as Extract<
+      MutationAssets,
+      { main_image_url: string | null }
+    >;
+    const result = await supabase.rpc("create_solo_ganadores_event", {
+      p_data: payload,
+      p_main_image_asset_id: eventAssets.main_image_url,
+      p_promo_video_asset_id: eventAssets.promo_video_url,
+    });
+
+    if (result.error) {
+      console.error("[admin/solo-ganadores] create event rpc failed", {
+        resource,
+        code: getSafeErrorCode(result.error),
+        rpc: getControlledRpcError(result.error) ?? "UNCONTROLLED",
+      });
+      return { ok: false };
+    }
+
+    return typeof result.data === "string" && UUID_RE.test(result.data)
+      ? { ok: true, value: result.data }
+      : { ok: false };
+  }
+
+  if (resource === "post") {
+    const postAssets = assets as Extract<MutationAssets, { photo_url: string | null }>;
+    const result = await supabase.rpc("create_solo_ganadores_post", {
+      p_data: payload,
+      p_photo_asset_id: postAssets.photo_url,
+      p_video_asset_id: postAssets.video_url,
+    });
+
+    if (result.error) {
+      console.error("[admin/solo-ganadores] create post rpc failed", {
+        resource,
+        code: getSafeErrorCode(result.error),
+        rpc: getControlledRpcError(result.error) ?? "UNCONTROLLED",
+      });
+      return { ok: false };
+    }
+
+    return typeof result.data === "string" && UUID_RE.test(result.data)
+      ? { ok: true, value: result.data }
+      : { ok: false };
+  }
+
+  const mediaAssets = assets as Extract<MutationAssets, { media_url: string | null }>;
+  const result = await supabase.rpc("create_solo_ganadores_media", {
+    p_data: payload,
+    p_media_asset_id: mediaAssets.media_url,
+  });
+
+  if (result.error) {
+    console.error("[admin/solo-ganadores] create media rpc failed", {
+      resource,
+      code: getSafeErrorCode(result.error),
+      rpc: getControlledRpcError(result.error) ?? "UNCONTROLLED",
+    });
+    return { ok: false };
+  }
+
+  return typeof result.data === "string" && UUID_RE.test(result.data)
+    ? { ok: true, value: result.data }
+    : { ok: false };
 }
 
 async function handleMutation(req: NextRequest, operation: "insert" | "update") {
@@ -838,34 +1409,39 @@ async function handleMutation(req: NextRequest, operation: "insert" | "update") 
       return mutationBadRequest(gate);
     }
 
-    const { resource, id, payload } = mutation.value;
-    const supabase = getSupabaseAdmin();
+    const { resource, id, payload, assets } = mutation.value;
+    const supabaseUrl = getSupabaseUrl();
+    const supabase = getSupabaseAdmin(supabaseUrl);
     const table = tableForResource(resource);
 
     if (operation === "insert") {
-      const result = await supabase
-        .from(table)
-        .insert(payload)
-        .select("id")
-        .single();
+      if (hasOwnBucketUrlWithoutAsset(resource, payload, assets, supabaseUrl)) {
+        return mutationBadRequest(gate);
+      }
 
-      if (result.error) {
-        console.error("[admin/solo-ganadores] insert failed", {
+      const assetSpecs = assetSpecsForMutation(resource, payload, assets);
+      if (!assetSpecs.ok) {
+        return mutationBadRequest(gate);
+      }
+
+      const assetsReady = await validateAssetsForCreate(supabase, assetSpecs.value);
+      if (assetsReady === "invalid") {
+        return mutationBadRequest(gate);
+      }
+
+      if (assetsReady === "unavailable") {
+        return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+      }
+
+      const created = await createResourceWithRpc(supabase, resource, payload, assets);
+      if (!created.ok) {
+        console.error("[admin/solo-ganadores] create rpc returned invalid result", {
           resource,
-          code: result.error.code,
         });
         return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
       }
 
-      const row = result.data as IdRow | null;
-      if (!row?.id || !UUID_RE.test(row.id)) {
-        console.error("[admin/solo-ganadores] insert returned invalid id", {
-          resource,
-        });
-        return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
-      }
-
-      return withAuthCookies(json(201, { ok: true, id: row.id }), gate);
+      return withAuthCookies(json(201, { ok: true, id: created.value }), gate);
     }
 
     if (!id) {

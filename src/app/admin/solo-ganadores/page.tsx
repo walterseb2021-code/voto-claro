@@ -81,6 +81,19 @@ type AdminSaveResponse =
       error?: string;
     };
 
+type AdminCreateAssets =
+  | {
+      main_image_url: string | null;
+      promo_video_url: string | null;
+    }
+  | {
+      photo_url: string | null;
+      video_url: string | null;
+    }
+  | {
+      media_url: string | null;
+    };
+
 type AdminImagePurpose =
   | "event_main_image"
   | "post_photo"
@@ -543,7 +556,8 @@ export default function AdminSoloGanadoresPage() {
   async function saveAdminResource(
     resource: AdminSaveResource,
     id: string,
-    data: Record<string, string | boolean | null>
+    data: Record<string, string | boolean | null>,
+    assets?: AdminCreateAssets
   ) {
     const isUpdate = Boolean(id);
     const res = await fetch("/api/admin/solo-ganadores", {
@@ -563,6 +577,7 @@ export default function AdminSoloGanadoresPage() {
           : {
               resource,
               data,
+              assets,
             }
       ),
     });
@@ -658,7 +673,10 @@ export default function AdminSoloGanadoresPage() {
         featured: Boolean(eventForm.featured),
       };
 
-      await saveAdminResource("event", eventForm.id, payload);
+      await saveAdminResource("event", eventForm.id, payload, {
+        main_image_url: eventMainImageAsset?.assetId ?? null,
+        promo_video_url: eventPromoVideoAsset?.assetId ?? null,
+      });
 
       setEventForm(emptyEvent);
       setEventMainImageAsset(null);
@@ -700,7 +718,10 @@ export default function AdminSoloGanadoresPage() {
         featured: Boolean(postForm.featured),
       };
 
-      await saveAdminResource("post", postForm.id, payload);
+      await saveAdminResource("post", postForm.id, payload, {
+        photo_url: postPhotoAsset?.assetId ?? null,
+        video_url: postVideoAsset?.assetId ?? null,
+      });
 
       setPostForm(emptyPost);
       setPostPhotoAsset(null);
@@ -741,7 +762,9 @@ export default function AdminSoloGanadoresPage() {
         featured: Boolean(mediaForm.featured),
       };
 
-      await saveAdminResource("media", mediaForm.id, payload);
+      await saveAdminResource("media", mediaForm.id, payload, {
+        media_url: mediaAsset?.assetId ?? null,
+      });
 
       setMediaForm(emptyMedia);
       setMediaAsset(null);
