@@ -17,10 +17,12 @@ type VideoUploadRequest = {
 type ValidationResult<T> = { ok: true; value: T } | { ok: false };
 
 const BUCKET = "solo-ganadores";
+const ASSET_TABLE = "solo_ganadores_assets";
 const MAX_JSON_BYTES = 4096;
 // Politica interna de VOTO CLARO para videos administrativos.
 const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
 const VIDEO_MIME = "video/mp4";
+const PENDING_ASSET_TTL_MS = 24 * 60 * 60 * 1000;
 
 function json(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
@@ -233,7 +235,7 @@ function validatePublicUrl(value: unknown) {
 
   try {
     const url = new URL(clean);
-    return url.protocol === "http:" || url.protocol === "https:" ? clean : null;
+    return url.protocol === "https:" ? clean : null;
   } catch {
     return null;
   }
@@ -246,6 +248,29 @@ function getSafeErrorCode(error: unknown) {
 
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" ? code : undefined;
+}
+
+async function cleanupPendingAsset(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  assetId: string,
+  purpose: VideoPurpose,
+  reason: string
+) {
+  const cleanup = await supabase
+    .from(ASSET_TABLE)
+    .delete()
+    .eq("id", assetId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+
+  if (cleanup.error) {
+    console.warn("[admin/solo-ganadores/video-upload-url] pending asset cleanup failed", {
+      purpose,
+      reason,
+      code: getSafeErrorCode(cleanup.error),
+    });
+  }
 }
 
 function badRequest(gate: Awaited<ReturnType<typeof requireAdmin>>) {
@@ -283,20 +308,75 @@ export async function POST(req: NextRequest) {
       return badRequest(gate);
     }
 
-    const { purpose } = input.value;
+    const { purpose, size: validatedSize } = input.value;
     const folder = folderForPurpose(purpose);
-    const path = `${folder}/${crypto.randomUUID()}.mp4`;
+    const assetId = crypto.randomUUID();
+    const path = `${folder}/${assetId}.mp4`;
     const config = getSupabaseConfig();
+    const supabase = getSupabaseAdmin(config.url, config.serviceKey);
+
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+    const publicUrl = validatePublicUrl(data.publicUrl);
+
+    if (!publicUrl) {
+      console.error("[admin/solo-ganadores/video-upload-url] public url unavailable", {
+        purpose,
+      });
+      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    const expiresAt = new Date(Date.now() + PENDING_ASSET_TTL_MS).toISOString();
+    const asset = await supabase
+      .from(ASSET_TABLE)
+      .insert({
+        id: assetId,
+        bucket: BUCKET,
+        object_path: path,
+        public_url: publicUrl,
+        media_kind: "video",
+        purpose,
+        status: "pending",
+        resource_type: null,
+        resource_id: null,
+        resource_field: null,
+        mime_type: VIDEO_MIME,
+        size_bytes: validatedSize,
+        confirmed_at: null,
+        expires_at: expiresAt,
+        deleting_at: null,
+        deleted_at: null,
+        last_error: null,
+      })
+      .select("id")
+      .single();
+
+    const registeredAssetId =
+      typeof asset.data?.id === "string" ? asset.data.id.trim() : "";
+
+    if (asset.error || registeredAssetId !== assetId) {
+      console.error("[admin/solo-ganadores/video-upload-url] asset register failed", {
+        purpose,
+        code: getSafeErrorCode(asset.error),
+      });
+      return withAuthCookies(
+        json(500, {
+          ok: false,
+          error: "No disponible",
+          code: "ASSET_REGISTER_FAILED",
+        }),
+        gate
+      );
+    }
+
     const endpoint = buildTusEndpoint(config.url);
 
     if (!endpoint) {
       console.error("[admin/solo-ganadores/video-upload-url] endpoint unavailable", {
         purpose,
       });
+      await cleanupPendingAsset(supabase, assetId, purpose, "endpoint-unavailable");
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
-
-    const supabase = getSupabaseAdmin(config.url, config.serviceKey);
 
     const signed = await supabase.storage.from(BUCKET).createSignedUploadUrl(path, {
       upsert: false,
@@ -307,6 +387,7 @@ export async function POST(req: NextRequest) {
         purpose,
         code: getSafeErrorCode(signed.error),
       });
+      await cleanupPendingAsset(supabase, assetId, purpose, "signed-upload-failed");
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
@@ -314,6 +395,7 @@ export async function POST(req: NextRequest) {
       console.error("[admin/solo-ganadores/video-upload-url] invalid signed upload data", {
         purpose,
       });
+      await cleanupPendingAsset(supabase, assetId, purpose, "missing-signed-data");
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
@@ -326,22 +408,14 @@ export async function POST(req: NextRequest) {
       console.error("[admin/solo-ganadores/video-upload-url] invalid signed upload data", {
         purpose,
       });
-      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
-    }
-
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    const publicUrl = validatePublicUrl(data.publicUrl);
-
-    if (!publicUrl) {
-      console.error("[admin/solo-ganadores/video-upload-url] public url unavailable", {
-        purpose,
-      });
+      await cleanupPendingAsset(supabase, assetId, purpose, "invalid-signed-data");
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
     return withAuthCookies(
       json(201, {
         ok: true,
+        assetId,
         token,
         path,
         url: publicUrl,
