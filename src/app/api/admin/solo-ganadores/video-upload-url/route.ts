@@ -219,7 +219,7 @@ function buildTusEndpoint(supabaseUrl: string) {
       return null;
     }
 
-    return `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
+    return `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable/sign`;
   } catch {
     return null;
   }
