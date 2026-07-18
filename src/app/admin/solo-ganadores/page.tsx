@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import * as tus from "tus-js-client";
 
 type Tab = "evento" | "ganadores" | "media";
 
@@ -96,8 +97,29 @@ type AdminImageUploadResponse =
       error?: string;
     };
 
+type AdminVideoPurpose =
+  | "event_promo_video"
+  | "post_video"
+  | "media_video";
+
+type AdminVideoAuthorizationResponse =
+  | {
+      ok: true;
+      token: string;
+      path: string;
+      url: string;
+      endpoint: string;
+      maxBytes: number;
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
+
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ADMIN_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
+const VIDEO_MIME = "video/mp4";
 
 const emptyEvent = {
   id: "",
@@ -158,14 +180,13 @@ function formatDate(value: string | null) {
   }
 }
 
-function safeFileName(name: string) {
-  return String(name || "archivo")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase();
+function getLastExtension(fileName: string) {
+  const clean = fileName.trim().toLowerCase();
+  const lastDot = clean.lastIndexOf(".");
+
+  if (lastDot <= 0 || lastDot === clean.length - 1) return null;
+
+  return clean.slice(lastDot + 1);
 }
 
 function isDirectVideoUrl(url: string) {
@@ -225,6 +246,7 @@ export default function AdminSoloGanadoresPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
 
   const [events, setEvents] = useState<SoloEvent[]>([]);
   const [posts, setPosts] = useState<SoloPost[]>([]);
@@ -245,42 +267,6 @@ export default function AdminSoloGanadoresPage() {
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/admin");
-  }
-
-  async function uploadSoloGanadoresFile(file: File, folder: string) {
-    if (!file) return "";
-
-    setUploading(true);
-    setMessage(null);
-
-    try {
-      const cleanName = safeFileName(file.name);
-      const path = `${folder}/${Date.now()}-${cleanName}`;
-
-      const { error } = await supabase.storage.from("solo-ganadores").upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-
-      if (error) throw error;
-
-      const { data } = supabase.storage.from("solo-ganadores").getPublicUrl(path);
-      const publicUrl = data.publicUrl;
-
-      if (!publicUrl) {
-        throw new Error("No se pudo obtener la URL pública del archivo.");
-      }
-
-      setMessage({ type: "success", text: "✅ Archivo subido correctamente." });
-      return publicUrl;
-    } catch (err: any) {
-      const text = errorText(err);
-      console.error("Error al subir archivo:", err);
-      setMessage({ type: "error", text: "Error al subir archivo: " + text });
-      return "";
-    } finally {
-      setUploading(false);
-    }
   }
 
   async function uploadAdminImage(file: File, purpose: AdminImagePurpose) {
@@ -330,6 +316,141 @@ export default function AdminSoloGanadoresPage() {
       setMessage({ type: "error", text: "Error al subir archivo: " + text });
       return "";
     } finally {
+      setUploading(false);
+    }
+  }
+
+  async function hasInitialFtyp(file: File) {
+    const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    return (
+      bytes.byteLength >= 8 &&
+      bytes[4] === 0x66 &&
+      bytes[5] === 0x74 &&
+      bytes[6] === 0x79 &&
+      bytes[7] === 0x70
+    );
+  }
+
+  async function requestVideoUploadAuthorization(
+    file: File,
+    purpose: AdminVideoPurpose
+  ) {
+    const res = await fetch("/api/admin/solo-ganadores/video-upload-url", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        purpose,
+        fileName: file.name,
+        mime: file.type,
+        size: file.size,
+      }),
+    });
+
+    const result = (await res
+      .json()
+      .catch(() => null)) as AdminVideoAuthorizationResponse | null;
+
+    if (!res.ok || !result) {
+      throw new Error("No disponible");
+    }
+
+    if (result.ok !== true) {
+      throw new Error(result.error || "No disponible");
+    }
+
+    if (
+      !result.token ||
+      !result.path ||
+      !result.url ||
+      !result.endpoint ||
+      result.maxBytes !== MAX_VIDEO_BYTES
+    ) {
+      throw new Error("No disponible");
+    }
+
+    return result;
+  }
+
+  async function uploadAdminVideo(file: File, purpose: AdminVideoPurpose) {
+    setUploading(true);
+    setMessage(null);
+    setVideoUploadProgress(0);
+
+    try {
+      if (
+        file.size <= 0 ||
+        file.size > MAX_VIDEO_BYTES ||
+        file.type !== VIDEO_MIME ||
+        getLastExtension(file.name) !== "mp4"
+      ) {
+        throw new Error("Solicitud inválida");
+      }
+
+      const hasFtyp = await hasInitialFtyp(file);
+      if (!hasFtyp) {
+        throw new Error("Solicitud inválida");
+      }
+
+      const authorization = await requestVideoUploadAuthorization(file, purpose);
+      let lastProgress = -1;
+
+      const publicUrl = await new Promise<string>((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: authorization.endpoint,
+          headers: {
+            "x-signature": authorization.token,
+          },
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          chunkSize: 6 * 1024 * 1024,
+          metadata: {
+            bucketName: "solo-ganadores",
+            objectName: authorization.path,
+            contentType: VIDEO_MIME,
+            cacheControl: "3600",
+          },
+          onError: () => {
+            reject(new Error("No disponible"));
+          },
+          onProgress: (bytesSent, bytesTotal) => {
+            if (bytesTotal <= 0) return;
+
+            const progress = Math.max(
+              0,
+              Math.min(100, Math.round((bytesSent / bytesTotal) * 100))
+            );
+
+            if (progress !== lastProgress) {
+              lastProgress = progress;
+              setVideoUploadProgress(progress);
+            }
+          },
+          onSuccess: () => {
+            if (!authorization.url) {
+              reject(new Error("No disponible"));
+              return;
+            }
+
+            resolve(authorization.url);
+          },
+        });
+
+        upload.start();
+      });
+
+      setMessage({ type: "success", text: "✅ Archivo subido correctamente." });
+      return publicUrl;
+    } catch (err) {
+      const text = errorText(err);
+      setMessage({ type: "error", text: "Error al subir archivo: " + text });
+      return "";
+    } finally {
+      setVideoUploadProgress(null);
       setUploading(false);
     }
   }
@@ -724,6 +845,9 @@ export default function AdminSoloGanadoresPage() {
       {uploading ? (
         <div className="mt-4 rounded-xl border border-blue-400 bg-blue-50 p-3 text-sm font-bold text-blue-800">
           Subiendo archivo… espera unos segundos antes de guardar.
+          {videoUploadProgress !== null ? (
+            <div className="mt-1">Subiendo video: {videoUploadProgress}%</div>
+          ) : null}
         </div>
       ) : null}
 
@@ -968,7 +1092,7 @@ export default function AdminSoloGanadoresPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const url = await uploadSoloGanadoresFile(file, "eventos");
+                        const url = await uploadAdminVideo(file, "event_promo_video");
                         if (url) setEventForm((p) => ({ ...p, promo_video_url: url }));
                         e.currentTarget.value = "";
                       }}
@@ -1205,7 +1329,7 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const url = await uploadSoloGanadoresFile(file, "ganadores");
+                    const url = await uploadAdminVideo(file, "post_video");
                     if (url) setPostForm((p) => ({ ...p, video_url: url }));
                     e.currentTarget.value = "";
                   }}
@@ -1383,7 +1507,7 @@ export default function AdminSoloGanadoresPage() {
                     if (file.type.startsWith("image/")) {
                       url = await uploadAdminImage(file, "media_image");
                     } else if (file.type.startsWith("video/")) {
-                      url = await uploadSoloGanadoresFile(file, "galeria");
+                      url = await uploadAdminVideo(file, "media_video");
                     } else {
                       setMessage({
                         type: "error",
