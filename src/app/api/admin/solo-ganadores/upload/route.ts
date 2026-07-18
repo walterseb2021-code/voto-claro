@@ -15,8 +15,10 @@ type DetectedImage = {
 type ValidationResult<T> = { ok: true; value: T } | { ok: false };
 
 const BUCKET = "solo-ganadores";
+const ASSET_TABLE = "solo_ganadores_assets";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_MULTIPART_BYTES = MAX_IMAGE_BYTES + 64 * 1024;
+const PENDING_ASSET_TTL_MS = 24 * 60 * 60 * 1000;
 
 const PURPOSES = new Set<ImagePurpose>([
   "event_main_image",
@@ -244,6 +246,22 @@ function getSafeErrorCode(error: unknown) {
   return typeof code === "string" ? code : undefined;
 }
 
+async function cleanupUploadedObject(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  path: string,
+  purpose: ImagePurpose,
+  reason: string
+) {
+  const cleanup = await supabase.storage.from(BUCKET).remove([path]);
+  if (cleanup.error) {
+    console.error("[admin/solo-ganadores/upload] cleanup failed", {
+      purpose,
+      reason,
+      code: getSafeErrorCode(cleanup.error),
+    });
+  }
+}
+
 async function validateFormData(req: NextRequest): Promise<
   ValidationResult<{
     purpose: ImagePurpose;
@@ -365,7 +383,8 @@ export async function POST(req: NextRequest) {
     }
 
     const folder = folderForPurpose(purpose);
-    const path = `${folder}/${crypto.randomUUID()}.${detected.extension}`;
+    const assetId = crypto.randomUUID();
+    const path = `${folder}/${assetId}.${detected.extension}`;
     const supabase = getSupabaseAdmin();
 
     const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
@@ -390,20 +409,61 @@ export async function POST(req: NextRequest) {
         purpose,
       });
 
-      const cleanup = await supabase.storage.from(BUCKET).remove([path]);
-      if (cleanup.error) {
-        console.error("[admin/solo-ganadores/upload] cleanup failed", {
-          purpose,
-          code: getSafeErrorCode(cleanup.error),
-        });
-      }
+      await cleanupUploadedObject(supabase, path, purpose, "public-url-unavailable");
 
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    const expiresAt = new Date(Date.now() + PENDING_ASSET_TTL_MS).toISOString();
+    const assetResult = await supabase
+      .from(ASSET_TABLE)
+      .insert({
+        id: assetId,
+        bucket: BUCKET,
+        object_path: path,
+        public_url: publicUrl,
+        media_kind: "image",
+        purpose,
+        status: "pending",
+        resource_type: null,
+        resource_id: null,
+        resource_field: null,
+        mime_type: detected.mime,
+        size_bytes: arrayBuffer.byteLength,
+        confirmed_at: null,
+        expires_at: expiresAt,
+        deleting_at: null,
+        deleted_at: null,
+        last_error: null,
+      })
+      .select("id")
+      .single();
+
+    const registeredAssetId =
+      typeof assetResult.data?.id === "string" ? assetResult.data.id : "";
+
+    if (assetResult.error || registeredAssetId !== assetId) {
+      console.error("[admin/solo-ganadores/upload] asset register failed", {
+        purpose,
+        code: getSafeErrorCode(assetResult.error),
+      });
+
+      await cleanupUploadedObject(supabase, path, purpose, "asset-register-failed");
+
+      return withAuthCookies(
+        json(500, {
+          ok: false,
+          error: "No disponible",
+          code: "ASSET_REGISTER_FAILED",
+        }),
+        gate
+      );
     }
 
     return withAuthCookies(
       json(201, {
         ok: true,
+        assetId,
         url: publicUrl,
         path,
       }),
