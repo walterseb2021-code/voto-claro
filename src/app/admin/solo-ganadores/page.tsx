@@ -86,9 +86,23 @@ type AdminImagePurpose =
   | "post_photo"
   | "media_image";
 
+type AdminPendingAsset = {
+  assetId: string;
+  path: string;
+  url: string;
+  purpose:
+    | "event_main_image"
+    | "event_promo_video"
+    | "post_photo"
+    | "post_video"
+    | "media_image"
+    | "media_video";
+};
+
 type AdminImageUploadResponse =
   | {
       ok: true;
+      assetId: string;
       url: string;
       path: string;
     }
@@ -105,6 +119,7 @@ type AdminVideoPurpose =
 type AdminVideoAuthorizationResponse =
   | {
       ok: true;
+      assetId: string;
       token: string;
       path: string;
       url: string;
@@ -189,6 +204,20 @@ function getLastExtension(fileName: string) {
   return clean.slice(lastDot + 1);
 }
 
+function expectedMediaPurpose(mediaType: string) {
+  if (mediaType === "video") return "media_video";
+  if (
+    mediaType === "foto" ||
+    mediaType === "ambiente" ||
+    mediaType === "entrega" ||
+    mediaType === "reconocimiento"
+  ) {
+    return "media_image";
+  }
+
+  return null;
+}
+
 function isDirectVideoUrl(url: string) {
   const u = String(url || "").toLowerCase();
   return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".mov");
@@ -255,6 +284,13 @@ export default function AdminSoloGanadoresPage() {
   const [eventForm, setEventForm] = useState(emptyEvent);
   const [postForm, setPostForm] = useState(emptyPost);
   const [mediaForm, setMediaForm] = useState(emptyMedia);
+  const [eventMainImageAsset, setEventMainImageAsset] =
+    useState<AdminPendingAsset | null>(null);
+  const [eventPromoVideoAsset, setEventPromoVideoAsset] =
+    useState<AdminPendingAsset | null>(null);
+  const [postPhotoAsset, setPostPhotoAsset] = useState<AdminPendingAsset | null>(null);
+  const [postVideoAsset, setPostVideoAsset] = useState<AdminPendingAsset | null>(null);
+  const [mediaAsset, setMediaAsset] = useState<AdminPendingAsset | null>(null);
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -305,16 +341,21 @@ export default function AdminSoloGanadoresPage() {
         throw new Error(result.error || "No disponible");
       }
 
-      if (!result.url || !result.path) {
+      if (!result.assetId || !result.url || !result.path) {
         throw new Error("No disponible");
       }
 
       setMessage({ type: "success", text: "✅ Archivo subido correctamente." });
-      return result.url;
+      return {
+        assetId: result.assetId,
+        path: result.path,
+        url: result.url,
+        purpose,
+      };
     } catch (err) {
       const text = errorText(err);
       setMessage({ type: "error", text: "Error al subir archivo: " + text });
-      return "";
+      return null;
     } finally {
       setUploading(false);
     }
@@ -363,6 +404,7 @@ export default function AdminSoloGanadoresPage() {
     }
 
     if (
+      !result.assetId ||
       !result.token ||
       !result.path ||
       !result.url ||
@@ -398,7 +440,7 @@ export default function AdminSoloGanadoresPage() {
       const authorization = await requestVideoUploadAuthorization(file, purpose);
       let lastProgress = -1;
 
-      const publicUrl = await new Promise<string>((resolve, reject) => {
+      const asset = await new Promise<AdminPendingAsset>((resolve, reject) => {
         const upload = new tus.Upload(file, {
           endpoint: authorization.endpoint,
           headers: {
@@ -436,7 +478,12 @@ export default function AdminSoloGanadoresPage() {
               return;
             }
 
-            resolve(authorization.url);
+            resolve({
+              assetId: authorization.assetId,
+              path: authorization.path,
+              url: authorization.url,
+              purpose,
+            });
           },
         });
 
@@ -444,11 +491,11 @@ export default function AdminSoloGanadoresPage() {
       });
 
       setMessage({ type: "success", text: "✅ Archivo subido correctamente." });
-      return publicUrl;
+      return asset;
     } catch (err) {
       const text = errorText(err);
       setMessage({ type: "error", text: "Error al subir archivo: " + text });
-      return "";
+      return null;
     } finally {
       setVideoUploadProgress(null);
       setUploading(false);
@@ -614,6 +661,8 @@ export default function AdminSoloGanadoresPage() {
       await saveAdminResource("event", eventForm.id, payload);
 
       setEventForm(emptyEvent);
+      setEventMainImageAsset(null);
+      setEventPromoVideoAsset(null);
       setMessage({ type: "success", text: "✅ Evento guardado correctamente." });
       await loadAll();
     } catch (err: any) {
@@ -654,6 +703,8 @@ export default function AdminSoloGanadoresPage() {
       await saveAdminResource("post", postForm.id, payload);
 
       setPostForm(emptyPost);
+      setPostPhotoAsset(null);
+      setPostVideoAsset(null);
       setMessage({ type: "success", text: "✅ Ganador guardado correctamente." });
       await loadAll();
     } catch (err: any) {
@@ -693,6 +744,7 @@ export default function AdminSoloGanadoresPage() {
       await saveAdminResource("media", mediaForm.id, payload);
 
       setMediaForm(emptyMedia);
+      setMediaAsset(null);
       setMessage({ type: "success", text: "✅ Contenido guardado correctamente." });
       await loadAll();
     } catch (err: any) {
@@ -910,7 +962,15 @@ export default function AdminSoloGanadoresPage() {
                 </p>
               </div>
 
-              <button type="button" onClick={() => setEventForm(emptyEvent)} className={btnSm}>
+              <button
+                type="button"
+                onClick={() => {
+                  setEventForm(emptyEvent);
+                  setEventMainImageAsset(null);
+                  setEventPromoVideoAsset(null);
+                }}
+                className={btnSm}
+              >
                 + Nuevo evento
               </button>
             </div>
@@ -1050,9 +1110,10 @@ export default function AdminSoloGanadoresPage() {
                     <input
                       className={input}
                       value={eventForm.main_image_url}
-                      onChange={(e) =>
-                        setEventForm((p) => ({ ...p, main_image_url: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        if (eventMainImageAsset) setEventMainImageAsset(null);
+                        setEventForm((p) => ({ ...p, main_image_url: e.target.value }));
+                      }}
                       placeholder="URL de imagen"
                     />
 
@@ -1064,8 +1125,11 @@ export default function AdminSoloGanadoresPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const url = await uploadAdminImage(file, "event_main_image");
-                        if (url) setEventForm((p) => ({ ...p, main_image_url: url }));
+                        const asset = await uploadAdminImage(file, "event_main_image");
+                        if (asset) {
+                          setEventMainImageAsset(asset);
+                          setEventForm((p) => ({ ...p, main_image_url: asset.url }));
+                        }
                         e.currentTarget.value = "";
                       }}
                     />
@@ -1078,9 +1142,10 @@ export default function AdminSoloGanadoresPage() {
                     <input
                       className={input}
                       value={eventForm.promo_video_url}
-                      onChange={(e) =>
-                        setEventForm((p) => ({ ...p, promo_video_url: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        if (eventPromoVideoAsset) setEventPromoVideoAsset(null);
+                        setEventForm((p) => ({ ...p, promo_video_url: e.target.value }));
+                      }}
                       placeholder="URL de video o YouTube"
                     />
 
@@ -1092,8 +1157,11 @@ export default function AdminSoloGanadoresPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const url = await uploadAdminVideo(file, "event_promo_video");
-                        if (url) setEventForm((p) => ({ ...p, promo_video_url: url }));
+                        const asset = await uploadAdminVideo(file, "event_promo_video");
+                        if (asset) {
+                          setEventPromoVideoAsset(asset);
+                          setEventForm((p) => ({ ...p, promo_video_url: asset.url }));
+                        }
                         e.currentTarget.value = "";
                       }}
                     />
@@ -1153,7 +1221,7 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm}
-                        onClick={() =>
+                        onClick={() => {
                           setEventForm({
                             id: ev.id,
                             title: ev.title || "",
@@ -1169,8 +1237,10 @@ export default function AdminSoloGanadoresPage() {
                             status: ev.status || "anunciado",
                             published: !!ev.published,
                             featured: !!ev.featured,
-                          })
-                        }
+                          });
+                          setEventMainImageAsset(null);
+                          setEventPromoVideoAsset(null);
+                        }}
                       >
                         Editar
                       </button>
@@ -1202,7 +1272,15 @@ export default function AdminSoloGanadoresPage() {
                 </p>
               </div>
 
-              <button type="button" onClick={() => setPostForm(emptyPost)} className={btnSm}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPostForm(emptyPost);
+                  setPostPhotoAsset(null);
+                  setPostVideoAsset(null);
+                }}
+                className={btnSm}
+              >
                 + Nuevo ganador
               </button>
             </div>
@@ -1291,7 +1369,10 @@ export default function AdminSoloGanadoresPage() {
                 <input
                   className={input}
                   value={postForm.photo_url}
-                  onChange={(e) => setPostForm((p) => ({ ...p, photo_url: e.target.value }))}
+                  onChange={(e) => {
+                    if (postPhotoAsset) setPostPhotoAsset(null);
+                    setPostForm((p) => ({ ...p, photo_url: e.target.value }));
+                  }}
                   placeholder="URL de foto"
                 />
 
@@ -1303,8 +1384,11 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const url = await uploadAdminImage(file, "post_photo");
-                    if (url) setPostForm((p) => ({ ...p, photo_url: url }));
+                    const asset = await uploadAdminImage(file, "post_photo");
+                    if (asset) {
+                      setPostPhotoAsset(asset);
+                      setPostForm((p) => ({ ...p, photo_url: asset.url }));
+                    }
                     e.currentTarget.value = "";
                   }}
                 />
@@ -1317,7 +1401,10 @@ export default function AdminSoloGanadoresPage() {
                 <input
                   className={input}
                   value={postForm.video_url}
-                  onChange={(e) => setPostForm((p) => ({ ...p, video_url: e.target.value }))}
+                  onChange={(e) => {
+                    if (postVideoAsset) setPostVideoAsset(null);
+                    setPostForm((p) => ({ ...p, video_url: e.target.value }));
+                  }}
                   placeholder="URL de video o YouTube"
                 />
 
@@ -1329,8 +1416,11 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const url = await uploadAdminVideo(file, "post_video");
-                    if (url) setPostForm((p) => ({ ...p, video_url: url }));
+                    const asset = await uploadAdminVideo(file, "post_video");
+                    if (asset) {
+                      setPostVideoAsset(asset);
+                      setPostForm((p) => ({ ...p, video_url: asset.url }));
+                    }
                     e.currentTarget.value = "";
                   }}
                 />
@@ -1404,7 +1494,7 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm}
-                        onClick={() =>
+                        onClick={() => {
                           setPostForm({
                             id: p.id,
                             source_module: p.source_module || "manual",
@@ -1420,8 +1510,10 @@ export default function AdminSoloGanadoresPage() {
                             event_date: p.event_date || "",
                             published: !!p.published,
                             featured: !!p.featured,
-                          })
-                        }
+                          });
+                          setPostPhotoAsset(null);
+                          setPostVideoAsset(null);
+                        }}
                       >
                         Editar
                       </button>
@@ -1453,7 +1545,14 @@ export default function AdminSoloGanadoresPage() {
                 </p>
               </div>
 
-              <button type="button" onClick={() => setMediaForm(emptyMedia)} className={btnSm}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMediaForm(emptyMedia);
+                  setMediaAsset(null);
+                }}
+                className={btnSm}
+              >
                 + Nuevo contenido
               </button>
             </div>
@@ -1474,7 +1573,14 @@ export default function AdminSoloGanadoresPage() {
                 <select
                   className={input}
                   value={mediaForm.media_type}
-                  onChange={(e) => setMediaForm((p) => ({ ...p, media_type: e.target.value }))}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    const expectedPurpose = expectedMediaPurpose(nextType);
+                    if (!expectedPurpose || mediaAsset?.purpose !== expectedPurpose) {
+                      setMediaAsset(null);
+                    }
+                    setMediaForm((p) => ({ ...p, media_type: nextType }));
+                  }}
                 >
                   <option value="foto">Foto</option>
                   <option value="video">Video</option>
@@ -1490,7 +1596,10 @@ export default function AdminSoloGanadoresPage() {
                 <input
                   className={input}
                   value={mediaForm.media_url}
-                  onChange={(e) => setMediaForm((p) => ({ ...p, media_url: e.target.value }))}
+                  onChange={(e) => {
+                    if (mediaAsset) setMediaAsset(null);
+                    setMediaForm((p) => ({ ...p, media_url: e.target.value }));
+                  }}
                   placeholder="URL de archivo, imagen, video o YouTube"
                 />
 
@@ -1502,12 +1611,16 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    let url = "";
+                    let asset: AdminPendingAsset | null = null;
+                    const expectedPurpose = expectedMediaPurpose(mediaForm.media_type);
 
-                    if (file.type.startsWith("image/")) {
-                      url = await uploadAdminImage(file, "media_image");
-                    } else if (file.type.startsWith("video/")) {
-                      url = await uploadAdminVideo(file, "media_video");
+                    if (expectedPurpose === "media_image" && file.type.startsWith("image/")) {
+                      asset = await uploadAdminImage(file, expectedPurpose);
+                    } else if (
+                      expectedPurpose === "media_video" &&
+                      file.type.startsWith("video/")
+                    ) {
+                      asset = await uploadAdminVideo(file, expectedPurpose);
                     } else {
                       setMessage({
                         type: "error",
@@ -1515,7 +1628,10 @@ export default function AdminSoloGanadoresPage() {
                       });
                     }
 
-                    if (url) setMediaForm((p) => ({ ...p, media_url: url }));
+                    if (asset) {
+                      setMediaAsset(asset);
+                      setMediaForm((p) => ({ ...p, media_url: asset.url }));
+                    }
                     e.currentTarget.value = "";
                   }}
                 />
@@ -1597,7 +1713,7 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm}
-                        onClick={() =>
+                        onClick={() => {
                           setMediaForm({
                             id: m.id,
                             title: m.title || "",
@@ -1607,8 +1723,9 @@ export default function AdminSoloGanadoresPage() {
                             related_winner_id: m.related_winner_id || "",
                             published: !!m.published,
                             featured: !!m.featured,
-                          })
-                        }
+                          });
+                          setMediaAsset(null);
+                        }}
                       >
                         Editar
                       </button>
