@@ -21,6 +21,7 @@ type EventDbRow = {
   published: boolean | null;
   featured: boolean | null;
   created_at: string | null;
+  updated_at: string | null;
 };
 
 type PostDbRow = {
@@ -39,6 +40,7 @@ type PostDbRow = {
   published: boolean | null;
   featured: boolean | null;
   created_at: string | null;
+  updated_at: string | null;
 };
 
 type MediaDbRow = {
@@ -51,6 +53,23 @@ type MediaDbRow = {
   published: boolean | null;
   featured: boolean | null;
   created_at: string | null;
+  updated_at: string | null;
+};
+
+type AdminAssetState =
+  | "confirmed"
+  | "legacy_own_url"
+  | "external"
+  | "youtube"
+  | "empty"
+  | "inconsistent";
+
+type AdminAssetMetadata = {
+  state: AdminAssetState;
+  assetId: string | null;
+  status: "confirmed" | null;
+  purpose: string | null;
+  mediaKind: "image" | "video" | null;
 };
 
 type AdminEvent = {
@@ -69,6 +88,9 @@ type AdminEvent = {
   published: boolean;
   featured: boolean;
   created_at: string | null;
+  updated_at: string | null;
+  main_image_asset: AdminAssetMetadata;
+  promo_video_asset: AdminAssetMetadata;
 };
 
 type AdminPost = {
@@ -87,6 +109,9 @@ type AdminPost = {
   published: boolean;
   featured: boolean;
   created_at: string | null;
+  updated_at: string | null;
+  photo_asset: AdminAssetMetadata;
+  video_asset: AdminAssetMetadata;
 };
 
 type AdminMedia = {
@@ -99,6 +124,8 @@ type AdminMedia = {
   published: boolean;
   featured: boolean;
   created_at: string | null;
+  updated_at: string | null;
+  media_asset: AdminAssetMetadata;
 };
 
 type Resource = "event" | "post" | "media";
@@ -208,6 +235,17 @@ type AssetDbRow = {
   deleted_at: string | null;
 };
 
+type ConfirmedAssetRow = {
+  id: string | null;
+  public_url: string | null;
+  media_kind: string | null;
+  purpose: string | null;
+  status: string | null;
+  resource_type: string | null;
+  resource_id: string | null;
+  resource_field: string | null;
+};
+
 type StorageInfo = {
   size?: number;
   contentType?: string;
@@ -240,6 +278,7 @@ const ASSET_TABLE = "solo_ganadores_assets";
 const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
 const VIDEO_MIME = "video/mp4";
 const MAX_BODY_BYTES = 65536;
+const ASSET_LOOKUP_BATCH_SIZE = 100;
 
 const EVENT_STATUSES = new Set(["anunciado", "activo", "finalizado"]);
 const SOURCE_MODULES = new Set([
@@ -972,6 +1011,256 @@ function isValidHttpUrl(value: string | null) {
   }
 }
 
+function isRecognizedYouTubeUrl(value: string | null) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return false;
+    }
+
+    const host = url.hostname.toLowerCase();
+
+    if (host === "youtube.com" || host === "www.youtube.com") {
+      const watchId = url.pathname === "/watch" ? url.searchParams.get("v") : null;
+      if (watchId?.trim()) return true;
+
+      if (url.pathname.startsWith("/embed/")) {
+        return Boolean(url.pathname.replace("/embed/", "").split("/")[0]?.trim());
+      }
+
+      if (url.pathname.startsWith("/shorts/")) {
+        return Boolean(url.pathname.replace("/shorts/", "").split("/")[0]?.trim());
+      }
+
+      return false;
+    }
+
+    if (host === "youtu.be") {
+      return Boolean(url.pathname.replace("/", "").split("/")[0]?.trim());
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function ownershipKey(resource: Resource, resourceId: string, field: AssetField) {
+  return `${resource}:${resourceId}:${field}`;
+}
+
+function isResource(value: string | null): value is Resource {
+  return value === "event" || value === "post" || value === "media";
+}
+
+function isAssetField(value: string | null): value is AssetField {
+  return (
+    value === "main_image_url" ||
+    value === "promo_video_url" ||
+    value === "photo_url" ||
+    value === "video_url" ||
+    value === "media_url"
+  );
+}
+
+function isValidOwnershipPair(resource: Resource, field: AssetField) {
+  if (resource === "event") {
+    return field === "main_image_url" || field === "promo_video_url";
+  }
+
+  if (resource === "post") {
+    return field === "photo_url" || field === "video_url";
+  }
+
+  return field === "media_url";
+}
+
+function mediaKind(value: string | null): AssetKind | null {
+  if (value === "image" || value === "video") return value;
+  return null;
+}
+
+function expectedAdminAsset(
+  resource: Resource,
+  field: AssetField,
+  mediaType?: string
+): { purpose: AssetPurpose; mediaKind: AssetKind } | null {
+  if (resource === "event" && field === "main_image_url") {
+    return { purpose: "event_main_image", mediaKind: "image" };
+  }
+
+  if (resource === "event" && field === "promo_video_url") {
+    return { purpose: "event_promo_video", mediaKind: "video" };
+  }
+
+  if (resource === "post" && field === "photo_url") {
+    return { purpose: "post_photo", mediaKind: "image" };
+  }
+
+  if (resource === "post" && field === "video_url") {
+    return { purpose: "post_video", mediaKind: "video" };
+  }
+
+  if (resource === "media" && field === "media_url") {
+    if (mediaType === "video") {
+      return { purpose: "media_video", mediaKind: "video" };
+    }
+
+    if (IMAGE_MEDIA_TYPES.has(mediaType ?? "")) {
+      return { purpose: "media_image", mediaKind: "image" };
+    }
+  }
+
+  return null;
+}
+
+function emptyAdminAssetMetadata(state: AdminAssetState): AdminAssetMetadata {
+  return {
+    state,
+    assetId: null,
+    status: null,
+    purpose: null,
+    mediaKind: null,
+  };
+}
+
+function classifyAdminAsset(
+  value: string | null,
+  asset: ConfirmedAssetRow | undefined,
+  expected: { purpose: AssetPurpose; mediaKind: AssetKind } | null,
+  supabaseUrl: string
+): AdminAssetMetadata {
+  const clean = nullableString(value);
+
+  if (asset) {
+    const assetKind = mediaKind(asset.media_kind);
+    const metadata: AdminAssetMetadata = {
+      state: "inconsistent",
+      assetId: typeof asset.id === "string" && asset.id.trim() ? asset.id : null,
+      status: asset.status === "confirmed" ? "confirmed" : null,
+      purpose:
+        typeof asset.purpose === "string" && asset.purpose.trim()
+          ? asset.purpose
+          : null,
+      mediaKind: assetKind,
+    };
+
+    if (
+      clean &&
+      expected &&
+      metadata.assetId !== null &&
+      asset.status === "confirmed" &&
+      asset.public_url === clean &&
+      asset.purpose === expected.purpose &&
+      assetKind === expected.mediaKind
+    ) {
+      return {
+        ...metadata,
+        state: "confirmed",
+      };
+    }
+
+    return metadata;
+  }
+
+  if (!clean) return emptyAdminAssetMetadata("empty");
+  if (isOwnBucketPublicUrl(clean, supabaseUrl)) {
+    return emptyAdminAssetMetadata("legacy_own_url");
+  }
+  if (isRecognizedYouTubeUrl(clean)) return emptyAdminAssetMetadata("youtube");
+  if (isValidHttpUrl(clean)) return emptyAdminAssetMetadata("external");
+
+  return emptyAdminAssetMetadata("inconsistent");
+}
+
+function buildOwnershipAssetMap(
+  rows: ConfirmedAssetRow[]
+): ValidationResult<Map<string, ConfirmedAssetRow>> {
+  const map = new Map<string, ConfirmedAssetRow>();
+
+  for (const row of rows) {
+    if (
+      !isResource(row.resource_type) ||
+      !isAssetField(row.resource_field) ||
+      typeof row.resource_id !== "string" ||
+      !UUID_RE.test(row.resource_id) ||
+      row.status !== "confirmed" ||
+      typeof row.id !== "string" ||
+      !UUID_RE.test(row.id) ||
+      !isValidOwnershipPair(row.resource_type, row.resource_field)
+    ) {
+      console.error("[admin/solo-ganadores] invalid confirmed asset ownership", {
+        resource: row.resource_type ?? "UNKNOWN",
+        field: row.resource_field ?? "UNKNOWN",
+      });
+      return { ok: false };
+    }
+
+    const key = ownershipKey(row.resource_type, row.resource_id, row.resource_field);
+    if (map.has(key)) {
+      console.error("[admin/solo-ganadores] duplicate confirmed asset ownership", {
+        resource: row.resource_type,
+        field: row.resource_field,
+      });
+      return { ok: false };
+    }
+
+    map.set(key, row);
+  }
+
+  return { ok: true, value: map };
+}
+
+function chunkArray<T>(values: T[], maxSize: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += maxSize) {
+    chunks.push(values.slice(index, index + maxSize));
+  }
+
+  return chunks;
+}
+
+async function fetchConfirmedAssetsForResource(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  resource: Resource,
+  resourceIds: string[]
+): Promise<ValidationResult<ConfirmedAssetRow[]>> {
+  const uniqueIds = Array.from(new Set(resourceIds.filter((id) => UUID_RE.test(id))));
+  if (uniqueIds.length === 0) return { ok: true, value: [] };
+
+  const batches = chunkArray(uniqueIds, ASSET_LOOKUP_BATCH_SIZE);
+  const results = await Promise.all(
+    batches.map((batch) =>
+      supabase
+        .from(ASSET_TABLE)
+        .select(
+          "id,public_url,media_kind,purpose,status,resource_type,resource_id,resource_field"
+        )
+        .eq("status", "confirmed")
+        .eq("resource_type", resource)
+        .in("resource_id", batch)
+    )
+  );
+
+  const rows: ConfirmedAssetRow[] = [];
+  for (const result of results) {
+    if (result.error) {
+      console.error("[admin/solo-ganadores] confirmed assets batch lookup failed", {
+        resource,
+        code: getSafeErrorCode(result.error),
+      });
+      return { ok: false };
+    }
+
+    rows.push(...((result.data ?? []) as ConfirmedAssetRow[]));
+  }
+
+  return { ok: true, value: rows };
+}
+
 function getSafeErrorCode(error: unknown) {
   if (!isRecord(error)) return "UNKNOWN";
 
@@ -1115,11 +1404,21 @@ function mutationBadRequest(gate: Awaited<ReturnType<typeof requireAdmin>>) {
   return withAuthCookies(json(400, { ok: false, error: "Solicitud inválida" }), gate);
 }
 
-function toAdminEvent(row: EventDbRow, stats: SanitizeStats): AdminEvent | null {
+function toAdminEvent(
+  row: EventDbRow,
+  stats: SanitizeStats,
+  assets: Map<string, ConfirmedAssetRow>,
+  supabaseUrl: string
+): AdminEvent | null {
   if (!UUID_RE.test(row.id)) {
     stats.excludedEvents += 1;
     return null;
   }
+
+  const mainImageAsset = assets.get(ownershipKey("event", row.id, "main_image_url"));
+  const promoVideoAsset = assets.get(
+    ownershipKey("event", row.id, "promo_video_url")
+  );
 
   return {
     id: row.id,
@@ -1137,14 +1436,35 @@ function toAdminEvent(row: EventDbRow, stats: SanitizeStats): AdminEvent | null 
     published: row.published === true,
     featured: row.featured === true,
     created_at: nullableString(row.created_at),
+    updated_at: nullableString(row.updated_at),
+    main_image_asset: classifyAdminAsset(
+      row.main_image_url,
+      mainImageAsset,
+      expectedAdminAsset("event", "main_image_url"),
+      supabaseUrl
+    ),
+    promo_video_asset: classifyAdminAsset(
+      row.promo_video_url,
+      promoVideoAsset,
+      expectedAdminAsset("event", "promo_video_url"),
+      supabaseUrl
+    ),
   };
 }
 
-function toAdminPost(row: PostDbRow, stats: SanitizeStats): AdminPost | null {
+function toAdminPost(
+  row: PostDbRow,
+  stats: SanitizeStats,
+  assets: Map<string, ConfirmedAssetRow>,
+  supabaseUrl: string
+): AdminPost | null {
   if (!UUID_RE.test(row.id)) {
     stats.excludedPosts += 1;
     return null;
   }
+
+  const photoAsset = assets.get(ownershipKey("post", row.id, "photo_url"));
+  const videoAsset = assets.get(ownershipKey("post", row.id, "video_url"));
 
   return {
     id: row.id,
@@ -1162,25 +1482,53 @@ function toAdminPost(row: PostDbRow, stats: SanitizeStats): AdminPost | null {
     published: row.published === true,
     featured: row.featured === true,
     created_at: nullableString(row.created_at),
+    updated_at: nullableString(row.updated_at),
+    photo_asset: classifyAdminAsset(
+      row.photo_url,
+      photoAsset,
+      expectedAdminAsset("post", "photo_url"),
+      supabaseUrl
+    ),
+    video_asset: classifyAdminAsset(
+      row.video_url,
+      videoAsset,
+      expectedAdminAsset("post", "video_url"),
+      supabaseUrl
+    ),
   };
 }
 
-function toAdminMedia(row: MediaDbRow, stats: SanitizeStats): AdminMedia | null {
+function toAdminMedia(
+  row: MediaDbRow,
+  stats: SanitizeStats,
+  assets: Map<string, ConfirmedAssetRow>,
+  supabaseUrl: string
+): AdminMedia | null {
   if (!UUID_RE.test(row.id)) {
     stats.excludedMedia += 1;
     return null;
   }
 
+  const mediaType = requiredString(row.media_type);
+  const mediaAsset = assets.get(ownershipKey("media", row.id, "media_url"));
+
   return {
     id: row.id,
     title: requiredString(row.title),
-    media_type: requiredString(row.media_type),
+    media_type: mediaType,
     media_url: requiredString(row.media_url),
     description: nullableString(row.description),
     related_winner_id: optionalUuid(row.related_winner_id, stats),
     published: row.published === true,
     featured: row.featured === true,
     created_at: nullableString(row.created_at),
+    updated_at: nullableString(row.updated_at),
+    media_asset: classifyAdminAsset(
+      row.media_url,
+      mediaAsset,
+      expectedAdminAsset("media", "media_url", mediaType),
+      supabaseUrl
+    ),
   };
 }
 
@@ -1581,44 +1929,51 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseAdmin();
+    const supabaseUrl = getSupabaseUrl();
+    const supabase = getSupabaseAdmin(supabaseUrl);
 
     const [eventsResult, postsResult, mediaResult] = await Promise.all([
       supabase
         .from("solo_ganadores_events")
         .select(
-          "id,title,semester,event_date,location_name,address,city,description,recognitions,main_image_url,promo_video_url,status,published,featured,created_at"
+          "id,title,semester,event_date,location_name,address,city,description,recognitions,main_image_url,promo_video_url,status,published,featured,created_at,updated_at"
         )
         .order("created_at", { ascending: false, nullsFirst: false })
         .limit(100),
       supabase
         .from("solo_ganadores_posts")
         .select(
-          "id,source_module,source_winner_id,winner_name,winner_alias,title,prize_name,description,photo_url,video_url,interview_url,event_date,published,featured,created_at"
+          "id,source_module,source_winner_id,winner_name,winner_alias,title,prize_name,description,photo_url,video_url,interview_url,event_date,published,featured,created_at,updated_at"
         )
         .order("created_at", { ascending: false, nullsFirst: false })
         .limit(200),
       supabase
         .from("solo_ganadores_media")
         .select(
-          "id,title,media_type,media_url,description,related_winner_id,published,featured,created_at"
+          "id,title,media_type,media_url,description,related_winner_id,published,featured,created_at,updated_at"
         )
         .order("created_at", { ascending: false, nullsFirst: false })
         .limit(300),
     ]);
 
     if (eventsResult.error) {
-      console.error("[admin/solo-ganadores] events lookup failed", eventsResult.error);
+      console.error("[admin/solo-ganadores] events lookup failed", {
+        code: getSafeErrorCode(eventsResult.error),
+      });
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
     if (postsResult.error) {
-      console.error("[admin/solo-ganadores] posts lookup failed", postsResult.error);
+      console.error("[admin/solo-ganadores] posts lookup failed", {
+        code: getSafeErrorCode(postsResult.error),
+      });
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
     if (mediaResult.error) {
-      console.error("[admin/solo-ganadores] media lookup failed", mediaResult.error);
+      console.error("[admin/solo-ganadores] media lookup failed", {
+        code: getSafeErrorCode(mediaResult.error),
+      });
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
@@ -1632,17 +1987,49 @@ export async function GET(req: NextRequest) {
     const eventRows = (eventsResult.data ?? []) as EventDbRow[];
     const postRows = (postsResult.data ?? []) as PostDbRow[];
     const mediaRows = (mediaResult.data ?? []) as MediaDbRow[];
+    const [eventAssets, postAssets, mediaAssets] = await Promise.all([
+      fetchConfirmedAssetsForResource(
+        supabase,
+        "event",
+        eventRows.map((row) => row.id)
+      ),
+      fetchConfirmedAssetsForResource(
+        supabase,
+        "post",
+        postRows.map((row) => row.id)
+      ),
+      fetchConfirmedAssetsForResource(
+        supabase,
+        "media",
+        mediaRows.map((row) => row.id)
+      ),
+    ]);
+
+    if (!eventAssets.ok || !postAssets.ok || !mediaAssets.ok) {
+      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    const mappedAssets = buildOwnershipAssetMap([
+      ...eventAssets.value,
+      ...postAssets.value,
+      ...mediaAssets.value,
+    ]);
+    if (!mappedAssets.ok) {
+      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+    }
+
+    const assetMap = mappedAssets.value;
 
     const events = eventRows
-      .map((row) => toAdminEvent(row, stats))
+      .map((row) => toAdminEvent(row, stats, assetMap, supabaseUrl))
       .filter((event): event is AdminEvent => event !== null);
 
     const posts = postRows
-      .map((row) => toAdminPost(row, stats))
+      .map((row) => toAdminPost(row, stats, assetMap, supabaseUrl))
       .filter((post): post is AdminPost => post !== null);
 
     const media = mediaRows
-      .map((row) => toAdminMedia(row, stats))
+      .map((row) => toAdminMedia(row, stats, assetMap, supabaseUrl))
       .filter((item): item is AdminMedia => item !== null);
 
     warnIfSanitized(stats);
@@ -1656,8 +2043,8 @@ export async function GET(req: NextRequest) {
       }),
       gate
     );
-  } catch (error) {
-    console.error("[admin/solo-ganadores] unexpected error", error);
+  } catch {
+    console.error("[admin/solo-ganadores] unexpected error");
     return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
   }
 }
