@@ -210,6 +210,48 @@ type MutationAssets =
       media_url: string | null;
     };
 
+type PatchAssetAction = "keep" | "replace" | "manual" | "clear";
+
+type PatchAssetInstruction = {
+  action: PatchAssetAction;
+  currentAssetId: string | null;
+  newAssetId: string | null;
+};
+
+type EventPatchData = Omit<EventMutationPayload, "updated_at">;
+type PostPatchData = Omit<PostMutationPayload, "updated_at">;
+type MediaPatchData = Omit<MediaMutationPayload, "updated_at">;
+type PatchData = EventPatchData | PostPatchData | MediaPatchData;
+
+type EventPatchAssets = {
+  main_image_url: PatchAssetInstruction;
+  promo_video_url: PatchAssetInstruction;
+};
+
+type PostPatchAssets = {
+  photo_url: PatchAssetInstruction;
+  video_url: PatchAssetInstruction;
+};
+
+type MediaPatchAssets = {
+  media_url: PatchAssetInstruction;
+};
+
+type PatchAssets = EventPatchAssets | PostPatchAssets | MediaPatchAssets;
+
+type PatchMutation = {
+  resource: Resource;
+  id: string;
+  expectedUpdatedAt: string;
+  data: PatchData;
+  assets: PatchAssets;
+};
+
+type RpcUpdateResult =
+  | { ok: true; value: string }
+  | { ok: false; reason: "rpc_error"; error: unknown }
+  | { ok: false; reason: "invalid_result" };
+
 type AssetSpec = {
   field: AssetField;
   assetId: string;
@@ -279,6 +321,8 @@ const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
 const VIDEO_MIME = "video/mp4";
 const MAX_BODY_BYTES = 65536;
 const ASSET_LOOKUP_BATCH_SIZE = 100;
+const ISO_TIMESTAMP_WITH_TIMEZONE_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|([+-])(\d{2}):(\d{2}))$/;
 
 const EVENT_STATUSES = new Set(["anunciado", "activo", "finalizado"]);
 const SOURCE_MODULES = new Set([
@@ -300,6 +344,10 @@ const MEDIA_TYPES = new Set([
 const IMAGE_MEDIA_TYPES = new Set(["foto", "ambiente", "entrega", "reconocimiento"]);
 const CONTROLLED_RPC_ERRORS = new Set([
   "INVALID_PAYLOAD",
+  "RESOURCE_NOT_FOUND",
+  "STALE_RESOURCE",
+  "INVALID_ASSET_ACTION",
+  "STALE_ASSET_STATE",
   "ASSET_DUPLICATE",
   "ASSET_NOT_FOUND",
   "ASSET_INVALID_STATUS",
@@ -307,8 +355,11 @@ const CONTROLLED_RPC_ERRORS = new Set([
   "ASSET_EXPIRED",
   "ASSET_PURPOSE_MISMATCH",
   "ASSET_KIND_MISMATCH",
+  "ASSET_URL_MISMATCH",
+  "ASSET_RELEASE_FAILED",
   "ASSET_CONFIRM_FAILED",
   "CREATE_FAILED",
+  "UPDATE_FAILED",
 ]);
 
 function json(status: number, body: Record<string, unknown>) {
@@ -859,6 +910,444 @@ function validatePayload(
   return validateMediaPayload(data);
 }
 
+function validateEventPatchData(
+  data: Record<string, unknown>
+): ValidationResult<EventPatchData> {
+  if (
+    !hasExactKeys(data, [
+      "title",
+      "semester",
+      "event_date",
+      "location_name",
+      "address",
+      "city",
+      "description",
+      "recognitions",
+      "main_image_url",
+      "promo_video_url",
+      "status",
+      "published",
+      "featured",
+    ])
+  ) {
+    return { ok: false };
+  }
+
+  const title = requiredText(data.title, 200);
+  const semester = optionalText(data.semester, 50);
+  const eventDate = optionalDate(data.event_date);
+  const locationName = optionalText(data.location_name, 200);
+  const address = optionalText(data.address, 300);
+  const city = optionalText(data.city, 120);
+  const description = optionalText(data.description, 10000);
+  const recognitions = optionalText(data.recognitions, 10000);
+  const mainImageUrl = optionalUrl(data.main_image_url);
+  const promoVideoUrl = optionalUrl(data.promo_video_url);
+  const status = enumText(data.status, EVENT_STATUSES);
+  const published = requiredBoolean(data.published);
+  const featured = requiredBoolean(data.featured);
+
+  if (
+    !title.ok ||
+    !semester.ok ||
+    !eventDate.ok ||
+    !locationName.ok ||
+    !address.ok ||
+    !city.ok ||
+    !description.ok ||
+    !recognitions.ok ||
+    !mainImageUrl.ok ||
+    !promoVideoUrl.ok ||
+    !status.ok ||
+    !published.ok ||
+    !featured.ok
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      title: title.value,
+      semester: semester.value,
+      event_date: eventDate.value,
+      location_name: locationName.value,
+      address: address.value,
+      city: city.value,
+      description: description.value,
+      recognitions: recognitions.value,
+      main_image_url: mainImageUrl.value,
+      promo_video_url: promoVideoUrl.value,
+      status: status.value,
+      published: published.value,
+      featured: featured.value,
+    },
+  };
+}
+
+function validatePostPatchData(
+  data: Record<string, unknown>
+): ValidationResult<PostPatchData> {
+  if (
+    !hasExactKeys(data, [
+      "source_module",
+      "source_winner_id",
+      "winner_name",
+      "winner_alias",
+      "title",
+      "prize_name",
+      "description",
+      "photo_url",
+      "video_url",
+      "interview_url",
+      "event_date",
+      "published",
+      "featured",
+    ])
+  ) {
+    return { ok: false };
+  }
+
+  const sourceModule = enumText(data.source_module, SOURCE_MODULES);
+  const sourceWinnerId = optionalText(data.source_winner_id, 300);
+  const winnerName = optionalText(data.winner_name, 200);
+  const winnerAlias = optionalText(data.winner_alias, 200);
+  const title = requiredText(data.title, 300);
+  const prizeName = optionalText(data.prize_name, 300);
+  const description = optionalText(data.description, 10000);
+  const photoUrl = optionalUrl(data.photo_url);
+  const videoUrl = optionalUrl(data.video_url);
+  const interviewUrl = optionalUrl(data.interview_url);
+  const eventDate = optionalDate(data.event_date);
+  const published = requiredBoolean(data.published);
+  const featured = requiredBoolean(data.featured);
+
+  if (
+    !sourceModule.ok ||
+    !sourceWinnerId.ok ||
+    !winnerName.ok ||
+    !winnerAlias.ok ||
+    !title.ok ||
+    !prizeName.ok ||
+    !description.ok ||
+    !photoUrl.ok ||
+    !videoUrl.ok ||
+    !interviewUrl.ok ||
+    !eventDate.ok ||
+    !published.ok ||
+    !featured.ok
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      source_module: sourceModule.value,
+      source_winner_id: sourceWinnerId.value,
+      winner_name: winnerName.value,
+      winner_alias: winnerAlias.value,
+      title: title.value,
+      prize_name: prizeName.value,
+      description: description.value,
+      photo_url: photoUrl.value,
+      video_url: videoUrl.value,
+      interview_url: interviewUrl.value,
+      event_date: eventDate.value,
+      published: published.value,
+      featured: featured.value,
+    },
+  };
+}
+
+function validateMediaPatchData(
+  data: Record<string, unknown>
+): ValidationResult<MediaPatchData> {
+  if (
+    !hasExactKeys(data, [
+      "title",
+      "media_type",
+      "media_url",
+      "description",
+      "related_winner_id",
+      "published",
+      "featured",
+    ])
+  ) {
+    return { ok: false };
+  }
+
+  const title = requiredText(data.title, 300);
+  const mediaType = enumText(data.media_type, MEDIA_TYPES);
+  const mediaUrl = requiredUrl(data.media_url);
+  const description = optionalText(data.description, 10000);
+  const relatedWinnerId = optionalUuidInput(data.related_winner_id);
+  const published = requiredBoolean(data.published);
+  const featured = requiredBoolean(data.featured);
+
+  if (
+    !title.ok ||
+    !mediaType.ok ||
+    !mediaUrl.ok ||
+    !description.ok ||
+    !relatedWinnerId.ok ||
+    !published.ok ||
+    !featured.ok
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      title: title.value,
+      media_type: mediaType.value,
+      media_url: mediaUrl.value,
+      description: description.value,
+      related_winner_id: relatedWinnerId.value,
+      published: published.value,
+      featured: featured.value,
+    },
+  };
+}
+
+function validatePatchData(
+  resource: Resource,
+  data: Record<string, unknown>
+): ValidationResult<PatchData> {
+  if (resource === "event") return validateEventPatchData(data);
+  if (resource === "post") return validatePostPatchData(data);
+  return validateMediaPatchData(data);
+}
+
+function validateExpectedUpdatedAt(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return { ok: false };
+
+  const clean = value.trim();
+  const match = ISO_TIMESTAMP_WITH_TIMEZONE_RE.exec(clean);
+  if (!match) return { ok: false };
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[8] ? Number(match[8]) : null;
+  const offsetMinute = match[9] ? Number(match[9]) : null;
+
+  if (
+    !Number.isInteger(year) ||
+    year < 1 ||
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12 ||
+    !Number.isInteger(day) ||
+    day < 1 ||
+    !Number.isInteger(hour) ||
+    hour > 23 ||
+    !Number.isInteger(minute) ||
+    minute > 59 ||
+    !Number.isInteger(second) ||
+    second > 59 ||
+    (offsetHour !== null && (!Number.isInteger(offsetHour) || offsetHour > 23)) ||
+    (offsetMinute !== null && (!Number.isInteger(offsetMinute) || offsetMinute > 59))
+  ) {
+    return { ok: false };
+  }
+
+  const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day > maxDay) return { ok: false };
+  if (!Number.isFinite(Date.parse(clean))) return { ok: false };
+
+  return { ok: true, value: clean };
+}
+
+function validatePatchAssetInstruction(
+  value: unknown,
+  fieldUrl: string | null,
+  allowClear: boolean
+): ValidationResult<PatchAssetInstruction> {
+  if (!isRecord(value)) return { ok: false };
+  if (!hasExactKeys(value, ["action", "currentAssetId", "newAssetId"])) {
+    return { ok: false };
+  }
+
+  const action = value.action;
+  if (
+    action !== "keep" &&
+    action !== "replace" &&
+    action !== "manual" &&
+    action !== "clear"
+  ) {
+    return { ok: false };
+  }
+
+  const currentAssetId = assetIdInput(value.currentAssetId);
+  const newAssetId = assetIdInput(value.newAssetId);
+  if (!currentAssetId.ok || !newAssetId.ok) return { ok: false };
+
+  if (action === "replace") {
+    if (!newAssetId.value) return { ok: false };
+    if (currentAssetId.value && currentAssetId.value === newAssetId.value) {
+      return { ok: false };
+    }
+    if (!fieldUrl || !isValidHttpUrl(fieldUrl)) return { ok: false };
+  } else if (newAssetId.value !== null) {
+    return { ok: false };
+  }
+
+  if (action === "manual" && (!fieldUrl || !isValidHttpUrl(fieldUrl))) {
+    return { ok: false };
+  }
+
+  if (action === "clear") {
+    if (!allowClear || fieldUrl !== null) return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      action,
+      currentAssetId: currentAssetId.value,
+      newAssetId: newAssetId.value,
+    },
+  };
+}
+
+function validateEventPatchAssets(
+  value: unknown,
+  data: EventPatchData
+): ValidationResult<EventPatchAssets> {
+  if (!isRecord(value)) return { ok: false };
+  if (!hasExactKeys(value, ["main_image_url", "promo_video_url"])) {
+    return { ok: false };
+  }
+
+  const mainImage = validatePatchAssetInstruction(
+    value.main_image_url,
+    data.main_image_url,
+    true
+  );
+  const promoVideo = validatePatchAssetInstruction(
+    value.promo_video_url,
+    data.promo_video_url,
+    true
+  );
+  if (!mainImage.ok || !promoVideo.ok) return { ok: false };
+
+  if (
+    mainImage.value.action === "replace" &&
+    promoVideo.value.action === "replace" &&
+    mainImage.value.newAssetId === promoVideo.value.newAssetId
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      main_image_url: mainImage.value,
+      promo_video_url: promoVideo.value,
+    },
+  };
+}
+
+function validatePostPatchAssets(
+  value: unknown,
+  data: PostPatchData
+): ValidationResult<PostPatchAssets> {
+  if (!isRecord(value)) return { ok: false };
+  if (!hasExactKeys(value, ["photo_url", "video_url"])) return { ok: false };
+
+  const photo = validatePatchAssetInstruction(value.photo_url, data.photo_url, true);
+  const video = validatePatchAssetInstruction(value.video_url, data.video_url, true);
+  if (!photo.ok || !video.ok) return { ok: false };
+
+  if (
+    photo.value.action === "replace" &&
+    video.value.action === "replace" &&
+    photo.value.newAssetId === video.value.newAssetId
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      photo_url: photo.value,
+      video_url: video.value,
+    },
+  };
+}
+
+function validateMediaPatchAssets(
+  value: unknown,
+  data: MediaPatchData
+): ValidationResult<MediaPatchAssets> {
+  if (!isRecord(value)) return { ok: false };
+  if (!hasExactKeys(value, ["media_url"])) return { ok: false };
+
+  const media = validatePatchAssetInstruction(value.media_url, data.media_url, false);
+  if (!media.ok) return { ok: false };
+  if (data.media_type === "entrevista" && media.value.action === "replace") {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      media_url: media.value,
+    },
+  };
+}
+
+function validatePatchAssets(
+  resource: Resource,
+  value: unknown,
+  data: PatchData
+): ValidationResult<PatchAssets> {
+  if (resource === "event") {
+    return validateEventPatchAssets(value, data as EventPatchData);
+  }
+  if (resource === "post") {
+    return validatePostPatchAssets(value, data as PostPatchData);
+  }
+  return validateMediaPatchAssets(value, data as MediaPatchData);
+}
+
+function validatePatchMutationBody(body: unknown): ValidationResult<PatchMutation> {
+  if (!isRecord(body)) return { ok: false };
+  if (!hasExactKeys(body, ["resource", "id", "expectedUpdatedAt", "data", "assets"])) {
+    return { ok: false };
+  }
+
+  const resource = validateResource(body.resource);
+  if (!resource.ok) return { ok: false };
+  if (typeof body.id !== "string" || !UUID_RE.test(body.id)) return { ok: false };
+
+  const expectedUpdatedAt = validateExpectedUpdatedAt(body.expectedUpdatedAt);
+  if (!expectedUpdatedAt.ok) return { ok: false };
+
+  if (!isRecord(body.data)) return { ok: false };
+  const data = validatePatchData(resource.value, body.data);
+  if (!data.ok) return { ok: false };
+
+  const assets = validatePatchAssets(resource.value, body.assets, data.value);
+  if (!assets.ok) return { ok: false };
+
+  return {
+    ok: true,
+    value: {
+      resource: resource.value,
+      id: body.id,
+      expectedUpdatedAt: expectedUpdatedAt.value,
+      data: data.value,
+      assets: assets.value,
+    },
+  };
+}
+
 function assetSpecsForMutation(
   resource: Resource,
   payload: MutationPayload,
@@ -1285,6 +1774,46 @@ function getControlledRpcError(error: unknown) {
   return null;
 }
 
+function patchRpcErrorStatus(code: string | null) {
+  if (
+    code === "INVALID_PAYLOAD" ||
+    code === "INVALID_ASSET_ACTION" ||
+    code === "ASSET_PURPOSE_MISMATCH" ||
+    code === "ASSET_KIND_MISMATCH"
+  ) {
+    return 400;
+  }
+
+  if (code === "RESOURCE_NOT_FOUND") return 404;
+
+  if (
+    code === "STALE_RESOURCE" ||
+    code === "STALE_ASSET_STATE" ||
+    code === "ASSET_DUPLICATE" ||
+    code === "ASSET_NOT_FOUND" ||
+    code === "ASSET_INVALID_STATUS" ||
+    code === "ASSET_ALREADY_OWNED" ||
+    code === "ASSET_EXPIRED" ||
+    code === "ASSET_URL_MISMATCH"
+  ) {
+    return 409;
+  }
+
+  return 500;
+}
+
+function patchRpcErrorBody(status: number, code: string | null) {
+  if (status === 400) return { ok: false, error: "Solicitud inv\u00e1lida" };
+  if (status === 404) return { ok: false, error: "No encontrado" };
+  if (status === 409) {
+    return code === "STALE_RESOURCE"
+      ? { ok: false, error: "Conflicto de edici\u00f3n", code }
+      : { ok: false, error: "Conflicto de edici\u00f3n" };
+  }
+
+  return { ok: false, error: "No disponible" };
+}
+
 function metadataString(
   metadata: Record<string, unknown> | null | undefined,
   key: string
@@ -1401,7 +1930,7 @@ function tableForResource(resource: Resource) {
 }
 
 function mutationBadRequest(gate: Awaited<ReturnType<typeof requireAdmin>>) {
-  return withAuthCookies(json(400, { ok: false, error: "Solicitud inválida" }), gate);
+  return withAuthCookies(json(400, { ok: false, error: "Solicitud inv\u00e1lida" }), gate);
 }
 
 function toAdminEvent(
@@ -1648,6 +2177,53 @@ async function validateAssetsForCreate(
   return "ok";
 }
 
+function videoAssetSpecsForPatch(
+  resource: Resource,
+  data: PatchData,
+  assets: PatchAssets
+): AssetSpec[] {
+  const specs: AssetSpec[] = [];
+
+  if (resource === "event") {
+    const eventAssets = assets as EventPatchAssets;
+    if (eventAssets.promo_video_url.action === "replace") {
+      specs.push({
+        field: "promo_video_url",
+        assetId: eventAssets.promo_video_url.newAssetId as string,
+        purpose: "event_promo_video",
+        mediaKind: "video",
+      });
+    }
+    return specs;
+  }
+
+  if (resource === "post") {
+    const postAssets = assets as PostPatchAssets;
+    if (postAssets.video_url.action === "replace") {
+      specs.push({
+        field: "video_url",
+        assetId: postAssets.video_url.newAssetId as string,
+        purpose: "post_video",
+        mediaKind: "video",
+      });
+    }
+    return specs;
+  }
+
+  const mediaData = data as MediaPatchData;
+  const mediaAssets = assets as MediaPatchAssets;
+  if (mediaData.media_type === "video" && mediaAssets.media_url.action === "replace") {
+    specs.push({
+      field: "media_url",
+      assetId: mediaAssets.media_url.newAssetId as string,
+      purpose: "media_video",
+      mediaKind: "video",
+    });
+  }
+
+  return specs;
+}
+
 async function createResourceWithRpc(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   resource: Resource,
@@ -1721,6 +2297,68 @@ async function createResourceWithRpc(
     : { ok: false };
 }
 
+async function updateResourceWithRpc(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  mutation: PatchMutation
+): Promise<RpcUpdateResult> {
+  const { resource, id, expectedUpdatedAt, data, assets } = mutation;
+
+  if (resource === "event") {
+    const eventAssets = assets as EventPatchAssets;
+    const result = await supabase.rpc("update_solo_ganadores_event", {
+      p_id: id,
+      p_data: data,
+      p_expected_updated_at: expectedUpdatedAt,
+      p_main_image_action: eventAssets.main_image_url.action,
+      p_main_image_current_asset_id: eventAssets.main_image_url.currentAssetId,
+      p_main_image_new_asset_id: eventAssets.main_image_url.newAssetId,
+      p_promo_video_action: eventAssets.promo_video_url.action,
+      p_promo_video_current_asset_id: eventAssets.promo_video_url.currentAssetId,
+      p_promo_video_new_asset_id: eventAssets.promo_video_url.newAssetId,
+    });
+
+    if (result.error) return { ok: false, reason: "rpc_error", error: result.error };
+    return typeof result.data === "string" && UUID_RE.test(result.data)
+      ? { ok: true, value: result.data }
+      : { ok: false, reason: "invalid_result" };
+  }
+
+  if (resource === "post") {
+    const postAssets = assets as PostPatchAssets;
+    const result = await supabase.rpc("update_solo_ganadores_post", {
+      p_id: id,
+      p_data: data,
+      p_expected_updated_at: expectedUpdatedAt,
+      p_photo_action: postAssets.photo_url.action,
+      p_photo_current_asset_id: postAssets.photo_url.currentAssetId,
+      p_photo_new_asset_id: postAssets.photo_url.newAssetId,
+      p_video_action: postAssets.video_url.action,
+      p_video_current_asset_id: postAssets.video_url.currentAssetId,
+      p_video_new_asset_id: postAssets.video_url.newAssetId,
+    });
+
+    if (result.error) return { ok: false, reason: "rpc_error", error: result.error };
+    return typeof result.data === "string" && UUID_RE.test(result.data)
+      ? { ok: true, value: result.data }
+      : { ok: false, reason: "invalid_result" };
+  }
+
+  const mediaAssets = assets as MediaPatchAssets;
+  const result = await supabase.rpc("update_solo_ganadores_media", {
+    p_id: id,
+    p_data: data,
+    p_expected_updated_at: expectedUpdatedAt,
+    p_media_action: mediaAssets.media_url.action,
+    p_media_current_asset_id: mediaAssets.media_url.currentAssetId,
+    p_media_new_asset_id: mediaAssets.media_url.newAssetId,
+  });
+
+  if (result.error) return { ok: false, reason: "rpc_error", error: result.error };
+  return typeof result.data === "string" && UUID_RE.test(result.data)
+    ? { ok: true, value: result.data }
+    : { ok: false, reason: "invalid_result" };
+}
+
 async function handleMutation(req: NextRequest, operation: "insert" | "update") {
   const gate = await requireAdmin(req);
   if (!gate.ok) {
@@ -1757,10 +2395,9 @@ async function handleMutation(req: NextRequest, operation: "insert" | "update") 
       return mutationBadRequest(gate);
     }
 
-    const { resource, id, payload, assets } = mutation.value;
+    const { resource, payload, assets } = mutation.value;
     const supabaseUrl = getSupabaseUrl();
     const supabase = getSupabaseAdmin(supabaseUrl);
-    const table = tableForResource(resource);
 
     if (operation === "insert") {
       if (hasOwnBucketUrlWithoutAsset(resource, payload, assets, supabaseUrl)) {
@@ -1792,40 +2429,85 @@ async function handleMutation(req: NextRequest, operation: "insert" | "update") 
       return withAuthCookies(json(201, { ok: true, id: created.value }), gate);
     }
 
-    if (!id) {
+    return mutationBadRequest(gate);
+  } catch {
+    console.error("[admin/solo-ganadores] mutation unexpected error", { operation });
+    return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+  }
+}
+
+async function handlePatchMutation(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return withAuthCookies(
+      json(gate.status, {
+        ok: false,
+        error: gate.error,
+      }),
+      gate
+    );
+  }
+
+  try {
+    if (!isAllowedMutationOrigin(req)) {
+      return withAuthCookies(json(403, { ok: false, error: "No autorizado" }), gate);
+    }
+
+    const { searchParams } = new URL(req.url);
+    if (Array.from(searchParams.keys()).length > 0) {
       return mutationBadRequest(gate);
     }
 
-    const result = await supabase
-      .from(table)
-      .update(payload)
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
+    if (!validateContentHeaders(req)) {
+      return mutationBadRequest(gate);
+    }
 
-    if (result.error) {
-      console.error("[admin/solo-ganadores] update failed", {
-        resource,
-        code: result.error.code,
-      });
+    const jsonBody = await readLimitedJson(req);
+    if (!jsonBody.ok) {
+      return mutationBadRequest(gate);
+    }
+
+    const mutation = validatePatchMutationBody(jsonBody.value);
+    if (!mutation.ok) {
+      return mutationBadRequest(gate);
+    }
+
+    const supabase = getSupabaseAdmin();
+    const videoSpecs = videoAssetSpecsForPatch(
+      mutation.value.resource,
+      mutation.value.data,
+      mutation.value.assets
+    );
+    const videosReady = await validateAssetsForCreate(supabase, videoSpecs);
+    if (videosReady === "invalid") {
+      return mutationBadRequest(gate);
+    }
+    if (videosReady === "unavailable") {
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
-    const row = result.data as IdRow | null;
-    if (!row) {
-      return withAuthCookies(json(404, { ok: false, error: "No encontrado" }), gate);
-    }
+    const updated = await updateResourceWithRpc(supabase, mutation.value);
+    if (!updated.ok) {
+      if (updated.reason === "invalid_result") {
+        console.error("[admin/solo-ganadores] update rpc returned invalid result", {
+          resource: mutation.value.resource,
+        });
+        return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+      }
 
-    if (!row.id || !UUID_RE.test(row.id)) {
-      console.error("[admin/solo-ganadores] update returned invalid id", {
-        resource,
+      const rpc = getControlledRpcError(updated.error);
+      const status = patchRpcErrorStatus(rpc);
+      console.error("[admin/solo-ganadores] update rpc failed", {
+        resource: mutation.value.resource,
+        code: getSafeErrorCode(updated.error),
+        rpc: rpc ?? "UNCONTROLLED",
       });
-      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+      return withAuthCookies(json(status, patchRpcErrorBody(status, rpc)), gate);
     }
 
-    return withAuthCookies(json(200, { ok: true, id: row.id }), gate);
+    return withAuthCookies(json(200, { ok: true, id: updated.value }), gate);
   } catch {
-    console.error("[admin/solo-ganadores] mutation unexpected error", { operation });
+    console.error("[admin/solo-ganadores] patch unexpected error");
     return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
   }
 }
@@ -1924,7 +2606,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     if (Array.from(searchParams.keys()).length > 0) {
       return withAuthCookies(
-        json(400, { ok: false, error: "Solicitud inválida" }),
+        json(400, { ok: false, error: "Solicitud inv\u00e1lida" }),
         gate
       );
     }
@@ -2054,5 +2736,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  return handleMutation(req, "update");
+  return handlePatchMutation(req);
 }

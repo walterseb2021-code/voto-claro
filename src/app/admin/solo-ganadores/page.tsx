@@ -33,7 +33,17 @@ type AdminAssetPresentation = {
   severity: AdminAssetSeverity;
 };
 
-type AdminEditBlockReason = "invalid_snapshot" | "inconsistent" | "media_change";
+type PatchBuildFailureReason =
+  | "not_editing"
+  | "missing_snapshot"
+  | "missing_updated_at"
+  | "invalid_current_asset"
+  | "invalid_pending_asset"
+  | "invalid_media_change"
+  | "unsupported_clear"
+  | "inconsistent_asset";
+
+type AdminEditBlockReason = PatchBuildFailureReason;
 
 type SoloEvent = {
   id: string;
@@ -137,6 +147,7 @@ type AdminSaveResponse =
   | {
       ok: false;
       error?: string;
+      code?: string;
     };
 
 type AdminCreateAssets =
@@ -296,6 +307,8 @@ type MediaPatchPayload = {
   assets: MediaPatchAssets;
 };
 
+type AdminPatchPayload = EventPatchPayload | PostPatchPayload | MediaPatchPayload;
+
 type PatchBuildResult<T> =
   | {
       ok: true;
@@ -303,15 +316,7 @@ type PatchBuildResult<T> =
     }
   | {
       ok: false;
-      reason:
-        | "not_editing"
-        | "missing_snapshot"
-        | "missing_updated_at"
-        | "invalid_current_asset"
-        | "invalid_pending_asset"
-        | "invalid_media_change"
-        | "unsupported_clear"
-        | "inconsistent_asset";
+      reason: PatchBuildFailureReason;
     };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -365,6 +370,18 @@ const emptyMedia = {
   published: false,
   featured: false,
 };
+
+class AdminRequestError extends Error {
+  status: number;
+  code: string | null;
+
+  constructor(status: number, message: string, code: string | null = null) {
+    super(message);
+    this.name = "AdminRequestError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 function cleanNullable(value: string) {
   const v = String(value || "").trim();
@@ -438,14 +455,6 @@ function isValidHttpUrl(value: string) {
   }
 }
 
-function hasUnconnectedMediaChange(
-  currentUrl: string | null | undefined,
-  snapshot: AdminEditAssetSnapshot,
-  pendingAsset: AdminPendingAsset | null
-) {
-  return Boolean(pendingAsset) || normalizedEditUrl(currentUrl) !== snapshot.originalUrl;
-}
-
 function assetStatePresentation(metadata: AdminAssetMetadata): AdminAssetPresentation {
   switch (metadata.state) {
     case "confirmed":
@@ -485,7 +494,7 @@ function assetStatePresentation(metadata: AdminAssetMetadata): AdminAssetPresent
       return {
         label: "Revisión obligatoria",
         description:
-          "La URL y la metadata del asset no son coherentes. No se permitirá guardar hasta reemplazar o limpiar este campo en una fase posterior.",
+          "La URL y la metadata del asset no son coherentes. Solo se permitirá guardar si reemplazas, limpias o corriges este campo de forma segura.",
         severity: "danger",
       };
   }
@@ -497,79 +506,44 @@ function isMissingSnapshotUpdatedAt(updatedAt: string | null) {
 
 function eventEditBlockReason(
   formId: string,
-  mainImageUrl: string,
-  promoVideoUrl: string,
-  snapshot: EventEditSnapshot | null,
-  mainImagePendingAsset: AdminPendingAsset | null,
-  promoVideoPendingAsset: AdminPendingAsset | null
+  snapshot: EventEditSnapshot | null
 ): AdminEditBlockReason | null {
   if (!formId) return null;
-  if (!snapshot || isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "invalid_snapshot";
-  if (
-    snapshot.mainImage.metadata.state === "inconsistent" ||
-    snapshot.promoVideo.metadata.state === "inconsistent"
-  ) {
-    return "inconsistent";
-  }
-  if (
-    hasUnconnectedMediaChange(mainImageUrl, snapshot.mainImage, mainImagePendingAsset) ||
-    hasUnconnectedMediaChange(promoVideoUrl, snapshot.promoVideo, promoVideoPendingAsset)
-  ) {
-    return "media_change";
-  }
+  if (!snapshot) return "missing_snapshot";
+  if (isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "missing_updated_at";
   return null;
 }
 
 function postEditBlockReason(
   formId: string,
-  photoUrl: string,
-  videoUrl: string,
-  snapshot: PostEditSnapshot | null,
-  photoPendingAsset: AdminPendingAsset | null,
-  videoPendingAsset: AdminPendingAsset | null
+  snapshot: PostEditSnapshot | null
 ): AdminEditBlockReason | null {
   if (!formId) return null;
-  if (!snapshot || isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "invalid_snapshot";
-  if (
-    snapshot.photo.metadata.state === "inconsistent" ||
-    snapshot.video.metadata.state === "inconsistent"
-  ) {
-    return "inconsistent";
-  }
-  if (
-    hasUnconnectedMediaChange(photoUrl, snapshot.photo, photoPendingAsset) ||
-    hasUnconnectedMediaChange(videoUrl, snapshot.video, videoPendingAsset)
-  ) {
-    return "media_change";
-  }
+  if (!snapshot) return "missing_snapshot";
+  if (isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "missing_updated_at";
   return null;
 }
 
 function mediaEditBlockReason(
   formId: string,
-  mediaType: string,
-  mediaUrl: string,
-  snapshot: MediaEditSnapshot | null,
-  mediaPendingAsset: AdminPendingAsset | null
+  snapshot: MediaEditSnapshot | null
 ): AdminEditBlockReason | null {
   if (!formId) return null;
-  if (!snapshot || isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "invalid_snapshot";
-  if (snapshot.media.metadata.state === "inconsistent") return "inconsistent";
-  if (
-    normalizedMediaType(mediaType) !== snapshot.originalMediaType ||
-    hasUnconnectedMediaChange(mediaUrl, snapshot.media, mediaPendingAsset)
-  ) {
-    return "media_change";
-  }
+  if (!snapshot) return "missing_snapshot";
+  if (isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "missing_updated_at";
   return null;
 }
 
 function blockedSaveMessage(reason: AdminEditBlockReason) {
-  if (reason === "media_change") {
-    return "No se puede guardar todavía el cambio multimedia. Vuelve a intentarlo cuando la edición segura esté habilitada.";
+  if (
+    reason === "not_editing" ||
+    reason === "missing_snapshot" ||
+    reason === "missing_updated_at"
+  ) {
+    return "Actualiza la lista y vuelve a pulsar Editar sobre el registro antes de guardar.";
   }
 
-  return "No se puede guardar esta edición de forma segura. Actualiza la lista y vuelve a pulsar Editar sobre el registro antes de intentarlo nuevamente.";
+  return "No se puede guardar esta edición con los cambios multimedia actuales. Revisa el contenido seleccionado.";
 }
 
 function validatedCurrentAssetId(
@@ -936,6 +910,12 @@ function buildMediaPatchPayload(
   };
 }
 
+function patchBuildFailure<T>(
+  result: PatchBuildResult<T> | null
+): AdminEditBlockReason | null {
+  return result && !result.ok ? result.reason : null;
+}
+
 function formatDate(value: string | null) {
   if (!value) return "-";
   try {
@@ -1006,15 +986,40 @@ function youtubeEmbedUrl(url: string) {
   return "";
 }
 
-function errorText(err: any) {
-  return (
-    err?.message ||
-    err?.details ||
-    err?.hint ||
-    err?.code ||
-    JSON.stringify(err) ||
-    "Error desconocido"
-  );
+function errorText(err: unknown) {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "string" && err.trim()) return err.trim();
+  if (err && typeof err === "object") {
+    const record = err as Record<string, unknown>;
+    for (const key of ["message", "details", "hint", "code"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+
+  return "Error desconocido";
+}
+
+function safeRequestLog(err: unknown) {
+  if (err instanceof AdminRequestError) {
+    return { status: err.status, code: err.code ?? "NONE" };
+  }
+
+  return { status: "UNKNOWN", code: "UNKNOWN" };
+}
+
+function saveRequestErrorMessage(err: unknown) {
+  if (err instanceof AdminRequestError) {
+    if (err.status === 409) {
+      return "El registro fue modificado en otra sesión. Actualiza la lista y vuelve a pulsar Editar antes de guardar nuevamente.";
+    }
+    if (err.status === 400) return err.message || "Solicitud inválida.";
+    if (err.status === 404) return "El registro ya no está disponible.";
+
+    return "No se pudo guardar. Inténtalo nuevamente.";
+  }
+
+  return "No se pudo guardar. Inténtalo nuevamente.";
 }
 
 export default function AdminSoloGanadoresPage() {
@@ -1048,29 +1053,35 @@ export default function AdminSoloGanadoresPage() {
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const eventEditBlockReasonValue = eventEditBlockReason(
+  const eventSnapshotBlockReason = eventEditBlockReason(
     eventForm.id,
-    eventForm.main_image_url,
-    eventForm.promo_video_url,
-    eventEditSnapshot,
-    eventMainImageAsset,
-    eventPromoVideoAsset
+    eventEditSnapshot
   );
-  const postEditBlockReasonValue = postEditBlockReason(
-    postForm.id,
-    postForm.photo_url,
-    postForm.video_url,
-    postEditSnapshot,
-    postPhotoAsset,
-    postVideoAsset
-  );
-  const mediaEditBlockReasonValue = mediaEditBlockReason(
-    mediaForm.id,
-    mediaForm.media_type,
-    mediaForm.media_url,
-    mediaEditSnapshot,
-    mediaAsset
-  );
+  const postSnapshotBlockReason = postEditBlockReason(postForm.id, postEditSnapshot);
+  const mediaSnapshotBlockReason = mediaEditBlockReason(mediaForm.id, mediaEditSnapshot);
+  const eventPatchBuildResult =
+    eventForm.id && !eventSnapshotBlockReason
+      ? buildEventPatchPayload(
+          eventForm,
+          eventEditSnapshot,
+          eventMainImageAsset,
+          eventPromoVideoAsset
+        )
+      : null;
+  const postPatchBuildResult =
+    postForm.id && !postSnapshotBlockReason
+      ? buildPostPatchPayload(postForm, postEditSnapshot, postPhotoAsset, postVideoAsset)
+      : null;
+  const mediaPatchBuildResult =
+    mediaForm.id && !mediaSnapshotBlockReason
+      ? buildMediaPatchPayload(mediaForm, mediaEditSnapshot, mediaAsset)
+      : null;
+  const eventEditBlockReasonValue =
+    eventSnapshotBlockReason ?? patchBuildFailure(eventPatchBuildResult);
+  const postEditBlockReasonValue =
+    postSnapshotBlockReason ?? patchBuildFailure(postPatchBuildResult);
+  const mediaEditBlockReasonValue =
+    mediaSnapshotBlockReason ?? patchBuildFailure(mediaPatchBuildResult);
   const eventEditBlocked = eventEditBlockReasonValue !== null;
   const postEditBlocked = postEditBlockReasonValue !== null;
   const mediaEditBlocked = mediaEditBlockReasonValue !== null;
@@ -1321,43 +1332,57 @@ export default function AdminSoloGanadoresPage() {
     }
   }
 
-  async function saveAdminResource(
+  async function createAdminResource(
     resource: AdminSaveResource,
-    id: string,
     data: Record<string, string | boolean | null>,
     assets?: AdminCreateAssets
   ) {
-    const isUpdate = Boolean(id);
     const res = await fetch("/api/admin/solo-ganadores", {
-      method: isUpdate ? "PATCH" : "POST",
+      method: "POST",
       cache: "no-store",
       credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(
-        isUpdate
-          ? {
-              resource,
-              id,
-              data,
-            }
-          : {
-              resource,
-              data,
-              assets,
-            }
-      ),
+      body: JSON.stringify({
+        resource,
+        data,
+        assets,
+      }),
     });
 
     const result = (await res.json().catch(() => null)) as AdminSaveResponse | null;
 
     if (!res.ok || !result) {
-      throw new Error("No disponible");
+      throw new AdminRequestError(res.status, "No disponible");
     }
 
     if (result.ok !== true) {
-      throw new Error(result.error || "No disponible");
+      throw new AdminRequestError(res.status, result.error || "No disponible", result.code ?? null);
+    }
+
+    return result.id;
+  }
+
+  async function updateAdminResource(payload: AdminPatchPayload) {
+    const res = await fetch("/api/admin/solo-ganadores", {
+      method: "PATCH",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = (await res.json().catch(() => null)) as AdminSaveResponse | null;
+
+    if (!res.ok || !result) {
+      throw new AdminRequestError(res.status, "No disponible");
+    }
+
+    if (result.ok !== true) {
+      throw new AdminRequestError(res.status, result.error || "No disponible", result.code ?? null);
     }
 
     return result.id;
@@ -1433,26 +1458,23 @@ export default function AdminSoloGanadoresPage() {
     setMessage(null);
 
     try {
-      const payload = {
-        title: eventForm.title.trim(),
-        semester: cleanNullable(eventForm.semester),
-        event_date: cleanNullable(eventForm.event_date),
-        location_name: cleanNullable(eventForm.location_name),
-        address: cleanNullable(eventForm.address),
-        city: cleanNullable(eventForm.city),
-        description: cleanNullable(eventForm.description),
-        recognitions: cleanNullable(eventForm.recognitions),
-        main_image_url: cleanNullable(eventForm.main_image_url),
-        promo_video_url: cleanNullable(eventForm.promo_video_url),
-        status: eventForm.status || "anunciado",
-        published: Boolean(eventForm.published),
-        featured: Boolean(eventForm.featured),
-      };
+      if (eventForm.id) {
+        const patch = eventPatchBuildResult;
+        if (!patch?.ok) {
+          setMessage({
+            type: "error",
+            text: blockedSaveMessage(patch?.reason ?? "missing_snapshot"),
+          });
+          return;
+        }
 
-      await saveAdminResource("event", eventForm.id, payload, {
-        main_image_url: eventMainImageAsset?.assetId ?? null,
-        promo_video_url: eventPromoVideoAsset?.assetId ?? null,
-      });
+        await updateAdminResource(patch.value);
+      } else {
+        await createAdminResource("event", eventDataFromForm(eventForm), {
+          main_image_url: eventMainImageAsset?.assetId ?? null,
+          promo_video_url: eventPromoVideoAsset?.assetId ?? null,
+        });
+      }
 
       setEventForm(emptyEvent);
       setEventMainImageAsset(null);
@@ -1460,10 +1482,9 @@ export default function AdminSoloGanadoresPage() {
       setEventEditSnapshot(null);
       setMessage({ type: "success", text: "✅ Evento guardado correctamente." });
       await loadAll();
-    } catch (err: any) {
-      const text = errorText(err);
-      console.error("Error al guardar evento:", err);
-      setMessage({ type: "error", text: "Error al guardar evento: " + text });
+    } catch (err: unknown) {
+      console.error("Error al guardar evento:", safeRequestLog(err));
+      setMessage({ type: "error", text: saveRequestErrorMessage(err) });
     } finally {
       setSaving(false);
     }
@@ -1487,26 +1508,23 @@ export default function AdminSoloGanadoresPage() {
     setMessage(null);
 
     try {
-      const payload = {
-        source_module: postForm.source_module || "manual",
-        source_winner_id: cleanNullable(postForm.source_winner_id),
-        winner_name: cleanNullable(postForm.winner_name),
-        winner_alias: cleanNullable(postForm.winner_alias),
-        title: postForm.title.trim(),
-        prize_name: cleanNullable(postForm.prize_name),
-        description: cleanNullable(postForm.description),
-        photo_url: cleanNullable(postForm.photo_url),
-        video_url: cleanNullable(postForm.video_url),
-        interview_url: cleanNullable(postForm.interview_url),
-        event_date: cleanNullable(postForm.event_date),
-        published: Boolean(postForm.published),
-        featured: Boolean(postForm.featured),
-      };
+      if (postForm.id) {
+        const patch = postPatchBuildResult;
+        if (!patch?.ok) {
+          setMessage({
+            type: "error",
+            text: blockedSaveMessage(patch?.reason ?? "missing_snapshot"),
+          });
+          return;
+        }
 
-      await saveAdminResource("post", postForm.id, payload, {
-        photo_url: postPhotoAsset?.assetId ?? null,
-        video_url: postVideoAsset?.assetId ?? null,
-      });
+        await updateAdminResource(patch.value);
+      } else {
+        await createAdminResource("post", postDataFromForm(postForm), {
+          photo_url: postPhotoAsset?.assetId ?? null,
+          video_url: postVideoAsset?.assetId ?? null,
+        });
+      }
 
       setPostForm(emptyPost);
       setPostPhotoAsset(null);
@@ -1514,10 +1532,9 @@ export default function AdminSoloGanadoresPage() {
       setPostEditSnapshot(null);
       setMessage({ type: "success", text: "✅ Ganador guardado correctamente." });
       await loadAll();
-    } catch (err: any) {
-      const text = errorText(err);
-      console.error("Error al guardar ganador:", err);
-      setMessage({ type: "error", text: "Error al guardar ganador: " + text });
+    } catch (err: unknown) {
+      console.error("Error al guardar ganador:", safeRequestLog(err));
+      setMessage({ type: "error", text: saveRequestErrorMessage(err) });
     } finally {
       setSaving(false);
     }
@@ -1546,29 +1563,31 @@ export default function AdminSoloGanadoresPage() {
     setMessage(null);
 
     try {
-      const payload = {
-        title: mediaForm.title.trim(),
-        media_type: mediaForm.media_type || "foto",
-        media_url: mediaForm.media_url.trim(),
-        description: cleanNullable(mediaForm.description),
-        related_winner_id: cleanNullable(mediaForm.related_winner_id),
-        published: Boolean(mediaForm.published),
-        featured: Boolean(mediaForm.featured),
-      };
+      if (mediaForm.id) {
+        const patch = mediaPatchBuildResult;
+        if (!patch?.ok) {
+          setMessage({
+            type: "error",
+            text: blockedSaveMessage(patch?.reason ?? "missing_snapshot"),
+          });
+          return;
+        }
 
-      await saveAdminResource("media", mediaForm.id, payload, {
-        media_url: mediaAsset?.assetId ?? null,
-      });
+        await updateAdminResource(patch.value);
+      } else {
+        await createAdminResource("media", mediaDataFromForm(mediaForm), {
+          media_url: mediaAsset?.assetId ?? null,
+        });
+      }
 
       setMediaForm(emptyMedia);
       setMediaAsset(null);
       setMediaEditSnapshot(null);
       setMessage({ type: "success", text: "✅ Contenido guardado correctamente." });
       await loadAll();
-    } catch (err: any) {
-      const text = errorText(err);
-      console.error("Error al guardar contenido:", err);
-      setMessage({ type: "error", text: "Error al guardar contenido: " + text });
+    } catch (err: unknown) {
+      console.error("Error al guardar contenido:", safeRequestLog(err));
+      setMessage({ type: "error", text: saveRequestErrorMessage(err) });
     } finally {
       setSaving(false);
     }
@@ -1605,7 +1624,7 @@ export default function AdminSoloGanadoresPage() {
 
       setMessage({ type: "success", text: "✅ Registro eliminado." });
       await loadAll();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const text = errorText(err);
       console.error("Error al eliminar:", err);
       setMessage({ type: "error", text: "Error al eliminar: " + text });
@@ -1706,7 +1725,7 @@ export default function AdminSoloGanadoresPage() {
           <div className="mt-2 border-t border-current/20 pt-2">
             <div className="font-extrabold">Nuevo archivo pendiente de confirmación</div>
             <div className="mt-1 leading-relaxed">
-              Se utilizará cuando el guardado seguro de edición quede conectado.
+              Se confirmará de forma atómica cuando guardes esta edición.
             </div>
           </div>
         ) : null}
@@ -1715,7 +1734,10 @@ export default function AdminSoloGanadoresPage() {
   }
 
   function EditBlockedNotice({ reason }: { reason: AdminEditBlockReason }) {
-    const isMediaChange = reason === "media_change";
+    const needsRefresh =
+      reason === "not_editing" ||
+      reason === "missing_snapshot" ||
+      reason === "missing_updated_at";
 
     return (
       <div
@@ -1723,14 +1745,14 @@ export default function AdminSoloGanadoresPage() {
         role="alert"
       >
         <div className="font-extrabold">
-          {isMediaChange
-            ? "Cambio multimedia pendiente"
-            : "No se puede guardar esta edición de forma segura."}
+          {needsRefresh
+            ? "No se puede guardar esta edición de forma segura."
+            : "Revisa los cambios multimedia."}
         </div>
         <div className="mt-1">
-          {isMediaChange
-            ? "La imagen, el video, la URL o el tipo de contenido fue modificada. Este cambio podrá guardarse cuando quede conectado el PATCH seguro de edición. Por ahora no se enviaron cambios."
-            : "El registro necesita actualizarse o contiene un recurso multimedia inconsistente. Actualiza la lista y vuelve a pulsar Editar sobre el registro antes de intentarlo nuevamente."}
+          {needsRefresh
+            ? "Actualiza la lista y vuelve a pulsar Editar sobre el registro antes de intentarlo nuevamente."
+            : "No se puede guardar esta edición con los cambios multimedia actuales. Revisa el contenido seleccionado."}
         </div>
       </div>
     );
