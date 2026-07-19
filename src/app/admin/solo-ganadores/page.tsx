@@ -25,6 +25,16 @@ type AdminAssetMetadata = {
   mediaKind: "image" | "video" | null;
 };
 
+type AdminAssetSeverity = "ok" | "info" | "warning" | "danger" | "neutral";
+
+type AdminAssetPresentation = {
+  label: string;
+  description: string;
+  severity: AdminAssetSeverity;
+};
+
+type AdminEditBlockReason = "invalid_snapshot" | "inconsistent" | "media_change";
+
 type SoloEvent = {
   id: string;
   title: string;
@@ -101,6 +111,7 @@ type PostEditSnapshot = {
 
 type MediaEditSnapshot = {
   updatedAt: string | null;
+  originalMediaType: string;
   media: AdminEditAssetSnapshot;
 };
 
@@ -263,10 +274,152 @@ function buildEditAssetSnapshot(
   const safeMetadata = metadata ?? fallbackAssetMetadata();
 
   return {
-    originalUrl: typeof url === "string" ? url.trim() : "",
+    originalUrl: normalizedEditUrl(url),
     metadata: safeMetadata,
     currentAssetId: safeMetadata.assetId,
   };
+}
+
+function normalizedEditUrl(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizedMediaType(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function hasUnconnectedMediaChange(
+  currentUrl: string | null | undefined,
+  snapshot: AdminEditAssetSnapshot,
+  pendingAsset: AdminPendingAsset | null
+) {
+  return Boolean(pendingAsset) || normalizedEditUrl(currentUrl) !== snapshot.originalUrl;
+}
+
+function assetStatePresentation(metadata: AdminAssetMetadata): AdminAssetPresentation {
+  switch (metadata.state) {
+    case "confirmed":
+      return {
+        label: "Archivo confirmado",
+        description: "El archivo está registrado y asociado correctamente a este campo.",
+        severity: "ok",
+      };
+    case "legacy_own_url":
+      return {
+        label: "Archivo heredado",
+        description:
+          "La URL pertenece al almacenamiento propio, pero no tiene un registro de asset confirmado. No se asumirá su propiedad ni se eliminará automáticamente.",
+        severity: "warning",
+      };
+    case "external":
+      return {
+        label: "URL externa",
+        description:
+          "Este campo utiliza una URL externa y no tiene un asset administrado por Voto Claro.",
+        severity: "info",
+      };
+    case "youtube":
+      return {
+        label: "Enlace de YouTube",
+        description:
+          "Este campo utiliza un enlace de YouTube y no tiene un asset administrado por Voto Claro.",
+        severity: "info",
+      };
+    case "empty":
+      return {
+        label: "Sin contenido",
+        description: "Este campo no tiene actualmente una URL ni un asset asociado.",
+        severity: "neutral",
+      };
+    case "inconsistent":
+      return {
+        label: "Revisión obligatoria",
+        description:
+          "La URL y la metadata del asset no son coherentes. No se permitirá guardar hasta reemplazar o limpiar este campo en una fase posterior.",
+        severity: "danger",
+      };
+  }
+}
+
+function isMissingSnapshotUpdatedAt(updatedAt: string | null) {
+  return !String(updatedAt || "").trim();
+}
+
+function eventEditBlockReason(
+  formId: string,
+  mainImageUrl: string,
+  promoVideoUrl: string,
+  snapshot: EventEditSnapshot | null,
+  mainImagePendingAsset: AdminPendingAsset | null,
+  promoVideoPendingAsset: AdminPendingAsset | null
+): AdminEditBlockReason | null {
+  if (!formId) return null;
+  if (!snapshot || isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "invalid_snapshot";
+  if (
+    snapshot.mainImage.metadata.state === "inconsistent" ||
+    snapshot.promoVideo.metadata.state === "inconsistent"
+  ) {
+    return "inconsistent";
+  }
+  if (
+    hasUnconnectedMediaChange(mainImageUrl, snapshot.mainImage, mainImagePendingAsset) ||
+    hasUnconnectedMediaChange(promoVideoUrl, snapshot.promoVideo, promoVideoPendingAsset)
+  ) {
+    return "media_change";
+  }
+  return null;
+}
+
+function postEditBlockReason(
+  formId: string,
+  photoUrl: string,
+  videoUrl: string,
+  snapshot: PostEditSnapshot | null,
+  photoPendingAsset: AdminPendingAsset | null,
+  videoPendingAsset: AdminPendingAsset | null
+): AdminEditBlockReason | null {
+  if (!formId) return null;
+  if (!snapshot || isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "invalid_snapshot";
+  if (
+    snapshot.photo.metadata.state === "inconsistent" ||
+    snapshot.video.metadata.state === "inconsistent"
+  ) {
+    return "inconsistent";
+  }
+  if (
+    hasUnconnectedMediaChange(photoUrl, snapshot.photo, photoPendingAsset) ||
+    hasUnconnectedMediaChange(videoUrl, snapshot.video, videoPendingAsset)
+  ) {
+    return "media_change";
+  }
+  return null;
+}
+
+function mediaEditBlockReason(
+  formId: string,
+  mediaType: string,
+  mediaUrl: string,
+  snapshot: MediaEditSnapshot | null,
+  mediaPendingAsset: AdminPendingAsset | null
+): AdminEditBlockReason | null {
+  if (!formId) return null;
+  if (!snapshot || isMissingSnapshotUpdatedAt(snapshot.updatedAt)) return "invalid_snapshot";
+  if (snapshot.media.metadata.state === "inconsistent") return "inconsistent";
+  if (
+    normalizedMediaType(mediaType) !== snapshot.originalMediaType ||
+    hasUnconnectedMediaChange(mediaUrl, snapshot.media, mediaPendingAsset)
+  ) {
+    return "media_change";
+  }
+  return null;
+}
+
+function blockedSaveMessage(reason: AdminEditBlockReason) {
+  if (reason === "media_change") {
+    return "No se puede guardar todavía el cambio multimedia. Vuelve a intentarlo cuando la edición segura esté habilitada.";
+  }
+
+  return "No se puede guardar esta edición de forma segura. Actualiza la lista y vuelve a pulsar Editar sobre el registro antes de intentarlo nuevamente.";
 }
 
 function formatDate(value: string | null) {
@@ -374,11 +527,39 @@ export default function AdminSoloGanadoresPage() {
   const [postPhotoAsset, setPostPhotoAsset] = useState<AdminPendingAsset | null>(null);
   const [postVideoAsset, setPostVideoAsset] = useState<AdminPendingAsset | null>(null);
   const [mediaAsset, setMediaAsset] = useState<AdminPendingAsset | null>(null);
-  const [, setEventEditSnapshot] = useState<EventEditSnapshot | null>(null);
-  const [, setPostEditSnapshot] = useState<PostEditSnapshot | null>(null);
-  const [, setMediaEditSnapshot] = useState<MediaEditSnapshot | null>(null);
+  const [eventEditSnapshot, setEventEditSnapshot] =
+    useState<EventEditSnapshot | null>(null);
+  const [postEditSnapshot, setPostEditSnapshot] = useState<PostEditSnapshot | null>(null);
+  const [mediaEditSnapshot, setMediaEditSnapshot] = useState<MediaEditSnapshot | null>(null);
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const eventEditBlockReasonValue = eventEditBlockReason(
+    eventForm.id,
+    eventForm.main_image_url,
+    eventForm.promo_video_url,
+    eventEditSnapshot,
+    eventMainImageAsset,
+    eventPromoVideoAsset
+  );
+  const postEditBlockReasonValue = postEditBlockReason(
+    postForm.id,
+    postForm.photo_url,
+    postForm.video_url,
+    postEditSnapshot,
+    postPhotoAsset,
+    postVideoAsset
+  );
+  const mediaEditBlockReasonValue = mediaEditBlockReason(
+    mediaForm.id,
+    mediaForm.media_type,
+    mediaForm.media_url,
+    mediaEditSnapshot,
+    mediaAsset
+  );
+  const eventEditBlocked = eventEditBlockReasonValue !== null;
+  const postEditBlocked = postEditBlockReasonValue !== null;
+  const mediaEditBlocked = mediaEditBlockReasonValue !== null;
 
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -721,6 +902,14 @@ export default function AdminSoloGanadoresPage() {
   }, [router, supabase.auth]);
 
   async function saveEvent() {
+    if (eventEditBlockReasonValue) {
+      setMessage({
+        type: "error",
+        text: blockedSaveMessage(eventEditBlockReasonValue),
+      });
+      return;
+    }
+
     if (!eventForm.title.trim()) {
       setMessage({ type: "error", text: "El evento necesita un título." });
       return;
@@ -767,6 +956,14 @@ export default function AdminSoloGanadoresPage() {
   }
 
   async function savePost() {
+    if (postEditBlockReasonValue) {
+      setMessage({
+        type: "error",
+        text: blockedSaveMessage(postEditBlockReasonValue),
+      });
+      return;
+    }
+
     if (!postForm.title.trim()) {
       setMessage({ type: "error", text: "El ganador necesita un título." });
       return;
@@ -813,6 +1010,14 @@ export default function AdminSoloGanadoresPage() {
   }
 
   async function saveMedia() {
+    if (mediaEditBlockReasonValue) {
+      setMessage({
+        type: "error",
+        text: blockedSaveMessage(mediaEditBlockReasonValue),
+      });
+      return;
+    }
+
     if (!mediaForm.title.trim()) {
       setMessage({ type: "error", text: "El contenido necesita un título." });
       return;
@@ -952,6 +1157,67 @@ export default function AdminSoloGanadoresPage() {
             Abrir enlace
           </a>
         )}
+      </div>
+    );
+  }
+
+  function AssetStateNotice({
+    metadata,
+    pendingAsset,
+  }: {
+    metadata: AdminAssetMetadata;
+    pendingAsset?: AdminPendingAsset | null;
+  }) {
+    const presentation = assetStatePresentation(metadata);
+    const severityClass: Record<AdminAssetSeverity, string> = {
+      ok: "border-green-700 bg-green-50 text-green-950",
+      info: "border-sky-700 bg-sky-50 text-sky-950",
+      warning: "border-amber-700 bg-amber-50 text-amber-950",
+      danger: "border-red-700 bg-red-50 text-red-950",
+      neutral: "border-slate-400 bg-slate-50 text-slate-800",
+    };
+
+    return (
+      <div
+        className={
+          "mt-2 rounded-xl border px-3 py-2 text-xs font-semibold " +
+          severityClass[presentation.severity]
+        }
+        role={metadata.state === "inconsistent" ? "alert" : "status"}
+      >
+        <div className="font-extrabold">Estado original: {presentation.label}</div>
+        <div className="mt-1 leading-relaxed">{presentation.description}</div>
+
+        {pendingAsset ? (
+          <div className="mt-2 border-t border-current/20 pt-2">
+            <div className="font-extrabold">Nuevo archivo pendiente de confirmación</div>
+            <div className="mt-1 leading-relaxed">
+              Se utilizará cuando el guardado seguro de edición quede conectado.
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function EditBlockedNotice({ reason }: { reason: AdminEditBlockReason }) {
+    const isMediaChange = reason === "media_change";
+
+    return (
+      <div
+        className="mt-4 rounded-xl border border-red-700 bg-red-50 px-3 py-2 text-sm font-semibold text-red-950"
+        role="alert"
+      >
+        <div className="font-extrabold">
+          {isMediaChange
+            ? "Cambio multimedia pendiente"
+            : "No se puede guardar esta edición de forma segura."}
+        </div>
+        <div className="mt-1">
+          {isMediaChange
+            ? "La imagen, el video, la URL o el tipo de contenido fue modificada. Este cambio podrá guardarse cuando quede conectado el PATCH seguro de edición. Por ahora no se enviaron cambios."
+            : "El registro necesita actualizarse o contiene un recurso multimedia inconsistente. Actualiza la lista y vuelve a pulsar Editar sobre el registro antes de intentarlo nuevamente."}
+        </div>
       </div>
     );
   }
@@ -1254,6 +1520,13 @@ export default function AdminSoloGanadoresPage() {
                       }}
                     />
 
+                    {eventForm.id && eventEditSnapshot ? (
+                      <AssetStateNotice
+                        metadata={eventEditSnapshot.mainImage.metadata}
+                        pendingAsset={eventMainImageAsset}
+                      />
+                    ) : null}
+
                     <MediaPreview url={eventForm.main_image_url} labelText="Vista previa de imagen" />
                   </div>
 
@@ -1286,6 +1559,13 @@ export default function AdminSoloGanadoresPage() {
                       }}
                     />
 
+                    {eventForm.id && eventEditSnapshot ? (
+                      <AssetStateNotice
+                        metadata={eventEditSnapshot.promoVideo.metadata}
+                        pendingAsset={eventPromoVideoAsset}
+                      />
+                    ) : null}
+
                     <MediaPreview url={eventForm.promo_video_url} labelText="Vista previa de video" />
                   </div>
 
@@ -1314,7 +1594,16 @@ export default function AdminSoloGanadoresPage() {
               </div>
             </div>
 
-            <button type="button" onClick={saveEvent} className={btn + " mt-5"} disabled={saving}>
+            {eventEditBlockReasonValue ? (
+              <EditBlockedNotice reason={eventEditBlockReasonValue} />
+            ) : null}
+
+            <button
+              type="button"
+              onClick={saveEvent}
+              className={btn + " mt-5"}
+              disabled={saving || eventEditBlocked}
+            >
               {saving
                 ? "Guardando…"
                 : eventForm.id
@@ -1525,6 +1814,13 @@ export default function AdminSoloGanadoresPage() {
                   }}
                 />
 
+                {postForm.id && postEditSnapshot ? (
+                  <AssetStateNotice
+                    metadata={postEditSnapshot.photo.metadata}
+                    pendingAsset={postPhotoAsset}
+                  />
+                ) : null}
+
                 <MediaPreview url={postForm.photo_url} labelText="Vista previa de foto" />
               </div>
 
@@ -1556,6 +1852,13 @@ export default function AdminSoloGanadoresPage() {
                     e.currentTarget.value = "";
                   }}
                 />
+
+                {postForm.id && postEditSnapshot ? (
+                  <AssetStateNotice
+                    metadata={postEditSnapshot.video.metadata}
+                    pendingAsset={postVideoAsset}
+                  />
+                ) : null}
 
                 <MediaPreview url={postForm.video_url} labelText="Vista previa de video" />
               </div>
@@ -1603,7 +1906,16 @@ export default function AdminSoloGanadoresPage() {
               </label>
             </div>
 
-            <button type="button" onClick={savePost} className={btn + " mt-5"} disabled={saving}>
+            {postEditBlockReasonValue ? (
+              <EditBlockedNotice reason={postEditBlockReasonValue} />
+            ) : null}
+
+            <button
+              type="button"
+              onClick={savePost}
+              className={btn + " mt-5"}
+              disabled={saving || postEditBlocked}
+            >
               {saving ? "Guardando…" : postForm.id ? "Guardar ganador" : "Crear ganador"}
             </button>
 
@@ -1774,6 +2086,13 @@ export default function AdminSoloGanadoresPage() {
                   }}
                 />
 
+                {mediaForm.id && mediaEditSnapshot ? (
+                  <AssetStateNotice
+                    metadata={mediaEditSnapshot.media.metadata}
+                    pendingAsset={mediaAsset}
+                  />
+                ) : null}
+
                 <MediaPreview url={mediaForm.media_url} labelText="Vista previa del contenido" />
               </div>
 
@@ -1830,7 +2149,16 @@ export default function AdminSoloGanadoresPage() {
               </label>
             </div>
 
-            <button type="button" onClick={saveMedia} className={btn + " mt-5"} disabled={saving}>
+            {mediaEditBlockReasonValue ? (
+              <EditBlockedNotice reason={mediaEditBlockReasonValue} />
+            ) : null}
+
+            <button
+              type="button"
+              onClick={saveMedia}
+              className={btn + " mt-5"}
+              disabled={saving || mediaEditBlocked}
+            >
               {saving ? "Guardando…" : mediaForm.id ? "Guardar contenido" : "Crear contenido"}
             </button>
 
@@ -1865,6 +2193,7 @@ export default function AdminSoloGanadoresPage() {
                           setMediaAsset(null);
                           setMediaEditSnapshot({
                             updatedAt: m.updated_at,
+                            originalMediaType: normalizedMediaType(m.media_type),
                             media: buildEditAssetSnapshot(m.media_url, m.media_asset),
                           });
                         }}
