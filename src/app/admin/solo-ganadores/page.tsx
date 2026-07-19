@@ -202,10 +202,124 @@ type AdminVideoAuthorizationResponse =
       error?: string;
     };
 
+type AdminAssetAction =
+  | "keep"
+  | "replace"
+  | "manual"
+  | "clear";
+
+type MediaTypeCategory = "image" | "video" | "interview" | "unknown";
+
+type AdminPatchAssetAction = {
+  action: AdminAssetAction;
+  currentAssetId: string | null;
+  newAssetId: string | null;
+};
+
+type EventFormData = {
+  title: string;
+  semester: string | null;
+  event_date: string | null;
+  location_name: string | null;
+  address: string | null;
+  city: string | null;
+  description: string | null;
+  recognitions: string | null;
+  main_image_url: string | null;
+  promo_video_url: string | null;
+  status: string;
+  published: boolean;
+  featured: boolean;
+};
+
+type PostFormData = {
+  source_module: string;
+  source_winner_id: string | null;
+  winner_name: string | null;
+  winner_alias: string | null;
+  title: string;
+  prize_name: string | null;
+  description: string | null;
+  photo_url: string | null;
+  video_url: string | null;
+  interview_url: string | null;
+  event_date: string | null;
+  published: boolean;
+  featured: boolean;
+};
+
+type MediaFormData = {
+  title: string;
+  media_type: string;
+  media_url: string;
+  description: string | null;
+  related_winner_id: string | null;
+  published: boolean;
+  featured: boolean;
+};
+
+type EventPatchAssets = {
+  main_image_url: AdminPatchAssetAction;
+  promo_video_url: AdminPatchAssetAction;
+};
+
+type PostPatchAssets = {
+  photo_url: AdminPatchAssetAction;
+  video_url: AdminPatchAssetAction;
+};
+
+type MediaPatchAssets = {
+  media_url: AdminPatchAssetAction;
+};
+
+type EventPatchPayload = {
+  resource: "event";
+  id: string;
+  expectedUpdatedAt: string;
+  data: EventFormData;
+  assets: EventPatchAssets;
+};
+
+type PostPatchPayload = {
+  resource: "post";
+  id: string;
+  expectedUpdatedAt: string;
+  data: PostFormData;
+  assets: PostPatchAssets;
+};
+
+type MediaPatchPayload = {
+  resource: "media";
+  id: string;
+  expectedUpdatedAt: string;
+  data: MediaFormData;
+  assets: MediaPatchAssets;
+};
+
+type PatchBuildResult<T> =
+  | {
+      ok: true;
+      value: T;
+    }
+  | {
+      ok: false;
+      reason:
+        | "not_editing"
+        | "missing_snapshot"
+        | "missing_updated_at"
+        | "invalid_current_asset"
+        | "invalid_pending_asset"
+        | "invalid_media_change"
+        | "unsupported_clear"
+        | "inconsistent_asset";
+    };
+
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ADMIN_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
 const VIDEO_MIME = "video/mp4";
+const UUID_V4_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const emptyEvent = {
   id: "",
@@ -286,6 +400,42 @@ function normalizedEditUrl(value: string | null | undefined) {
 
 function normalizedMediaType(value: string | null | undefined) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function mediaTypeCategory(value: string | null | undefined): MediaTypeCategory {
+  const mediaType = normalizedMediaType(value);
+
+  if (
+    mediaType === "foto" ||
+    mediaType === "ambiente" ||
+    mediaType === "entrega" ||
+    mediaType === "reconocimiento"
+  ) {
+    return "image";
+  }
+
+  if (mediaType === "video") return "video";
+  if (mediaType === "entrevista") return "interview";
+
+  return "unknown";
+}
+
+function normalizedAssetId(value: string | null | undefined) {
+  const clean = typeof value === "string" ? value.trim() : "";
+  return clean ? clean : null;
+}
+
+function isValidAssetUuid(value: string) {
+  return UUID_V4_PATTERN.test(value);
+}
+
+function isValidHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function hasUnconnectedMediaChange(
@@ -420,6 +570,370 @@ function blockedSaveMessage(reason: AdminEditBlockReason) {
   }
 
   return "No se puede guardar esta edición de forma segura. Actualiza la lista y vuelve a pulsar Editar sobre el registro antes de intentarlo nuevamente.";
+}
+
+function validatedCurrentAssetId(
+  snapshot: AdminEditAssetSnapshot
+): PatchBuildResult<string | null> {
+  const currentAssetId = normalizedAssetId(snapshot.currentAssetId);
+
+  if (snapshot.metadata.state === "confirmed") {
+    if (!currentAssetId || !isValidAssetUuid(currentAssetId)) {
+      return { ok: false, reason: "invalid_current_asset" };
+    }
+
+    return { ok: true, value: currentAssetId };
+  }
+
+  if (snapshot.metadata.state === "inconsistent") {
+    if (currentAssetId && !isValidAssetUuid(currentAssetId)) {
+      return { ok: false, reason: "invalid_current_asset" };
+    }
+
+    return { ok: true, value: currentAssetId };
+  }
+
+  if (currentAssetId) {
+    return { ok: false, reason: "invalid_current_asset" };
+  }
+
+  return { ok: true, value: null };
+}
+
+function buildPatchAssetAction({
+  currentUrl,
+  snapshot,
+  pendingAsset,
+  allowClear,
+  expectedPurpose,
+}: {
+  currentUrl: string | null | undefined;
+  snapshot: AdminEditAssetSnapshot;
+  pendingAsset: AdminPendingAsset | null;
+  allowClear: boolean;
+  expectedPurpose: AdminPendingAsset["purpose"] | null;
+}): PatchBuildResult<AdminPatchAssetAction> {
+  const currentAssetIdResult = validatedCurrentAssetId(snapshot);
+  if (!currentAssetIdResult.ok) return currentAssetIdResult;
+
+  const currentAssetId = currentAssetIdResult.value;
+  const cleanCurrentUrl = normalizedEditUrl(currentUrl);
+  const isInconsistent = snapshot.metadata.state === "inconsistent";
+
+  if (pendingAsset) {
+    const newAssetId = normalizedAssetId(pendingAsset.assetId);
+    if (
+      !newAssetId ||
+      !isValidAssetUuid(newAssetId) ||
+      !expectedPurpose ||
+      pendingAsset.purpose !== expectedPurpose
+    ) {
+      return { ok: false, reason: "invalid_pending_asset" };
+    }
+
+    if (normalizedEditUrl(pendingAsset.url) !== cleanCurrentUrl) {
+      return { ok: false, reason: "invalid_media_change" };
+    }
+
+    return {
+      ok: true,
+      value: {
+        action: "replace",
+        currentAssetId,
+        newAssetId,
+      },
+    };
+  }
+
+  if (!isInconsistent && cleanCurrentUrl === snapshot.originalUrl) {
+    return {
+      ok: true,
+      value: {
+        action: "keep",
+        currentAssetId,
+        newAssetId: null,
+      },
+    };
+  }
+
+  if (isInconsistent && cleanCurrentUrl === snapshot.originalUrl) {
+    return { ok: false, reason: "inconsistent_asset" };
+  }
+
+  if (!cleanCurrentUrl) {
+    if (!allowClear) return { ok: false, reason: "unsupported_clear" };
+
+    if (!snapshot.originalUrl && !isInconsistent) {
+      return {
+        ok: true,
+        value: {
+          action: "keep",
+          currentAssetId,
+          newAssetId: null,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      value: {
+        action: "clear",
+        currentAssetId,
+        newAssetId: null,
+      },
+    };
+  }
+
+  if (cleanCurrentUrl !== snapshot.originalUrl) {
+    if (!isValidHttpUrl(cleanCurrentUrl)) {
+      return { ok: false, reason: "invalid_media_change" };
+    }
+
+    return {
+      ok: true,
+      value: {
+        action: "manual",
+        currentAssetId,
+        newAssetId: null,
+      },
+    };
+  }
+
+  if (isInconsistent) {
+    return { ok: false, reason: "inconsistent_asset" };
+  }
+
+  return { ok: false, reason: "invalid_media_change" };
+}
+
+function eventDataFromForm(form: typeof emptyEvent): EventFormData {
+  return {
+    title: form.title.trim(),
+    semester: cleanNullable(form.semester),
+    event_date: cleanNullable(form.event_date),
+    location_name: cleanNullable(form.location_name),
+    address: cleanNullable(form.address),
+    city: cleanNullable(form.city),
+    description: cleanNullable(form.description),
+    recognitions: cleanNullable(form.recognitions),
+    main_image_url: cleanNullable(form.main_image_url),
+    promo_video_url: cleanNullable(form.promo_video_url),
+    status: form.status || "anunciado",
+    published: Boolean(form.published),
+    featured: Boolean(form.featured),
+  };
+}
+
+function postDataFromForm(form: typeof emptyPost): PostFormData {
+  return {
+    source_module: form.source_module || "manual",
+    source_winner_id: cleanNullable(form.source_winner_id),
+    winner_name: cleanNullable(form.winner_name),
+    winner_alias: cleanNullable(form.winner_alias),
+    title: form.title.trim(),
+    prize_name: cleanNullable(form.prize_name),
+    description: cleanNullable(form.description),
+    photo_url: cleanNullable(form.photo_url),
+    video_url: cleanNullable(form.video_url),
+    interview_url: cleanNullable(form.interview_url),
+    event_date: cleanNullable(form.event_date),
+    published: Boolean(form.published),
+    featured: Boolean(form.featured),
+  };
+}
+
+function mediaDataFromForm(form: typeof emptyMedia): MediaFormData {
+  return {
+    title: form.title.trim(),
+    media_type: form.media_type || "foto",
+    media_url: form.media_url.trim(),
+    description: cleanNullable(form.description),
+    related_winner_id: cleanNullable(form.related_winner_id),
+    published: Boolean(form.published),
+    featured: Boolean(form.featured),
+  };
+}
+
+function validateMediaTypeChangeForPatch(
+  originalMediaType: string,
+  currentMediaType: string,
+  action: AdminAssetAction
+): PatchBuildResult<true> {
+  const originalType = normalizedMediaType(originalMediaType);
+  const currentType = normalizedMediaType(currentMediaType);
+  const originalCategory = mediaTypeCategory(originalType);
+  const currentCategory = mediaTypeCategory(currentType);
+
+  if (originalCategory === "unknown" || currentCategory === "unknown") {
+    return { ok: false, reason: "invalid_media_change" };
+  }
+
+  if (action === "clear") {
+    return { ok: false, reason: "unsupported_clear" };
+  }
+
+  if (action === "replace" || action === "manual") {
+    return { ok: true, value: true };
+  }
+
+  if (
+    action === "keep" &&
+    (originalType === currentType ||
+      (originalCategory === "image" && currentCategory === "image"))
+  ) {
+    return { ok: true, value: true };
+  }
+
+  return { ok: false, reason: "invalid_media_change" };
+}
+
+function buildEventPatchPayload(
+  form: typeof emptyEvent,
+  snapshot: EventEditSnapshot | null,
+  mainImagePendingAsset: AdminPendingAsset | null,
+  promoVideoPendingAsset: AdminPendingAsset | null
+): PatchBuildResult<EventPatchPayload> {
+  const id = normalizedAssetId(form.id);
+  if (!id) return { ok: false, reason: "not_editing" };
+  if (!snapshot) return { ok: false, reason: "missing_snapshot" };
+  if (isMissingSnapshotUpdatedAt(snapshot.updatedAt)) {
+    return { ok: false, reason: "missing_updated_at" };
+  }
+  const expectedUpdatedAt = normalizedEditUrl(snapshot.updatedAt);
+
+  const mainImageAction = buildPatchAssetAction({
+    currentUrl: form.main_image_url,
+    snapshot: snapshot.mainImage,
+    pendingAsset: mainImagePendingAsset,
+    allowClear: true,
+    expectedPurpose: "event_main_image",
+  });
+  if (!mainImageAction.ok) return mainImageAction;
+
+  const promoVideoAction = buildPatchAssetAction({
+    currentUrl: form.promo_video_url,
+    snapshot: snapshot.promoVideo,
+    pendingAsset: promoVideoPendingAsset,
+    allowClear: true,
+    expectedPurpose: "event_promo_video",
+  });
+  if (!promoVideoAction.ok) return promoVideoAction;
+
+  return {
+    ok: true,
+    value: {
+      resource: "event",
+      id,
+      expectedUpdatedAt,
+      data: eventDataFromForm(form),
+      assets: {
+        main_image_url: mainImageAction.value,
+        promo_video_url: promoVideoAction.value,
+      },
+    },
+  };
+}
+
+function buildPostPatchPayload(
+  form: typeof emptyPost,
+  snapshot: PostEditSnapshot | null,
+  photoPendingAsset: AdminPendingAsset | null,
+  videoPendingAsset: AdminPendingAsset | null
+): PatchBuildResult<PostPatchPayload> {
+  const id = normalizedAssetId(form.id);
+  if (!id) return { ok: false, reason: "not_editing" };
+  if (!snapshot) return { ok: false, reason: "missing_snapshot" };
+  if (isMissingSnapshotUpdatedAt(snapshot.updatedAt)) {
+    return { ok: false, reason: "missing_updated_at" };
+  }
+  const expectedUpdatedAt = normalizedEditUrl(snapshot.updatedAt);
+
+  const photoAction = buildPatchAssetAction({
+    currentUrl: form.photo_url,
+    snapshot: snapshot.photo,
+    pendingAsset: photoPendingAsset,
+    allowClear: true,
+    expectedPurpose: "post_photo",
+  });
+  if (!photoAction.ok) return photoAction;
+
+  const videoAction = buildPatchAssetAction({
+    currentUrl: form.video_url,
+    snapshot: snapshot.video,
+    pendingAsset: videoPendingAsset,
+    allowClear: true,
+    expectedPurpose: "post_video",
+  });
+  if (!videoAction.ok) return videoAction;
+
+  return {
+    ok: true,
+    value: {
+      resource: "post",
+      id,
+      expectedUpdatedAt,
+      data: postDataFromForm(form),
+      assets: {
+        photo_url: photoAction.value,
+        video_url: videoAction.value,
+      },
+    },
+  };
+}
+
+function buildMediaPatchPayload(
+  form: typeof emptyMedia,
+  snapshot: MediaEditSnapshot | null,
+  pendingAsset: AdminPendingAsset | null
+): PatchBuildResult<MediaPatchPayload> {
+  const id = normalizedAssetId(form.id);
+  if (!id) return { ok: false, reason: "not_editing" };
+  if (!snapshot) return { ok: false, reason: "missing_snapshot" };
+  if (isMissingSnapshotUpdatedAt(snapshot.updatedAt)) {
+    return { ok: false, reason: "missing_updated_at" };
+  }
+  const expectedUpdatedAt = normalizedEditUrl(snapshot.updatedAt);
+
+  const data = mediaDataFromForm(form);
+  if (!data.media_url) return { ok: false, reason: "unsupported_clear" };
+
+  const expectedPurpose = expectedMediaPurpose(data.media_type);
+  if (!expectedPurpose && data.media_type !== "entrevista") {
+    return { ok: false, reason: "invalid_media_change" };
+  }
+
+  if (pendingAsset && !expectedPurpose) {
+    return { ok: false, reason: "invalid_pending_asset" };
+  }
+
+  const mediaAction = buildPatchAssetAction({
+    currentUrl: data.media_url,
+    snapshot: snapshot.media,
+    pendingAsset,
+    allowClear: false,
+    expectedPurpose,
+  });
+  if (!mediaAction.ok) return mediaAction;
+
+  const mediaTypeChange = validateMediaTypeChangeForPatch(
+    snapshot.originalMediaType,
+    data.media_type,
+    mediaAction.value.action
+  );
+  if (!mediaTypeChange.ok) return mediaTypeChange;
+
+  return {
+    ok: true,
+    value: {
+      resource: "media",
+      id,
+      expectedUpdatedAt,
+      data,
+      assets: {
+        media_url: mediaAction.value,
+      },
+    },
+  };
 }
 
 function formatDate(value: string | null) {
