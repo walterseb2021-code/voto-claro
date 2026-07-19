@@ -9,6 +9,22 @@ import * as tus from "tus-js-client";
 
 type Tab = "evento" | "ganadores" | "media";
 
+type AdminAssetState =
+  | "confirmed"
+  | "legacy_own_url"
+  | "external"
+  | "youtube"
+  | "empty"
+  | "inconsistent";
+
+type AdminAssetMetadata = {
+  state: AdminAssetState;
+  assetId: string | null;
+  status: "confirmed" | null;
+  purpose: string | null;
+  mediaKind: "image" | "video" | null;
+};
+
 type SoloEvent = {
   id: string;
   title: string;
@@ -25,6 +41,9 @@ type SoloEvent = {
   published: boolean;
   featured: boolean;
   created_at: string | null;
+  updated_at: string | null;
+  main_image_asset: AdminAssetMetadata;
+  promo_video_asset: AdminAssetMetadata;
 };
 
 type SoloPost = {
@@ -43,6 +62,9 @@ type SoloPost = {
   published: boolean;
   featured: boolean;
   created_at: string | null;
+  updated_at: string | null;
+  photo_asset: AdminAssetMetadata;
+  video_asset: AdminAssetMetadata;
 };
 
 type SoloMedia = {
@@ -55,6 +77,31 @@ type SoloMedia = {
   published: boolean;
   featured: boolean;
   created_at: string | null;
+  updated_at: string | null;
+  media_asset: AdminAssetMetadata;
+};
+
+type AdminEditAssetSnapshot = {
+  originalUrl: string;
+  metadata: AdminAssetMetadata;
+  currentAssetId: string | null;
+};
+
+type EventEditSnapshot = {
+  updatedAt: string | null;
+  mainImage: AdminEditAssetSnapshot;
+  promoVideo: AdminEditAssetSnapshot;
+};
+
+type PostEditSnapshot = {
+  updatedAt: string | null;
+  photo: AdminEditAssetSnapshot;
+  video: AdminEditAssetSnapshot;
+};
+
+type MediaEditSnapshot = {
+  updatedAt: string | null;
+  media: AdminEditAssetSnapshot;
 };
 
 type AdminSoloGanadoresApiResponse =
@@ -199,6 +246,29 @@ function cleanNullable(value: string) {
   return v ? v : null;
 }
 
+function fallbackAssetMetadata(): AdminAssetMetadata {
+  return {
+    state: "inconsistent",
+    assetId: null,
+    status: null,
+    purpose: null,
+    mediaKind: null,
+  };
+}
+
+function buildEditAssetSnapshot(
+  url: string | null | undefined,
+  metadata: AdminAssetMetadata | null | undefined
+): AdminEditAssetSnapshot {
+  const safeMetadata = metadata ?? fallbackAssetMetadata();
+
+  return {
+    originalUrl: typeof url === "string" ? url.trim() : "",
+    metadata: safeMetadata,
+    currentAssetId: safeMetadata.assetId,
+  };
+}
+
 function formatDate(value: string | null) {
   if (!value) return "-";
   try {
@@ -304,6 +374,9 @@ export default function AdminSoloGanadoresPage() {
   const [postPhotoAsset, setPostPhotoAsset] = useState<AdminPendingAsset | null>(null);
   const [postVideoAsset, setPostVideoAsset] = useState<AdminPendingAsset | null>(null);
   const [mediaAsset, setMediaAsset] = useState<AdminPendingAsset | null>(null);
+  const [, setEventEditSnapshot] = useState<EventEditSnapshot | null>(null);
+  const [, setPostEditSnapshot] = useState<PostEditSnapshot | null>(null);
+  const [, setMediaEditSnapshot] = useState<MediaEditSnapshot | null>(null);
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -681,6 +754,7 @@ export default function AdminSoloGanadoresPage() {
       setEventForm(emptyEvent);
       setEventMainImageAsset(null);
       setEventPromoVideoAsset(null);
+      setEventEditSnapshot(null);
       setMessage({ type: "success", text: "✅ Evento guardado correctamente." });
       await loadAll();
     } catch (err: any) {
@@ -726,6 +800,7 @@ export default function AdminSoloGanadoresPage() {
       setPostForm(emptyPost);
       setPostPhotoAsset(null);
       setPostVideoAsset(null);
+      setPostEditSnapshot(null);
       setMessage({ type: "success", text: "✅ Ganador guardado correctamente." });
       await loadAll();
     } catch (err: any) {
@@ -768,6 +843,7 @@ export default function AdminSoloGanadoresPage() {
 
       setMediaForm(emptyMedia);
       setMediaAsset(null);
+      setMediaEditSnapshot(null);
       setMessage({ type: "success", text: "✅ Contenido guardado correctamente." });
       await loadAll();
     } catch (err: any) {
@@ -787,6 +863,26 @@ export default function AdminSoloGanadoresPage() {
 
     try {
       await deleteAdminResource(resource, id);
+
+      if (resource === "event" && eventForm.id === id) {
+        setEventForm(emptyEvent);
+        setEventMainImageAsset(null);
+        setEventPromoVideoAsset(null);
+        setEventEditSnapshot(null);
+      }
+
+      if (resource === "post" && postForm.id === id) {
+        setPostForm(emptyPost);
+        setPostPhotoAsset(null);
+        setPostVideoAsset(null);
+        setPostEditSnapshot(null);
+      }
+
+      if (resource === "media" && mediaForm.id === id) {
+        setMediaForm(emptyMedia);
+        setMediaAsset(null);
+        setMediaEditSnapshot(null);
+      }
 
       setMessage({ type: "success", text: "✅ Registro eliminado." });
       await loadAll();
@@ -991,6 +1087,7 @@ export default function AdminSoloGanadoresPage() {
                   setEventForm(emptyEvent);
                   setEventMainImageAsset(null);
                   setEventPromoVideoAsset(null);
+                  setEventEditSnapshot(null);
                 }}
                 className={btnSm}
               >
@@ -1263,6 +1360,17 @@ export default function AdminSoloGanadoresPage() {
                           });
                           setEventMainImageAsset(null);
                           setEventPromoVideoAsset(null);
+                          setEventEditSnapshot({
+                            updatedAt: ev.updated_at,
+                            mainImage: buildEditAssetSnapshot(
+                              ev.main_image_url,
+                              ev.main_image_asset
+                            ),
+                            promoVideo: buildEditAssetSnapshot(
+                              ev.promo_video_url,
+                              ev.promo_video_asset
+                            ),
+                          });
                         }}
                       >
                         Editar
@@ -1301,6 +1409,7 @@ export default function AdminSoloGanadoresPage() {
                   setPostForm(emptyPost);
                   setPostPhotoAsset(null);
                   setPostVideoAsset(null);
+                  setPostEditSnapshot(null);
                 }}
                 className={btnSm}
               >
@@ -1536,6 +1645,11 @@ export default function AdminSoloGanadoresPage() {
                           });
                           setPostPhotoAsset(null);
                           setPostVideoAsset(null);
+                          setPostEditSnapshot({
+                            updatedAt: p.updated_at,
+                            photo: buildEditAssetSnapshot(p.photo_url, p.photo_asset),
+                            video: buildEditAssetSnapshot(p.video_url, p.video_asset),
+                          });
                         }}
                       >
                         Editar
@@ -1573,6 +1687,7 @@ export default function AdminSoloGanadoresPage() {
                 onClick={() => {
                   setMediaForm(emptyMedia);
                   setMediaAsset(null);
+                  setMediaEditSnapshot(null);
                 }}
                 className={btnSm}
               >
@@ -1748,6 +1863,10 @@ export default function AdminSoloGanadoresPage() {
                             featured: !!m.featured,
                           });
                           setMediaAsset(null);
+                          setMediaEditSnapshot({
+                            updatedAt: m.updated_at,
+                            media: buildEditAssetSnapshot(m.media_url, m.media_asset),
+                          });
                         }}
                       >
                         Editar
