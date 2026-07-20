@@ -1022,6 +1022,21 @@ function saveRequestErrorMessage(err: unknown) {
   return "No se pudo guardar. Inténtalo nuevamente.";
 }
 
+
+function deleteRequestErrorMessage(err: unknown) {
+  if (err instanceof AdminRequestError) {
+    if (err.status === 409 || err.code === "STALE_RESOURCE") {
+      return "El registro fue modificado en otra sesi\u00f3n. Actualiza la lista antes de eliminarlo.";
+    }
+    if (err.status === 404) return "El registro ya no est\u00e1 disponible.";
+    if (err.status === 400) return "Solicitud inv\u00e1lida.";
+
+    return "No se pudo eliminar. Int\u00e9ntalo nuevamente.";
+  }
+
+  return "No se pudo eliminar. Int\u00e9ntalo nuevamente.";
+}
+
 export default function AdminSoloGanadoresPage() {
   const router = useRouter();
 
@@ -1388,7 +1403,11 @@ export default function AdminSoloGanadoresPage() {
     return result.id;
   }
 
-  async function deleteAdminResource(resource: AdminSaveResource, id: string) {
+  async function deleteAdminResource(
+    resource: AdminSaveResource,
+    id: string,
+    expectedUpdatedAt: string
+  ) {
     const res = await fetch("/api/admin/solo-ganadores", {
       method: "DELETE",
       cache: "no-store",
@@ -1399,17 +1418,18 @@ export default function AdminSoloGanadoresPage() {
       body: JSON.stringify({
         resource,
         id,
+        expectedUpdatedAt,
       }),
     });
 
     const result = (await res.json().catch(() => null)) as AdminSaveResponse | null;
 
     if (!res.ok || !result) {
-      throw new Error("No disponible");
+      throw new AdminRequestError(res.status, "No disponible");
     }
 
     if (result.ok !== true) {
-      throw new Error(result.error || "No disponible");
+      throw new AdminRequestError(res.status, result.error || "No disponible", result.code ?? null);
     }
 
     return result.id;
@@ -1593,14 +1613,27 @@ export default function AdminSoloGanadoresPage() {
     }
   }
 
-  async function deleteRow(resource: AdminSaveResource, id: string) {
+  async function deleteRow(
+    resource: AdminSaveResource,
+    id: string,
+    expectedUpdatedAt: string | null | undefined
+  ) {
+    if (saving) return;
+    if (!id || !String(expectedUpdatedAt || "").trim()) {
+      setMessage({
+        type: "error",
+        text: "Actualiza la lista antes de eliminar este registro.",
+      });
+      return;
+    }
+
     if (!confirm("¿Seguro que deseas eliminar este registro?")) return;
 
     setSaving(true);
     setMessage(null);
 
     try {
-      await deleteAdminResource(resource, id);
+      await deleteAdminResource(resource, id, String(expectedUpdatedAt).trim());
 
       if (resource === "event" && eventForm.id === id) {
         setEventForm(emptyEvent);
@@ -1625,9 +1658,8 @@ export default function AdminSoloGanadoresPage() {
       setMessage({ type: "success", text: "✅ Registro eliminado." });
       await loadAll();
     } catch (err: unknown) {
-      const text = errorText(err);
-      console.error("Error al eliminar:", err);
-      setMessage({ type: "error", text: "Error al eliminar: " + text });
+      console.error("Error al eliminar:", safeRequestLog(err));
+      setMessage({ type: "error", text: deleteRequestErrorMessage(err) });
     } finally {
       setSaving(false);
     }
@@ -2204,7 +2236,8 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}
-                        onClick={() => deleteRow("event", ev.id)}
+                        onClick={() => deleteRow("event", ev.id, ev.updated_at)}
+                        disabled={saving}
                       >
                         Eliminar
                       </button>
@@ -2506,7 +2539,8 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}
-                        onClick={() => deleteRow("post", p.id)}
+                        onClick={() => deleteRow("post", p.id, p.updated_at)}
+                        disabled={saving}
                       >
                         Eliminar
                       </button>
@@ -2740,7 +2774,8 @@ export default function AdminSoloGanadoresPage() {
                       <button
                         type="button"
                         className={btnSm + " bg-red-700 hover:bg-red-800"}
-                        onClick={() => deleteRow("media", m.id)}
+                        onClick={() => deleteRow("media", m.id, m.updated_at)}
+                        disabled={saving}
                       >
                         Eliminar
                       </button>

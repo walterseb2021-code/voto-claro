@@ -294,13 +294,10 @@ type StorageInfo = {
   metadata?: Record<string, unknown> | null;
 };
 
-type IdRow = {
-  id: string | null;
-};
-
 type DeleteInput = {
   resource: Resource;
   id: string;
+  expectedUpdatedAt: string;
 };
 
 type SanitizeStats = {
@@ -356,10 +353,12 @@ const CONTROLLED_RPC_ERRORS = new Set([
   "ASSET_PURPOSE_MISMATCH",
   "ASSET_KIND_MISMATCH",
   "ASSET_URL_MISMATCH",
+  "OWNERSHIP_INCONSISTENT",
   "ASSET_RELEASE_FAILED",
   "ASSET_CONFIRM_FAILED",
   "CREATE_FAILED",
   "UPDATE_FAILED",
+  "DELETE_FAILED",
 ]);
 
 function json(status: number, body: Record<string, unknown>) {
@@ -1794,7 +1793,8 @@ function patchRpcErrorStatus(code: string | null) {
     code === "ASSET_INVALID_STATUS" ||
     code === "ASSET_ALREADY_OWNED" ||
     code === "ASSET_EXPIRED" ||
-    code === "ASSET_URL_MISMATCH"
+    code === "ASSET_URL_MISMATCH" ||
+    code === "OWNERSHIP_INCONSISTENT"
   ) {
     return 409;
   }
@@ -1921,12 +1921,6 @@ async function verifyVideoAssetObject(
   }
 
   return "ok";
-}
-
-function tableForResource(resource: Resource) {
-  if (resource === "event") return "solo_ganadores_events";
-  if (resource === "post") return "solo_ganadores_posts";
-  return "solo_ganadores_media";
 }
 
 function mutationBadRequest(gate: Awaited<ReturnType<typeof requireAdmin>>) {
@@ -2138,7 +2132,7 @@ function validateMutationBody(
 
 function validateDeleteBody(value: unknown): ValidationResult<DeleteInput> {
   if (!isRecord(value)) return { ok: false };
-  if (!hasExactKeys(value, ["resource", "id"])) return { ok: false };
+  if (!hasExactKeys(value, ["resource", "id", "expectedUpdatedAt"])) return { ok: false };
 
   const resource = validateResource(value.resource);
   if (!resource.ok) return { ok: false };
@@ -2146,11 +2140,15 @@ function validateDeleteBody(value: unknown): ValidationResult<DeleteInput> {
   const id = requiredText(value.id, 36);
   if (!id.ok || !UUID_RE.test(id.value)) return { ok: false };
 
+  const expectedUpdatedAt = validateExpectedUpdatedAt(value.expectedUpdatedAt);
+  if (!expectedUpdatedAt.ok) return { ok: false };
+
   return {
     ok: true,
     value: {
       resource: resource.value,
       id: id.value,
+      expectedUpdatedAt: expectedUpdatedAt.value,
     },
   };
 }
@@ -2359,6 +2357,47 @@ async function updateResourceWithRpc(
     : { ok: false, reason: "invalid_result" };
 }
 
+async function deleteResourceWithRpc(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  input: DeleteInput
+): Promise<RpcUpdateResult> {
+  const { resource, id, expectedUpdatedAt } = input;
+
+  if (resource === "event") {
+    const result = await supabase.rpc("delete_solo_ganadores_event", {
+      p_id: id,
+      p_expected_updated_at: expectedUpdatedAt,
+    });
+
+    if (result.error) return { ok: false, reason: "rpc_error", error: result.error };
+    return typeof result.data === "string" && UUID_RE.test(result.data)
+      ? { ok: true, value: result.data }
+      : { ok: false, reason: "invalid_result" };
+  }
+
+  if (resource === "post") {
+    const result = await supabase.rpc("delete_solo_ganadores_post", {
+      p_id: id,
+      p_expected_updated_at: expectedUpdatedAt,
+    });
+
+    if (result.error) return { ok: false, reason: "rpc_error", error: result.error };
+    return typeof result.data === "string" && UUID_RE.test(result.data)
+      ? { ok: true, value: result.data }
+      : { ok: false, reason: "invalid_result" };
+  }
+
+  const result = await supabase.rpc("delete_solo_ganadores_media", {
+    p_id: id,
+    p_expected_updated_at: expectedUpdatedAt,
+  });
+
+  if (result.error) return { ok: false, reason: "rpc_error", error: result.error };
+  return typeof result.data === "string" && UUID_RE.test(result.data)
+    ? { ok: true, value: result.data }
+    : { ok: false, reason: "invalid_result" };
+}
+
 async function handleMutation(req: NextRequest, operation: "insert" | "update") {
   const gate = await requireAdmin(req);
   if (!gate.ok) {
@@ -2512,7 +2551,7 @@ async function handlePatchMutation(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
+async function handleDeleteMutation(req: NextRequest) {
   const gate = await requireAdmin(req);
   if (!gate.ok) {
     return withAuthCookies(
@@ -2548,38 +2587,34 @@ export async function DELETE(req: NextRequest) {
       return mutationBadRequest(gate);
     }
 
-    const { resource, id } = input.value;
+    const { resource } = input.value;
     const supabase = getSupabaseAdmin();
-    const table = tableForResource(resource);
+    const deleted = await deleteResourceWithRpc(supabase, input.value);
 
-    const result = await supabase
-      .from(table)
-      .delete()
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
+    if (!deleted.ok) {
+      if (deleted.reason === "invalid_result") {
+        console.error("[admin/solo-ganadores] delete rpc returned invalid result", {
+          resource,
+        });
+        return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+      }
 
-    if (result.error) {
-      console.error("[admin/solo-ganadores] delete failed", {
+      const rpc = getControlledRpcError(deleted.error);
+      const status = patchRpcErrorStatus(rpc);
+      console.error("[admin/solo-ganadores] delete rpc failed", {
         resource,
-        code: result.error.code,
+        code: getSafeErrorCode(deleted.error),
+        rpc: rpc ?? "UNCONTROLLED",
       });
+      return withAuthCookies(json(status, patchRpcErrorBody(status, rpc)), gate);
+    }
+
+    if (!deleted.value || !UUID_RE.test(deleted.value)) {
+      console.error("[admin/solo-ganadores] delete returned invalid id", { resource });
       return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
     }
 
-    const row = result.data as IdRow | null;
-    if (!row) {
-      return withAuthCookies(json(404, { ok: false, error: "No encontrado" }), gate);
-    }
-
-    if (!row.id || !UUID_RE.test(row.id)) {
-      console.error("[admin/solo-ganadores] delete returned invalid id", {
-        resource,
-      });
-      return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
-    }
-
-    return withAuthCookies(json(200, { ok: true, id: row.id }), gate);
+    return withAuthCookies(json(200, { ok: true, id: deleted.value }), gate);
   } catch {
     console.error("[admin/solo-ganadores] unexpected delete error");
     return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
@@ -2733,6 +2768,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   return handleMutation(req, "insert");
+}
+
+export async function DELETE(req: NextRequest) {
+  return handleDeleteMutation(req);
 }
 
 export async function PATCH(req: NextRequest) {
