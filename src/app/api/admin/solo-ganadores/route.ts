@@ -26,6 +26,7 @@ type EventDbRow = {
 
 type PostDbRow = {
   id: string;
+  event_id: string | null;
   source_module: string | null;
   source_winner_id: string | null;
   winner_name: string | null;
@@ -45,6 +46,7 @@ type PostDbRow = {
 
 type MediaDbRow = {
   id: string;
+  event_id: string | null;
   title: string | null;
   media_type: string | null;
   media_url: string | null;
@@ -95,6 +97,7 @@ type AdminEvent = {
 
 type AdminPost = {
   id: string;
+  event_id: string | null;
   source_module: string;
   source_winner_id: string | null;
   winner_name: string | null;
@@ -116,6 +119,7 @@ type AdminPost = {
 
 type AdminMedia = {
   id: string;
+  event_id: string | null;
   title: string;
   media_type: string;
   media_url: string;
@@ -148,6 +152,7 @@ type EventMutationPayload = {
 };
 
 type PostMutationPayload = {
+  event_id: string;
   source_module: string;
   source_winner_id: string | null;
   winner_name: string | null;
@@ -165,6 +170,7 @@ type PostMutationPayload = {
 };
 
 type MediaMutationPayload = {
+  event_id: string;
   title: string;
   media_type: string;
   media_url: string;
@@ -341,6 +347,11 @@ const MEDIA_TYPES = new Set([
 const IMAGE_MEDIA_TYPES = new Set(["foto", "ambiente", "entrega", "reconocimiento"]);
 const CONTROLLED_RPC_ERRORS = new Set([
   "INVALID_PAYLOAD",
+  "EVENT_REQUIRED",
+  "EVENT_NOT_FOUND",
+  "WINNER_NOT_FOUND",
+  "WINNER_EVENT_MISMATCH",
+  "EVENT_HAS_CHILDREN",
   "RESOURCE_NOT_FOUND",
   "STALE_RESOURCE",
   "INVALID_ASSET_ACTION",
@@ -602,6 +613,13 @@ function optionalUuidInput(value: unknown): ValidationResult<string | null> {
   return text;
 }
 
+function requiredUuidInput(value: unknown): ValidationResult<string> {
+  const text = requiredText(value, 36);
+  if (!text.ok || !UUID_RE.test(text.value)) return { ok: false };
+
+  return text;
+}
+
 function assetIdInput(value: unknown): ValidationResult<string | null> {
   if (value === null) return { ok: true, value: null };
   if (typeof value !== "string") return { ok: false };
@@ -777,6 +795,7 @@ function validatePostPayload(
 ): ValidationResult<PostMutationPayload> {
   if (
     !hasExactKeys(data, [
+      "event_id",
       "source_module",
       "source_winner_id",
       "winner_name",
@@ -795,6 +814,7 @@ function validatePostPayload(
     return { ok: false };
   }
 
+  const eventId = requiredUuidInput(data.event_id);
   const sourceModule = enumText(data.source_module, SOURCE_MODULES);
   const sourceWinnerId = optionalText(data.source_winner_id, 300);
   const winnerName = optionalText(data.winner_name, 200);
@@ -810,6 +830,7 @@ function validatePostPayload(
   const featured = requiredBoolean(data.featured);
 
   if (
+    !eventId.ok ||
     !sourceModule.ok ||
     !sourceWinnerId.ok ||
     !winnerName.ok ||
@@ -830,6 +851,7 @@ function validatePostPayload(
   return {
     ok: true,
     value: {
+      event_id: eventId.value,
       source_module: sourceModule.value,
       source_winner_id: sourceWinnerId.value,
       winner_name: winnerName.value,
@@ -853,6 +875,7 @@ function validateMediaPayload(
 ): ValidationResult<MediaMutationPayload> {
   if (
     !hasExactKeys(data, [
+      "event_id",
       "title",
       "media_type",
       "media_url",
@@ -865,6 +888,7 @@ function validateMediaPayload(
     return { ok: false };
   }
 
+  const eventId = requiredUuidInput(data.event_id);
   const title = requiredText(data.title, 300);
   const mediaType = enumText(data.media_type, MEDIA_TYPES);
   const mediaUrl = requiredUrl(data.media_url);
@@ -874,6 +898,7 @@ function validateMediaPayload(
   const featured = requiredBoolean(data.featured);
 
   if (
+    !eventId.ok ||
     !title.ok ||
     !mediaType.ok ||
     !mediaUrl.ok ||
@@ -888,6 +913,7 @@ function validateMediaPayload(
   return {
     ok: true,
     value: {
+      event_id: eventId.value,
       title: title.value,
       media_type: mediaType.value,
       media_url: mediaUrl.value,
@@ -989,6 +1015,7 @@ function validatePostPatchData(
 ): ValidationResult<PostPatchData> {
   if (
     !hasExactKeys(data, [
+      "event_id",
       "source_module",
       "source_winner_id",
       "winner_name",
@@ -1007,6 +1034,7 @@ function validatePostPatchData(
     return { ok: false };
   }
 
+  const eventId = requiredUuidInput(data.event_id);
   const sourceModule = enumText(data.source_module, SOURCE_MODULES);
   const sourceWinnerId = optionalText(data.source_winner_id, 300);
   const winnerName = optionalText(data.winner_name, 200);
@@ -1022,6 +1050,7 @@ function validatePostPatchData(
   const featured = requiredBoolean(data.featured);
 
   if (
+    !eventId.ok ||
     !sourceModule.ok ||
     !sourceWinnerId.ok ||
     !winnerName.ok ||
@@ -1042,6 +1071,7 @@ function validatePostPatchData(
   return {
     ok: true,
     value: {
+      event_id: eventId.value,
       source_module: sourceModule.value,
       source_winner_id: sourceWinnerId.value,
       winner_name: winnerName.value,
@@ -1064,6 +1094,7 @@ function validateMediaPatchData(
 ): ValidationResult<MediaPatchData> {
   if (
     !hasExactKeys(data, [
+      "event_id",
       "title",
       "media_type",
       "media_url",
@@ -1076,6 +1107,7 @@ function validateMediaPatchData(
     return { ok: false };
   }
 
+  const eventId = requiredUuidInput(data.event_id);
   const title = requiredText(data.title, 300);
   const mediaType = enumText(data.media_type, MEDIA_TYPES);
   const mediaUrl = requiredUrl(data.media_url);
@@ -1085,6 +1117,7 @@ function validateMediaPatchData(
   const featured = requiredBoolean(data.featured);
 
   if (
+    !eventId.ok ||
     !title.ok ||
     !mediaType.ok ||
     !mediaUrl.ok ||
@@ -1099,6 +1132,7 @@ function validateMediaPatchData(
   return {
     ok: true,
     value: {
+      event_id: eventId.value,
       title: title.value,
       media_type: mediaType.value,
       media_url: mediaUrl.value,
@@ -1776,6 +1810,9 @@ function getControlledRpcError(error: unknown) {
 function patchRpcErrorStatus(code: string | null) {
   if (
     code === "INVALID_PAYLOAD" ||
+    code === "EVENT_REQUIRED" ||
+    code === "EVENT_NOT_FOUND" ||
+    code === "WINNER_NOT_FOUND" ||
     code === "INVALID_ASSET_ACTION" ||
     code === "ASSET_PURPOSE_MISMATCH" ||
     code === "ASSET_KIND_MISMATCH"
@@ -1787,6 +1824,8 @@ function patchRpcErrorStatus(code: string | null) {
 
   if (
     code === "STALE_RESOURCE" ||
+    code === "WINNER_EVENT_MISMATCH" ||
+    code === "EVENT_HAS_CHILDREN" ||
     code === "STALE_ASSET_STATE" ||
     code === "ASSET_DUPLICATE" ||
     code === "ASSET_NOT_FOUND" ||
@@ -1803,6 +1842,29 @@ function patchRpcErrorStatus(code: string | null) {
 }
 
 function patchRpcErrorBody(status: number, code: string | null) {
+  if (code === "EVENT_REQUIRED") {
+    return { ok: false, error: "Selecciona un evento." };
+  }
+  if (code === "EVENT_NOT_FOUND") {
+    return { ok: false, error: "El evento seleccionado no existe." };
+  }
+  if (code === "WINNER_NOT_FOUND") {
+    return { ok: false, error: "El ganador seleccionado no existe." };
+  }
+  if (code === "WINNER_EVENT_MISMATCH") {
+    return {
+      ok: false,
+      error: "El ganador y el contenido de galer\u00eda deben pertenecer al mismo evento.",
+    };
+  }
+  if (code === "EVENT_HAS_CHILDREN") {
+    return {
+      ok: false,
+      error:
+        "No se puede eliminar el evento porque tiene ganadores o contenido de galer\u00eda asociado. Puedes ocultarlo desactivando Publicado.",
+    };
+  }
+
   if (status === 400) return { ok: false, error: "Solicitud inv\u00e1lida" };
   if (status === 404) return { ok: false, error: "No encontrado" };
   if (status === 409) {
@@ -1991,6 +2053,7 @@ function toAdminPost(
 
   return {
     id: row.id,
+    event_id: optionalUuid(row.event_id, stats),
     source_module: requiredString(row.source_module),
     source_winner_id: nullableString(row.source_winner_id),
     winner_name: nullableString(row.winner_name),
@@ -2037,6 +2100,7 @@ function toAdminMedia(
 
   return {
     id: row.id,
+    event_id: optionalUuid(row.event_id, stats),
     title: requiredString(row.title),
     media_type: mediaType,
     media_url: requiredString(row.media_url),
@@ -2227,7 +2291,7 @@ async function createResourceWithRpc(
   resource: Resource,
   payload: MutationPayload,
   assets: MutationAssets
-): Promise<ValidationResult<string>> {
+): Promise<RpcUpdateResult> {
   if (resource === "event") {
     const eventAssets = assets as Extract<
       MutationAssets,
@@ -2245,12 +2309,12 @@ async function createResourceWithRpc(
         code: getSafeErrorCode(result.error),
         rpc: getControlledRpcError(result.error) ?? "UNCONTROLLED",
       });
-      return { ok: false };
+      return { ok: false, reason: "rpc_error", error: result.error };
     }
 
     return typeof result.data === "string" && UUID_RE.test(result.data)
       ? { ok: true, value: result.data }
-      : { ok: false };
+      : { ok: false, reason: "invalid_result" };
   }
 
   if (resource === "post") {
@@ -2267,12 +2331,12 @@ async function createResourceWithRpc(
         code: getSafeErrorCode(result.error),
         rpc: getControlledRpcError(result.error) ?? "UNCONTROLLED",
       });
-      return { ok: false };
+      return { ok: false, reason: "rpc_error", error: result.error };
     }
 
     return typeof result.data === "string" && UUID_RE.test(result.data)
       ? { ok: true, value: result.data }
-      : { ok: false };
+      : { ok: false, reason: "invalid_result" };
   }
 
   const mediaAssets = assets as Extract<MutationAssets, { media_url: string | null }>;
@@ -2287,12 +2351,12 @@ async function createResourceWithRpc(
       code: getSafeErrorCode(result.error),
       rpc: getControlledRpcError(result.error) ?? "UNCONTROLLED",
     });
-    return { ok: false };
+    return { ok: false, reason: "rpc_error", error: result.error };
   }
 
   return typeof result.data === "string" && UUID_RE.test(result.data)
     ? { ok: true, value: result.data }
-    : { ok: false };
+    : { ok: false, reason: "invalid_result" };
 }
 
 async function updateResourceWithRpc(
@@ -2459,10 +2523,21 @@ async function handleMutation(req: NextRequest, operation: "insert" | "update") 
 
       const created = await createResourceWithRpc(supabase, resource, payload, assets);
       if (!created.ok) {
-        console.error("[admin/solo-ganadores] create rpc returned invalid result", {
+        if (created.reason === "invalid_result") {
+          console.error("[admin/solo-ganadores] create rpc returned invalid result", {
+            resource,
+          });
+          return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+        }
+
+        const rpc = getControlledRpcError(created.error);
+        const status = patchRpcErrorStatus(rpc);
+        console.error("[admin/solo-ganadores] create rpc failed", {
           resource,
+          code: getSafeErrorCode(created.error),
+          rpc: rpc ?? "UNCONTROLLED",
         });
-        return withAuthCookies(json(500, { ok: false, error: "No disponible" }), gate);
+        return withAuthCookies(json(status, patchRpcErrorBody(status, rpc)), gate);
       }
 
       return withAuthCookies(json(201, { ok: true, id: created.value }), gate);
@@ -2660,14 +2735,14 @@ export async function GET(req: NextRequest) {
       supabase
         .from("solo_ganadores_posts")
         .select(
-          "id,source_module,source_winner_id,winner_name,winner_alias,title,prize_name,description,photo_url,video_url,interview_url,event_date,published,featured,created_at,updated_at"
+          "id,event_id,source_module,source_winner_id,winner_name,winner_alias,title,prize_name,description,photo_url,video_url,interview_url,event_date,published,featured,created_at,updated_at"
         )
         .order("created_at", { ascending: false, nullsFirst: false })
         .limit(200),
       supabase
         .from("solo_ganadores_media")
         .select(
-          "id,title,media_type,media_url,description,related_winner_id,published,featured,created_at,updated_at"
+          "id,event_id,title,media_type,media_url,description,related_winner_id,published,featured,created_at,updated_at"
         )
         .order("created_at", { ascending: false, nullsFirst: false })
         .limit(300),

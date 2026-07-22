@@ -68,6 +68,7 @@ type SoloEvent = {
 
 type SoloPost = {
   id: string;
+  event_id: string | null;
   source_module: string;
   source_winner_id: string | null;
   winner_name: string | null;
@@ -89,6 +90,7 @@ type SoloPost = {
 
 type SoloMedia = {
   id: string;
+  event_id: string | null;
   title: string;
   media_type: string;
   media_url: string;
@@ -115,12 +117,14 @@ type EventEditSnapshot = {
 
 type PostEditSnapshot = {
   updatedAt: string | null;
+  originalEventId: string | null;
   photo: AdminEditAssetSnapshot;
   video: AdminEditAssetSnapshot;
 };
 
 type MediaEditSnapshot = {
   updatedAt: string | null;
+  originalEventId: string | null;
   originalMediaType: string;
   media: AdminEditAssetSnapshot;
 };
@@ -244,6 +248,7 @@ type EventFormData = {
 };
 
 type PostFormData = {
+  event_id: string;
   source_module: string;
   source_winner_id: string | null;
   winner_name: string | null;
@@ -260,6 +265,7 @@ type PostFormData = {
 };
 
 type MediaFormData = {
+  event_id: string;
   title: string;
   media_type: string;
   media_url: string;
@@ -325,6 +331,8 @@ const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
 const VIDEO_MIME = "video/mp4";
 const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const emptyEvent = {
   id: "",
@@ -345,6 +353,7 @@ const emptyEvent = {
 
 const emptyPost = {
   id: "",
+  event_id: "",
   source_module: "manual",
   source_winner_id: "",
   winner_name: "",
@@ -362,6 +371,7 @@ const emptyPost = {
 
 const emptyMedia = {
   id: "",
+  event_id: "",
   title: "",
   media_type: "foto",
   media_url: "",
@@ -444,6 +454,10 @@ function normalizedAssetId(value: string | null | undefined) {
 
 function isValidAssetUuid(value: string) {
   return UUID_V4_PATTERN.test(value);
+}
+
+function isValidUuid(value: string) {
+  return UUID_PATTERN.test(value.trim());
 }
 
 function isValidHttpUrl(value: string) {
@@ -700,6 +714,7 @@ function eventDataFromForm(form: typeof emptyEvent): EventFormData {
 
 function postDataFromForm(form: typeof emptyPost): PostFormData {
   return {
+    event_id: form.event_id.trim(),
     source_module: form.source_module || "manual",
     source_winner_id: cleanNullable(form.source_winner_id),
     winner_name: cleanNullable(form.winner_name),
@@ -718,6 +733,7 @@ function postDataFromForm(form: typeof emptyPost): PostFormData {
 
 function mediaDataFromForm(form: typeof emptyMedia): MediaFormData {
   return {
+    event_id: form.event_id.trim(),
     title: form.title.trim(),
     media_type: form.media_type || "foto",
     media_url: form.media_url.trim(),
@@ -1010,6 +1026,10 @@ function safeRequestLog(err: unknown) {
 
 function saveRequestErrorMessage(err: unknown) {
   if (err instanceof AdminRequestError) {
+    if (err.code === "STALE_RESOURCE") {
+      return "El registro fue modificado en otra sesiÃ³n. Actualiza la lista y vuelve a pulsar Editar antes de guardar nuevamente.";
+    }
+    if (err.message && err.message !== "No disponible") return err.message;
     if (err.status === 409) {
       return "El registro fue modificado en otra sesión. Actualiza la lista y vuelve a pulsar Editar antes de guardar nuevamente.";
     }
@@ -1025,7 +1045,11 @@ function saveRequestErrorMessage(err: unknown) {
 
 function deleteRequestErrorMessage(err: unknown) {
   if (err instanceof AdminRequestError) {
-    if (err.status === 409 || err.code === "STALE_RESOURCE") {
+    if (err.code === "STALE_RESOURCE") {
+      return "El registro fue modificado en otra sesi\u00f3n. Actualiza la lista antes de eliminarlo.";
+    }
+    if (err.message && err.message !== "No disponible") return err.message;
+    if (err.status === 409) {
       return "El registro fue modificado en otra sesi\u00f3n. Actualiza la lista antes de eliminarlo.";
     }
     if (err.status === 404) return "El registro ya no est\u00e1 disponible.";
@@ -1100,6 +1124,18 @@ export default function AdminSoloGanadoresPage() {
   const eventEditBlocked = eventEditBlockReasonValue !== null;
   const postEditBlocked = postEditBlockReasonValue !== null;
   const mediaEditBlocked = mediaEditBlockReasonValue !== null;
+  const hasEvents = events.length > 0;
+  const eventsById = useMemo(() => {
+    const map = new Map<string, SoloEvent>();
+    for (const event of events) {
+      map.set(event.id, event);
+    }
+    return map;
+  }, [events]);
+  const mediaWinnerOptions = useMemo(() => {
+    if (!mediaForm.event_id) return [];
+    return posts.filter((post) => post.event_id === mediaForm.event_id);
+  }, [mediaForm.event_id, posts]);
 
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -1110,6 +1146,79 @@ export default function AdminSoloGanadoresPage() {
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/admin");
+  }
+
+  function eventOptionLabel(event: SoloEvent) {
+    return event.event_date
+      ? `${event.title} - ${formatDate(event.event_date)}`
+      : event.title;
+  }
+
+  function eventLabel(eventId: string | null) {
+    if (!eventId) return "Sin evento clasificado";
+
+    return eventsById.get(eventId)?.title || "Evento no disponible";
+  }
+
+  function validateSelectedEvent(eventId: string) {
+    const clean = eventId.trim();
+    return Boolean(clean && isValidUuid(clean) && eventsById.has(clean));
+  }
+
+  function requireSelectedEvent(eventId: string) {
+    if (!hasEvents) {
+      setMessage({
+        type: "error",
+        text: "Crea primero un evento antes de registrar ganadores o contenido de galer\u00eda.",
+      });
+      return false;
+    }
+
+    if (!validateSelectedEvent(eventId)) {
+      setMessage({ type: "error", text: "Selecciona un evento." });
+      return false;
+    }
+
+    return true;
+  }
+
+  function updateMediaEvent(nextEventId: string) {
+    setMediaForm((current) => {
+      const shouldKeepWinner =
+        nextEventId &&
+        current.related_winner_id &&
+        posts.some(
+          (post) => post.id === current.related_winner_id && post.event_id === nextEventId
+        );
+
+      return {
+        ...current,
+        event_id: nextEventId,
+        related_winner_id: shouldKeepWinner ? current.related_winner_id : "",
+      };
+    });
+  }
+
+  function confirmPostHistoricalEventChange() {
+    const postEventId = postForm.event_id.trim();
+    return !(
+      postForm.id &&
+      postEditSnapshot?.originalEventId &&
+      postEditSnapshot.originalEventId !== postEventId
+    )
+      ? true
+      : confirm("Est\u00e1s cambiando el evento hist\u00f3rico de este ganador. \u00bfDeseas continuar?");
+  }
+
+  function confirmMediaHistoricalEventChange() {
+    const mediaEventId = mediaForm.event_id.trim();
+    return !(
+      mediaForm.id &&
+      mediaEditSnapshot?.originalEventId &&
+      mediaEditSnapshot.originalEventId !== mediaEventId
+    )
+      ? true
+      : confirm("Est\u00e1s cambiando el evento hist\u00f3rico de este contenido. \u00bfDeseas continuar?");
   }
 
   async function uploadAdminImage(file: File, purpose: AdminImagePurpose) {
@@ -1511,6 +1620,10 @@ export default function AdminSoloGanadoresPage() {
   }
 
   async function savePost() {
+    if (!requireSelectedEvent(postForm.event_id)) {
+      return;
+    }
+
     if (postEditBlockReasonValue) {
       setMessage({
         type: "error",
@@ -1521,6 +1634,10 @@ export default function AdminSoloGanadoresPage() {
 
     if (!postForm.title.trim()) {
       setMessage({ type: "error", text: "El ganador necesita un título." });
+      return;
+    }
+
+    if (!confirmPostHistoricalEventChange()) {
       return;
     }
 
@@ -1561,6 +1678,10 @@ export default function AdminSoloGanadoresPage() {
   }
 
   async function saveMedia() {
+    if (!requireSelectedEvent(mediaForm.event_id)) {
+      return;
+    }
+
     if (mediaEditBlockReasonValue) {
       setMessage({
         type: "error",
@@ -1576,6 +1697,10 @@ export default function AdminSoloGanadoresPage() {
 
     if (!mediaForm.media_url.trim()) {
       setMessage({ type: "error", text: "Debes colocar la URL del archivo o video." });
+      return;
+    }
+
+    if (!confirmMediaHistoricalEventChange()) {
       return;
     }
 
@@ -2275,6 +2400,18 @@ export default function AdminSoloGanadoresPage() {
               </button>
             </div>
 
+            {!hasEvents ? (
+              <div className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+                Crea primero un evento antes de registrar ganadores o contenido de galer\u00eda.
+              </div>
+            ) : null}
+
+            {postForm.id && !postForm.event_id ? (
+              <div className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+                Este registro debe asignarse a un evento antes de guardar.
+              </div>
+            ) : null}
+
             <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className={label}>Título *</label>
@@ -2284,6 +2421,22 @@ export default function AdminSoloGanadoresPage() {
                   onChange={(e) => setPostForm((p) => ({ ...p, title: e.target.value }))}
                   placeholder="Ganador destacado de Voto Claro"
                 />
+              </div>
+
+              <div>
+                <label className={label}>Evento *</label>
+                <select
+                  className={input}
+                  value={postForm.event_id}
+                  onChange={(e) => setPostForm((p) => ({ ...p, event_id: e.target.value }))}
+                >
+                  <option value="">Selecciona un evento</option>
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {eventOptionLabel(event)}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -2374,6 +2527,14 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
+                    if (!requireSelectedEvent(postForm.event_id)) {
+                      e.currentTarget.value = "";
+                      return;
+                    }
+                    if (!confirmPostHistoricalEventChange()) {
+                      e.currentTarget.value = "";
+                      return;
+                    }
                     const asset = await uploadAdminImage(file, "post_photo");
                     if (asset) {
                       setPostPhotoAsset(asset);
@@ -2413,6 +2574,14 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
+                    if (!requireSelectedEvent(postForm.event_id)) {
+                      e.currentTarget.value = "";
+                      return;
+                    }
+                    if (!confirmPostHistoricalEventChange()) {
+                      e.currentTarget.value = "";
+                      return;
+                    }
                     const asset = await uploadAdminVideo(file, "post_video");
                     if (asset) {
                       setPostVideoAsset(asset);
@@ -2495,6 +2664,9 @@ export default function AdminSoloGanadoresPage() {
                     <div>
                       <div className="text-sm font-extrabold text-slate-900">{p.title}</div>
                       <div className="mt-1 text-xs text-slate-600">
+                        Evento: {eventLabel(p.event_id)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">
                         {p.winner_alias || p.winner_name || "Sin nombre visible"} • {p.source_module}
                       </div>
                       <div className="mt-1 text-xs text-slate-600">
@@ -2510,6 +2682,7 @@ export default function AdminSoloGanadoresPage() {
                         onClick={() => {
                           setPostForm({
                             id: p.id,
+                            event_id: p.event_id ?? "",
                             source_module: p.source_module || "manual",
                             source_winner_id: p.source_winner_id || "",
                             winner_name: p.winner_name || "",
@@ -2528,6 +2701,7 @@ export default function AdminSoloGanadoresPage() {
                           setPostVideoAsset(null);
                           setPostEditSnapshot({
                             updatedAt: p.updated_at,
+                            originalEventId: p.event_id,
                             photo: buildEditAssetSnapshot(p.photo_url, p.photo_asset),
                             video: buildEditAssetSnapshot(p.video_url, p.video_asset),
                           });
@@ -2576,6 +2750,18 @@ export default function AdminSoloGanadoresPage() {
                 + Nuevo contenido
               </button>
             </div>
+
+            {!hasEvents ? (
+              <div className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+                Crea primero un evento antes de registrar ganadores o contenido de galer\u00eda.
+              </div>
+            ) : null}
+
+            {mediaForm.id && !mediaForm.event_id ? (
+              <div className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+                Este registro debe asignarse a un evento antes de guardar.
+              </div>
+            ) : null}
 
             <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -2631,6 +2817,14 @@ export default function AdminSoloGanadoresPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
+                    if (!requireSelectedEvent(mediaForm.event_id)) {
+                      e.currentTarget.value = "";
+                      return;
+                    }
+                    if (!confirmMediaHistoricalEventChange()) {
+                      e.currentTarget.value = "";
+                      return;
+                    }
                     let asset: AdminPendingAsset | null = null;
                     const expectedPurpose = expectedMediaPurpose(mediaForm.media_type);
 
@@ -2679,16 +2873,35 @@ export default function AdminSoloGanadoresPage() {
               </div>
 
               <div className="md:col-span-2">
+                <label className={label}>Evento *</label>
+                <select
+                  className={input}
+                  value={mediaForm.event_id}
+                  onChange={(e) => updateMediaEvent(e.target.value)}
+                >
+                  <option value="">Selecciona un evento</option>
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {eventOptionLabel(event)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
                 <label className={label}>Relacionar con ganador opcional</label>
                 <select
                   className={input}
-                  value={mediaForm.related_winner_id}
+                  value={mediaForm.event_id ? mediaForm.related_winner_id : ""}
+                  disabled={!mediaForm.event_id}
                   onChange={(e) =>
                     setMediaForm((p) => ({ ...p, related_winner_id: e.target.value }))
                   }
                 >
-                  <option value="">Sin relación</option>
-                  {posts.map((p) => (
+                  <option value="">
+                    {mediaForm.event_id ? "Sin relación" : "Selecciona primero un evento"}
+                  </option>
+                  {mediaWinnerOptions.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.title} — {p.winner_alias || p.winner_name || "Ganador"}
                     </option>
@@ -2739,6 +2952,9 @@ export default function AdminSoloGanadoresPage() {
                     <div>
                       <div className="text-sm font-extrabold text-slate-900">{m.title}</div>
                       <div className="mt-1 text-xs text-slate-600">
+                        Evento: {eventLabel(m.event_id)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">
                         {m.media_type} • {m.published ? "Publicado" : "Borrador"}{" "}
                         {m.featured ? "• Destacado" : ""}
                       </div>
@@ -2752,6 +2968,7 @@ export default function AdminSoloGanadoresPage() {
                         onClick={() => {
                           setMediaForm({
                             id: m.id,
+                            event_id: m.event_id ?? "",
                             title: m.title || "",
                             media_type: m.media_type || "foto",
                             media_url: m.media_url || "",
@@ -2763,6 +2980,7 @@ export default function AdminSoloGanadoresPage() {
                           setMediaAsset(null);
                           setMediaEditSnapshot({
                             updatedAt: m.updated_at,
+                            originalEventId: m.event_id,
                             originalMediaType: normalizedMediaType(m.media_type),
                             media: buildEditAssetSnapshot(m.media_url, m.media_asset),
                           });
