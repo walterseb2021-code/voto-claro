@@ -17,12 +17,14 @@ type EventDbRow = {
   recognitions: string | null;
   main_image_url: string | null;
   promo_video_url: string | null;
+  status: string | null;
   featured: boolean | null;
   created_at: string | null;
 };
 
 type PostDbRow = {
   id: string;
+  event_id: string | null;
   source_module: string | null;
   winner_name: string | null;
   winner_alias: string | null;
@@ -39,10 +41,12 @@ type PostDbRow = {
 
 type MediaDbRow = {
   id: string;
+  event_id: string | null;
   title: string | null;
   media_type: string | null;
   media_url: string | null;
   description: string | null;
+  related_winner_id: string | null;
   featured: boolean | null;
   created_at: string | null;
 };
@@ -59,10 +63,13 @@ type PublicEvent = {
   recognitions: string | null;
   main_image_url: string | null;
   promo_video_url: string | null;
+  status: string;
+  featured: boolean;
 };
 
-type PublicPost = {
+type PublicWinner = {
   id: string;
+  event_id: string | null;
   source_module: string;
   winner_name: string | null;
   winner_alias: string | null;
@@ -73,25 +80,40 @@ type PublicPost = {
   video_url: string | null;
   interview_url: string | null;
   event_date: string | null;
+  featured: boolean;
+};
+
+type PublicRelatedWinner = {
+  id: string;
+  title: string;
+  winner_name: string | null;
+  winner_alias: string | null;
 };
 
 type PublicMedia = {
   id: string;
+  event_id: string | null;
   title: string;
   media_type: string;
   media_url: string;
   description: string | null;
+  featured: boolean;
+  related_winner_id: string | null;
+  related_winner: PublicRelatedWinner | null;
 };
 
-type Selectable<T> = {
-  item: T;
-  featured: boolean;
+type PublicEventGroup = {
+  event: PublicEvent;
+  winners: PublicWinner[];
+  media: PublicMedia[];
 };
 
 type SanitizeStats = {
   excludedEvents: number;
-  excludedPosts: number;
+  excludedWinners: number;
   excludedMedia: number;
+  excludedHiddenWinners: number;
+  excludedHiddenMedia: number;
   invalidOptionalUrls: number;
 };
 
@@ -175,56 +197,78 @@ function optionalUrl(value: string | null, stats: SanitizeStats) {
   return validUrl;
 }
 
-function toPublicEvent(row: EventDbRow, stats: SanitizeStats): Selectable<PublicEvent> | null {
+function nullableUuid(value: string | null) {
+  const clean = typeof value === "string" ? value.trim() : "";
+  if (!clean) return null;
+  return UUID_RE.test(clean) ? clean : undefined;
+}
+
+function toPublicEvent(row: EventDbRow, stats: SanitizeStats): PublicEvent | null {
   if (!UUID_RE.test(row.id)) {
     stats.excludedEvents += 1;
     return null;
   }
 
   return {
+    id: row.id,
+    title: row.title ?? "",
+    semester: row.semester ?? null,
+    event_date: row.event_date ?? null,
+    location_name: row.location_name ?? null,
+    address: row.address ?? null,
+    city: row.city ?? null,
+    description: row.description ?? null,
+    recognitions: row.recognitions ?? null,
+    main_image_url: optionalUrl(row.main_image_url, stats),
+    promo_video_url: optionalUrl(row.promo_video_url, stats),
+    status: row.status ?? "",
     featured: row.featured === true,
-    item: {
-      id: row.id,
-      title: row.title ?? "",
-      semester: row.semester ?? null,
-      event_date: row.event_date ?? null,
-      location_name: row.location_name ?? null,
-      address: row.address ?? null,
-      city: row.city ?? null,
-      description: row.description ?? null,
-      recognitions: row.recognitions ?? null,
-      main_image_url: optionalUrl(row.main_image_url, stats),
-      promo_video_url: optionalUrl(row.promo_video_url, stats),
-    },
   };
 }
 
-function toPublicPost(row: PostDbRow, stats: SanitizeStats): Selectable<PublicPost> | null {
+function toPublicWinner(row: PostDbRow, stats: SanitizeStats): PublicWinner | null {
   if (!UUID_RE.test(row.id)) {
-    stats.excludedPosts += 1;
+    stats.excludedWinners += 1;
+    return null;
+  }
+
+  const eventId = nullableUuid(row.event_id);
+  if (eventId === undefined) {
+    stats.excludedWinners += 1;
     return null;
   }
 
   return {
+    id: row.id,
+    event_id: eventId,
+    source_module: row.source_module ?? "",
+    winner_name: row.winner_name ?? null,
+    winner_alias: row.winner_alias ?? null,
+    title: row.title ?? "",
+    prize_name: row.prize_name ?? null,
+    description: row.description ?? null,
+    photo_url: optionalUrl(row.photo_url, stats),
+    video_url: optionalUrl(row.video_url, stats),
+    interview_url: optionalUrl(row.interview_url, stats),
+    event_date: row.event_date ?? null,
     featured: row.featured === true,
-    item: {
-      id: row.id,
-      source_module: row.source_module ?? "",
-      winner_name: row.winner_name ?? null,
-      winner_alias: row.winner_alias ?? null,
-      title: row.title ?? "",
-      prize_name: row.prize_name ?? null,
-      description: row.description ?? null,
-      photo_url: optionalUrl(row.photo_url, stats),
-      video_url: optionalUrl(row.video_url, stats),
-      interview_url: optionalUrl(row.interview_url, stats),
-      event_date: row.event_date ?? null,
-    },
   };
 }
 
-function toPublicMedia(row: MediaDbRow, stats: SanitizeStats): Selectable<PublicMedia> | null {
+function toPublicMedia(row: MediaDbRow, stats: SanitizeStats): PublicMedia | null {
   if (!UUID_RE.test(row.id)) {
+    stats.excludedMedia += 1;
+    return null;
+  }
+
+  const eventId = nullableUuid(row.event_id);
+  if (eventId === undefined) {
+    stats.excludedMedia += 1;
+    return null;
+  }
+
+  const relatedWinnerId = nullableUuid(row.related_winner_id);
+  if (relatedWinnerId === undefined) {
     stats.excludedMedia += 1;
     return null;
   }
@@ -236,37 +280,116 @@ function toPublicMedia(row: MediaDbRow, stats: SanitizeStats): Selectable<Public
   }
 
   return {
+    id: row.id,
+    event_id: eventId,
+    title: row.title ?? "",
+    media_type: row.media_type ?? "",
+    media_url: mediaUrl,
+    description: row.description ?? null,
     featured: row.featured === true,
-    item: {
-      id: row.id,
-      title: row.title ?? "",
-      media_type: row.media_type ?? "",
-      media_url: mediaUrl,
-      description: row.description ?? null,
-    },
+    related_winner_id: relatedWinnerId,
+    related_winner: null,
   };
 }
 
-function chooseEvent(events: Selectable<PublicEvent>[]) {
-  const selected = events.find((event) => event.featured) ?? events[0] ?? null;
-  return selected ? [selected.item] : [];
+function toRelatedWinner(winner: PublicWinner): PublicRelatedWinner {
+  return {
+    id: winner.id,
+    title: winner.title,
+    winner_name: winner.winner_name,
+    winner_alias: winner.winner_alias,
+  };
 }
 
-function choosePosts(posts: Selectable<PublicPost>[]) {
-  const featured = posts.filter((post) => post.featured);
-  return (featured.length ? featured : posts.slice(0, 6)).map((post) => post.item);
-}
+function groupPublicContent(
+  events: PublicEvent[],
+  winners: PublicWinner[],
+  mediaItems: PublicMedia[],
+  stats: SanitizeStats
+) {
+  const publishedEventIds = new Set(events.map((event) => event.id));
+  const groups = events.map<PublicEventGroup>((event) => ({
+    event,
+    winners: [],
+    media: [],
+  }));
+  const groupsByEventId = new Map(groups.map((group) => [group.event.id, group]));
+  const legacy: { winners: PublicWinner[]; media: PublicMedia[] } = {
+    winners: [],
+    media: [],
+  };
+  const visibleWinnersById = new Map<string, PublicWinner>();
 
-function chooseMedia(media: Selectable<PublicMedia>[]) {
-  const featured = media.filter((item) => item.featured);
-  return (featured.length ? featured : media.slice(0, 9)).map((item) => item.item);
+  for (const winner of winners) {
+    if (winner.event_id === null) {
+      legacy.winners.push(winner);
+      visibleWinnersById.set(winner.id, winner);
+      continue;
+    }
+
+    const group = groupsByEventId.get(winner.event_id);
+    if (!group || !publishedEventIds.has(winner.event_id)) {
+      stats.excludedHiddenWinners += 1;
+      continue;
+    }
+
+    group.winners.push(winner);
+    visibleWinnersById.set(winner.id, winner);
+  }
+
+  for (const mediaItem of mediaItems) {
+    if (mediaItem.event_id !== null && !publishedEventIds.has(mediaItem.event_id)) {
+      stats.excludedHiddenMedia += 1;
+      continue;
+    }
+
+    const relatedWinner =
+      mediaItem.related_winner_id === null
+        ? null
+        : visibleWinnersById.get(mediaItem.related_winner_id) ?? null;
+    const publicMediaItem: PublicMedia =
+      relatedWinner && relatedWinner.event_id === mediaItem.event_id
+        ? {
+            ...mediaItem,
+            related_winner_id: relatedWinner.id,
+            related_winner: toRelatedWinner(relatedWinner),
+          }
+        : {
+            ...mediaItem,
+            related_winner_id: null,
+            related_winner: null,
+          };
+
+    if (publicMediaItem.event_id === null) {
+      legacy.media.push(publicMediaItem);
+      continue;
+    }
+
+    const group = groupsByEventId.get(publicMediaItem.event_id);
+    if (!group) {
+      stats.excludedHiddenMedia += 1;
+      continue;
+    }
+
+    group.media.push(publicMediaItem);
+  }
+
+  const featuredEvent = events.find((event) => event.featured) ?? events[0] ?? null;
+
+  return {
+    featuredEventId: featuredEvent?.id ?? null,
+    events: groups,
+    legacy,
+  };
 }
 
 function warnIfSanitized(stats: SanitizeStats) {
   if (
     stats.excludedEvents === 0 &&
-    stats.excludedPosts === 0 &&
+    stats.excludedWinners === 0 &&
     stats.excludedMedia === 0 &&
+    stats.excludedHiddenWinners === 0 &&
+    stats.excludedHiddenMedia === 0 &&
     stats.invalidOptionalUrls === 0
   ) {
     return;
@@ -274,8 +397,10 @@ function warnIfSanitized(stats: SanitizeStats) {
 
   console.warn("[solo-ganadores/public] sanitized public rows", {
     events: stats.excludedEvents,
-    posts: stats.excludedPosts,
+    winners: stats.excludedWinners,
     media: stats.excludedMedia,
+    hiddenWinners: stats.excludedHiddenWinners,
+    hiddenMedia: stats.excludedHiddenMedia,
     optionalUrls: stats.invalidOptionalUrls,
   });
 }
@@ -304,78 +429,90 @@ export async function GET(req: Request) {
       supabase
         .from("solo_ganadores_events")
         .select(
-          "id,title,semester,event_date,location_name,address,city,description,recognitions,main_image_url,promo_video_url,featured,created_at"
+          "id,title,semester,event_date,location_name,address,city,description,recognitions,main_image_url,promo_video_url,status,featured,created_at"
         )
         .eq("published", true)
         .order("featured", { ascending: false, nullsFirst: false })
+        .order("event_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false, nullsFirst: false })
-        .limit(10),
+        .order("title", { ascending: true, nullsFirst: false })
+        .limit(50)
+        .returns<EventDbRow[]>(),
       supabase
         .from("solo_ganadores_posts")
         .select(
-          "id,source_module,winner_name,winner_alias,title,prize_name,description,photo_url,video_url,interview_url,event_date,featured,created_at"
+          "id,event_id,source_module,winner_name,winner_alias,title,prize_name,description,photo_url,video_url,interview_url,event_date,featured,created_at"
         )
         .eq("published", true)
         .order("featured", { ascending: false, nullsFirst: false })
+        .order("event_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false, nullsFirst: false })
-        .limit(20),
+        .order("title", { ascending: true, nullsFirst: false })
+        .limit(500)
+        .returns<PostDbRow[]>(),
       supabase
         .from("solo_ganadores_media")
-        .select("id,title,media_type,media_url,description,featured,created_at")
+        .select("id,event_id,title,media_type,media_url,description,related_winner_id,featured,created_at")
         .eq("published", true)
         .order("featured", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false, nullsFirst: false })
-        .limit(30),
+        .order("title", { ascending: true, nullsFirst: false })
+        .limit(500)
+        .returns<MediaDbRow[]>(),
     ]);
 
     if (eventsResult.error) {
-      console.error("[solo-ganadores/public] events lookup failed", eventsResult.error);
+      console.error("[solo-ganadores/public] events lookup failed");
       return json(500, { ok: false, error: "No disponible" });
     }
 
     if (postsResult.error) {
-      console.error("[solo-ganadores/public] posts lookup failed", postsResult.error);
+      console.error("[solo-ganadores/public] winners lookup failed");
       return json(500, { ok: false, error: "No disponible" });
     }
 
     if (mediaResult.error) {
-      console.error("[solo-ganadores/public] media lookup failed", mediaResult.error);
+      console.error("[solo-ganadores/public] media lookup failed");
       return json(500, { ok: false, error: "No disponible" });
     }
 
     const stats: SanitizeStats = {
       excludedEvents: 0,
-      excludedPosts: 0,
+      excludedWinners: 0,
       excludedMedia: 0,
+      excludedHiddenWinners: 0,
+      excludedHiddenMedia: 0,
       invalidOptionalUrls: 0,
     };
 
-    const eventRows = (eventsResult.data ?? []) as EventDbRow[];
-    const postRows = (postsResult.data ?? []) as PostDbRow[];
-    const mediaRows = (mediaResult.data ?? []) as MediaDbRow[];
+    const eventRows = eventsResult.data ?? [];
+    const postRows = postsResult.data ?? [];
+    const mediaRows = mediaResult.data ?? [];
 
     const events = eventRows
       .map((row) => toPublicEvent(row, stats))
-      .filter((event): event is Selectable<PublicEvent> => event !== null);
+      .filter((event): event is PublicEvent => event !== null);
 
-    const posts = postRows
-      .map((row) => toPublicPost(row, stats))
-      .filter((post): post is Selectable<PublicPost> => post !== null);
+    const winners = postRows
+      .map((row) => toPublicWinner(row, stats))
+      .filter((winner): winner is PublicWinner => winner !== null);
 
     const media = mediaRows
       .map((row) => toPublicMedia(row, stats))
-      .filter((item): item is Selectable<PublicMedia> => item !== null);
+      .filter((item): item is PublicMedia => item !== null);
+
+    const grouped = groupPublicContent(events, winners, media, stats);
 
     warnIfSanitized(stats);
 
     return json(200, {
       ok: true,
-      events: chooseEvent(events),
-      posts: choosePosts(posts),
-      media: chooseMedia(media),
+      featuredEventId: grouped.featuredEventId,
+      events: grouped.events,
+      legacy: grouped.legacy,
     });
-  } catch (error) {
-    console.error("[solo-ganadores/public] unexpected error", error);
+  } catch {
+    console.error("[solo-ganadores/public] unexpected error");
     return json(500, { ok: false, error: "No disponible" });
   }
 }

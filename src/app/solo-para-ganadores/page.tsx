@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
@@ -17,10 +18,13 @@ type PublicEvent = {
   recognitions: string | null;
   main_image_url: string | null;
   promo_video_url: string | null;
+  status: string;
+  featured: boolean;
 };
 
-type PublicPost = {
+type PublicWinner = {
   id: string;
+  event_id: string | null;
   source_module: string;
   winner_name: string | null;
   winner_alias: string | null;
@@ -31,40 +35,336 @@ type PublicPost = {
   video_url: string | null;
   interview_url: string | null;
   event_date: string | null;
+  featured: boolean;
+};
+
+type PublicRelatedWinner = {
+  id: string;
+  title: string;
+  winner_name: string | null;
+  winner_alias: string | null;
 };
 
 type PublicMedia = {
   id: string;
+  event_id: string | null;
   title: string;
   media_type: string;
   media_url: string;
   description: string | null;
+  featured: boolean;
+  related_winner_id: string | null;
+  related_winner: PublicRelatedWinner | null;
 };
 
-type PublicSoloGanadoresApiResponse =
-  | {
-      ok: true;
-      events: PublicEvent[];
-      posts: PublicPost[];
-      media: PublicMedia[];
-    }
-  | {
-      ok: false;
-      error?: string;
-    };
+type PublicEventGroup = {
+  event: PublicEvent;
+  winners: PublicWinner[];
+  media: PublicMedia[];
+};
+
+type PublicLegacyGroup = {
+  winners: PublicWinner[];
+  media: PublicMedia[];
+};
+
+type PublicSoloGanadoresPayload = {
+  ok: true;
+  featuredEventId: string | null;
+  events: PublicEventGroup[];
+  legacy: PublicLegacyGroup;
+};
+
+type MediaDisplayKind = "youtube" | "video" | "image" | "link";
+
+type JsonRecord = Record<string, unknown>;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DATE_ONLY_RE = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
+
+const EMPTY_LEGACY: PublicLegacyGroup = { winners: [], media: [] };
+const EMPTY_GROUPS: PublicEventGroup[] = [];
+
+const wrap =
+  "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
+const sectionWrap =
+  "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
+const inner = "rounded-2xl border-2 border-red-600 bg-white/90 p-4";
+const card = "rounded-2xl border-2 border-red-600 bg-white/90 p-5 shadow-sm";
+const btn =
+  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
+  "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
+  "hover:bg-green-900 transition shadow-sm";
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requiredString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableString(value: unknown) {
+  if (value === null) return null;
+  return typeof value === "string" ? value : undefined;
+}
+
+function nullableUuid(value: unknown) {
+  if (value === null) return null;
+  return typeof value === "string" && UUID_RE.test(value) ? value : undefined;
+}
+
+function parseArray<T>(value: unknown, parser: (item: unknown) => T | null) {
+  if (!Array.isArray(value)) return null;
+
+  const items: T[] = [];
+  for (const item of value) {
+    const parsed = parser(item);
+    if (!parsed) return null;
+    items.push(parsed);
+  }
+
+  return items;
+}
+
+function parsePublicEvent(value: unknown): PublicEvent | null {
+  if (!isRecord(value)) return null;
+
+  const id = requiredString(value.id);
+  const title = requiredString(value.title);
+  const semester = nullableString(value.semester);
+  const eventDate = nullableString(value.event_date);
+  const locationName = nullableString(value.location_name);
+  const address = nullableString(value.address);
+  const city = nullableString(value.city);
+  const description = nullableString(value.description);
+  const recognitions = nullableString(value.recognitions);
+  const mainImageUrl = nullableString(value.main_image_url);
+  const promoVideoUrl = nullableString(value.promo_video_url);
+  const status = requiredString(value.status);
+
+  if (
+    !id ||
+    !UUID_RE.test(id) ||
+    !title ||
+    semester === undefined ||
+    eventDate === undefined ||
+    locationName === undefined ||
+    address === undefined ||
+    city === undefined ||
+    description === undefined ||
+    recognitions === undefined ||
+    mainImageUrl === undefined ||
+    promoVideoUrl === undefined ||
+    !status ||
+    typeof value.featured !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    semester,
+    event_date: eventDate,
+    location_name: locationName,
+    address,
+    city,
+    description,
+    recognitions,
+    main_image_url: mainImageUrl,
+    promo_video_url: promoVideoUrl,
+    status,
+    featured: value.featured,
+  };
+}
+
+function parsePublicWinner(value: unknown): PublicWinner | null {
+  if (!isRecord(value)) return null;
+
+  const id = requiredString(value.id);
+  const eventId = nullableUuid(value.event_id);
+  const sourceModule = requiredString(value.source_module);
+  const winnerName = nullableString(value.winner_name);
+  const winnerAlias = nullableString(value.winner_alias);
+  const title = requiredString(value.title);
+  const prizeName = nullableString(value.prize_name);
+  const description = nullableString(value.description);
+  const photoUrl = nullableString(value.photo_url);
+  const videoUrl = nullableString(value.video_url);
+  const interviewUrl = nullableString(value.interview_url);
+  const eventDate = nullableString(value.event_date);
+
+  if (
+    !id ||
+    !UUID_RE.test(id) ||
+    eventId === undefined ||
+    !sourceModule ||
+    winnerName === undefined ||
+    winnerAlias === undefined ||
+    !title ||
+    prizeName === undefined ||
+    description === undefined ||
+    photoUrl === undefined ||
+    videoUrl === undefined ||
+    interviewUrl === undefined ||
+    eventDate === undefined ||
+    typeof value.featured !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    event_id: eventId,
+    source_module: sourceModule,
+    winner_name: winnerName,
+    winner_alias: winnerAlias,
+    title,
+    prize_name: prizeName,
+    description,
+    photo_url: photoUrl,
+    video_url: videoUrl,
+    interview_url: interviewUrl,
+    event_date: eventDate,
+    featured: value.featured,
+  };
+}
+
+function parsePublicRelatedWinner(value: unknown): PublicRelatedWinner | null {
+  if (!isRecord(value)) return null;
+
+  const id = requiredString(value.id);
+  const title = requiredString(value.title);
+  const winnerName = nullableString(value.winner_name);
+  const winnerAlias = nullableString(value.winner_alias);
+
+  if (
+    !id ||
+    !UUID_RE.test(id) ||
+    !title ||
+    winnerName === undefined ||
+    winnerAlias === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    winner_name: winnerName,
+    winner_alias: winnerAlias,
+  };
+}
+
+function parsePublicMedia(value: unknown): PublicMedia | null {
+  if (!isRecord(value)) return null;
+
+  const id = requiredString(value.id);
+  const eventId = nullableUuid(value.event_id);
+  const title = requiredString(value.title);
+  const mediaType = requiredString(value.media_type);
+  const mediaUrl = requiredString(value.media_url);
+  const description = nullableString(value.description);
+  const relatedWinnerId = nullableUuid(value.related_winner_id);
+  let relatedWinner: PublicRelatedWinner | null = null;
+  if (value.related_winner !== null) {
+    relatedWinner = parsePublicRelatedWinner(value.related_winner);
+    if (!relatedWinner) return null;
+  }
+
+  if (
+    !id ||
+    !UUID_RE.test(id) ||
+    eventId === undefined ||
+    !title ||
+    !mediaType ||
+    !mediaUrl ||
+    description === undefined ||
+    relatedWinnerId === undefined ||
+    (relatedWinnerId === null) !== (relatedWinner === null) ||
+    (relatedWinner !== null && relatedWinner.id !== relatedWinnerId) ||
+    typeof value.featured !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    event_id: eventId,
+    title,
+    media_type: mediaType,
+    media_url: mediaUrl,
+    description,
+    featured: value.featured,
+    related_winner_id: relatedWinnerId,
+    related_winner: relatedWinner,
+  };
+}
+
+function parsePublicEventGroup(value: unknown): PublicEventGroup | null {
+  if (!isRecord(value)) return null;
+
+  const event = parsePublicEvent(value.event);
+  const winners = parseArray(value.winners, parsePublicWinner);
+  const media = parseArray(value.media, parsePublicMedia);
+
+  if (!event || !winners || !media) return null;
+
+  return { event, winners, media };
+}
+
+function parsePublicLegacyGroup(value: unknown): PublicLegacyGroup | null {
+  if (!isRecord(value)) return null;
+
+  const winners = parseArray(value.winners, parsePublicWinner);
+  const media = parseArray(value.media, parsePublicMedia);
+
+  if (!winners || !media) return null;
+
+  return { winners, media };
+}
+
+function parsePublicSoloGanadoresPayload(value: unknown): PublicSoloGanadoresPayload | null {
+  if (!isRecord(value) || value.ok !== true) return null;
+
+  const featuredEventId = nullableUuid(value.featuredEventId);
+  const events = parseArray(value.events, parsePublicEventGroup);
+  const legacy = parsePublicLegacyGroup(value.legacy);
+
+  if (featuredEventId === undefined || !events || !legacy) return null;
+
+  return {
+    ok: true,
+    featuredEventId,
+    events,
+    legacy,
+  };
+}
 
 function formatDate(value: string | null) {
-  if (!value) return "Fecha por confirmar";
+  const clean = String(value || "").trim();
+  if (!clean) return "";
 
-  try {
-    return new Date(value).toLocaleDateString("es-PE", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  } catch {
-    return value;
+  const dateOnly = clean.match(DATE_ONLY_RE);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return `${day}/${month}/${year}`;
   }
+
+  const date = new Date(clean);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("es-PE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function dateOrSemester(event: PublicEvent) {
+  return formatDate(event.event_date) || event.semester || "";
 }
 
 function sourceLabel(source: string) {
@@ -74,27 +374,23 @@ function sourceLabel(source: string) {
   if (key === "comentarios_ciudadanos") return "Comentarios Ciudadanos";
   if (key === "proyecto_ciudadano") return "Proyecto Ciudadano";
   if (key === "espacio_emprendedor") return "Espacio Emprendedor";
-  if (key === "intencion_de_voto") return "Intención de voto";
+  if (key === "intencion_de_voto") return "Intencion de voto";
 
   return "Voto Claro";
 }
 
-function isDirectVideoUrl(url: string) {
-  const u = String(url || "").toLowerCase();
-  return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".mov");
+function isSafeHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
-function isImageUrl(url: string) {
-  const u = String(url || "").toLowerCase();
-
-  return (
-    u.endsWith(".jpg") ||
-    u.endsWith(".jpeg") ||
-    u.endsWith(".png") ||
-    u.endsWith(".webp") ||
-    u.endsWith(".gif") ||
-    u.includes("/storage/v1/object/public/")
-  );
+function safeYoutubeId(value: string | null) {
+  const clean = String(value || "").trim();
+  return /^[A-Za-z0-9_-]+$/.test(clean) ? clean : "";
 }
 
 function youtubeEmbedUrl(url: string) {
@@ -102,37 +398,116 @@ function youtubeEmbedUrl(url: string) {
   if (!raw) return "";
 
   try {
-    const u = new URL(raw);
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:") return "";
 
-    if (u.hostname.includes("youtube.com")) {
-      const v = u.searchParams.get("v");
-      if (v) return `https://www.youtube.com/embed/${v}`;
+    const hostname = parsed.hostname.toLowerCase();
+    const youtubeHosts = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"]);
+    const shortHosts = new Set(["youtu.be", "www.youtu.be"]);
 
-      if (u.pathname.startsWith("/shorts/")) {
-        const id = u.pathname.replace("/shorts/", "").split("/")[0];
-        if (id) return `https://www.youtube.com/embed/${id}`;
+    if (youtubeHosts.has(hostname)) {
+      if (parsed.pathname === "/watch") {
+        const id = safeYoutubeId(parsed.searchParams.get("v"));
+        return id ? `https://www.youtube.com/embed/${id}` : "";
+      }
+
+      if (parsed.pathname.startsWith("/shorts/")) {
+        const id = safeYoutubeId(parsed.pathname.replace("/shorts/", "").split("/")[0]);
+        return id ? `https://www.youtube.com/embed/${id}` : "";
+      }
+
+      if (parsed.pathname.startsWith("/embed/")) {
+        const id = safeYoutubeId(parsed.pathname.replace("/embed/", "").split("/")[0]);
+        return id ? `https://www.youtube.com/embed/${id}` : "";
       }
     }
 
-    if (u.hostname.includes("youtu.be")) {
-      const id = u.pathname.replace("/", "").split("/")[0];
-      if (id) return `https://www.youtube.com/embed/${id}`;
+    if (shortHosts.has(hostname)) {
+      const id = safeYoutubeId(parsed.pathname.replace("/", "").split("/")[0]);
+      return id ? `https://www.youtube.com/embed/${id}` : "";
     }
-  } catch {}
+  } catch {
+    return "";
+  }
 
   return "";
 }
 
-function mediaKind(url: string, type?: string | null) {
-  const t = String(type || "").toLowerCase();
+function isDirectVideoUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.toLowerCase();
+    return path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mov");
+  } catch {
+    const clean = String(url || "").toLowerCase();
+    return clean.endsWith(".mp4") || clean.endsWith(".webm") || clean.endsWith(".mov");
+  }
+}
+
+function isImageUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.toLowerCase();
+    return (
+      path.endsWith(".jpg") ||
+      path.endsWith(".jpeg") ||
+      path.endsWith(".png") ||
+      path.endsWith(".webp") ||
+      path.endsWith(".gif") ||
+      path.includes("/storage/v1/object/public/")
+    );
+  } catch {
+    const clean = String(url || "").toLowerCase();
+    return (
+      clean.endsWith(".jpg") ||
+      clean.endsWith(".jpeg") ||
+      clean.endsWith(".png") ||
+      clean.endsWith(".webp") ||
+      clean.endsWith(".gif")
+    );
+  }
+}
+
+function mediaKind(url: string, type?: string | null): MediaDisplayKind {
+  const mediaType = String(type || "").toLowerCase();
   const clean = String(url || "").trim();
 
   if (youtubeEmbedUrl(clean)) return "youtube";
   if (isDirectVideoUrl(clean)) return "video";
-  if (t.includes("video") || t.includes("entrevista")) return "video";
+  if (mediaType.includes("video") || mediaType.includes("entrevista")) return "video";
   if (isImageUrl(clean)) return "image";
 
   return "link";
+}
+
+function recognitionLines(value: string | null) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function winnerDisplayName(winner: PublicWinner | PublicRelatedWinner) {
+  return winner.winner_alias || winner.winner_name || winner.title;
+}
+
+function SafeExternalLink({
+  href,
+  children,
+  className,
+}: {
+  href: string | null;
+  children: ReactNode;
+  className: string;
+}) {
+  const clean = String(href || "").trim();
+  if (!clean || !isSafeHttpUrl(clean)) return null;
+
+  return (
+    <a href={clean} target="_blank" rel="noopener noreferrer" className={className}>
+      {children}
+    </a>
+  );
 }
 
 function PublicMediaBox({
@@ -141,12 +516,14 @@ function PublicMediaBox({
   type,
   emptyText = "Imagen o video por publicar.",
   variant = "large",
+  imageLoading = "lazy",
 }: {
   url: string | null;
   title: string;
   type?: string | null;
   emptyText?: string;
   variant?: "large" | "compact";
+  imageLoading?: "lazy" | "eager";
 }) {
   const clean = String(url || "").trim();
   const [failed, setFailed] = useState(false);
@@ -172,30 +549,34 @@ function PublicMediaBox({
       <iframe
         src={embed}
         title={title}
+        loading="lazy"
+        referrerPolicy="strict-origin-when-cross-origin"
         className={`${sizeClass} ${radiusClass} border border-slate-300 bg-black`}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allow="encrypted-media; picture-in-picture"
         allowFullScreen
       />
     );
   }
 
-  if (kind === "video") {
+  if (kind === "video" && isSafeHttpUrl(clean)) {
     return (
       <video
         src={clean}
         controls
+        preload="metadata"
         className={`${sizeClass} ${radiusClass} border border-slate-300 bg-black object-contain`}
         onError={() => setFailed(true)}
       />
     );
   }
 
-  if (kind === "image") {
+  if (kind === "image" && isSafeHttpUrl(clean)) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={clean}
         alt={title}
+        loading={imageLoading}
         className={`${sizeClass} ${radiusClass} border border-slate-300 bg-slate-50 object-cover`}
         onError={() => setFailed(true)}
       />
@@ -206,30 +587,329 @@ function PublicMediaBox({
     <div
       className={`${sizeClass} ${radiusClass} border border-slate-300 bg-slate-50 flex items-center justify-center p-5 text-center`}
     >
-      <a
+      <SafeExternalLink
         href={clean}
-        target="_blank"
-        rel="noreferrer"
         className="text-sm font-extrabold text-green-800 underline break-all"
       >
         Abrir contenido
-      </a>
+      </SafeExternalLink>
     </div>
+  );
+}
+
+function WinnerCard({ winner }: { winner: PublicWinner }) {
+  const winnerDate = formatDate(winner.event_date);
+
+  return (
+    <article className={card}>
+      <div className="h-32 sm:h-36 overflow-hidden rounded-xl bg-slate-100">
+        {winner.photo_url ? (
+          <PublicMediaBox
+            url={winner.photo_url}
+            title={winner.title}
+            type="foto"
+            emptyText="Imagen del ganador por publicar."
+            variant="compact"
+          />
+        ) : winner.video_url ? (
+          <PublicMediaBox
+            url={winner.video_url}
+            title={winner.title}
+            type="video"
+            emptyText="Video del ganador por publicar."
+            variant="compact"
+          />
+        ) : (
+          <div className="h-full rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center">
+            <div className="text-4xl" aria-hidden="true">
+              Trofeo
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 text-xs font-extrabold text-green-800">
+        {sourceLabel(winner.source_module)}
+      </div>
+
+      <h4 className="mt-1 text-base font-extrabold text-slate-900">{winner.title}</h4>
+
+      <div className="mt-1 text-sm font-semibold text-slate-700">
+        {winnerDisplayName(winner)}
+      </div>
+
+      {winner.prize_name ? (
+        <div className="mt-2 text-xs font-bold text-slate-700">
+          Premio: {winner.prize_name}
+        </div>
+      ) : null}
+
+      {winnerDate ? <div className="mt-1 text-xs text-slate-600">{winnerDate}</div> : null}
+
+      {winner.description ? (
+        <p className="mt-3 text-sm text-slate-700 leading-relaxed">{winner.description}</p>
+      ) : null}
+
+      <SafeExternalLink
+        href={winner.video_url}
+        className="mt-3 inline-flex text-xs font-extrabold text-green-800 underline"
+      >
+        Ver video
+      </SafeExternalLink>
+
+      <SafeExternalLink
+        href={winner.interview_url}
+        className="mt-2 block text-xs font-extrabold text-green-800 underline"
+      >
+        Ver entrevista
+      </SafeExternalLink>
+    </article>
+  );
+}
+
+function MediaCard({ item }: { item: PublicMedia }) {
+  const relatedName = item.related_winner ? winnerDisplayName(item.related_winner) : "";
+
+  return (
+    <article className="rounded-2xl border border-slate-300 bg-white overflow-hidden shadow-sm">
+      <div className="h-32 sm:h-36 bg-slate-100 overflow-hidden">
+        <PublicMediaBox
+          url={item.media_url}
+          title={item.title}
+          type={item.media_type}
+          emptyText="Contenido no disponible."
+          variant="compact"
+        />
+      </div>
+
+      <div className="p-3">
+        <div className="text-xs font-extrabold text-green-800 uppercase">
+          {item.media_type}
+        </div>
+        <h4 className="mt-1 text-sm font-extrabold text-slate-900">{item.title}</h4>
+        {relatedName ? (
+          <p className="mt-1 text-xs font-bold text-slate-700">
+            Relacionado con: {relatedName}
+          </p>
+        ) : null}
+        {item.description ? (
+          <p className="mt-1 text-xs text-slate-600 leading-relaxed">{item.description}</p>
+        ) : null}
+
+        {mediaKind(item.media_url, item.media_type) === "link" ? (
+          <SafeExternalLink
+            href={item.media_url}
+            className="mt-2 inline-flex text-xs font-extrabold text-green-800 underline"
+          >
+            Abrir contenido
+          </SafeExternalLink>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function WinnersGrid({ winners }: { winners: PublicWinner[] }) {
+  if (!winners.length) {
+    return (
+      <p className="mt-2 text-sm text-slate-700">
+        Todavía no hay ganadores publicados para este evento.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      {winners.map((winner) => (
+        <WinnerCard key={winner.id} winner={winner} />
+      ))}
+    </div>
+  );
+}
+
+function MediaGrid({ media }: { media: PublicMedia[] }) {
+  if (!media.length) {
+    return (
+      <p className="mt-2 text-sm text-slate-700">
+        Todavía no hay contenido de galería publicado para este evento.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      {media.map((item) => (
+        <MediaCard key={item.id} item={item} />
+      ))}
+    </div>
+  );
+}
+
+function EventPublicSection({
+  group,
+  variant,
+}: {
+  group: PublicEventGroup;
+  variant: "featured" | "archive";
+}) {
+  const event = group.event;
+  const eventDate = formatDate(event.event_date);
+  const recognitions = recognitionLines(event.recognitions);
+  const isFeatured = variant === "featured";
+
+  return (
+    <div className={isFeatured ? "" : "pt-3"}>
+      <div className={isFeatured ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "space-y-4"}>
+        <div>
+          {isFeatured ? (
+            <div className="mb-2 inline-flex rounded-full border border-green-800 px-3 py-1 text-xs font-extrabold text-green-800">
+              Evento destacado
+            </div>
+          ) : null}
+
+          {isFeatured ? (
+            <h2 className="text-xl font-extrabold text-slate-900">{event.title}</h2>
+          ) : (
+            <h3 className="text-lg font-extrabold text-slate-900">{event.title}</h3>
+          )}
+
+          {event.semester ? (
+            <div className="mt-2 text-sm font-semibold text-slate-700">
+              Semestre: {event.semester}
+            </div>
+          ) : null}
+
+          {eventDate ? (
+            <div className="mt-1 text-sm text-slate-700">Fecha: {eventDate}</div>
+          ) : null}
+
+          {event.location_name ? (
+            <div className="mt-1 text-sm text-slate-700">
+              Lugar: {event.location_name}
+            </div>
+          ) : null}
+
+          {event.city ? (
+            <div className="mt-1 text-sm text-slate-700">Ciudad: {event.city}</div>
+          ) : null}
+
+          {event.address ? (
+            <div className="mt-1 text-sm text-slate-700">Direccion: {event.address}</div>
+          ) : null}
+
+          {event.description ? (
+            <p className="mt-4 text-sm text-slate-700 leading-relaxed">
+              {event.description}
+            </p>
+          ) : null}
+
+          {recognitions.length ? (
+            <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+              <b>Reconocimientos:</b>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {recognitions.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          {event.main_image_url ? (
+            <div className="min-h-[220px]">
+              <div className="mb-1 text-xs font-extrabold text-slate-700">
+                Imagen principal
+              </div>
+              <PublicMediaBox
+                url={event.main_image_url}
+                title={`${event.title} - imagen principal`}
+                type="foto"
+                emptyText="Imagen principal por publicar."
+                imageLoading={isFeatured ? "eager" : "lazy"}
+              />
+            </div>
+          ) : null}
+
+          {event.promo_video_url ? (
+            <div className="min-h-[220px]">
+              <div className="mb-1 text-xs font-extrabold text-slate-700">
+                Video promocional
+              </div>
+              <PublicMediaBox
+                url={event.promo_video_url}
+                title={`${event.title} - video promocional`}
+                type="video"
+                emptyText="Video del evento por publicar."
+              />
+            </div>
+          ) : null}
+
+          {!event.main_image_url && !event.promo_video_url ? (
+            <PublicMediaBox
+              url={null}
+              title={event.title}
+              type="foto"
+              emptyText="Imagen o video del evento por publicar."
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <section className="mt-6">
+        <h3 className="text-lg font-extrabold text-slate-900">Ganadores del evento</h3>
+        <WinnersGrid winners={group.winners} />
+      </section>
+
+      <section className="mt-6">
+        <h3 className="text-lg font-extrabold text-slate-900">Galeria del evento</h3>
+        <MediaGrid media={group.media} />
+      </section>
+    </div>
+  );
+}
+
+function archiveSummary(group: PublicEventGroup) {
+  const date = dateOrSemester(group.event);
+  const winnersLabel =
+    group.winners.length === 1 ? "1 ganador" : `${group.winners.length} ganadores`;
+  const mediaLabel =
+    group.media.length === 1 ? "1 recuerdo" : `${group.media.length} recuerdos`;
+
+  return [group.event.title, date, winnersLabel, mediaLabel].filter(Boolean).join(" - ");
+}
+
+function containsVideoOrInterview(groups: PublicEventGroup[], legacy: PublicLegacyGroup) {
+  const groupedMedia = groups.flatMap((group) => group.media);
+  const allMedia = [...groupedMedia, ...legacy.media];
+  return allMedia.some((item) =>
+    ["video", "entrevista"].includes(String(item.media_type || "").toLowerCase())
   );
 }
 
 export default function SoloParaGanadoresPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
-  const [events, setEvents] = useState<PublicEvent[]>([]);
-  const [posts, setPosts] = useState<PublicPost[]>([]);
-  const [media, setMedia] = useState<PublicMedia[]>([]);
+  const [payload, setPayload] = useState<PublicSoloGanadoresPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const featuredEvent = events[0] ?? null;
-  const featuredPosts = posts;
-  const featuredMedia = media;
+  const groups = payload?.events ?? EMPTY_GROUPS;
+  const legacy = payload?.legacy ?? EMPTY_LEGACY;
+  const featuredEventId = payload?.featuredEventId ?? null;
+  const featuredGroup =
+    groups.find((group) => group.event.id === featuredEventId) ?? groups[0] ?? null;
+  const archiveGroups = featuredGroup
+    ? groups.filter((group) => group.event.id !== featuredGroup.event.id)
+    : groups;
+  const hasLegacy = legacy.winners.length > 0 || legacy.media.length > 0;
+  const hasAnyContent = groups.length > 0 || hasLegacy;
+  const winnersCount =
+    groups.reduce((total, group) => total + group.winners.length, 0) +
+    legacy.winners.length;
+  const mediaCount =
+    groups.reduce((total, group) => total + group.media.length, 0) + legacy.media.length;
+  const hasVideosOrInterviews = containsVideoOrInterview(groups, legacy);
 
   useEffect(() => {
     let alive = true;
@@ -244,24 +924,19 @@ export default function SoloParaGanadoresPage() {
           cache: "no-store",
         });
 
-        const data = (await res.json().catch(() => null)) as
-          | PublicSoloGanadoresApiResponse
-          | null;
+        const raw: unknown = await res.json().catch(() => null);
+        const data = parsePublicSoloGanadoresPayload(raw);
 
-        if (!res.ok || !data || data.ok !== true) {
+        if (!res.ok || !data) {
           throw new Error("No disponible");
         }
 
         if (!alive) return;
 
-        setEvents(data.events);
-        setPosts(data.posts);
-        setMedia(data.media);
+        setPayload(data);
       } catch {
         if (!alive) return;
-        setEvents([]);
-        setPosts([]);
-        setMedia([]);
+        setPayload(null);
         setLoadError("No disponible");
       } finally {
         if (alive) setLoading(false);
@@ -281,52 +956,54 @@ export default function SoloParaGanadoresPage() {
       pageTitle: "Solo para ganadores",
       route: "/solo-para-ganadores",
       summary:
-        "Ventana pública de reconocimiento a los ganadores de Voto Claro, con información sobre premios, eventos, fotos, videos, entrevistas y entregas.",
+        "Ventana publica de reconocimiento a los ganadores de Voto Claro, organizada por eventos, premios, fotos, videos, entrevistas y entregas.",
       speakableSummary:
-        "Estás en Solo para ganadores. Esta ventana reúne reconocimientos, ganadores, eventos, fotos, videos, entrevistas y entregas de premios dentro de Voto Claro.",
+        "Estas en Solo para ganadores. Esta ventana reune reconocimientos, ganadores, eventos, fotos, videos, entrevistas y entregas de premios dentro de Voto Claro.",
       activeSection: "vitrina-ganadores",
       visibleText: [
-        "Pantalla pública Solo para ganadores.",
-        "Aquí se muestran ganadores de las distintas dinámicas de Voto Claro.",
-        "También se presentan fotos, videos, entrevistas, reconocimientos y detalles del evento del semestre.",
-        featuredEvent
-          ? `Evento destacado visible: ${featuredEvent.title}.`
-          : "No hay evento destacado visible todavía.",
-        `Ganadores publicados visibles: ${posts.length}.`,
-        `Elementos de galería visibles: ${media.length}.`,
+        "Pantalla publica Solo para ganadores.",
+        "Aqui se muestran ganadores organizados por evento.",
+        "Tambien se presentan fotos, videos, entrevistas, reconocimientos y detalles de cada ceremonia.",
+        featuredGroup
+          ? `Evento destacado visible: ${featuredGroup.event.title}.`
+          : "No hay evento destacado visible todavia.",
+        `Eventos publicados visibles: ${groups.length}.`,
+        `Ganadores publicados visibles: ${winnersCount}.`,
+        `Elementos de galeria visibles: ${mediaCount}.`,
       ].join("\n"),
       availableActions: [
-        "Ver ganadores destacados",
-        "Ver evento del semestre",
-        "Ver galería de fotos",
+        "Ver evento destacado",
+        "Ver archivo de eventos",
+        "Ver ganadores por evento",
+        "Ver galeria de fotos",
         "Ver videos y entrevistas",
         "Volver al inicio",
       ],
       suggestedPrompts: [
         {
           id: "ganadores-1",
-          label: "¿Qué es esto?",
-          question: "¿Qué es la ventana Solo para ganadores?",
+          label: "Que es esto",
+          question: "Que es la ventana Solo para ganadores?",
         },
         {
           id: "ganadores-2",
           label: "Ganadores",
-          question: "¿Qué ganadores aparecen en esta ventana?",
+          question: "Que ganadores aparecen en esta ventana?",
         },
         {
           id: "ganadores-3",
           label: "Evento",
-          question: "¿Qué información hay sobre el evento del semestre?",
+          question: "Que informacion hay sobre el evento destacado?",
         },
         {
           id: "ganadores-4",
-          label: "Galería",
-          question: "¿Qué fotos, videos o entrevistas puedo ver aquí?",
+          label: "Galeria",
+          question: "Que fotos, videos o entrevistas puedo ver aqui?",
         },
         {
           id: "ganadores-5",
           label: "Transparencia",
-          question: "¿Por qué esta ventana ayuda a dar transparencia a los premios?",
+          question: "Por que esta ventana ayuda a dar transparencia a los premios?",
         },
       ],
       selectedItemTitle: "Solo para ganadores",
@@ -335,16 +1012,15 @@ export default function SoloParaGanadoresPage() {
         moduloPublico: true,
         loading,
         loadError,
-        eventosPublicadosCount: events.length,
-        ganadoresPublicadosCount: posts.length,
-        mediaPublicadaCount: media.length,
-        eventoDestacadoTitulo: featuredEvent?.title || "",
-        contieneGanadores: posts.length > 0,
-        contieneEventoSemestre: events.length > 0,
-        contieneGaleria: media.length > 0,
-        contieneVideosEntrevistas: media.some((m) =>
-          ["video", "entrevista"].includes(String(m.media_type || "").toLowerCase())
-        ),
+        eventosPublicadosCount: groups.length,
+        ganadoresPublicadosCount: winnersCount,
+        mediaPublicadaCount: mediaCount,
+        eventoDestacadoTitulo: featuredGroup?.event.title || "",
+        contieneGanadores: winnersCount > 0,
+        contieneEventoDestacado: featuredGroup !== null,
+        contieneGaleria: mediaCount > 0,
+        contieneLegacy: hasLegacy,
+        contieneVideosEntrevistas: hasVideosOrInterviews,
       },
     });
 
@@ -356,22 +1032,13 @@ export default function SoloParaGanadoresPage() {
     clearPageContext,
     loading,
     loadError,
-    events.length,
-    posts.length,
-    media.length,
-    featuredEvent?.title,
+    groups.length,
+    winnersCount,
+    mediaCount,
+    featuredGroup?.event.title,
+    hasLegacy,
+    hasVideosOrInterviews,
   ]);
-
-  const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
-  const inner = "rounded-2xl border-2 border-red-600 bg-white/90 p-4";
-  const card = "rounded-2xl border-2 border-red-600 bg-white/90 p-5 shadow-sm";
-  const btn =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm";
 
   return (
     <main className={wrap}>
@@ -381,7 +1048,7 @@ export default function SoloParaGanadoresPage() {
             SOLO PARA GANADORES
           </h1>
           <p className="mt-2 text-sm md:text-base font-semibold text-slate-700 max-w-3xl">
-            Una vitrina pública para reconocer a los ciudadanos que participaron,
+            Una vitrina publica para reconocer a los ciudadanos que participaron,
             destacaron y recibieron premios dentro de Voto Claro.
           </p>
         </div>
@@ -395,10 +1062,10 @@ export default function SoloParaGanadoresPage() {
         <section className={sectionWrap}>
           <div className={inner}>
             <div className="text-sm font-extrabold text-slate-900">
-              Cargando información…
+              Cargando información...
             </div>
             <p className="mt-2 text-sm text-slate-700">
-              Estamos consultando ganadores, evento del semestre y galería pública.
+              Estamos consultando ganadores, eventos y galería pública.
             </p>
           </div>
         </section>
@@ -420,29 +1087,29 @@ export default function SoloParaGanadoresPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             <div className={card}>
               <div className="text-xl font-extrabold text-slate-900">
-                🏆 Reconocimiento público
+                Reconocimiento publico
               </div>
               <p className="mt-3 text-sm text-slate-700 leading-relaxed">
-                Aquí se reúnen los ganadores de las distintas dinámicas de la
-                plataforma: retos, comentarios ciudadanos, proyectos, iniciativas
-                y otras actividades con premio.
+                Aqui se reunen los ganadores de las distintas dinamicas de la
+                plataforma: retos, comentarios ciudadanos, proyectos, iniciativas y
+                otras actividades con premio.
               </p>
               <p className="mt-3 text-sm text-slate-700 leading-relaxed">
-                Cada reconocimiento busca mostrar una historia visible: quién participó,
-                en qué dinámica destacó y qué premio recibió.
+                Cada reconocimiento busca mostrar una historia visible: quien participo,
+                en que dinamica destaco y que premio recibio.
               </p>
             </div>
 
             <div className={card}>
               <div className="text-xl font-extrabold text-slate-900">
-                🎥 Evidencia y memoria
+                Evidencia y memoria
               </div>
               <p className="mt-3 text-sm text-slate-700 leading-relaxed">
                 Esta ventana muestra fotos, videos, entrevistas, testimonios y momentos
                 de entrega de premios.
               </p>
               <p className="mt-3 text-sm text-slate-700 leading-relaxed">
-                Así, los usuarios pueden ver el proceso de reconocimiento y el contenido
+                Asi, los usuarios pueden ver el proceso de reconocimiento y el contenido
                 relacionado con cada evento.
               </p>
             </div>
@@ -450,271 +1117,95 @@ export default function SoloParaGanadoresPage() {
         </div>
       </section>
 
-      <section className={sectionWrap + " mt-6"}>
-        <div className={inner}>
-          <div className="text-lg font-extrabold text-slate-900">
-            🗓️ Evento del semestre
+      {!loading && !loadError && !hasAnyContent ? (
+        <section className={sectionWrap + " mt-6"}>
+          <div className={inner}>
+            <p className="text-sm font-semibold text-slate-700">
+              Todavía no hay reconocimientos públicos disponibles.
+            </p>
           </div>
+        </section>
+      ) : null}
 
-          {featuredEvent ? (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">
-                  {featuredEvent.title}
-                </h2>
-
-                <div className="mt-2 text-sm font-semibold text-slate-700">
-                  {featuredEvent.semester
-                    ? `Semestre: ${featuredEvent.semester}`
-                    : "Semestre por confirmar"}
-                </div>
-
-                <div className="mt-1 text-sm text-slate-700">
-                  Fecha: {formatDate(featuredEvent.event_date)}
-                </div>
-
-                <div className="mt-1 text-sm text-slate-700">
-                  Lugar: {featuredEvent.location_name || "Lugar por confirmar"}
-                </div>
-
-                <div className="mt-1 text-sm text-slate-700">
-                  Ciudad: {featuredEvent.city || "Por confirmar"}
-                </div>
-
-                {featuredEvent.address ? (
-                  <div className="mt-1 text-sm text-slate-700">
-                    Dirección: {featuredEvent.address}
-                  </div>
-                ) : null}
-
-                {featuredEvent.description ? (
-                  <p className="mt-4 text-sm text-slate-700 leading-relaxed">
-                    {featuredEvent.description}
-                  </p>
-                ) : (
-                  <p className="mt-4 text-sm text-slate-700 leading-relaxed">
-                    Los detalles del evento serán publicados por la administración cuando
-                    se confirme la programación oficial.
-                  </p>
-                )}
-
-                {featuredEvent.recognitions ? (
-                  <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700 whitespace-pre-line">
-                    <b>Reconocimientos:</b>
-                    <br />
-                    {featuredEvent.recognitions}
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="min-h-[220px]">
-                {featuredEvent.promo_video_url ? (
-                  <PublicMediaBox
-                    url={featuredEvent.promo_video_url}
-                    title={featuredEvent.title}
-                    type="video"
-                    emptyText="Video del evento por publicar."
-                  />
-                ) : (
-                  <PublicMediaBox
-                    url={featuredEvent.main_image_url}
-                    title={featuredEvent.title}
-                    type="foto"
-                    emptyText="Imagen o video del evento por publicar."
-                  />
-                )}
-              </div>
+      {featuredGroup ? (
+        <section className={sectionWrap + " mt-6"}>
+          <div className={inner}>
+            <div className="text-lg font-extrabold text-slate-900">
+              Evento destacado
             </div>
-          ) : (
+            <div className="mt-4">
+              <EventPublicSection group={featuredGroup} variant="featured" />
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {archiveGroups.length ? (
+        <section className={sectionWrap + " mt-6"}>
+          <div className={inner}>
+            <h2 className="text-lg font-extrabold text-slate-900">Archivo de eventos</h2>
             <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-              Los detalles del evento serán publicados por la administración cuando se
-              confirme la programación oficial. Aquí se mostrará el lugar, la fecha,
-              los ambientes, reconocimientos, fotos, videos y entrevistas relacionadas
-              con la entrega de premios.
+              Consulta los reconocimientos, ganadores y recuerdos de ceremonias anteriores.
             </p>
-          )}
-        </div>
-      </section>
 
-      <section className={sectionWrap + " mt-6"}>
-        <div className={inner}>
-          <div className="text-lg font-extrabold text-slate-900">
-            🏅 Ganadores destacados
-          </div>
-
-          {featuredPosts.length ? (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {featuredPosts.map((post) => (
-                <div key={post.id} className={card}>
-                  <div className="h-32 sm:h-36 overflow-hidden rounded-xl bg-slate-100">
-                    {post.photo_url ? (
-                      <PublicMediaBox
-                        url={post.photo_url}
-                        title={post.title}
-                        type="foto"
-                        emptyText="Imagen del ganador por publicar."
-                        variant="compact"
-                      />
-                    ) : post.video_url ? (
-                      <PublicMediaBox
-                        url={post.video_url}
-                        title={post.title}
-                        type="video"
-                        emptyText="Video del ganador por publicar."
-                        variant="compact"
-                      />
-                    ) : (
-                      <div className="h-full rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center">
-                        <div className="text-4xl">🏆</div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-3 text-xs font-extrabold text-green-800">
-                    {sourceLabel(post.source_module)}
-                  </div>
-
-                  <div className="mt-1 text-base font-extrabold text-slate-900">
-                    {post.title}
-                  </div>
-
-                  <div className="mt-1 text-sm font-semibold text-slate-700">
-                    {post.winner_alias || post.winner_name || "Ganador destacado"}
-                  </div>
-
-                  {post.prize_name ? (
-                    <div className="mt-2 text-xs font-bold text-slate-700">
-                      Premio: {post.prize_name}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-1 text-xs text-slate-600">
-                    {formatDate(post.event_date)}
-                  </div>
-
-                  {post.description ? (
-                    <p className="mt-3 text-sm text-slate-700 leading-relaxed">
-                      {post.description}
-                    </p>
-                  ) : null}
-
-                  {post.video_url ? (
-                    <a
-                      href={post.video_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex text-xs font-extrabold text-green-800 underline"
-                    >
-                      Ver video
-                    </a>
-                  ) : null}
-
-                  {post.interview_url ? (
-                    <a
-                      href={post.interview_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 block text-xs font-extrabold text-green-800 underline"
-                    >
-                      Ver entrevista
-                    </a>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-700">
-              Todavía no hay ganadores publicados. Cuando el administrador publique
-              ganadores, aparecerán aquí.
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className={sectionWrap + " mt-6"}>
-        <div className={inner}>
-          <div className="text-lg font-extrabold text-slate-900">
-            📸 Galería pública
-          </div>
-          <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-            Fotos, videos, entrevistas, testimonios, ambientes del evento y registros
-            de entrega de premios.
-          </p>
-
-          {featuredMedia.length ? (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {featuredMedia.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-slate-300 bg-white overflow-hidden shadow-sm"
+            <div className="mt-4 space-y-3">
+              {archiveGroups.map((group) => (
+                <details
+                  key={group.event.id}
+                  className="rounded-xl border border-slate-300 bg-slate-50 p-3"
                 >
-                  <div className="h-32 sm:h-36 bg-slate-100 overflow-hidden">
-                    <PublicMediaBox
-                      url={item.media_url}
-                      title={item.title}
-                      type={item.media_type}
-                      emptyText="Contenido no disponible."
-                      variant="compact"
-                    />
-                  </div>
-
-                  <div className="p-3">
-                    <div className="text-xs font-extrabold text-green-800 uppercase">
-                      {item.media_type}
-                    </div>
-                    <div className="mt-1 text-sm font-extrabold text-slate-900">
-                      {item.title}
-                    </div>
-                    {item.description ? (
-                      <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                        {item.description}
-                      </p>
-                    ) : null}
-
-                    {mediaKind(item.media_url, item.media_type) === "link" ? (
-                      <a
-                        href={item.media_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-flex text-xs font-extrabold text-green-800 underline"
-                      >
-                        Abrir contenido
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
+                  <summary className="cursor-pointer text-sm font-extrabold text-slate-900">
+                    {archiveSummary(group)}
+                  </summary>
+                  <EventPublicSection group={group} variant="archive" />
+                </details>
               ))}
             </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-center">
-                <div className="text-2xl">📷</div>
-                <div className="mt-2 text-xs font-extrabold text-slate-900">Fotos</div>
-              </div>
+          </div>
+        </section>
+      ) : null}
 
-              <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-center">
-                <div className="text-2xl">🎥</div>
-                <div className="mt-2 text-xs font-extrabold text-slate-900">Videos</div>
-              </div>
+      {hasLegacy ? (
+        <section className={sectionWrap + " mt-6"}>
+          <div className={inner}>
+            <h2 className="text-lg font-extrabold text-slate-900">
+              Reconocimientos anteriores
+            </h2>
+            <p className="mt-2 text-sm text-slate-700 leading-relaxed">
+              Contenido publicado antes de organizar los reconocimientos por evento.
+            </p>
 
-              <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-center">
-                <div className="text-2xl">🎙️</div>
-                <div className="mt-2 text-xs font-extrabold text-slate-900">Entrevistas</div>
-              </div>
-
-              <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-center">
-                <div className="text-2xl">🎖️</div>
-                <div className="mt-2 text-xs font-extrabold text-slate-900">
-                  Reconocimientos
+            {legacy.winners.length ? (
+              <section className="mt-5">
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Ganadores historicos
+                </h3>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {legacy.winners.map((winner) => (
+                    <WinnerCard key={winner.id} winner={winner} />
+                  ))}
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
+              </section>
+            ) : null}
+
+            {legacy.media.length ? (
+              <section className="mt-6">
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Galeria historica
+                </h3>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {legacy.media.map((item) => (
+                    <MediaCard key={item.id} item={item} />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <footer className="mt-6 text-xs text-slate-600 leading-relaxed">
-        Esta ventana muestra información pública de reconocimiento, evidencia de premios
+        Esta ventana muestra informacion publica de reconocimiento, evidencia de premios
         y contenido relacionado con eventos de ganadores dentro de Voto Claro.
       </footer>
     </main>
