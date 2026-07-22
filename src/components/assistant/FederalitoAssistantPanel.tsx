@@ -45,6 +45,7 @@ const LS_VOICE_MODE = "votoclaro_voice_mode_v1";
 const LS_VOICE_LANG = "votoclaro_voice_lang_v1";
 const LS_VOICE_HINT_SHOWN = "votoclaro_voice_hint_shown_v1";
 const LS_ASK_MODE = "votoclaro_assistant_mode_v1";
+const MOBILE_ASSISTANT_QUERY = "(max-width: 639px)";
 
 // ✅ Panel flotante: posición persistente
 const LS_ASSIST_POS = "votoclaro_assistant_pos_v1";
@@ -3941,9 +3942,26 @@ export default function FederalitoAssistantPanel() {
 
   // ✅ Evita mismatch SSR/cliente (hydration)
   const [mounted, setMounted] = useState(false);
+  const [isMobileAssistantViewport, setIsMobileAssistantViewport] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const mediaQuery = window.matchMedia(MOBILE_ASSISTANT_QUERY);
+    const syncMobileAssistantViewport = () => {
+      setIsMobileAssistantViewport(mediaQuery.matches);
+    };
+
+    syncMobileAssistantViewport();
+    mediaQuery.addEventListener("change", syncMobileAssistantViewport);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncMobileAssistantViewport);
+    };
+  }, [mounted]);
 
   // ✅ Al cambiar de ventana, cortar cualquier narración en curso
    
@@ -6070,6 +6088,28 @@ function sendQuick(q: string) {
 }
 
   const fabLabel = useMemo(() => (open ? "Cerrar Asistente" : "Abrir Asistente"), [open]);
+  const fabStyle: React.CSSProperties = isMobileAssistantViewport
+    ? {
+        right: 12,
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        left: "auto",
+        top: "auto",
+      }
+    : mounted
+    ? { left: fabPos.x, top: fabPos.y }
+    : { right: 16, bottom: 16, left: "auto", top: "auto" };
+  const panelStyle: React.CSSProperties = isMobileAssistantViewport
+    ? {
+        left: 8,
+        right: 8,
+        top: "auto",
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+        width: "calc(100vw - 16px)",
+      }
+    : { left: pos.x, top: pos.y };
+  const mobilePanelShellStyle: React.CSSProperties | undefined = isMobileAssistantViewport
+    ? { maxHeight: "min(72dvh, calc(100dvh - 80px))" }
+    : undefined;
   const modeLabel = askMode === "HV" ? "HV" : askMode === "PLAN" ? "Plan" : "Actuar político";
    
     useEffect(() => {
@@ -6137,11 +6177,7 @@ function sendQuick(q: string) {
     "fixed z-[60] pointer-events-none vc-assistant-fab-wrap",
     open ? "vc-assistant-open" : "",
   ].join(" ")}
-  style={
-    mounted
-      ? { left: fabPos.x, top: fabPos.y }
-      : { right: 16, bottom: 16, left: "auto", top: "auto" }
-  }
+  style={fabStyle}
 >
               <button
   type="button"
@@ -6149,8 +6185,8 @@ function sendQuick(q: string) {
   onPointerMove={onFabPointerMove}
   onPointerUp={onFabPointerUp}
   className={[
-    "flex items-center gap-2 rounded-full border bg-white",
-    "shadow-lg px-3 py-2",
+    "flex h-14 w-14 items-center justify-center gap-2 rounded-full border bg-white",
+    "shadow-lg p-2 sm:h-auto sm:w-auto sm:justify-start sm:px-3 sm:py-2",
     "hover:shadow-xl active:scale-[0.98] transition",
     "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-200",
     "hover:-translate-y-[2px]",
@@ -6174,7 +6210,7 @@ function sendQuick(q: string) {
               />
             </div>
 
-            <div className="text-left leading-[14px]">
+            <div className="hidden text-left leading-[14px] sm:block">
               <div className="text-[12px] font-extrabold text-slate-900">Asistente</div>
               <div className="text-[11px] text-slate-600">{open ? `Modo: ${modeLabel}` : "Asistente / Guía"}</div>
             </div>
@@ -6189,7 +6225,7 @@ function sendQuick(q: string) {
                 // @ts-ignore
                 safeResetFabPos();
               }}
-              className="ml-2 text-[11px] font-extrabold text-slate-600 hover:text-slate-900 cursor-pointer"
+              className="ml-2 hidden text-[11px] font-extrabold text-slate-600 hover:text-slate-900 cursor-pointer sm:inline"
               title="Reiniciar posición del botón"
             >
               ↺
@@ -6206,9 +6242,12 @@ function sendQuick(q: string) {
     "fixed z-[70] w-[min(92vw,420px)] vc-assistant-panel",
     open ? "vc-assistant-panel-open" : "",
   ].join(" ")}
-  style={{ left: pos.x, top: pos.y }}
+  style={panelStyle}
 >
-            <div className="rounded-2xl border bg-white shadow-2xl overflow-hidden flex flex-col max-h-[75vh] vc-assistant-shell">
+            <div
+              className="rounded-2xl border bg-white shadow-2xl overflow-hidden flex flex-col max-h-[75vh] vc-assistant-shell"
+              style={mobilePanelShellStyle}
+            >
             {/* Header */}
             <div
                 className="px-4 py-3 flex items-center justify-between gap-3 bg-gradient-to-r from-green-700 to-green-600 text-white cursor-move select-none vc-assistant-header"
