@@ -85,6 +85,23 @@ function genPin4(): string {
   return String(n);
 }
 
+function normalizeCandidateSearchText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function candidateNameMatchesSearch(candidateName: string, query: string) {
+  const tokens = normalizeCandidateSearchText(query).split(" ").filter(Boolean);
+  if (!tokens.length) return false;
+
+  const normalizedName = normalizeCandidateSearchText(candidateName);
+  return tokens.every((token) => normalizedName.includes(token));
+}
+
 function pinBelongsToCandidate(
   pin: CandidatePin,
   candidate: CandidatePanelIdentity
@@ -152,10 +169,9 @@ export default function AdminLivePage() {
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>("");
 
   const suggestions = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return [];
+    if (!q.trim()) return [];
     return candidatesFlat
-      .filter((x) => x.name.toLowerCase().includes(s))
+      .filter((x) => candidateNameMatchesSearch(x.name, q))
       .slice(0, 10);
   }, [q, candidatesFlat]);
 
