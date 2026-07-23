@@ -16,11 +16,16 @@ type CleanupAsset = {
   resource_field: ResourceField | null;
   purpose: AssetPurpose;
   media_kind: AssetKind;
+  mime_type: AssetMimeType;
+  size_bytes: number;
   status: "deleting";
   cleanup_origin: CleanupOrigin;
   deleting_at: string;
   deleted_at: null;
   cleanup_claimed_at: string;
+  cleanup_attempts: number;
+  last_attempt_at: string | null;
+  next_retry_at: string | null;
 };
 
 type CleanupClaimIdentity = {
@@ -47,7 +52,22 @@ type AssetPurpose =
 
 type AssetKind = "image" | "video";
 
-type CleanupOrigin = "expired_pending" | null;
+type AssetMimeType = "image/jpeg" | "image/png" | "image/webp" | "video/mp4";
+
+type CleanupOrigin = "expired_pending" | "orphan_storage" | null;
+
+type OrphanStorageCleanupSpec = {
+  assetId: string;
+  storageObjectId: string;
+  bucket: "solo-ganadores";
+  objectPath: string;
+  publicUrl: string;
+  purpose: AssetPurpose;
+  mediaKind: AssetKind;
+  mimeType: AssetMimeType;
+  sizeBytes: number;
+  storageCreatedAt: string;
+};
 
 type OwnershipState = "complete" | "null" | "partial";
 
@@ -87,6 +107,125 @@ const UUID_RE =
 const OBJECT_PATH_RE =
   /^(eventos|ganadores|galeria)\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp|mp4)$/;
 const TIMEZONE_RE = /(Z|[+-][0-9]{2}:[0-9]{2})$/;
+const ORPHAN_STORAGE_CLEANUP_SPECS: readonly OrphanStorageCleanupSpec[] = [
+  {
+    assetId: "b5b0a1e1-0001-4653-8000-000000000001",
+    storageObjectId: "30442747-4884-4113-bb9d-63c62e095a58",
+    bucket: BUCKET,
+    objectPath: "eventos/1777230507968-1.jpg",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/eventos/1777230507968-1.jpg",
+    purpose: "event_main_image",
+    mediaKind: "image",
+    mimeType: "image/jpeg",
+    sizeBytes: 512994,
+    storageCreatedAt: "2026-04-26T19:08:30.406102+00:00",
+  },
+  {
+    assetId: "b5b0a1e1-0002-4653-8000-000000000002",
+    storageObjectId: "8224b691-7469-40ed-9666-f7a2422ba30b",
+    bucket: BUCKET,
+    objectPath: "eventos/1777239894050-1.jpg",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/eventos/1777239894050-1.jpg",
+    purpose: "event_main_image",
+    mediaKind: "image",
+    mimeType: "image/jpeg",
+    sizeBytes: 512994,
+    storageCreatedAt: "2026-04-26T21:44:56.987563+00:00",
+  },
+  {
+    assetId: "b5b0a1e1-0003-4653-8000-000000000003",
+    storageObjectId: "327ab125-c12f-454e-b2b8-2b67454120b9",
+    bucket: BUCKET,
+    objectPath: "ganadores/1777239961367-images.jpg",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/ganadores/1777239961367-images.jpg",
+    purpose: "post_photo",
+    mediaKind: "image",
+    mimeType: "image/jpeg",
+    sizeBytes: 13174,
+    storageCreatedAt: "2026-04-26T21:46:02.932489+00:00",
+  },
+  {
+    assetId: "030b82e0-c2a1-4907-914f-026d74a65f86",
+    storageObjectId: "5d9d55e8-308e-4675-8444-a08d8d938b18",
+    bucket: BUCKET,
+    objectPath: "eventos/030b82e0-c2a1-4907-914f-026d74a65f86.jpg",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/eventos/030b82e0-c2a1-4907-914f-026d74a65f86.jpg",
+    purpose: "event_main_image",
+    mediaKind: "image",
+    mimeType: "image/jpeg",
+    sizeBytes: 112623,
+    storageCreatedAt: "2026-07-17T22:07:42.009513+00:00",
+  },
+  {
+    assetId: "eed877cd-4c99-46ea-9ae0-c17d9c06f387",
+    storageObjectId: "31051575-b681-4406-81c1-a849b96e99f3",
+    bucket: BUCKET,
+    objectPath: "ganadores/eed877cd-4c99-46ea-9ae0-c17d9c06f387.png",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/ganadores/eed877cd-4c99-46ea-9ae0-c17d9c06f387.png",
+    purpose: "post_photo",
+    mediaKind: "image",
+    mimeType: "image/png",
+    sizeBytes: 585587,
+    storageCreatedAt: "2026-07-17T22:14:16.450955+00:00",
+  },
+  {
+    assetId: "dca21711-3629-42b3-ba82-9571d9506f3a",
+    storageObjectId: "59c52f60-73db-4827-9d50-c90e09a524b1",
+    bucket: BUCKET,
+    objectPath: "galeria/dca21711-3629-42b3-ba82-9571d9506f3a.png",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/galeria/dca21711-3629-42b3-ba82-9571d9506f3a.png",
+    purpose: "media_image",
+    mediaKind: "image",
+    mimeType: "image/png",
+    sizeBytes: 12552,
+    storageCreatedAt: "2026-07-17T22:16:38.173796+00:00",
+  },
+  {
+    assetId: "af2b1e2e-2e20-4d71-947a-5500f59e78db",
+    storageObjectId: "16d3a471-c346-4539-b5a3-37b9eaee54c9",
+    bucket: BUCKET,
+    objectPath: "eventos/af2b1e2e-2e20-4d71-947a-5500f59e78db.mp4",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/eventos/af2b1e2e-2e20-4d71-947a-5500f59e78db.mp4",
+    purpose: "event_promo_video",
+    mediaKind: "video",
+    mimeType: "video/mp4",
+    sizeBytes: 2779345,
+    storageCreatedAt: "2026-07-18T04:36:48.081828+00:00",
+  },
+  {
+    assetId: "2ae854b9-0020-4b94-84b7-051c02ea2a08",
+    storageObjectId: "dcb19486-f79a-44ca-88cd-f0fb17f67cf1",
+    bucket: BUCKET,
+    objectPath: "ganadores/2ae854b9-0020-4b94-84b7-051c02ea2a08.mp4",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/ganadores/2ae854b9-0020-4b94-84b7-051c02ea2a08.mp4",
+    purpose: "post_video",
+    mediaKind: "video",
+    mimeType: "video/mp4",
+    sizeBytes: 2779345,
+    storageCreatedAt: "2026-07-18T04:45:52.366892+00:00",
+  },
+  {
+    assetId: "9cb353f8-d5b6-45c0-8d17-ddec6973d2d4",
+    storageObjectId: "e339ad80-56f1-45c0-b9ea-0dc5d91823a5",
+    bucket: BUCKET,
+    objectPath: "galeria/9cb353f8-d5b6-45c0-8d17-ddec6973d2d4.mp4",
+    publicUrl:
+      "https://rqirkysmcdgoqnkonlrp.supabase.co/storage/v1/object/public/solo-ganadores/galeria/9cb353f8-d5b6-45c0-8d17-ddec6973d2d4.mp4",
+    purpose: "media_video",
+    mediaKind: "video",
+    mimeType: "video/mp4",
+    sizeBytes: 2779345,
+    storageCreatedAt: "2026-07-18T04:47:55.031218+00:00",
+  },
+] as const;
 
 function json(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, {
@@ -112,6 +251,18 @@ function isValidTimestamp(value: unknown): value is string {
 
   const trimmed = value.trim();
   return TIMEZONE_RE.test(trimmed) && Number.isFinite(Date.parse(trimmed));
+}
+
+function isOptionalTimestamp(value: unknown): value is string | null {
+  return value === null || isValidTimestamp(value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function getSafeErrorCode(error: unknown) {
@@ -230,8 +381,21 @@ function isValidAssetKind(value: unknown): value is AssetKind {
   return value === "image" || value === "video";
 }
 
+function isValidAssetMimeType(value: unknown): value is AssetMimeType {
+  return (
+    value === "image/jpeg" ||
+    value === "image/png" ||
+    value === "image/webp" ||
+    value === "video/mp4"
+  );
+}
+
 function isValidCleanupOrigin(value: unknown): value is CleanupOrigin {
-  return value === null || value === "expired_pending";
+  return (
+    value === null ||
+    value === "expired_pending" ||
+    value === "orphan_storage"
+  );
 }
 
 function isValidOwnershipTuple(
@@ -322,7 +486,12 @@ function validateLoadedCleanupAsset(
     row.deleted_at !== null ||
     !isValidTimestamp(row.cleanup_claimed_at) ||
     !isValidAssetPurpose(row.purpose) ||
-    !isValidAssetKind(row.media_kind)
+    !isValidAssetKind(row.media_kind) ||
+    !isValidAssetMimeType(row.mime_type) ||
+    !isPositiveInteger(row.size_bytes) ||
+    !isNonNegativeInteger(row.cleanup_attempts) ||
+    !isOptionalTimestamp(row.last_attempt_at) ||
+    !isOptionalTimestamp(row.next_retry_at)
   ) {
     return { ok: false };
   }
@@ -336,7 +505,11 @@ function validateLoadedCleanupAsset(
     return { ok: false };
   }
 
-  if (ownership === "null" && row.cleanup_origin !== "expired_pending") {
+  if (
+    ownership === "null" &&
+    row.cleanup_origin !== "expired_pending" &&
+    row.cleanup_origin !== "orphan_storage"
+  ) {
     return { ok: false };
   }
 
@@ -365,11 +538,16 @@ function validateLoadedCleanupAsset(
       resource_field: ownership === "complete" ? (row.resource_field as ResourceField) : null,
       purpose: row.purpose,
       media_kind: row.media_kind,
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
       status: "deleting",
       cleanup_origin: row.cleanup_origin,
       deleting_at: row.deleting_at,
       deleted_at: null,
       cleanup_claimed_at: row.cleanup_claimed_at,
+      cleanup_attempts: row.cleanup_attempts,
+      last_attempt_at: row.last_attempt_at,
+      next_retry_at: row.next_retry_at,
     },
   };
 }
@@ -481,9 +659,40 @@ function isAuthorizedLegacyCleanupAsset(asset: CleanupAsset) {
   );
 }
 
+function getOrphanStorageCleanupSpec(assetId: string) {
+  return ORPHAN_STORAGE_CLEANUP_SPECS.find(
+    (spec) => spec.assetId === assetId
+  );
+}
+
+function isAuthorizedOrphanStorageCleanupAsset(asset: CleanupAsset) {
+  const spec = getOrphanStorageCleanupSpec(asset.asset_id);
+  if (!spec) {
+    return false;
+  }
+
+  return (
+    asset.cleanup_origin === "orphan_storage" &&
+    asset.resource_type === null &&
+    asset.resource_id === null &&
+    asset.resource_field === null &&
+    asset.bucket === spec.bucket &&
+    asset.object_path === spec.objectPath &&
+    asset.public_url === spec.publicUrl &&
+    asset.purpose === spec.purpose &&
+    asset.media_kind === spec.mediaKind &&
+    asset.mime_type === spec.mimeType &&
+    asset.size_bytes === spec.sizeBytes
+  );
+}
+
 function isCleanupObjectPathValid(asset: CleanupAsset) {
   if (asset.cleanup_origin === "expired_pending") {
     return isExpiredPendingObjectPathCompatible(asset);
+  }
+
+  if (asset.cleanup_origin === "orphan_storage") {
+    return isAuthorizedOrphanStorageCleanupAsset(asset);
   }
 
   if (asset.cleanup_origin !== null) {
@@ -576,12 +785,17 @@ async function loadClaimedAsset(
         "resource_field",
         "purpose",
         "media_kind",
+        "mime_type",
+        "size_bytes",
         "status",
         "cleanup_origin",
         "deleting_at",
         "deleted_at",
         "cleanup_token",
         "cleanup_claimed_at",
+        "cleanup_attempts",
+        "last_attempt_at",
+        "next_retry_at",
       ].join(",")
     )
     .eq("id", identity.asset_id)
@@ -668,6 +882,70 @@ async function objectExistsAfterRemoveError(
   }
 }
 
+type OrphanStoragePreRemoveResult =
+  | "OK"
+  | "CLAIM_NOT_FOUND"
+  | "ORPHAN_STORAGE_MISSING"
+  | "REFERENCE_CONFLICT"
+  | "INVALID_PATH"
+  | "UNKNOWN_ERROR";
+
+async function validateOrphanStorageBeforeRemove(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  asset: CleanupAsset
+): Promise<OrphanStoragePreRemoveResult> {
+  if (asset.cleanup_origin !== "orphan_storage") {
+    return "OK";
+  }
+
+  const result = await supabase.rpc(
+    "validate_solo_ganadores_orphan_storage_asset_before_remove",
+    {
+      p_asset_id: asset.asset_id,
+      p_cleanup_token: asset.cleanup_token,
+    }
+  );
+
+  if (result.error) {
+    console.warn("[cron/solo-ganadores-cleanup] orphan pre-remove rpc failed", {
+      code: getSafeErrorCode(result.error),
+    });
+    return "UNKNOWN_ERROR";
+  }
+
+  if (result.data === "OK") {
+    return "OK";
+  }
+
+  if (result.data === "CLAIM_NOT_FOUND") {
+    return "CLAIM_NOT_FOUND";
+  }
+
+  if (result.data === "ORPHAN_STORAGE_MISSING") {
+    return "ORPHAN_STORAGE_MISSING";
+  }
+
+  if (result.data === "ORPHAN_REFERENCED") {
+    return "REFERENCE_CONFLICT";
+  }
+
+  if (
+    result.data === "ORPHAN_NOT_ALLOWED" ||
+    result.data === "ORPHAN_ASSET_CONFLICT" ||
+    result.data === "ORPHAN_STORAGE_DUPLICATE" ||
+    result.data === "ORPHAN_STORAGE_ID_MISMATCH" ||
+    result.data === "ORPHAN_STORAGE_CREATED_AT_MISMATCH" ||
+    result.data === "ORPHAN_STORAGE_SIZE_INVALID" ||
+    result.data === "ORPHAN_SIZE_MISMATCH" ||
+    result.data === "ORPHAN_MIME_MISMATCH"
+  ) {
+    return "INVALID_PATH";
+  }
+
+  console.warn("[cron/solo-ganadores-cleanup] orphan pre-remove rpc invalid response");
+  return "UNKNOWN_ERROR";
+}
+
 async function processClaimedAsset(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   asset: CleanupAsset,
@@ -731,6 +1009,45 @@ async function processClaimedAsset(
   }
 
   if (secondReference === "error") {
+    const failed = await failCleanupClaim(supabase, asset, {
+      errorCode: "UNKNOWN_ERROR",
+      retryable: true,
+    });
+    stats[failed ? "failed" : "skipped"] += 1;
+    return;
+  }
+
+  const orphanPreRemove = await validateOrphanStorageBeforeRemove(supabase, asset);
+  if (orphanPreRemove === "CLAIM_NOT_FOUND") {
+    stats.skipped += 1;
+    return;
+  }
+
+  if (orphanPreRemove === "ORPHAN_STORAGE_MISSING") {
+    const completed = await completeCleanupClaim(supabase, asset);
+    stats[completed ? "deleted" : "failed"] += 1;
+    return;
+  }
+
+  if (orphanPreRemove === "REFERENCE_CONFLICT") {
+    const failed = await failCleanupClaim(supabase, asset, {
+      errorCode: "REFERENCE_CONFLICT",
+      retryable: false,
+    });
+    stats[failed ? "failed" : "skipped"] += 1;
+    return;
+  }
+
+  if (orphanPreRemove === "INVALID_PATH") {
+    const failed = await failCleanupClaim(supabase, asset, {
+      errorCode: "INVALID_PATH",
+      retryable: false,
+    });
+    stats[failed ? "failed" : "skipped"] += 1;
+    return;
+  }
+
+  if (orphanPreRemove === "UNKNOWN_ERROR") {
     const failed = await failCleanupClaim(supabase, asset, {
       errorCode: "UNKNOWN_ERROR",
       retryable: true,
