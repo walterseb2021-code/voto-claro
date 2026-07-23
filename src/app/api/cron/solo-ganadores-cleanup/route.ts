@@ -11,11 +11,16 @@ type CleanupAsset = {
   bucket: string;
   object_path: string;
   public_url: string;
-  resource_type: ResourceType;
-  resource_id: string;
-  resource_field: ResourceField;
+  resource_type: ResourceType | null;
+  resource_id: string | null;
+  resource_field: ResourceField | null;
   purpose: AssetPurpose;
   media_kind: AssetKind;
+  status: "deleting";
+  cleanup_origin: CleanupOrigin;
+  deleting_at: string;
+  deleted_at: null;
+  cleanup_claimed_at: string;
 };
 
 type CleanupClaimIdentity = {
@@ -42,6 +47,10 @@ type AssetPurpose =
 
 type AssetKind = "image" | "video";
 
+type CleanupOrigin = "expired_pending" | null;
+
+type OwnershipState = "complete" | "null" | "partial";
+
 type RetryableCleanupFailure = {
   errorCode: "STORAGE_ERROR" | "STORAGE_NOT_FOUND_CHECK_FAILED" | "UNKNOWN_ERROR";
   retryable: true;
@@ -63,6 +72,12 @@ type CleanupStats = {
 
 type ValidationResult<T> = { ok: true; value: T } | { ok: false };
 
+type ClaimedAssetLoadResult =
+  | { status: "loaded"; asset: CleanupAsset }
+  | { status: "missing" }
+  | { status: "invalid" }
+  | { status: "error" };
+
 const BUCKET = "solo-ganadores";
 const CLAIM_LIMIT = 1;
 const GRACE_SECONDS = 86400;
@@ -71,6 +86,7 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OBJECT_PATH_RE =
   /^(eventos|ganadores|galeria)\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp|mp4)$/;
+const TIMEZONE_RE = /(Z|[+-][0-9]{2}:[0-9]{2})$/;
 
 function json(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, {
@@ -87,6 +103,15 @@ function cleanupErrorResponse() {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isValidTimestamp(value: unknown): value is string {
+  if (!isNonEmptyString(value)) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  return TIMEZONE_RE.test(trimmed) && Number.isFinite(Date.parse(trimmed));
 }
 
 function getSafeErrorCode(error: unknown) {
@@ -140,6 +165,15 @@ function getSupabaseAdmin() {
   return createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+function getSupabaseOrigin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  if (!url) {
+    throw new Error("MISSING_SUPABASE_CONFIG");
+  }
+
+  return new URL(url).origin;
 }
 
 function validateClaimIdentity(value: unknown): ValidationResult<CleanupClaimIdentity> {
@@ -196,6 +230,10 @@ function isValidAssetKind(value: unknown): value is AssetKind {
   return value === "image" || value === "video";
 }
 
+function isValidCleanupOrigin(value: unknown): value is CleanupOrigin {
+  return value === null || value === "expired_pending";
+}
+
 function isValidOwnershipTuple(
   resourceType: ResourceType,
   resourceField: ResourceField,
@@ -242,37 +280,71 @@ function isValidOwnershipTuple(
   );
 }
 
-function validateClaimedAsset(value: unknown): ValidationResult<CleanupAsset> {
-  const identity = validateClaimIdentity(value);
-  if (!identity.ok) {
-    return { ok: false };
+function classifyOwnership(row: Record<string, unknown>): OwnershipState {
+  if (
+    isValidResourceType(row.resource_type) &&
+    isNonEmptyString(row.resource_id) &&
+    UUID_RE.test(row.resource_id) &&
+    isValidResourceField(row.resource_field)
+  ) {
+    return "complete";
   }
 
+  if (
+    row.resource_type === null &&
+    row.resource_id === null &&
+    row.resource_field === null
+  ) {
+    return "null";
+  }
+
+  return "partial";
+}
+
+function validateLoadedCleanupAsset(
+  value: unknown,
+  identity: CleanupClaimIdentity
+): ValidationResult<CleanupAsset> {
   const row = value as Record<string, unknown>;
 
   if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    row.id !== identity.asset_id ||
+    row.cleanup_token !== identity.cleanup_token ||
     !isNonEmptyString(row.bucket) ||
     !isNonEmptyString(row.object_path) ||
-    !isNonEmptyString(row.public_url)
-  ) {
-    return { ok: false };
-  }
-
-  if (
-    !isValidResourceType(row.resource_type) ||
-    !isNonEmptyString(row.resource_id) ||
-    !UUID_RE.test(row.resource_id) ||
-    !isValidResourceField(row.resource_field) ||
+    !isNonEmptyString(row.public_url) ||
+    row.status !== "deleting" ||
+    !isValidCleanupOrigin(row.cleanup_origin) ||
+    !isValidTimestamp(row.deleting_at) ||
+    row.deleted_at !== null ||
+    !isValidTimestamp(row.cleanup_claimed_at) ||
     !isValidAssetPurpose(row.purpose) ||
     !isValidAssetKind(row.media_kind)
   ) {
     return { ok: false };
   }
 
+  const ownership = classifyOwnership(row);
+  if (ownership === "partial") {
+    return { ok: false };
+  }
+
+  if (ownership === "complete" && row.cleanup_origin !== null) {
+    return { ok: false };
+  }
+
+  if (ownership === "null" && row.cleanup_origin !== "expired_pending") {
+    return { ok: false };
+  }
+
   if (
+    ownership === "complete" &&
     !isValidOwnershipTuple(
-      row.resource_type,
-      row.resource_field,
+      row.resource_type as ResourceType,
+      row.resource_field as ResourceField,
       row.purpose,
       row.media_kind
     )
@@ -283,16 +355,21 @@ function validateClaimedAsset(value: unknown): ValidationResult<CleanupAsset> {
   return {
     ok: true,
     value: {
-      asset_id: identity.value.asset_id,
-      cleanup_token: identity.value.cleanup_token,
+      asset_id: identity.asset_id,
+      cleanup_token: identity.cleanup_token,
       bucket: row.bucket,
       object_path: row.object_path,
       public_url: row.public_url,
-      resource_type: row.resource_type,
-      resource_id: row.resource_id,
-      resource_field: row.resource_field,
+      resource_type: ownership === "complete" ? (row.resource_type as ResourceType) : null,
+      resource_id: ownership === "complete" ? (row.resource_id as string) : null,
+      resource_field: ownership === "complete" ? (row.resource_field as ResourceField) : null,
       purpose: row.purpose,
       media_kind: row.media_kind,
+      status: "deleting",
+      cleanup_origin: row.cleanup_origin,
+      deleting_at: row.deleting_at,
+      deleted_at: null,
+      cleanup_claimed_at: row.cleanup_claimed_at,
     },
   };
 }
@@ -310,6 +387,10 @@ function isImageObjectPath(path: string) {
 }
 
 function isObjectPathCompatibleWithAsset(asset: CleanupAsset) {
+  if (asset.resource_type === null) {
+    return false;
+  }
+
   if (asset.resource_type === "event" && !asset.object_path.startsWith("eventos/")) {
     return false;
   }
@@ -327,6 +408,112 @@ function isObjectPathCompatibleWithAsset(asset: CleanupAsset) {
   }
 
   return asset.object_path.endsWith(".mp4");
+}
+
+function isExpiredPendingObjectPathCompatible(asset: CleanupAsset) {
+  const assetId = asset.asset_id.toLowerCase();
+
+  if (asset.purpose === "event_main_image" && asset.media_kind === "image") {
+    return new RegExp(`^eventos/${assetId}\\.(jpg|png|webp)$`).test(
+      asset.object_path
+    );
+  }
+
+  if (asset.purpose === "event_promo_video" && asset.media_kind === "video") {
+    return asset.object_path === `eventos/${assetId}.mp4`;
+  }
+
+  if (asset.purpose === "post_photo" && asset.media_kind === "image") {
+    return new RegExp(`^ganadores/${assetId}\\.(jpg|png|webp)$`).test(
+      asset.object_path
+    );
+  }
+
+  if (asset.purpose === "post_video" && asset.media_kind === "video") {
+    return asset.object_path === `ganadores/${assetId}.mp4`;
+  }
+
+  if (asset.purpose === "media_image" && asset.media_kind === "image") {
+    return new RegExp(`^galeria/${assetId}\\.(jpg|png|webp)$`).test(
+      asset.object_path
+    );
+  }
+
+  if (asset.purpose === "media_video" && asset.media_kind === "video") {
+    return asset.object_path === `galeria/${assetId}.mp4`;
+  }
+
+  return false;
+}
+
+function isAuthorizedLegacyCleanupAsset(asset: CleanupAsset) {
+  return (
+    (
+      asset.asset_id === "7c4f2a9e-8b6d-4a30-9c6f-2e1d5a0b3c41" &&
+      asset.resource_type === "event" &&
+      asset.resource_id === "34ee17ef-f619-412a-9b2f-6cbbf9d19e84" &&
+      asset.resource_field === "main_image_url" &&
+      asset.purpose === "event_main_image" &&
+      asset.media_kind === "image" &&
+      asset.object_path === "eventos/1777247882007-1.jpg" &&
+      asset.cleanup_origin === null
+    ) ||
+    (
+      asset.asset_id === "9f2d6a1b-3c84-4e92-8f51-7a6c0d2b5e13" &&
+      asset.resource_type === "post" &&
+      asset.resource_id === "3515459c-d423-4675-9ce8-26d67e0f3ae1" &&
+      asset.resource_field === "photo_url" &&
+      asset.purpose === "post_photo" &&
+      asset.media_kind === "image" &&
+      asset.object_path === "ganadores/1777250755974-camones-2-300x200.jpg" &&
+      asset.cleanup_origin === null
+    ) ||
+    (
+      asset.asset_id === "2e8c7f41-6d95-4b3a-a2f7-0c9e1d8b6a52" &&
+      asset.resource_type === "media" &&
+      asset.resource_id === "75439f96-ac27-4497-8c24-b7af747378f1" &&
+      asset.resource_field === "media_url" &&
+      asset.purpose === "media_image" &&
+      asset.media_kind === "image" &&
+      asset.object_path === "galeria/1777232612501-camones-2-300x200.jpg" &&
+      asset.cleanup_origin === null
+    )
+  );
+}
+
+function isCleanupObjectPathValid(asset: CleanupAsset) {
+  if (asset.cleanup_origin === "expired_pending") {
+    return isExpiredPendingObjectPathCompatible(asset);
+  }
+
+  if (asset.cleanup_origin !== null) {
+    return false;
+  }
+
+  if (isAuthorizedLegacyCleanupAsset(asset)) {
+    return true;
+  }
+
+  return isValidObjectPath(asset.object_path) && isObjectPathCompatibleWithAsset(asset);
+}
+
+function isCanonicalPublicUrl(asset: CleanupAsset, supabaseOrigin: string) {
+  try {
+    const url = new URL(asset.public_url);
+    const expectedPath = `/storage/v1/object/public/${BUCKET}/${asset.object_path}`;
+
+    return (
+      url.protocol === "https:" &&
+      url.origin === supabaseOrigin &&
+      url.username === "" &&
+      url.password === "" &&
+      url.pathname === expectedPath &&
+      url.search === "" &&
+      url.hash === ""
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function failCleanupClaim(
@@ -372,67 +559,89 @@ async function completeCleanupClaim(
   return typeof result.data === "string" && UUID_RE.test(result.data);
 }
 
-async function hasReferenceInTable(
+async function loadClaimedAsset(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  table: string,
-  fields: string[],
-  publicUrl: string
-): Promise<"referenced" | "clear" | "error"> {
-  for (const field of fields) {
-    const result = await supabase
-      .from(table)
-      .select("id")
-      .eq(field, publicUrl)
-      .limit(1);
+  identity: CleanupClaimIdentity
+): Promise<ClaimedAssetLoadResult> {
+  const result = await supabase
+    .from("solo_ganadores_assets")
+    .select(
+      [
+        "id",
+        "bucket",
+        "object_path",
+        "public_url",
+        "resource_type",
+        "resource_id",
+        "resource_field",
+        "purpose",
+        "media_kind",
+        "status",
+        "cleanup_origin",
+        "deleting_at",
+        "deleted_at",
+        "cleanup_token",
+        "cleanup_claimed_at",
+      ].join(",")
+    )
+    .eq("id", identity.asset_id)
+    .eq("cleanup_token", identity.cleanup_token)
+    .eq("status", "deleting")
+    .is("deleted_at", null)
+    .not("cleanup_claimed_at", "is", null)
+    .limit(2);
 
-    if (result.error) {
-      console.warn("[cron/solo-ganadores-cleanup] reference lookup failed", {
-        table,
-        field,
-        code: getSafeErrorCode(result.error),
-      });
-      return "error";
-    }
-
-    if ((result.data ?? []).length > 0) {
-      return "referenced";
-    }
+  if (result.error) {
+    console.warn("[cron/solo-ganadores-cleanup] claimed asset reload failed", {
+      code: getSafeErrorCode(result.error),
+    });
+    return { status: "error" };
   }
 
-  return "clear";
+  const rows = result.data ?? [];
+  if (rows.length === 0) {
+    return { status: "missing" };
+  }
+
+  if (rows.length > 1) {
+    console.warn("[cron/solo-ganadores-cleanup] claimed asset reload duplicated");
+    return { status: "invalid" };
+  }
+
+  const validated = validateLoadedCleanupAsset(rows[0], identity);
+  if (!validated.ok) {
+    console.warn("[cron/solo-ganadores-cleanup] claimed asset reload invalid");
+    return { status: "invalid" };
+  }
+
+  return { status: "loaded", asset: validated.value };
 }
 
 async function hasActiveReference(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   publicUrl: string
 ): Promise<"referenced" | "clear" | "error"> {
-  const checks: Array<{ table: string; fields: string[] }> = [
-    {
-      table: "solo_ganadores_events",
-      fields: ["main_image_url", "promo_video_url"],
-    },
-    {
-      table: "solo_ganadores_posts",
-      fields: ["photo_url", "video_url", "interview_url"],
-    },
-    {
-      table: "solo_ganadores_media",
-      fields: ["media_url"],
-    },
-  ];
+  const result = await supabase.rpc("solo_ganadores_asset_has_active_reference", {
+    p_public_url: publicUrl,
+  });
 
-  for (const check of checks) {
-    const result = await hasReferenceInTable(
-      supabase,
-      check.table,
-      check.fields,
-      publicUrl
-    );
-
-    if (result !== "clear") return result;
+  if (result.error) {
+    console.warn("[cron/solo-ganadores-cleanup] reference rpc failed", {
+      code: getSafeErrorCode(result.error),
+    });
+    return "error";
   }
 
-  return "clear";
+  if (result.data === true) {
+    return "referenced";
+  }
+
+  if (result.data === false) {
+    return "clear";
+  }
+
+  console.warn("[cron/solo-ganadores-cleanup] reference rpc invalid response");
+  return "error";
 }
 
 async function objectExistsAfterRemoveError(
@@ -462,6 +671,7 @@ async function objectExistsAfterRemoveError(
 async function processClaimedAsset(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   asset: CleanupAsset,
+  supabaseOrigin: string,
   stats: CleanupStats
 ) {
   if (asset.bucket !== BUCKET) {
@@ -473,7 +683,7 @@ async function processClaimedAsset(
     return;
   }
 
-  if (!isValidObjectPath(asset.object_path)) {
+  if (!isCleanupObjectPathValid(asset)) {
     const failed = await failCleanupClaim(supabase, asset, {
       errorCode: "INVALID_PATH",
       retryable: false,
@@ -482,7 +692,7 @@ async function processClaimedAsset(
     return;
   }
 
-  if (!isObjectPathCompatibleWithAsset(asset)) {
+  if (!isCanonicalPublicUrl(asset, supabaseOrigin)) {
     const failed = await failCleanupClaim(supabase, asset, {
       errorCode: "INVALID_PATH",
       retryable: false,
@@ -502,6 +712,25 @@ async function processClaimedAsset(
   }
 
   if (reference === "error") {
+    const failed = await failCleanupClaim(supabase, asset, {
+      errorCode: "UNKNOWN_ERROR",
+      retryable: true,
+    });
+    stats[failed ? "failed" : "skipped"] += 1;
+    return;
+  }
+
+  const secondReference = await hasActiveReference(supabase, asset.public_url);
+  if (secondReference === "referenced") {
+    const failed = await failCleanupClaim(supabase, asset, {
+      errorCode: "REFERENCE_CONFLICT",
+      retryable: false,
+    });
+    stats[failed ? "failed" : "skipped"] += 1;
+    return;
+  }
+
+  if (secondReference === "error") {
     const failed = await failCleanupClaim(supabase, asset, {
       errorCode: "UNKNOWN_ERROR",
       retryable: true,
@@ -550,6 +779,7 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+    const supabaseOrigin = getSupabaseOrigin();
 
     console.info("[cron/solo-ganadores-cleanup] cleanup started");
 
@@ -589,18 +819,32 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      const asset = validateClaimedAsset(row);
-      if (!asset.ok) {
-        console.warn("[cron/solo-ganadores-cleanup] invalid claimed asset metadata");
+      const loaded = await loadClaimedAsset(supabase, identity.value);
+      if (loaded.status === "missing") {
+        console.warn("[cron/solo-ganadores-cleanup] claimed asset no longer current");
+        stats.skipped += 1;
+        continue;
+      }
+
+      if (loaded.status === "error") {
         const failed = await failCleanupClaim(supabase, identity.value, {
-          errorCode: "REFERENCE_CONFLICT",
+          errorCode: "UNKNOWN_ERROR",
+          retryable: true,
+        });
+        stats[failed ? "failed" : "skipped"] += 1;
+        continue;
+      }
+
+      if (loaded.status === "invalid") {
+        const failed = await failCleanupClaim(supabase, identity.value, {
+          errorCode: "INVALID_PATH",
           retryable: false,
         });
         stats[failed ? "failed" : "skipped"] += 1;
         continue;
       }
 
-      await processClaimedAsset(supabase, asset.value, stats);
+      await processClaimedAsset(supabase, loaded.asset, supabaseOrigin, stats);
     }
 
     console.info("[cron/solo-ganadores-cleanup] cleanup finished", stats);
