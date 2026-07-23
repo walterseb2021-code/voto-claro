@@ -3,20 +3,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { CANDIDATE_GROUPS } from "@/lib/perufederalCandidates";
-import { supabase } from "@/lib/supabaseClient";
+import { resolveCandidatePanelIdentity } from "@/lib/candidatePanelCatalog";
 
-// ===============================
-// ✅ Storage keys (demo PRO)
-// ===============================
 type LivePlatform = "YOUTUBE" | "FACEBOOK" | "TIKTOK" | "OTRA";
-
-type CandidatePin = {
-  candidateId: string;
-  pin: string;
-  createdAt: number;
-  updatedAt: number;
-};
 
 type LiveEntry = {
   id: string;
@@ -28,39 +17,17 @@ type LiveEntry = {
   status: "LIVE" | "ENDED";
 };
 
-const LS_LIVE_KEY = "votoclaro_live_entries_v1";
-const LS_PINS_KEY = "votoclaro_live_pins_v1";
-const LS_PANEL_UNLOCK_PREFIX = "votoclaro_panel_unlocked_";
+type SessionResponse =
+  | {
+      authenticated: true;
+      candidateId: string;
+      expiresAt?: string;
+    }
+  | { authenticated: false };
 
-function safeJsonParse<T>(raw: string | null, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function readPins(): CandidatePin[] {
-  if (typeof window === "undefined") return [];
-  return safeJsonParse<CandidatePin[]>(
-    window.localStorage.getItem(LS_PINS_KEY),
-    []
-  );
-}
-
-function readLives(): LiveEntry[] {
-  if (typeof window === "undefined") return [];
-  return safeJsonParse<LiveEntry[]>(
-    window.localStorage.getItem(LS_LIVE_KEY),
-    []
-  );
-}
-
-function writeLives(entries: LiveEntry[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LS_LIVE_KEY, JSON.stringify(entries));
-}
+type LiveListResponse =
+  | { ok: true; entries: LiveEntry[] }
+  | { ok: false; error?: string };
 
 function platformLabel(p: LivePlatform) {
   switch (p) {
@@ -77,47 +44,25 @@ function platformLabel(p: LivePlatform) {
 
 function isValidUrl(url: string) {
   try {
-    const u = new URL(url);
-    return u.protocol === "http:" || u.protocol === "https:";
+    const parsed = new URL(url);
+    return parsed.protocol === "https:";
   } catch {
     return false;
   }
 }
 
-function genId() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-function normId(input: string) {
-  // 1) Asegura decodificación (por si llega %C3%B1, etc.)
-  let s = String(input || "");
-  try {
-    s = decodeURIComponent(s);
-  } catch {
-    // si no estaba codificado, seguimos normal
-  }
-
-  // 2) Normaliza: minúsculas + quita tildes/diacríticos (incluye ñ -> n)
-  s = s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-  // 3) Limpieza suave
-  s = s.replace(/\s+/g, "-");
-
-  return s;
-}
-
 export default function CandidatePanelPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const params = useParams<{ id: string }>();
 
   function goBack() {
-    // 1) Prioridad: returnTo (flujo controlado)
     const returnTo = searchParams.get("returnTo");
     if (returnTo && returnTo.startsWith("/")) {
       router.push(returnTo);
       return;
     }
 
-    // 2) Referrer inteligente (misma web), evitando volver a pantallas no deseadas
     if (typeof window !== "undefined") {
       const ref = document.referrer || "";
       const origin = window.location.origin;
@@ -126,453 +71,316 @@ export default function CandidatePanelPage() {
         try {
           const u = new URL(ref);
           const path = u.pathname + u.search + u.hash;
-
-          // evita volver a presentaciones/splash (ajusta si tu ruta real es otra)
           const blocked =
-            path === "/" ||
-            path.startsWith("/bienvenida") ||
-            path.includes("splash");
+            path === "/" || path.startsWith("/bienvenida") || path.includes("splash");
 
           if (!blocked) {
             router.push(path);
             return;
           }
-        } catch {
-          // si falla el parse, seguimos con fallback
-        }
+        } catch {}
       }
 
-      // 3) Solo si no tenemos referrer útil, intentamos back()
       if (window.history.length > 1) {
         router.back();
         return;
       }
     }
 
-    // 4) Fallback seguro
     router.push("/");
   }
 
-const params = useParams<{ id: string }>();
+  const candidateIdUrlRaw = String(params?.id ?? "");
+  let candidateIdUrlDecoded = candidateIdUrlRaw;
+  try {
+    candidateIdUrlDecoded = decodeURIComponent(candidateIdUrlRaw);
+  } catch {}
 
-// 1) ID que viene por URL (decodificado)
-const candidateIdUrlRaw = String(params?.id ?? "");
-let candidateIdUrlDecoded = candidateIdUrlRaw;
-try {
-  candidateIdUrlDecoded = decodeURIComponent(candidateIdUrlRaw);
-} catch {}
+  const candidate = useMemo(() => {
+    return resolveCandidatePanelIdentity(candidateIdUrlDecoded);
+  }, [candidateIdUrlDecoded]);
 
-// 2) ID normalizado SOLO para ubicar el candidato en el array
-const candidateIdNorm = normId(candidateIdUrlDecoded);
+  const candidateId = candidate?.canonicalId ?? candidateIdUrlDecoded;
 
-
-// ===============================
-// ✅ Candidate lookup (robusto)
-// ===============================
-const candidate = useMemo(() => { 
-  const all: Array<{
-    id: string;
-    idNorm: string;
-    name: string;
-  }> = [];
-
-  for (const g of CANDIDATE_GROUPS) {
-    for (const c of g.candidates) {
-      const id = String(c.id);
-      all.push({
-        id,
-        idNorm: normId(id),
-        name: String(c.name),
-      });
-    }
-  }
-
-  return all.find((x) => x.idNorm === candidateIdNorm) ?? null;
-}, [candidateIdNorm]);
-
-// ✅ ID CANÓNICO (el real del dataset). Usar este para Supabase y localStorage.
-const candidateId = candidate?.id ?? candidateIdUrlDecoded;
-
-  // ===============================
-  // ✅ Unlock with PIN (solo emisor)
-  // ===============================
-  const [pins, setPins] = useState<CandidatePin[]>([]);
-  const [unlocked, setUnlocked] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
   const [pinInput, setPinInput] = useState("");
-  // ✅ PIN desde Supabase (entre dispositivos)
-  const [serverPin, setServerPin] = useState<string | null>(null);
-  const [pinLoading, setPinLoading] = useState(false);
+  const [unlockLoading, setUnlockLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!candidateId) return;
-    let cancelled = false;
-
-    async function loadPin() {
-      setPinLoading(true);
-
-      const { data, error } = await supabase
-        .from("votoclaro_candidate_pins")
-        .select("pin")
-        .eq("candidate_id", candidateId)
-        .maybeSingle();
-
-      if (cancelled) return;
-
-      if (error) {
-        console.warn(
-          "[VOTO CLARO] Error leyendo PIN desde Supabase:",
-          error.message
-        );
-        setServerPin(null);
-      } else {
-        setServerPin((data?.pin as string) ?? null);
-      }
-
-      setPinLoading(false);
-    }
-
-    void loadPin();
-    return () => {
-      cancelled = true;
-    };
-  }, [candidateId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setPins(readPins());
-    const ok =
-      window.localStorage.getItem(LS_PANEL_UNLOCK_PREFIX + candidateId) === "1";
-    setUnlocked(ok);
-  }, [candidateId]);
-
-  const correctPin = useMemo(() => {
-    // 1) Primero Supabase (nube / entre dispositivos)
-    if (serverPin) return serverPin;
-
-    // 2) Fallback local (demo antigua)
-    return pins.find((p) => p.candidateId === candidateId)?.pin ?? null;
-  }, [serverPin, pins, candidateId]);
-
-  function tryUnlock() {
-    if (!correctPin) {
-      alert("Aún no existe PIN para este candidato. Pídeselo al administrador.");
-      return;
-    }
-    if (pinInput.trim() === correctPin) {
-      window.localStorage.setItem(LS_PANEL_UNLOCK_PREFIX + candidateId, "1");
-      setUnlocked(true);
-    } else {
-      alert("PIN incorrecto.");
-    }
-  }
-
-  // ===============================
-  // ✅ Lives management
-  // ===============================
   const [lives, setLives] = useState<LiveEntry[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
   const [platform, setPlatform] = useState<LivePlatform>("FACEBOOK");
   const [url, setUrl] = useState("");
   const [setAsLive, setSetAsLive] = useState(true);
 
-  // ✅ FIX: Supabase es la fuente de verdad para ESTE candidato (no reinsertamos localStorage borrado)
-  // ✅ PLUS: Realtime (si admin borra, el panel se actualiza solo)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!candidateId) return;
+  function expireSession(message = "La sesión venció. Ingresa nuevamente el PIN.") {
+    setAuthenticated(false);
+    setSessionExpiresAt(null);
+    setLives([]);
+    setNotice(message);
+  }
 
-    let cancelled = false;
-
-    // 1) Carga inmediata local (por si la red demora)
-    setLives(readLives());
-
-    function replaceCandidateLivesInState(serverCandidateLives: LiveEntry[]) {
-      setLives((prev) => {
-        const others = prev.filter((x) => x.candidateId !== candidateId);
-        const next = [...serverCandidateLives, ...others].sort(
-          (a, b) => b.createdAt - a.createdAt
-        );
-        writeLives(next);
-        return next;
+  async function loadLives() {
+    setLiveLoading(true);
+    try {
+      const res = await fetch("/api/candidate/live", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
       });
-    }
 
-    async function loadCandidateLivesFromSupabase() {
-      const { data, error } = await supabase
-        .from("votoclaro_live_entries")
-        .select("id,candidate_id,candidate_name,platform,url,status,created_at")
-        .eq("candidate_id", candidateId)
-        .order("created_at", { ascending: false })
-        .limit(300);
-
-      if (cancelled) return;
-
-      if (error) {
-        console.warn(
-          "[VOTO CLARO] Error leyendo lives desde Supabase:",
-          error.message
-        );
+      if (res.status === 401 || res.status === 403) {
+        expireSession();
         return;
       }
 
-      const serverLivesForCandidate: LiveEntry[] = (data ?? []).map((r: any) => ({
-        id: String(r.id),
-        candidateId: String(r.candidate_id),
-        candidateName: String(r.candidate_name),
-        platform: r.platform as LivePlatform,
-        url: String(r.url),
-        status: r.status as "LIVE" | "ENDED",
-        createdAt: new Date(r.created_at).getTime(),
-      }));
+      const data = (await res.json().catch(() => null)) as LiveListResponse | null;
+      if (!res.ok || !data?.ok) {
+        setNotice("No se pudo cargar el historial.");
+        return;
+      }
 
-      // ✅ Supabase manda: reemplazamos lo del candidato (NO reinsertamos "localOnly")
-      replaceCandidateLivesInState(serverLivesForCandidate);
+      setLives(data.entries);
+    } finally {
+      setLiveLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!candidate) {
+      setSessionLoading(false);
+      return;
     }
 
-    void loadCandidateLivesFromSupabase();
+    let cancelled = false;
 
-    // Listener de storage (misma PC en otra pestaña)
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === LS_LIVE_KEY) {
-        // Revalidamos desde Supabase para que no reaparezcan borrados
-        void loadCandidateLivesFromSupabase();
-      }
-      if (e.key === LS_PINS_KEY) setPins(readPins());
-    };
-    window.addEventListener("storage", onStorage);
+    async function checkSession() {
+      setSessionLoading(true);
+      setNotice(null);
 
-    // ✅ Realtime: INSERT / UPDATE / DELETE del candidato
-    const channel = supabase
-      .channel(`vc-live-${candidateId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "votoclaro_live_entries",
-          filter: `candidate_id=eq.${candidateId}`,
-        },
-        (payload: any) => {
-            console.log("[ADMIN REALTIME payload]", payload);
+      try {
+        const res = await fetch("/api/candidate/panel/session", {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => null)) as SessionResponse | null;
 
-          // DELETE
-          if (payload.eventType === "DELETE") {
-            const deletedId = String(payload.old?.id ?? "");
-            if (!deletedId) return;
+        if (cancelled) return;
 
-            setLives((prev) => {
-              const next = prev.filter((x) => x.id !== deletedId);
-              writeLives(next);
-              return next;
-            });
-            return;
-          }
+        const sessionIdentity = data?.authenticated
+          ? resolveCandidatePanelIdentity(data.candidateId)
+          : null;
+        const matchesCandidate =
+          Boolean(sessionIdentity && candidate) &&
+          sessionIdentity?.storageCandidateId === candidate?.storageCandidateId;
 
-          // INSERT / UPDATE
-          const row = payload.new;
-          if (!row) return;
-
-          const incoming: LiveEntry = {
-            id: String(row.id),
-            candidateId: String(row.candidate_id),
-            candidateName: String(row.candidate_name),
-            platform: row.platform as LivePlatform,
-            url: String(row.url),
-            status: row.status as "LIVE" | "ENDED",
-            createdAt: new Date(row.created_at).getTime(),
-          };
-
-          setLives((prev) => {
-            const idx = prev.findIndex((x) => x.id === incoming.id);
-            let next: LiveEntry[];
-            if (idx >= 0) {
-              next = prev.map((x) => (x.id === incoming.id ? incoming : x));
-            } else {
-              next = [incoming, ...prev];
-            }
-            next = next.sort((a, b) => b.createdAt - a.createdAt);
-            writeLives(next);
-            return next;
-          });
+        if (res.ok && data?.authenticated && matchesCandidate) {
+          setAuthenticated(true);
+          setSessionExpiresAt(data.expiresAt ?? null);
+          await loadLives();
+          return;
         }
-      )
-      .subscribe((status) => {
-  console.log("[ADMIN REALTIME status]", status);
-});
 
+        setAuthenticated(false);
+        setSessionExpiresAt(null);
+        setLives([]);
+
+        if (data?.authenticated && !matchesCandidate) {
+          setNotice("Hay una sesión activa para otro candidato. Cierra sesión e ingresa el PIN correcto.");
+        }
+      } finally {
+        if (!cancelled) setSessionLoading(false);
+      }
+    }
+
+    void checkSession();
 
     return () => {
       cancelled = true;
-      window.removeEventListener("storage", onStorage);
-      void supabase.removeChannel(channel);
     };
-  }, [candidateId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateId, candidate]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    if (typeof window === "undefined") return;
+
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        void loadLives();
+      }
+    };
+
+    const intervalId = window.setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, candidateId]);
 
   const myHistory = useMemo(() => {
+    if (!candidate) return [];
     return lives
-      .filter((x) => x.candidateId === candidateId)
+      .filter(
+        (x) =>
+          x.candidateId === candidate.canonicalId ||
+          x.candidateId === candidate.storageCandidateId
+      )
       .sort((a, b) => b.createdAt - a.createdAt);
-  }, [lives, candidateId]);
+  }, [lives, candidate]);
 
   const myLiveNow = useMemo(() => {
     return myHistory.find((x) => x.status === "LIVE") ?? null;
   }, [myHistory]);
+
+  async function tryUnlock() {
+    if (!candidate) {
+      alert("Candidato no encontrado.");
+      return;
+    }
+
+    setUnlockLoading(true);
+    setNotice(null);
+
+    try {
+      const res = await fetch("/api/candidate/panel/unlock", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateId, pin: pinInput.trim() }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; authenticated?: boolean; candidateId?: string; expiresAt?: string }
+        | null;
+      const unlockedIdentity = data?.candidateId
+        ? resolveCandidatePanelIdentity(data.candidateId)
+        : null;
+      const unlockedMatchesCandidate =
+        Boolean(unlockedIdentity && candidate) &&
+        unlockedIdentity?.storageCandidateId === candidate?.storageCandidateId;
+
+      if (!res.ok || !data?.ok || !unlockedMatchesCandidate) {
+        alert(
+          res.status === 429
+            ? "Demasiados intentos. Intenta nuevamente más tarde."
+            : "No se pudo validar el acceso."
+        );
+        return;
+      }
+
+      setAuthenticated(true);
+      setSessionExpiresAt(data.expiresAt ?? null);
+      setPinInput("");
+      await loadLives();
+    } finally {
+      setUnlockLoading(false);
+    }
+  }
+
+  async function logout() {
+    try {
+      await fetch("/api/candidate/panel/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } finally {
+      setAuthenticated(false);
+      setSessionExpiresAt(null);
+      setLives([]);
+      setPinInput("");
+      setNotice("Sesión cerrada.");
+    }
+  }
 
   async function activateLink() {
     if (!candidate) {
       alert("Candidato no encontrado.");
       return;
     }
+
     const trimmed = url.trim();
     if (!trimmed || !isValidUrl(trimmed)) {
-      alert("Pega un enlace válido (https://...).");
+      alert("Pega un enlace válido con https://");
       return;
     }
 
-    const now = Date.now();
+    const res = await fetch("/api/candidate/live", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform, url: trimmed, setAsLive }),
+    });
 
-    // ✅ REGLA A: si activan nuevo LIVE, el anterior LIVE del mismo candidato pasa a ENDED
-    let next = lives.map((x) =>
-      x.candidateId === candidateId && x.status === "LIVE"
-        ? { ...x, status: "ENDED" as const }
-        : x
-    );
+    if (res.status === 401 || res.status === 403) {
+      expireSession();
+      return;
+    }
 
-    const entry: LiveEntry = {
-      id: genId(),
-      candidateId,
-      candidateName: candidate.name,
-      platform,
-      url: trimmed,
-      createdAt: now,
-      status: setAsLive ? "LIVE" : "ENDED",
-    };
-
-    next = [entry, ...next];
-    setLives(next);
-    writeLives(next);
-
-    // ✅ Guardar también en Supabase (para sincronizar entre dispositivos)
-    // ✅ IMPORTANTE: NO enviamos "id" (Supabase genera UUID)
-    // ✅ Luego reemplazamos el id temporal por el UUID real en state + localStorage
-    try {
-      const { data, error } = await supabase
-        .from("votoclaro_live_entries")
-        .insert({
-          // id: NO SE ENVÍA
-          candidate_id: candidateId,
-          candidate_name: candidate.name,
-          platform,
-          url: trimmed,
-          status: entry.status,
-          created_at: new Date(now).toISOString(),
-        })
-        .select("id")
-        .single();
-
-      if (error) {
-        console.warn("[Supabase] insert live error:", error.message);
-      } else if (data?.id) {
-        const serverId = String(data.id);
-
-        setLives((curr) => {
-          const updated = curr.map((x) =>
-            x.id === entry.id ? { ...x, id: serverId } : x
-          );
-          writeLives(updated);
-          return updated;
-        });
-      }
-    } catch (e: any) {
-      console.warn(
-        "[Supabase] insert live error (exception):",
-        e?.message ?? e
-      );
+    if (!res.ok) {
+      alert("No se pudo guardar el enlace.");
+      return;
     }
 
     setUrl("");
+    await loadLives();
     alert(setAsLive ? "Transmisión activada ✅" : "Enlace guardado en historial ✅");
   }
 
-  function finishLive() {
+  async function finishLive() {
     if (!myLiveNow) return;
-    const next = lives.map((x) =>
-      x.id === myLiveNow.id ? { ...x, status: "ENDED" as const } : x
-    );
-    setLives(next);
-    writeLives(next);
 
-    // ✅ Actualizar también en Supabase (para sincronizar entre dispositivos)
-    void supabase
-      .from("votoclaro_live_entries")
-      .update({ status: "ENDED" })
-      .eq("id", myLiveNow.id)
-      .then(({ error }) => {
-        if (error) {
-          console.warn("[Supabase] update live error:", error.message);
-        }
-      });
-
-    alert("Transmisión finalizada ✅");
-  }
-  async function deleteLive(entry: LiveEntry) {
-    const ok = confirm("¿Seguro que deseas BORRAR este enlace?\n\nSe eliminará en Usuario y Administrador también.");
-    if (!ok) return;
-
-    // 1) UI inmediata (optimista)
-    setLives((prev) => {
-      const next = prev.filter((x) => x.id !== entry.id);
-      writeLives(next);
-      return next;
+    const res = await fetch(`/api/candidate/live/${encodeURIComponent(myLiveNow.id)}`, {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "ENDED" }),
     });
 
-    // 2) Borrar en Supabase (source of truth)
-    try {
-      const { error } = await supabase
-        .from("votoclaro_live_entries")
-        .delete()
-        .eq("id", entry.id);
-
-      if (error) {
-        console.warn("[Supabase] delete live error:", error.message);
-
-        // 🔁 Re-sync: si falló el delete, recargamos desde Supabase para no quedar desincronizados
-        const { data, error: reloadErr } = await supabase
-          .from("votoclaro_live_entries")
-          .select("id,candidate_id,candidate_name,platform,url,status,created_at")
-          .eq("candidate_id", candidateId)
-          .order("created_at", { ascending: false })
-          .limit(300);
-
-        if (!reloadErr) {
-          const serverLivesForCandidate: LiveEntry[] = (data ?? []).map((r: any) => ({
-            id: String(r.id),
-            candidateId: String(r.candidate_id),
-            candidateName: String(r.candidate_name),
-            platform: r.platform as LivePlatform,
-            url: String(r.url),
-            status: r.status as "LIVE" | "ENDED",
-            createdAt: new Date(r.created_at).getTime(),
-          }));
-
-          setLives((prev) => {
-            const others = prev.filter((x) => x.candidateId !== candidateId);
-            const next = [...serverLivesForCandidate, ...others].sort((a, b) => b.createdAt - a.createdAt);
-            writeLives(next);
-            return next;
-          });
-        }
-
-        alert("No se pudo borrar en Supabase. Revisé sincronización.");
-      }
-    } catch (e: any) {
-      console.warn("[Supabase] delete live exception:", e?.message ?? e);
-      alert("Error inesperado al borrar.");
+    if (res.status === 401 || res.status === 403) {
+      expireSession();
+      return;
     }
+
+    if (!res.ok) {
+      alert("No se pudo finalizar la transmisión.");
+      return;
+    }
+
+    await loadLives();
+    alert("Transmisión finalizada ✅");
   }
 
-  // ===============================
-  // ✅ Styles (PRO verde/rojo)
-  // ===============================
+  async function deleteLive(entry: LiveEntry) {
+    const ok = confirm(
+      "¿Seguro que deseas BORRAR este enlace?\n\nSe eliminará en Usuario y Administrador también."
+    );
+    if (!ok) return;
+
+    const res = await fetch(`/api/candidate/live/${encodeURIComponent(entry.id)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      expireSession();
+      return;
+    }
+
+    if (!res.ok) {
+      alert("No se pudo borrar el enlace.");
+      return;
+    }
+
+    await loadLives();
+  }
+
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-3xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
   const sectionWrap =
@@ -581,11 +389,11 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
   const btn =
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm";
+    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
   const btnDanger =
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
     "border-2 border-red-700 bg-red-700 text-white text-sm font-extrabold " +
-    "hover:bg-red-800 transition shadow-sm";
+    "hover:bg-red-800 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
   const input =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
@@ -615,7 +423,25 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
     );
   }
 
-  if (!unlocked) {
+  if (sessionLoading) {
+    return (
+      <main className={wrap}>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 break-words">
+          Panel privado (VOTO CLARO)
+        </h1>
+
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="text-sm font-extrabold text-slate-900">
+              Verificando sesión...
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!authenticated) {
     return (
       <main className={wrap}>
         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 break-words">
@@ -629,8 +455,14 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
             </div>
 
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
-              Candidato: <span className="font-extrabold">{candidate.name}</span>
+              Candidato: <span className="font-extrabold">{candidate.displayName}</span>
             </div>
+
+            {notice ? (
+              <div className="mt-3 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+                {notice}
+              </div>
+            ) : null}
 
             <input
               value={pinInput}
@@ -638,19 +470,20 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
               inputMode="numeric"
               placeholder="PIN de 4 dígitos"
               className={input}
+              disabled={unlockLoading}
             />
-            {pinLoading ? (
-              <div className="mt-2 text-xs font-semibold text-slate-600">
-                Cargando PIN...
-              </div>
-            ) : null}
 
-            <button type="button" onClick={tryUnlock} className={btn + " mt-3"}>
-              Entrar
+            <button
+              type="button"
+              onClick={tryUnlock}
+              className={btn + " mt-3"}
+              disabled={unlockLoading}
+            >
+              {unlockLoading ? "Validando..." : "Entrar"}
             </button>
 
             <div className="mt-3 text-xs text-slate-600">
-              Si no tienes PIN, pídelo al administrador.
+              Si no tienes PIN, pídeselo al administrador.
             </div>
           </div>
         </section>
@@ -669,17 +502,34 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
           Panel de transmisión (VOTO CLARO)
         </h1>
 
-        <button type="button" onClick={goBack} className={btn}>
-          ← Volver
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button type="button" onClick={goBack} className={btn}>
+            ← Volver
+          </button>
+          <button type="button" onClick={logout} className={btnDanger}>
+            Cerrar sesión
+          </button>
+        </div>
       </div>
 
       <section className={sectionWrap}>
         <div className={inner}>
           <div className="text-sm font-extrabold text-slate-900">Candidato</div>
           <div className="mt-1 text-base md:text-lg font-extrabold text-slate-900 break-words">
-            {candidate.name}
+            {candidate.displayName}
           </div>
+
+          {sessionExpiresAt ? (
+            <div className="mt-2 text-xs font-semibold text-slate-600">
+              Sesión activa hasta: {new Date(sessionExpiresAt).toLocaleString("es-PE")}
+            </div>
+          ) : null}
+
+          {notice ? (
+            <div className="mt-3 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+              {notice}
+            </div>
+          ) : null}
 
           {myLiveNow ? (
             <div className="mt-4 rounded-2xl border-4 border-red-700 bg-red-50/60 p-4">
@@ -707,7 +557,7 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50/70 p-4 text-sm font-semibold text-slate-700">
-              No tienes transmisión EN VIVO activa.
+              {liveLoading ? "Cargando transmisiones..." : "No tienes transmisión EN VIVO activa."}
             </div>
           )}
 
@@ -750,19 +600,12 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
                 onChange={(e) => setSetAsLive(e.target.checked)}
                 className="h-4 w-4"
               />
-              <label
-                htmlFor="asLive"
-                className="text-sm font-extrabold text-slate-800"
-              >
+              <label htmlFor="asLive" className="text-sm font-extrabold text-slate-800">
                 Marcar como EN VIVO (si ya está transmitiendo)
               </label>
             </div>
 
-            <button
-              type="button"
-              onClick={activateLink}
-              className={btn + " mt-3"}
-            >
+            <button type="button" onClick={activateLink} className={btn + " mt-3"}>
               Guardar enlace
             </button>
 
@@ -773,8 +616,13 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
           </div>
 
           <div className="mt-5 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4">
-            <div className="text-sm font-extrabold text-slate-900">
-              Historial de transmisiones
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-sm font-extrabold text-slate-900">
+                Historial de transmisiones
+              </div>
+              <button type="button" onClick={loadLives} className={btn} disabled={liveLoading}>
+                {liveLoading ? "Actualizando..." : "Actualizar"}
+              </button>
             </div>
 
             {myHistory.length === 0 ? (
@@ -790,8 +638,8 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
                   >
                     <div className="min-w-0">
                       <div className="text-xs font-extrabold text-slate-700">
-                        {new Date(x.createdAt).toLocaleString("es-PE")} ·{" "}
-                        {platformLabel(x.platform)} ·{" "}
+                        {new Date(x.createdAt).toLocaleString("es-PE")} {" - "}
+                        {platformLabel(x.platform)} {" - "}
                         {x.status === "LIVE" ? "🔴 EN VIVO" : "Finalizado"}
                       </div>
                       <div className="mt-1 text-[11px] text-slate-600 break-words">
@@ -799,28 +647,26 @@ const candidateId = candidate?.id ?? candidateIdUrlDecoded;
                       </div>
                     </div>
 
-                   <div className="flex items-center gap-2">
-  <button
-    type="button"
-    onClick={() => window.open(x.url, "_blank")}
-    className={btn}
-  >
-    Ver
-  </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => window.open(x.url, "_blank")}
+                        className={btn}
+                      >
+                        Ver
+                      </button>
 
-  <button
-    type="button"
-    onClick={() => deleteLive(x)}
-    className={btnDanger}
-    title="Borrar enlace"
-  >
-    🗑️ Borrar
-  </button>
-</div>
-
+                      <button
+                        type="button"
+                        onClick={() => deleteLive(x)}
+                        className={btnDanger}
+                        title="Borrar enlace"
+                      >
+                        🗑️ Borrar
+                      </button>
+                    </div>
                   </div>
                 ))}
-
               </div>
             )}
           </div>

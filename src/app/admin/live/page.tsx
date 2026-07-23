@@ -4,7 +4,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CANDIDATE_GROUPS } from "@/lib/perufederalCandidates";
+import {
+  getCandidatePanelOptions,
+  type CandidatePanelIdentity,
+} from "@/lib/candidatePanelCatalog";
 import { supabase } from "@/lib/supabaseClient";
 import { createClient } from "@supabase/supabase-js";
 
@@ -82,6 +85,16 @@ function genPin4(): string {
   return String(n);
 }
 
+function pinBelongsToCandidate(
+  pin: CandidatePin,
+  candidate: CandidatePanelIdentity
+) {
+  return (
+    pin.candidateId === candidate.storageCandidateId ||
+    candidate.acceptedIds.includes(pin.candidateId)
+  );
+}
+
 export default function AdminLivePage() {
   const router = useRouter();
   const PROD_ORIGIN = "https://voto-claro.vercel.app";
@@ -128,27 +141,11 @@ export default function AdminLivePage() {
   // ✅ Data candidates (DEDUP por id)
   // ===============================
   const candidatesFlat = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
-
-    for (const g of CANDIDATE_GROUPS) {
-      for (const c of g.candidates) {
-        const id = String(c.id);
-        const name = String(c.name);
-
-        // ✅ Si el id ya existe, NO lo volvemos a meter
-        // (evita duplicados entre categorías/grupos)
-        if (!map.has(id)) {
-          map.set(id, { id, name });
-        } else {
-          // opcional: si quieres, podrías actualizar el nombre si el nuevo es más largo/mejor
-          // const prev = map.get(id)!;
-          // if (name.length > prev.name.length) map.set(id, { id, name });
-        }
-      }
-    }
-
-    const all = Array.from(map.values());
-    return all.sort((a, b) => a.name.localeCompare(b.name, "es"));
+    return getCandidatePanelOptions().map((identity) => ({
+      ...identity,
+      id: identity.canonicalId,
+      name: identity.displayName,
+    }));
   }, []);
 
   const [q, setQ] = useState("");
@@ -227,7 +224,8 @@ export default function AdminLivePage() {
     if (typeof window === "undefined") return;
 
     // Si aún no hay candidato seleccionado, no hacemos subscribe
-    if (!selectedCandidateId) {
+    const selectedCandidate = candidatesFlat.find((x) => x.id === selectedCandidateId) ?? null;
+    if (!selectedCandidate) {
       return () => {};
     }
 
@@ -244,14 +242,14 @@ export default function AdminLivePage() {
     }
 
     const channel = supabase
-      .channel(`vc-admin-live-${selectedCandidateId}`)
+      .channel(`vc-admin-live-${selectedCandidate.storageCandidateId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "votoclaro_live_entries",
-          filter: `candidate_id=eq.${selectedCandidateId}`,
+          filter: `candidate_id=eq.${selectedCandidate.storageCandidateId}`,
         },
         (payload: any) => {
           // DELETE
@@ -288,7 +286,7 @@ export default function AdminLivePage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [selectedCandidateId]);
+  }, [selectedCandidateId, candidatesFlat]);
 
   const selectedCandidate = useMemo(() => {
     if (!selectedCandidateId) return null;
@@ -296,24 +294,24 @@ export default function AdminLivePage() {
   }, [selectedCandidateId, candidatesFlat]);
 
   const selectedPin = useMemo(() => {
-    if (!selectedCandidateId) return null;
-    return pins.find((p) => p.candidateId === selectedCandidateId) ?? null;
-  }, [pins, selectedCandidateId]);
+    if (!selectedCandidate) return null;
+    return pins.find((p) => pinBelongsToCandidate(p, selectedCandidate)) ?? null;
+  }, [pins, selectedCandidate]);
 
   const selectedHistory = useMemo(() => {
-    if (!selectedCandidateId) return [];
+    if (!selectedCandidate) return [];
     return lives
-      .filter((x) => x.candidateId === selectedCandidateId)
+      .filter((x) => x.candidateId === selectedCandidate.storageCandidateId)
       .sort((a, b) => b.createdAt - a.createdAt);
-  }, [lives, selectedCandidateId]);
+  }, [lives, selectedCandidate]);
 
-  function ensurePin(candidateId: string): CandidatePin {
+  function ensurePin(candidate: CandidatePanelIdentity): CandidatePin {
     const now = Date.now();
-    const existing = pins.find((p) => p.candidateId === candidateId);
+    const existing = pins.find((p) => pinBelongsToCandidate(p, candidate));
     if (existing) return existing;
 
     const created: CandidatePin = {
-      candidateId,
+      candidateId: candidate.storageCandidateId,
       pin: genPin4(),
       createdAt: now,
       updatedAt: now,
@@ -323,31 +321,39 @@ export default function AdminLivePage() {
     writePins(next);
 
     // ✅ Sync a Supabase (entre dispositivos)
-    void persistPinToServer(candidateId, created.pin);
+    void persistPinToServer(candidate.canonicalId, created.pin);
 
     return created;
   }
 
-  function regeneratePin(candidateId: string) {
+  function regeneratePin(candidate: CandidatePanelIdentity) {
     const now = Date.now();
     const next = pins.map((p) =>
-      p.candidateId === candidateId
+      pinBelongsToCandidate(p, candidate)
         ? { ...p, pin: genPin4(), updatedAt: now }
         : p
     );
 
     // si no existía, lo creamos
-    const exists = next.some((p) => p.candidateId === candidateId);
+    const exists = next.some((p) => pinBelongsToCandidate(p, candidate));
     const finalPins = exists
       ? next
-      : [{ candidateId, pin: genPin4(), createdAt: now, updatedAt: now }, ...next];
+      : [
+          {
+            candidateId: candidate.storageCandidateId,
+            pin: genPin4(),
+            createdAt: now,
+            updatedAt: now,
+          },
+          ...next,
+        ];
 
     setPins(finalPins);
     writePins(finalPins);
 
     // ✅ Sync a Supabase (entre dispositivos)
-    const latest = finalPins.find((p) => p.candidateId === candidateId);
-    if (latest) void persistPinToServer(candidateId, latest.pin);
+    const latest = finalPins.find((p) => pinBelongsToCandidate(p, candidate));
+    if (latest) void persistPinToServer(candidate.canonicalId, latest.pin);
   }
 
   function copy(text: string) {
@@ -524,7 +530,7 @@ export default function AdminLivePage() {
                   onClick={() => {
                     setSelectedCandidateId(c.id);
                     setQ(c.name);
-                    ensurePin(c.id);
+                    ensurePin(c);
                   }}
                   className="w-full text-left rounded-xl px-3 py-2 hover:bg-green-100 transition text-sm font-extrabold text-slate-900"
                 >
@@ -598,7 +604,7 @@ export default function AdminLivePage() {
 
                     <button
                       type="button"
-                      onClick={() => regeneratePin(selectedCandidate.id)}
+                      onClick={() => regeneratePin(selectedCandidate)}
                       className={btnSm}
                       title="Si se filtró, regeneras y el PIN anterior queda inválido"
                     >
@@ -626,7 +632,7 @@ export default function AdminLivePage() {
                       disabled={deletingAll}
                       onClick={() =>
                         deleteAllLivesForCandidate(
-                          selectedCandidate.id,
+                          selectedCandidate.storageCandidateId,
                           selectedCandidate.name
                         )
                       }
