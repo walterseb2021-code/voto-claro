@@ -16,13 +16,6 @@ import { createClient } from "@supabase/supabase-js";
 // ===============================
 type LivePlatform = "YOUTUBE" | "FACEBOOK" | "TIKTOK" | "OTRA";
 
-type CandidatePin = {
-  candidateId: string;
-  pin: string; // 4 dígitos
-  createdAt: number;
-  updatedAt: number;
-};
-
 type LiveEntry = {
   id: string;
   candidateId: string;
@@ -34,7 +27,7 @@ type LiveEntry = {
 };
 
 const LS_LIVE_KEY = "votoclaro_live_entries_v1";
-const LS_PINS_KEY = "votoclaro_live_pins_v1";
+const LEGACY_PINS_KEY = "votoclaro_live_pins_v1";
 
 function safeJsonParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -43,19 +36,6 @@ function safeJsonParse<T>(raw: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function readPins(): CandidatePin[] {
-  if (typeof window === "undefined") return [];
-  return safeJsonParse<CandidatePin[]>(
-    window.localStorage.getItem(LS_PINS_KEY),
-    []
-  );
-}
-
-function writePins(pins: CandidatePin[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LS_PINS_KEY, JSON.stringify(pins));
 }
 
 function readLives(): LiveEntry[] {
@@ -79,12 +59,6 @@ function platformLabel(p: LivePlatform) {
   }
 }
 
-function genPin4(): string {
-  // 1000–9999 para evitar PINs tipo 0001
-  const n = Math.floor(1000 + Math.random() * 9000);
-  return String(n);
-}
-
 function normalizeCandidateSearchText(value: string) {
   return value
     .trim()
@@ -100,16 +74,6 @@ function candidateNameMatchesSearch(candidateName: string, query: string) {
 
   const normalizedName = normalizeCandidateSearchText(candidateName);
   return tokens.every((token) => normalizedName.includes(token));
-}
-
-function pinBelongsToCandidate(
-  pin: CandidatePin,
-  candidate: CandidatePanelIdentity
-) {
-  return (
-    pin.candidateId === candidate.storageCandidateId ||
-    candidate.acceptedIds.includes(pin.candidateId)
-  );
 }
 
 export default function AdminLivePage() {
@@ -167,6 +131,11 @@ export default function AdminLivePage() {
 
   const [q, setQ] = useState("");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>("");
+  const [generatedAccessCode, setGeneratedAccessCode] = useState<{
+    candidateId: string;
+    accessCode: string;
+  } | null>(null);
+  const [accessCodeLoading, setAccessCodeLoading] = useState(false);
 
   const suggestions = useMemo(() => {
     if (!q.trim()) return [];
@@ -176,16 +145,14 @@ export default function AdminLivePage() {
   }, [q, candidatesFlat]);
 
   // ===============================
-  // ✅ Load pins + lives
+  // ✅ Load lives
   // ===============================
-  const [pins, setPins] = useState<CandidatePin[]>([]);
   const [lives, setLives] = useState<LiveEntry[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Pines (aún local por ahora; ya los estamos guardando en Supabase también)
-    setPins(readPins());
+    window.localStorage.removeItem(LEGACY_PINS_KEY);
 
     async function loadLivesFromSupabase() {
       const { data, error } = await supabase
@@ -222,7 +189,6 @@ export default function AdminLivePage() {
 
     // Si el admin hace cambios locales (demo antigua), refrescamos al toque
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LS_PINS_KEY) setPins(readPins());
       if (e.key === LS_LIVE_KEY) {
         // Preferimos Supabase como fuente de verdad
         void loadLivesFromSupabase();
@@ -232,6 +198,10 @@ export default function AdminLivePage() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  useEffect(() => {
+    setGeneratedAccessCode(null);
+  }, [selectedCandidateId]);
 
   // ===============================
   // ✅ NUEVO: Realtime en Admin (solo candidato seleccionado)
@@ -309,68 +279,12 @@ export default function AdminLivePage() {
     return candidatesFlat.find((x) => x.id === selectedCandidateId) ?? null;
   }, [selectedCandidateId, candidatesFlat]);
 
-  const selectedPin = useMemo(() => {
-    if (!selectedCandidate) return null;
-    return pins.find((p) => pinBelongsToCandidate(p, selectedCandidate)) ?? null;
-  }, [pins, selectedCandidate]);
-
   const selectedHistory = useMemo(() => {
     if (!selectedCandidate) return [];
     return lives
       .filter((x) => x.candidateId === selectedCandidate.storageCandidateId)
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [lives, selectedCandidate]);
-
-  function ensurePin(candidate: CandidatePanelIdentity): CandidatePin {
-    const now = Date.now();
-    const existing = pins.find((p) => pinBelongsToCandidate(p, candidate));
-    if (existing) return existing;
-
-    const created: CandidatePin = {
-      candidateId: candidate.storageCandidateId,
-      pin: genPin4(),
-      createdAt: now,
-      updatedAt: now,
-    };
-    const next = [created, ...pins];
-    setPins(next);
-    writePins(next);
-
-    // ✅ Sync a Supabase (entre dispositivos)
-    void persistPinToServer(candidate.canonicalId, created.pin);
-
-    return created;
-  }
-
-  function regeneratePin(candidate: CandidatePanelIdentity) {
-    const now = Date.now();
-    const next = pins.map((p) =>
-      pinBelongsToCandidate(p, candidate)
-        ? { ...p, pin: genPin4(), updatedAt: now }
-        : p
-    );
-
-    // si no existía, lo creamos
-    const exists = next.some((p) => pinBelongsToCandidate(p, candidate));
-    const finalPins = exists
-      ? next
-      : [
-          {
-            candidateId: candidate.storageCandidateId,
-            pin: genPin4(),
-            createdAt: now,
-            updatedAt: now,
-          },
-          ...next,
-        ];
-
-    setPins(finalPins);
-    writePins(finalPins);
-
-    // ✅ Sync a Supabase (entre dispositivos)
-    const latest = finalPins.find((p) => pinBelongsToCandidate(p, candidate));
-    if (latest) void persistPinToServer(candidate.canonicalId, latest.pin);
-  }
 
   function copy(text: string) {
     navigator.clipboard?.writeText(text).then(
@@ -379,24 +293,50 @@ export default function AdminLivePage() {
     );
   }
 
-  async function persistPinToServer(candidateId: string, pin: string) {
+  async function rotateAccessCode(candidate: CandidatePanelIdentity) {
+    if (accessCodeLoading) return;
+
+    const ok = window.confirm(
+      "¿Generar o rotar el código de acceso de este candidato?\n\n" +
+        "El código actual dejará de funcionar.\n" +
+        "Se cerrarán las sesiones activas.\n" +
+        "El nuevo código solo se mostrará una vez."
+    );
+    if (!ok) return;
+
+    setGeneratedAccessCode(null);
+    setAccessCodeLoading(true);
     try {
-      const res = await fetch("/api/admin/pin", {
+      const res = await fetch("/api/admin/candidate-access-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateId, pin }),
+        cache: "no-store",
+        body: JSON.stringify({ candidateId: candidate.canonicalId }),
       });
 
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        console.warn(
-          "[VOTO CLARO] No se pudo guardar PIN en Supabase:",
-          res.status,
-          txt
-        );
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; candidateId?: string; accessCode?: string; error?: string }
+        | null;
+
+      if (res.status === 409) {
+        alert("Otro cambio ocurrió al mismo tiempo. Intenta nuevamente.");
+        return;
       }
+
+      if (!res.ok || !data?.ok || data.candidateId !== candidate.canonicalId || !data.accessCode) {
+        alert("No se pudo generar el código de acceso.");
+        return;
+      }
+
+      setGeneratedAccessCode({
+        candidateId: candidate.canonicalId,
+        accessCode: data.accessCode,
+      });
     } catch (err) {
-      console.warn("[VOTO CLARO] Error de red guardando PIN en Supabase:", err);
+      console.warn("[VOTO CLARO] Error de red generando código de acceso:", err);
+      alert("Error de red generando el código de acceso.");
+    } finally {
+      setAccessCodeLoading(false);
     }
   }
 
@@ -546,7 +486,6 @@ export default function AdminLivePage() {
                   onClick={() => {
                     setSelectedCandidateId(c.id);
                     setQ(c.name);
-                    ensurePin(c);
                   }}
                   className="w-full text-left rounded-xl px-3 py-2 hover:bg-green-100 transition text-sm font-extrabold text-slate-900"
                 >
@@ -558,7 +497,7 @@ export default function AdminLivePage() {
 
           {!selectedCandidate ? (
             <div className="mt-4 text-sm font-semibold text-slate-700">
-              Selecciona un candidato para ver su PIN y su panel.
+              Selecciona un candidato para ver su código de acceso y su panel.
             </div>
           ) : (
             <div className="mt-5 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4">
@@ -603,33 +542,58 @@ export default function AdminLivePage() {
                 </div>
 
                 <div className="rounded-2xl border-2 border-red-600 bg-white/85 p-3">
-                  <div className="text-xs font-extrabold text-slate-700">PIN (4 dígitos)</div>
-
-                  <div className="mt-1 text-2xl font-extrabold text-slate-900 tracking-widest">
-                    {selectedPin?.pin ?? "----"}
+                  <div className="text-xs font-extrabold text-slate-700">
+                    Código de acceso
                   </div>
 
                   <div className="mt-2 flex gap-2 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => selectedPin?.pin && copy(selectedPin.pin)}
+                      onClick={() => rotateAccessCode(selectedCandidate)}
                       className={btnSm}
+                      disabled={accessCodeLoading}
                     >
-                      Copiar PIN
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => regeneratePin(selectedCandidate)}
-                      className={btnSm}
-                      title="Si se filtró, regeneras y el PIN anterior queda inválido"
-                    >
-                      Regenerar PIN
+                      {accessCodeLoading ? "Generando..." : "Generar código de acceso"}
                     </button>
                   </div>
 
+                  {generatedAccessCode?.candidateId === selectedCandidate.canonicalId ? (
+                    <div className="mt-3 rounded-2xl border-2 border-red-600 bg-green-50/70 p-3">
+                      <div className="text-xs font-extrabold text-slate-700">
+                        Código de acceso generado
+                      </div>
+
+                      <div className="mt-1 text-2xl font-extrabold text-slate-900 tracking-widest">
+                        {generatedAccessCode.accessCode}
+                      </div>
+
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => copy(generatedAccessCode.accessCode)}
+                          className={btnSm}
+                        >
+                          Copiar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setGeneratedAccessCode(null)}
+                          className={btnSm}
+                        >
+                          Ocultar
+                        </button>
+                      </div>
+
+                      <div className="mt-2 text-[11px] text-slate-600">
+                        Guárdalo y entrégalo al candidato por un canal seguro. No
+                        podrá recuperarse después.
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="mt-2 text-[11px] text-slate-600">
-                    No vence automáticamente. Solo cambia cuando tú lo regeneras.
+                    El código solo aparece una vez al generarlo o rotarlo.
                   </div>
                 </div>
               </div>

@@ -5,12 +5,15 @@ import {
   createCandidatePanelSession,
   getCandidatePanelAdminClient,
   getIpFingerprint,
+  isValidCandidateAccessCode,
   isValidPinFormat,
+  normalizeCandidateAccessCode,
   recordCandidatePanelPinFailure,
   resetCandidatePanelRateLimit,
   resolveCandidate,
   revokeCandidatePanelSession,
   safeComparePin,
+  verifyCandidateAccessCode,
 } from "@/lib/candidatePanelAuth";
 import {
   isAllowedCandidatePanelMutationOrigin,
@@ -21,10 +24,18 @@ export const runtime = "nodejs";
 
 type UnlockBody = {
   candidateId?: unknown;
+  accessCode?: unknown;
   pin?: unknown;
 };
 
-const UNLOCK_KEYS = new Set(["candidateId", "pin"]);
+const UNLOCK_KEYS = new Set(["candidateId", "accessCode", "pin"]);
+
+type CredentialRow = {
+  candidate_id: string;
+  pin: string | null;
+  access_code_verifier: string | null;
+  credential_revision: number | string | null;
+};
 
 function genericUnauthorized(status = 401) {
   return NextResponse.json(
@@ -59,13 +70,24 @@ export async function POST(req: NextRequest) {
   }
 
   const candidateIdInput = String(body.candidateId ?? "").trim();
-  const pinInput = String(body.pin ?? "").trim();
+  const hasAccessCode = Object.prototype.hasOwnProperty.call(body, "accessCode");
+  const hasLegacyPin = Object.prototype.hasOwnProperty.call(body, "pin");
+
+  if (hasAccessCode === hasLegacyPin) {
+    return genericUnauthorized(400);
+  }
+
+  const credentialInputRaw = String(
+    hasAccessCode ? body.accessCode ?? "" : body.pin ?? ""
+  ).trim();
 
   if (
     !candidateIdInput ||
     candidateIdInput.length > 160 ||
     /[\u0000-\u001f]/.test(candidateIdInput) ||
-    !isValidPinFormat(pinInput)
+    !credentialInputRaw ||
+    credentialInputRaw.length > 64 ||
+    /[\u0000-\u001f]/.test(credentialInputRaw)
   ) {
     return genericUnauthorized(400);
   }
@@ -92,25 +114,44 @@ export async function POST(req: NextRequest) {
     return genericUnauthorized(429);
   }
 
-  let storedPin: string | null = null;
-
   const supabase = getCandidatePanelAdminClient();
   const { data, error } = await supabase
     .from("votoclaro_candidate_pins")
-    .select("pin")
+    .select("candidate_id,pin,access_code_verifier,credential_revision")
     .eq("candidate_id", candidate.storageCandidateId)
-    .maybeSingle<{ pin: string }>();
+    .maybeSingle<CredentialRow>();
 
   if (error) {
-    console.error("[candidate-panel] PIN lookup failed", error.message);
+    console.error("[candidate-panel] credential lookup failed", error.message);
     return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
   }
 
-  storedPin = typeof data?.pin === "string" ? data.pin : null;
+  let valid = false;
 
-  const valid =
-    Boolean(candidate && storedPin && isValidPinFormat(storedPin)) &&
-    safeComparePin(pinInput, storedPin as string);
+  if (typeof data?.access_code_verifier === "string" && data.access_code_verifier) {
+    const normalizedAccessCode = normalizeCandidateAccessCode(credentialInputRaw);
+    if (isValidCandidateAccessCode(normalizedAccessCode)) {
+      const accessCodeResult = await verifyCandidateAccessCode(
+        normalizedAccessCode,
+        data.access_code_verifier
+      );
+
+      if (!accessCodeResult.ok) {
+        console.error(
+          "[candidate-panel] stored credential configuration is invalid",
+          candidate.storageCandidateId
+        );
+        return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
+      }
+
+      valid = accessCodeResult.valid;
+    }
+  } else {
+    const storedPin = typeof data?.pin === "string" ? data.pin : null;
+    valid =
+      Boolean(storedPin && isValidPinFormat(storedPin) && isValidPinFormat(credentialInputRaw)) &&
+      safeComparePin(credentialInputRaw, storedPin as string);
+  }
 
   if (!valid) {
     await recordCandidatePanelPinFailure(candidate.storageCandidateId, ipFingerprint.value);

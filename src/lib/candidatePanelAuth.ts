@@ -1,6 +1,15 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  scrypt,
+  timingSafeEqual,
+  type ScryptOptions,
+} from "crypto";
 import { type NextRequest, type NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { promisify } from "util";
 import { resolveCandidatePanelIdentity } from "@/lib/candidatePanelCatalog";
 
 const CANDIDATE_PANEL_COOKIE_BASE = "vc_candidate_panel_session";
@@ -10,6 +19,26 @@ const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const RATE_LIMIT_SECRET_MIN_LENGTH = 32;
 const DEV_RATE_LIMIT_SECRET =
   "development-only-candidate-panel-rate-limit-secret";
+const ACCESS_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const ACCESS_CODE_LENGTH = 8;
+const ACCESS_CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/;
+const ACCESS_CODE_VERIFIER_PREFIX = "vcac";
+const ACCESS_CODE_VERIFIER_VERSION = "v1";
+const ACCESS_CODE_VERIFIER_ALGORITHM = "scrypt";
+const ACCESS_CODE_SCRYPT_N = 32768;
+const ACCESS_CODE_SCRYPT_R = 8;
+const ACCESS_CODE_SCRYPT_P = 1;
+const ACCESS_CODE_SCRYPT_KEYLEN = 32;
+const ACCESS_CODE_SCRYPT_SALT_BYTES = 16;
+const ACCESS_CODE_SCRYPT_MAXMEM = 64 * 1024 * 1024;
+const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
+const DECIMAL_RE = /^[0-9]+$/;
+const scryptAsync = promisify(scrypt) as (
+  password: string | Buffer,
+  salt: string | Buffer,
+  keylen: number,
+  options: ScryptOptions
+) => Promise<Buffer>;
 
 type CandidatePanelSessionRow = {
   id: string;
@@ -35,6 +64,15 @@ type RateLimitResult =
   | { ok: false };
 
 type IpFingerprintResult = { ok: true; value: string } | { ok: false };
+
+type CandidateAccessCodeVerifier = {
+  n: number;
+  r: number;
+  p: number;
+  keylen: number;
+  salt: Buffer;
+  hash: Buffer;
+};
 
 function getSupabaseUrl() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
@@ -78,6 +116,144 @@ export function resolveCandidate(candidateId: unknown) {
 
 export function isValidPinFormat(pin: unknown) {
   return /^\d{4}$/.test(String(pin ?? "").trim());
+}
+
+export function normalizeCandidateAccessCode(value: unknown) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+export function isValidCandidateAccessCode(value: unknown) {
+  return ACCESS_CODE_RE.test(normalizeCandidateAccessCode(value));
+}
+
+export function generateCandidateAccessCode() {
+  let code = "";
+  for (let i = 0; i < ACCESS_CODE_LENGTH; i += 1) {
+    code += ACCESS_CODE_ALPHABET.charAt(randomInt(ACCESS_CODE_ALPHABET.length));
+  }
+  return code;
+}
+
+function decodeBase64Url(value: string) {
+  if (!value || value.length > 128 || !BASE64URL_RE.test(value)) return null;
+  try {
+    return Buffer.from(value, "base64url");
+  } catch {
+    return null;
+  }
+}
+
+export function parseCandidateAccessCodeVerifier(
+  verifier: unknown
+): CandidateAccessCodeVerifier | null {
+  const value = String(verifier ?? "").trim();
+  if (!value || value.length > 300 || /[\u0000-\u001f]/.test(value)) return null;
+
+  const parts = value.split("$");
+  if (parts.length !== 9) return null;
+
+  const [prefix, version, algorithm, nRaw, rRaw, pRaw, keylenRaw, saltRaw, hashRaw] =
+    parts;
+  if (
+    prefix !== ACCESS_CODE_VERIFIER_PREFIX ||
+    version !== ACCESS_CODE_VERIFIER_VERSION ||
+    algorithm !== ACCESS_CODE_VERIFIER_ALGORITHM
+  ) {
+    return null;
+  }
+
+  if (
+    !DECIMAL_RE.test(nRaw) ||
+    !DECIMAL_RE.test(rRaw) ||
+    !DECIMAL_RE.test(pRaw) ||
+    !DECIMAL_RE.test(keylenRaw)
+  ) {
+    return null;
+  }
+
+  if (
+    nRaw !== String(ACCESS_CODE_SCRYPT_N) ||
+    rRaw !== String(ACCESS_CODE_SCRYPT_R) ||
+    pRaw !== String(ACCESS_CODE_SCRYPT_P) ||
+    keylenRaw !== String(ACCESS_CODE_SCRYPT_KEYLEN)
+  ) {
+    return null;
+  }
+
+  const n = Number(nRaw);
+  const r = Number(rRaw);
+  const p = Number(pRaw);
+  const keylen = Number(keylenRaw);
+  if (
+    n !== ACCESS_CODE_SCRYPT_N ||
+    r !== ACCESS_CODE_SCRYPT_R ||
+    p !== ACCESS_CODE_SCRYPT_P ||
+    keylen !== ACCESS_CODE_SCRYPT_KEYLEN
+  ) {
+    return null;
+  }
+
+  const salt = decodeBase64Url(saltRaw);
+  const hash = decodeBase64Url(hashRaw);
+  if (!salt || salt.length !== ACCESS_CODE_SCRYPT_SALT_BYTES) return null;
+  if (!hash || hash.length !== keylen) return null;
+
+  return { n, r, p, keylen, salt, hash };
+}
+
+export async function hashCandidateAccessCode(accessCode: unknown) {
+  const normalized = normalizeCandidateAccessCode(accessCode);
+  if (!isValidCandidateAccessCode(normalized)) {
+    throw new Error("Invalid candidate access code format");
+  }
+
+  const salt = randomBytes(ACCESS_CODE_SCRYPT_SALT_BYTES);
+  const hash = await scryptAsync(normalized, salt, ACCESS_CODE_SCRYPT_KEYLEN, {
+    N: ACCESS_CODE_SCRYPT_N,
+    r: ACCESS_CODE_SCRYPT_R,
+    p: ACCESS_CODE_SCRYPT_P,
+    maxmem: ACCESS_CODE_SCRYPT_MAXMEM,
+  });
+
+  return [
+    ACCESS_CODE_VERIFIER_PREFIX,
+    ACCESS_CODE_VERIFIER_VERSION,
+    ACCESS_CODE_VERIFIER_ALGORITHM,
+    String(ACCESS_CODE_SCRYPT_N),
+    String(ACCESS_CODE_SCRYPT_R),
+    String(ACCESS_CODE_SCRYPT_P),
+    String(ACCESS_CODE_SCRYPT_KEYLEN),
+    salt.toString("base64url"),
+    hash.toString("base64url"),
+  ].join("$");
+}
+
+export async function verifyCandidateAccessCode(
+  accessCode: unknown,
+  verifier: unknown
+) {
+  const normalized = normalizeCandidateAccessCode(accessCode);
+  if (!isValidCandidateAccessCode(normalized)) {
+    return { ok: true, valid: false } as const;
+  }
+
+  const parsed = parseCandidateAccessCodeVerifier(verifier);
+  if (!parsed) {
+    return { ok: false, reason: "malformed-verifier" } as const;
+  }
+
+  const hash = await scryptAsync(normalized, parsed.salt, parsed.keylen, {
+    N: parsed.n,
+    r: parsed.r,
+    p: parsed.p,
+    maxmem: ACCESS_CODE_SCRYPT_MAXMEM,
+  });
+
+  if (hash.length !== parsed.hash.length) {
+    return { ok: true, valid: false } as const;
+  }
+
+  return { ok: true, valid: timingSafeEqual(hash, parsed.hash) } as const;
 }
 
 export function generateCandidatePanelToken() {

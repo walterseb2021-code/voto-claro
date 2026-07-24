@@ -105,7 +105,7 @@ export default function CandidatePanelPage() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
-  const [pinInput, setPinInput] = useState("");
+  const [accessCodeInput, setAccessCodeInput] = useState("");
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -115,7 +115,7 @@ export default function CandidatePanelPage() {
   const [url, setUrl] = useState("");
   const [setAsLive, setSetAsLive] = useState(true);
 
-  function expireSession(message = "La sesión venció. Ingresa nuevamente el PIN.") {
+  function expireSession(message = "La sesión venció. Ingresa nuevamente el código de acceso.") {
     setAuthenticated(false);
     setSessionExpiresAt(null);
     setLives([]);
@@ -189,7 +189,7 @@ export default function CandidatePanelPage() {
         setLives([]);
 
         if (data?.authenticated && !matchesCandidate) {
-          setNotice("Hay una sesión activa para otro candidato. Cierra sesión e ingresa el PIN correcto.");
+          setNotice("Hay una sesión activa para otro candidato. Cierra sesión e ingresa el código correcto.");
         }
       } finally {
         if (!cancelled) setSessionLoading(false);
@@ -253,7 +253,7 @@ export default function CandidatePanelPage() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateId, pin: pinInput.trim() }),
+        body: JSON.stringify({ candidateId, accessCode: accessCodeInput.trim() }),
       });
 
       const data = (await res.json().catch(() => null)) as
@@ -277,7 +277,7 @@ export default function CandidatePanelPage() {
 
       setAuthenticated(true);
       setSessionExpiresAt(data.expiresAt ?? null);
-      setPinInput("");
+      setAccessCodeInput("");
       await loadLives();
     } finally {
       setUnlockLoading(false);
@@ -294,7 +294,7 @@ export default function CandidatePanelPage() {
       setAuthenticated(false);
       setSessionExpiresAt(null);
       setLives([]);
-      setPinInput("");
+      setAccessCodeInput("");
       setNotice("Sesión cerrada.");
     }
   }
@@ -451,7 +451,7 @@ export default function CandidatePanelPage() {
         <section className={sectionWrap}>
           <div className={inner}>
             <div className="text-sm font-extrabold text-slate-900">
-              Acceso con PIN
+              Acceso privado
             </div>
 
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
@@ -465,10 +465,16 @@ export default function CandidatePanelPage() {
             ) : null}
 
             <input
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              inputMode="numeric"
-              placeholder="PIN de 4 dígitos"
+              type="password"
+              value={accessCodeInput}
+              onChange={(e) => setAccessCodeInput(e.target.value.toUpperCase())}
+              inputMode="text"
+              autoCapitalize="characters"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={8}
+              placeholder="Código de acceso"
               className={input}
               disabled={unlockLoading}
             />
@@ -483,7 +489,7 @@ export default function CandidatePanelPage() {
             </button>
 
             <div className="mt-3 text-xs text-slate-600">
-              Si no tienes PIN, pídeselo al administrador.
+              Si no tienes un código de acceso, pídeselo al administrador.
             </div>
           </div>
         </section>
