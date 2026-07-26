@@ -5,6 +5,7 @@ import {
   createCandidatePanelSession,
   getCandidatePanelAdminClient,
   getIpFingerprint,
+  isActiveCredentialStatus,
   isValidCandidateAccessCode,
   isValidPinFormat,
   normalizeCandidateAccessCode,
@@ -35,6 +36,7 @@ type CredentialRow = {
   pin: string | null;
   access_code_verifier: string | null;
   credential_revision: number | string | null;
+  credential_status: string | null;
 };
 
 function genericUnauthorized(status = 401) {
@@ -42,6 +44,12 @@ function genericUnauthorized(status = 401) {
     { ok: false, error: "No se pudo validar el acceso." },
     { status }
   );
+}
+
+function currentRevision(row: CredentialRow | null) {
+  if (!row) return null;
+  const value = Number(row.credential_revision ?? 0);
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -117,7 +125,7 @@ export async function POST(req: NextRequest) {
   const supabase = getCandidatePanelAdminClient();
   const { data, error } = await supabase
     .from("votoclaro_candidate_pins")
-    .select("candidate_id,pin,access_code_verifier,credential_revision")
+    .select("candidate_id,pin,access_code_verifier,credential_revision,credential_status")
     .eq("candidate_id", candidate.storageCandidateId)
     .maybeSingle<CredentialRow>();
 
@@ -127,6 +135,17 @@ export async function POST(req: NextRequest) {
   }
 
   let valid = false;
+  const expectedRevision = currentRevision(data ?? null);
+
+  if (!isActiveCredentialStatus(data?.credential_status)) {
+    await recordCandidatePanelPinFailure(candidate.storageCandidateId, ipFingerprint.value);
+    return genericUnauthorized(401);
+  }
+
+  if (expectedRevision === null) {
+    console.error("[candidate-panel] invalid stored credential revision");
+    return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
+  }
 
   if (typeof data?.access_code_verifier === "string" && data.access_code_verifier) {
     const normalizedAccessCode = normalizeCandidateAccessCode(credentialInputRaw);
@@ -161,7 +180,10 @@ export async function POST(req: NextRequest) {
   await resetCandidatePanelRateLimit(candidate.storageCandidateId, ipFingerprint.value);
   await revokeCandidatePanelSession(req);
 
-  const session = await createCandidatePanelSession(candidate.storageCandidateId);
+  const session = await createCandidatePanelSession(
+    candidate.storageCandidateId,
+    expectedRevision
+  );
   if (!session) {
     return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
   }

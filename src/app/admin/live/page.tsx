@@ -26,6 +26,15 @@ type LiveEntry = {
   status: "LIVE" | "ENDED";
 };
 
+type CredentialStatus = "ACTIVE" | "DISABLED" | "REVOKED";
+
+type CredentialState = {
+  candidateId: string;
+  credentialStatus: CredentialStatus;
+  credentialRevision: number;
+  hasAccessCode: boolean;
+};
+
 const LS_LIVE_KEY = "votoclaro_live_entries_v1";
 const LEGACY_PINS_KEY = "votoclaro_live_pins_v1";
 
@@ -136,6 +145,12 @@ export default function AdminLivePage() {
     accessCode: string;
   } | null>(null);
   const [accessCodeLoading, setAccessCodeLoading] = useState(false);
+  const [credentialState, setCredentialState] = useState<CredentialState | null>(
+    null
+  );
+  const [credentialStateLoading, setCredentialStateLoading] = useState(false);
+  const [credentialStateQueryFailed, setCredentialStateQueryFailed] =
+    useState(false);
 
   const suggestions = useMemo(() => {
     if (!q.trim()) return [];
@@ -202,6 +217,91 @@ export default function AdminLivePage() {
   useEffect(() => {
     setGeneratedAccessCode(null);
   }, [selectedCandidateId]);
+
+  useEffect(() => {
+    const selectedCandidate =
+      candidatesFlat.find((x) => x.id === selectedCandidateId) ?? null;
+
+    setCredentialState(null);
+    setCredentialStateQueryFailed(false);
+    setGeneratedAccessCode(null);
+
+    if (!selectedCandidate) {
+      setCredentialStateLoading(false);
+      return;
+    }
+
+    const selectedCanonicalId = selectedCandidate.canonicalId;
+    let cancelled = false;
+    setCredentialStateLoading(true);
+
+    async function loadCredentialState() {
+      try {
+        const res = await fetch(
+          `/api/admin/candidate-access-code?candidateId=${encodeURIComponent(
+            selectedCanonicalId
+          )}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const data = (await res.json().catch(() => null)) as
+          | {
+              ok?: boolean;
+              candidateId?: string;
+              credentialStatus?: CredentialStatus;
+              credentialRevision?: number;
+              hasAccessCode?: boolean;
+            }
+          | null;
+
+        if (cancelled) return;
+
+        const nextStatus = data?.credentialStatus;
+        const nextRevision = data?.credentialRevision;
+
+        if (
+          !res.ok ||
+          !data?.ok ||
+          data.candidateId !== selectedCanonicalId ||
+          (
+            nextStatus !== "ACTIVE" &&
+            nextStatus !== "DISABLED" &&
+            nextStatus !== "REVOKED"
+          ) ||
+          typeof nextRevision !== "number" ||
+          !Number.isSafeInteger(nextRevision)
+        ) {
+          setCredentialState(null);
+          setCredentialStateQueryFailed(true);
+          return;
+        }
+
+        setCredentialStateQueryFailed(false);
+        setCredentialState({
+          candidateId: selectedCanonicalId,
+          credentialStatus: nextStatus,
+          credentialRevision: nextRevision,
+          hasAccessCode: Boolean(data.hasAccessCode),
+        });
+      } catch {
+        if (!cancelled) {
+          setCredentialState(null);
+          setCredentialStateQueryFailed(true);
+        }
+      } finally {
+        if (!cancelled) setCredentialStateLoading(false);
+      }
+    }
+
+    void loadCredentialState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCandidateId, candidatesFlat]);
 
   // ===============================
   // ✅ NUEVO: Realtime en Admin (solo candidato seleccionado)
@@ -295,6 +395,13 @@ export default function AdminLivePage() {
 
   async function rotateAccessCode(candidate: CandidatePanelIdentity) {
     if (accessCodeLoading) return;
+    if (
+      credentialState?.candidateId === candidate.canonicalId &&
+      credentialState.credentialStatus !== "ACTIVE"
+    ) {
+      alert("No se pudo generar el código de acceso.");
+      return;
+    }
 
     const ok = window.confirm(
       "¿Generar o rotar el código de acceso de este candidato?\n\n" +
@@ -332,6 +439,11 @@ export default function AdminLivePage() {
         candidateId: candidate.canonicalId,
         accessCode: data.accessCode,
       });
+      setCredentialState((prev) =>
+        prev?.candidateId === candidate.canonicalId
+          ? { ...prev, credentialStatus: "ACTIVE", hasAccessCode: true }
+          : prev
+      );
     } catch (err) {
       console.warn("[VOTO CLARO] Error de red generando código de acceso:", err);
       alert("Error de red generando el código de acceso.");
@@ -497,7 +609,7 @@ export default function AdminLivePage() {
 
           {!selectedCandidate ? (
             <div className="mt-4 text-sm font-semibold text-slate-700">
-              Selecciona un candidato para ver su código de acceso y su panel.
+              Selecciona un candidato para gestionar su acceso privado y abrir su panel.
             </div>
           ) : (
             <div className="mt-5 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4">
@@ -546,12 +658,34 @@ export default function AdminLivePage() {
                     Código de acceso
                   </div>
 
+                  <div className="mt-2 text-xs font-extrabold text-slate-700">
+                    {credentialStateLoading
+                      ? "Verificando acceso..."
+                      : credentialStateQueryFailed
+                        ? "No se pudo consultar el estado del acceso."
+                        : credentialState?.credentialStatus === "ACTIVE"
+                        ? "Acceso activo"
+                        : "Acceso deshabilitado"}
+                  </div>
+
+                  {!credentialStateLoading &&
+                  !credentialStateQueryFailed &&
+                  credentialState?.credentialStatus !== "ACTIVE" ? (
+                    <div className="mt-2 text-[11px] text-slate-600">
+                      El acceso privado de este candidato está deshabilitado.
+                    </div>
+                  ) : null}
+
                   <div className="mt-2 flex gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => rotateAccessCode(selectedCandidate)}
                       className={btnSm}
-                      disabled={accessCodeLoading}
+                      disabled={
+                        accessCodeLoading ||
+                        credentialStateLoading ||
+                        credentialState?.credentialStatus !== "ACTIVE"
+                      }
                     >
                       {accessCodeLoading ? "Generando..." : "Generar código de acceso"}
                     </button>

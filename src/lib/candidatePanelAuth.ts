@@ -48,6 +48,10 @@ type CandidatePanelSessionRow = {
   last_seen_at: string | null;
 };
 
+type CandidateCredentialStatusRow = {
+  credential_status: string | null;
+};
+
 type CandidatePanelSession =
   | {
       ok: true;
@@ -116,6 +120,10 @@ export function resolveCandidate(candidateId: unknown) {
 
 export function isValidPinFormat(pin: unknown) {
   return /^\d{4}$/.test(String(pin ?? "").trim());
+}
+
+export function isActiveCredentialStatus(status: unknown) {
+  return String(status ?? "").trim().toUpperCase() === "ACTIVE";
 }
 
 export function normalizeCandidateAccessCode(value: unknown) {
@@ -319,7 +327,17 @@ export function clearCandidatePanelCookie(response: NextResponse) {
   return response;
 }
 
-export async function createCandidatePanelSession(storageCandidateId: string) {
+export async function createCandidatePanelSession(
+  storageCandidateId: string,
+  expectedCredentialRevision: number
+) {
+  if (
+    !Number.isSafeInteger(expectedCredentialRevision) ||
+    expectedCredentialRevision < 0
+  ) {
+    return null;
+  }
+
   const token = generateCandidatePanelToken();
   const tokenHash = hashCandidatePanelToken(token);
   const expiresAt = new Date(
@@ -328,21 +346,23 @@ export async function createCandidatePanelSession(storageCandidateId: string) {
 
   const supabase = getCandidatePanelAdminClient();
   const { data, error } = await supabase
-    .from("candidate_panel_sessions")
-    .insert({
-      candidate_id: storageCandidateId,
-      token_hash: tokenHash,
-      expires_at: expiresAt,
-    })
-    .select("id")
-    .single();
+    .rpc("create_candidate_panel_session_if_active", {
+      p_candidate_id: storageCandidateId,
+      p_expected_revision: expectedCredentialRevision,
+      p_token_hash: tokenHash,
+      p_expires_at: expiresAt,
+    });
 
-  if (error || !data?.id) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row?.id) {
     console.error("[candidate-panel] session create failed", error?.message);
     return null;
   }
 
-  return { token, expiresAt };
+  return {
+    token,
+    expiresAt: typeof row.expires_at === "string" ? row.expires_at : expiresAt,
+  };
 }
 
 export async function validateCandidatePanelSession(
@@ -371,6 +391,21 @@ export async function validateCandidatePanelSession(
 
   const identity = resolveCandidatePanelIdentity(data.candidate_id);
   if (!identity) return { ok: false };
+
+  const { data: credential, error: credentialError } = await supabase
+    .from("votoclaro_candidate_pins")
+    .select("credential_status")
+    .eq("candidate_id", identity.storageCandidateId)
+    .maybeSingle<CandidateCredentialStatusRow>();
+
+  if (credentialError) {
+    console.error("[candidate-panel] session credential status lookup failed", credentialError.message);
+    return { ok: false };
+  }
+
+  if (!isActiveCredentialStatus(credential?.credential_status)) {
+    return { ok: false };
+  }
 
   const shouldTouch =
     !data.last_seen_at ||

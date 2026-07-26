@@ -20,6 +20,8 @@ type Body = {
 
 type CredentialRow = {
   credential_revision: number | string | null;
+  credential_status: string | null;
+  access_code_verifier?: string | null;
 };
 
 const BODY_KEYS = new Set(["candidateId"]);
@@ -43,6 +45,59 @@ function currentRevision(row: CredentialRow | null) {
   if (!row) return 0;
   const value = Number(row.credential_revision ?? 0);
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function normalizedCredentialStatus(row: CredentialRow | null) {
+  const status = String(row?.credential_status ?? "ACTIVE").trim().toUpperCase();
+  return status === "ACTIVE" || status === "DISABLED" || status === "REVOKED"
+    ? status
+    : null;
+}
+
+async function getCredentialRow(storageCandidateId: string) {
+  const supabase = getCandidatePanelAdminClient();
+  return supabase
+    .from("votoclaro_candidate_pins")
+    .select("credential_revision,credential_status,access_code_verifier")
+    .eq("candidate_id", storageCandidateId)
+    .maybeSingle<CredentialRow>();
+}
+
+export async function GET(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return jsonResponse({ error: gate.error }, gate.status);
+  }
+
+  const candidate = resolveCandidatePanelIdentity(
+    req.nextUrl.searchParams.get("candidateId")
+  );
+  if (!candidate) return jsonError("Solicitud invalida.");
+
+  const { data: credentialRow, error } = await getCredentialRow(
+    candidate.storageCandidateId
+  );
+
+  if (error) {
+    console.error("[candidate-access-code] status lookup failed", error.message);
+    return jsonError("No disponible.", 503);
+  }
+
+  const credentialStatus = normalizedCredentialStatus(credentialRow ?? null);
+  const credentialRevision = currentRevision(credentialRow ?? null);
+
+  if (credentialStatus === null || credentialRevision === null) {
+    console.error("[candidate-access-code] invalid stored credential metadata");
+    return jsonError("No disponible.", 503);
+  }
+
+  return jsonResponse({
+    ok: true,
+    candidateId: candidate.canonicalId,
+    credentialStatus,
+    credentialRevision,
+    hasAccessCode: Boolean(credentialRow?.access_code_verifier),
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -79,11 +134,9 @@ export async function POST(req: NextRequest) {
   if (!candidate) return jsonError("Solicitud invalida.");
 
   const supabase = getCandidatePanelAdminClient();
-  const { data: credentialRow, error: revisionError } = await supabase
-    .from("votoclaro_candidate_pins")
-    .select("credential_revision")
-    .eq("candidate_id", candidate.storageCandidateId)
-    .maybeSingle<CredentialRow>();
+  const { data: credentialRow, error: revisionError } = await getCredentialRow(
+    candidate.storageCandidateId
+  );
 
   if (revisionError) {
     console.error("[candidate-access-code] revision lookup failed", revisionError.message);
@@ -94,6 +147,16 @@ export async function POST(req: NextRequest) {
   if (expectedRevision === null) {
     console.error("[candidate-access-code] invalid stored credential revision");
     return jsonError("No disponible.", 503);
+  }
+
+  const credentialStatus = normalizedCredentialStatus(credentialRow ?? null);
+  if (credentialStatus === null) {
+    console.error("[candidate-access-code] invalid stored credential status");
+    return jsonError("No disponible.", 503);
+  }
+
+  if (credentialStatus !== "ACTIVE") {
+    return jsonError("No se pudo completar la rotacion.", 409);
   }
 
   const accessCode = generateCandidateAccessCode();
@@ -114,7 +177,10 @@ export async function POST(req: NextRequest) {
   if (rotateError) {
     if (
       rotateError.code === "P0001" &&
-      rotateError.message.includes("CANDIDATE_ACCESS_CODE_REVISION_CONFLICT")
+      (
+        rotateError.message.includes("CANDIDATE_ACCESS_CODE_REVISION_CONFLICT") ||
+        rotateError.message.includes("CANDIDATE_ACCESS_CODE_STATUS_CONFLICT")
+      )
     ) {
       return jsonError("Conflicto de rotacion. Intenta nuevamente.", 409);
     }
