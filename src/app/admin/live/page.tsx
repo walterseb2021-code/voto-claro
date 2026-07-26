@@ -386,6 +386,10 @@ export default function AdminLivePage() {
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [lives, selectedCandidate]);
 
+  const credentialUnavailable =
+    credentialState?.credentialStatus === "DISABLED" ||
+    credentialState?.credentialStatus === "REVOKED";
+
   function copy(text: string) {
     navigator.clipboard?.writeText(text).then(
       () => alert("Copiado ✅"),
@@ -395,11 +399,11 @@ export default function AdminLivePage() {
 
   async function rotateAccessCode(candidate: CandidatePanelIdentity) {
     if (accessCodeLoading) return;
-    if (
+    const canRotateCredential =
       credentialState?.candidateId === candidate.canonicalId &&
-      credentialState.credentialStatus !== "ACTIVE"
-    ) {
-      alert("No se pudo generar el código de acceso.");
+      credentialState.credentialStatus === "ACTIVE";
+
+    if (!canRotateCredential) {
       return;
     }
 
@@ -531,7 +535,8 @@ export default function AdminLivePage() {
   const btnSm =
     "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
     "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm";
+    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 " +
+    "disabled:cursor-not-allowed disabled:hover:bg-green-800";
 
   // ✅ NUEVO: botón peligro (solo visual; no toca estilos globales)
   const btnDangerSm =
@@ -684,10 +689,15 @@ export default function AdminLivePage() {
                       disabled={
                         accessCodeLoading ||
                         credentialStateLoading ||
+                        credentialStateQueryFailed ||
                         credentialState?.credentialStatus !== "ACTIVE"
                       }
                     >
-                      {accessCodeLoading ? "Generando..." : "Generar código de acceso"}
+                      {credentialUnavailable
+                        ? "Acceso deshabilitado"
+                        : accessCodeLoading
+                          ? "Generando..."
+                          : "Generar código de acceso"}
                     </button>
                   </div>
 

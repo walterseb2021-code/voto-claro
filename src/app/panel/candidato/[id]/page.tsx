@@ -1,7 +1,7 @@
 // src/app/panel/candidato/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { resolveCandidatePanelIdentity } from "@/lib/candidatePanelCatalog";
 
@@ -108,6 +108,11 @@ export default function CandidatePanelPage() {
   const [accessCodeInput, setAccessCodeInput] = useState("");
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const explicitLogoutRef = useRef(false);
+  const mountedRef = useRef(false);
+  const loadLivesAbortRef = useRef<AbortController | null>(null);
+  const loadLivesRequestIdRef = useRef(0);
+  const accessFailureAlertTimeoutRef = useRef<number | null>(null);
 
   const [lives, setLives] = useState<LiveEntry[]>([]);
   const [liveLoading, setLiveLoading] = useState(false);
@@ -115,21 +120,103 @@ export default function CandidatePanelPage() {
   const [url, setUrl] = useState("");
   const [setAsLive, setSetAsLive] = useState(true);
 
+  function cancelActiveLoadLives() {
+    loadLivesRequestIdRef.current += 1;
+    loadLivesAbortRef.current?.abort();
+    loadLivesAbortRef.current = null;
+  }
+
+  function startLoadLivesRequest() {
+    cancelActiveLoadLives();
+
+    if (!mountedRef.current || explicitLogoutRef.current) {
+      return null;
+    }
+
+    const controller = new AbortController();
+    const requestId = loadLivesRequestIdRef.current + 1;
+    loadLivesRequestIdRef.current = requestId;
+    loadLivesAbortRef.current = controller;
+
+    return { controller, requestId };
+  }
+
+  function canApplyLoadLivesRequest(
+    requestId: number,
+    controller: AbortController
+  ) {
+    return (
+      mountedRef.current &&
+      !explicitLogoutRef.current &&
+      loadLivesRequestIdRef.current === requestId &&
+      loadLivesAbortRef.current === controller &&
+      !controller.signal.aborted
+    );
+  }
+
+  function isAbortError(error: unknown) {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      error.name === "AbortError"
+    );
+  }
+
   function expireSession(message = "La sesión venció. Ingresa nuevamente el código de acceso.") {
+    if (!mountedRef.current) return;
+
     setAuthenticated(false);
     setSessionExpiresAt(null);
     setLives([]);
-    setNotice(message);
+    if (!explicitLogoutRef.current) {
+      setNotice(message);
+    }
   }
 
+  function showAccessFailure(message: string) {
+    if (!mountedRef.current) return;
+
+    setAccessCodeInput("");
+    if (accessFailureAlertTimeoutRef.current !== null) {
+      window.clearTimeout(accessFailureAlertTimeoutRef.current);
+    }
+
+    accessFailureAlertTimeoutRef.current = window.setTimeout(() => {
+      accessFailureAlertTimeoutRef.current = null;
+      if (mountedRef.current) alert(message);
+    }, 0);
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      cancelActiveLoadLives();
+      if (accessFailureAlertTimeoutRef.current !== null) {
+        window.clearTimeout(accessFailureAlertTimeoutRef.current);
+        accessFailureAlertTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   async function loadLives() {
+    const request = startLoadLivesRequest();
+    if (!request) return;
+
+    const { controller, requestId } = request;
     setLiveLoading(true);
+
     try {
       const res = await fetch("/api/candidate/live", {
         method: "GET",
         credentials: "same-origin",
         cache: "no-store",
+        signal: controller.signal,
       });
+
+      if (!canApplyLoadLivesRequest(requestId, controller)) return;
 
       if (res.status === 401 || res.status === 403) {
         expireSession();
@@ -137,14 +224,27 @@ export default function CandidatePanelPage() {
       }
 
       const data = (await res.json().catch(() => null)) as LiveListResponse | null;
+
+      if (!canApplyLoadLivesRequest(requestId, controller)) return;
+
       if (!res.ok || !data?.ok) {
         setNotice("No se pudo cargar el historial.");
         return;
       }
 
       setLives(data.entries);
+    } catch (error) {
+      if (isAbortError(error)) return;
+      if (canApplyLoadLivesRequest(requestId, controller)) {
+        setNotice("No se pudo cargar el historial.");
+      }
     } finally {
-      setLiveLoading(false);
+      if (canApplyLoadLivesRequest(requestId, controller)) {
+        setLiveLoading(false);
+      }
+      if (loadLivesAbortRef.current === controller) {
+        loadLivesAbortRef.current = null;
+      }
     }
   }
 
@@ -245,6 +345,7 @@ export default function CandidatePanelPage() {
       return;
     }
 
+    explicitLogoutRef.current = false;
     setUnlockLoading(true);
     setNotice(null);
 
@@ -267,7 +368,7 @@ export default function CandidatePanelPage() {
         unlockedIdentity?.storageCandidateId === candidate?.storageCandidateId;
 
       if (!res.ok || !data?.ok || !unlockedMatchesCandidate) {
-        alert(
+        showAccessFailure(
           res.status === 429
             ? "Demasiados intentos. Intenta nuevamente más tarde."
             : "No se pudo validar el acceso."
@@ -279,22 +380,31 @@ export default function CandidatePanelPage() {
       setSessionExpiresAt(data.expiresAt ?? null);
       setAccessCodeInput("");
       await loadLives();
+    } catch {
+      showAccessFailure("No se pudo validar el acceso.");
     } finally {
-      setUnlockLoading(false);
+      if (mountedRef.current) {
+        setUnlockLoading(false);
+      }
     }
   }
 
   async function logout() {
+    explicitLogoutRef.current = true;
+    cancelActiveLoadLives();
     try {
       await fetch("/api/candidate/panel/logout", {
         method: "POST",
         credentials: "same-origin",
       });
     } finally {
+      if (!mountedRef.current) return;
+
       setAuthenticated(false);
       setSessionExpiresAt(null);
       setLives([]);
       setAccessCodeInput("");
+      setLiveLoading(false);
       setNotice("Sesión cerrada.");
     }
   }
