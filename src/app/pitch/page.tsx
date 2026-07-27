@@ -4,7 +4,6 @@
 export const dynamic = "force-dynamic";
 
 import React from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { PITCH_DONE_KEY } from "@/lib/adminConfig";
 import { partyWelcomeAssets, setActiveParty } from "@/lib/partyThemeClient";
 
@@ -32,6 +31,130 @@ const BTN_BG_2 = "#166534";
 const BTN_BG_APP = BG_APP;
 const BTN_BG_APP_2 = "#0D3B9A";
 const BTN_TEXT = "#ffffff";
+const MAX_PITCH_TOKEN_LENGTH = 2048;
+const LEGACY_PITCH_TOKEN_KEY = "votoclaro_pitch_token_v1";
+const WELCOME_RETURN_URL_KEY = "vc_welcome_return_url";
+const SENSITIVE_URL_PARAMS = new Set([
+  "t",
+  "token",
+  "access_token",
+  "refresh_token",
+  "code",
+  "password",
+  "secret",
+  "authorization",
+]);
+
+function hasSensitiveHash(hash: string) {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!raw) return false;
+
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw.replace(/\+/g, " "));
+  } catch {}
+
+  const candidates = [raw, decoded];
+  return candidates.some((value) => {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+
+    try {
+      const params = new URLSearchParams(
+        trimmed.startsWith("?") || trimmed.startsWith("&")
+          ? trimmed.slice(1)
+          : trimmed
+      );
+      for (const key of params.keys()) {
+        if (SENSITIVE_URL_PARAMS.has(key.toLowerCase())) return true;
+      }
+    } catch {}
+
+    return /(?:^|[/?&#;\s])(?:t|token|access_token|refresh_token|code|password|secret|authorization)\s*=/i.test(
+      trimmed
+    );
+  });
+}
+
+function sanitizeInternalReturnPath(value: string, origin: string) {
+  try {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.startsWith("//") || trimmed.includes("\\")) {
+      return "/pitch";
+    }
+
+    const parsed = new URL(trimmed, origin);
+    if (parsed.origin !== origin) return "/pitch";
+    if (!["http:", "https:"].includes(parsed.protocol)) return "/pitch";
+    if (parsed.username || parsed.password) return "/pitch";
+    if (!parsed.pathname.startsWith("/") || parsed.pathname.startsWith("//")) {
+      return "/pitch";
+    }
+
+    const params = new URLSearchParams(parsed.search);
+    Array.from(params.keys()).forEach((key) => {
+      if (SENSITIVE_URL_PARAMS.has(key.toLowerCase())) {
+        params.delete(key);
+      }
+    });
+
+    const hash = hasSensitiveHash(parsed.hash) ? "" : parsed.hash;
+    const query = params.toString();
+
+    return `${parsed.pathname}${query ? `?${query}` : ""}${hash}`;
+  } catch {
+    return "/pitch";
+  }
+}
+
+function cleanupLegacyPitchStorage() {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.removeItem(LEGACY_PITCH_TOKEN_KEY);
+  } catch {}
+
+  try {
+    const safeReturnPath = sanitizeInternalReturnPath(
+      window.localStorage.getItem(WELCOME_RETURN_URL_KEY) ?? "/pitch",
+      window.location.origin
+    );
+    window.localStorage.setItem(WELCOME_RETURN_URL_KEY, safeReturnPath);
+    document.cookie =
+      `${WELCOME_RETURN_URL_KEY}=` +
+      encodeURIComponent(safeReturnPath) +
+      "; path=/; max-age=31536000; SameSite=Lax";
+  } catch {}
+}
+
+function getTransientTokenAndCleanUrl() {
+  const currentUrl = new URL(window.location.href);
+  const rawToken = currentUrl.searchParams.get("t");
+  const token =
+    typeof rawToken === "string" ? rawToken.trim() : "";
+  const safeReturnPath = sanitizeInternalReturnPath(currentUrl.href, currentUrl.origin);
+
+  window.history.replaceState(null, "", safeReturnPath || "/pitch");
+
+  return { token, safeReturnPath };
+}
+
+function isValidTransientPitchToken(token: string | null | undefined) {
+  return Boolean(
+    typeof token === "string" &&
+      token.trim() &&
+      token.length <= MAX_PITCH_TOKEN_LENGTH
+  );
+}
+
+function isAbortError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
+}
 
 function saveLegalAcceptance() {
   if (typeof window === "undefined") return;
@@ -72,23 +195,18 @@ export default function PitchPage() {
   const [isInstallable, setIsInstallable] = React.useState(false);
   const [legalAccepted, setLegalAccepted] = React.useState(false);
   const [legalError, setLegalError] = React.useState("");
+  const transientPitchTokenRef = React.useRef<string | null | undefined>(undefined);
+  const pitchRequestIdRef = React.useRef(0);
 
   async function installApp() {
-    console.log("Botón Instalar App clickeado");
-
     if (deferredPrompt) {
       try {
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
-        console.log(
-          `Usuario ${outcome === "accepted" ? "instaló" : "canceló"} la app`
-        );
         setDeferredPrompt(null);
         setIsInstallable(false);
         if (outcome === "accepted") return;
-      } catch (e) {
-        console.log("Error con deferredPrompt, usando fallback", e);
-      }
+      } catch {}
     }
 
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
@@ -139,85 +257,99 @@ export default function PitchPage() {
 
   React.useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
+    const requestId = pitchRequestIdRef.current + 1;
+    pitchRequestIdRef.current = requestId;
+    let timeoutId: number | null = null;
+
+    function canApplyResult() {
+      return (
+        alive &&
+        pitchRequestIdRef.current === requestId &&
+        !controller.signal.aborted
+      );
+    }
 
     async function checkAccess() {
       try {
         if (typeof window === "undefined") return;
 
-        const url = new URL(window.location.href);
-        const token = (url.searchParams.get("t") ?? "").trim();
+        cleanupLegacyPitchStorage();
+        let token = transientPitchTokenRef.current;
+        let safeReturnPath = sanitizeInternalReturnPath(
+          window.location.href,
+          window.location.origin
+        );
 
-        const welcomeReturnUrl =
-          window.location.pathname + window.location.search;
+        if (token === undefined) {
+          const captured = getTransientTokenAndCleanUrl();
+          token =
+            captured.token && captured.token.length <= MAX_PITCH_TOKEN_LENGTH
+              ? captured.token
+              : null;
+          transientPitchTokenRef.current = token;
+          safeReturnPath = captured.safeReturnPath;
+        }
 
-        localStorage.setItem("vc_welcome_return_url", welcomeReturnUrl);
+        localStorage.setItem(WELCOME_RETURN_URL_KEY, safeReturnPath);
         document.cookie =
-          "vc_welcome_return_url=" +
-          encodeURIComponent(welcomeReturnUrl) +
+          `${WELCOME_RETURN_URL_KEY}=` +
+          encodeURIComponent(safeReturnPath) +
           "; path=/; max-age=31536000; SameSite=Lax";
 
         const nextParty =
-          token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-")
+          typeof token === "string" &&
+          (token.startsWith("GRUPOB-") || token.startsWith("GRUPOC-"))
             ? "app"
             : "perufederal";
 
         setParty(nextParty);
         setActiveParty(nextParty);
 
-        if (!token) {
-          if (alive) setAccess("MISSING_TOKEN");
+        if (!isValidTransientPitchToken(token)) {
+          if (canApplyResult()) setAccess("MISSING_TOKEN");
+          transientPitchTokenRef.current = undefined;
           return;
         }
 
-        const { data, error } = await supabase
-          .from("votoclaro_public_links")
-          .select("id")
-          .eq("route", "/pitch")
-          .eq("token", token)
-          .eq("is_active", true)
-          .limit(1);
-
-        console.log("[Pitch][DEBUG] token:", token);
-        console.log("[Pitch][DEBUG] data:", data);
-        console.log("[Pitch][DEBUG] error:", error);
-
-        if (error) {
-          console.error("[Pitch] token check error:", error);
-          if (alive) setAccess("DENIED");
-          return;
-        }
-
-        const ok = Array.isArray(data) && data.length > 0;
-
-        if (ok) {
+        timeoutId = window.setTimeout(async () => {
           try {
-            const res = await fetch("/api/gate/pitch", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              cache: "no-store",
-              body: JSON.stringify({ token }),
-            });
+            if (!canApplyResult() || !isValidTransientPitchToken(token)) return;
 
-            if (!res.ok) {
-              console.error("[Pitch] gate API failed");
-              if (alive) setAccess("DENIED");
-              return;
-            }
+        const res = await fetch("/api/gate/pitch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ token }),
+              signal: controller.signal,
+        });
 
-            sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
-            sessionStorage.setItem("votoclaro_pitch_token_v1", token);
-            sessionStorage.setItem(PITCH_DONE_KEY, "1");
-          } catch (e) {
-            console.error("[Pitch] gate activation error:", e);
-            if (alive) setAccess("DENIED");
-            return;
-          }
+            if (!canApplyResult()) return;
+
+        if (!res.ok) {
+              setAccess("DENIED");
+              transientPitchTokenRef.current = undefined;
+          return;
         }
 
-        if (alive) setAccess(ok ? "GRANTED" : "DENIED");
-      } catch (e) {
-        console.error("[Pitch] token check exception:", e);
-        if (alive) setAccess("DENIED");
+        sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
+        sessionStorage.setItem(PITCH_DONE_KEY, "1");
+
+            setAccess("GRANTED");
+            transientPitchTokenRef.current = undefined;
+          } catch (error) {
+            if (isAbortError(error)) return;
+            if (canApplyResult()) {
+              setAccess("DENIED");
+              transientPitchTokenRef.current = undefined;
+            }
+          }
+        }, 0);
+      } catch {
+        if (canApplyResult()) {
+          setAccess("DENIED");
+          transientPitchTokenRef.current = undefined;
+        }
       }
     }
 
@@ -225,6 +357,10 @@ export default function PitchPage() {
 
     return () => {
       alive = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+      controller.abort();
     };
   }, []);
 
@@ -232,7 +368,6 @@ export default function PitchPage() {
     let isMounted = true;
 
     const handleBeforeInstallPrompt = (e: any) => {
-      console.log("📲 Evento beforeinstallprompt CAPTURADO");
       e.preventDefault();
 
       if (isMounted) {
@@ -243,7 +378,6 @@ export default function PitchPage() {
 
     const checkIfInstalled = () => {
       if (window.matchMedia("(display-mode: standalone)").matches) {
-        console.log("📱 App ya está instalada");
         if (isMounted) setIsInstallable(false);
       }
     };
@@ -253,7 +387,6 @@ export default function PitchPage() {
 
     const timeoutId = setTimeout(() => {
       if (isMounted && !deferredPrompt) {
-        console.log("🔍 Re-verificando instalabilidad...");
         window.dispatchEvent(new Event("beforeinstallprompt"));
       }
     }, 2000);
@@ -341,9 +474,7 @@ export default function PitchPage() {
             className="mt-3 text-sm leading-relaxed"
             style={{ color: TEXT_DARK, fontWeight: 700 }}
           >
-            Debes ingresar con un enlace válido que incluya un token.
-            <br />
-            Ejemplo: <b>/pitch?t=GRUPOA-2026-01</b>
+            Debes volver a abrir el enlace de acceso proporcionado.
           </p>
         </div>
       </main>
@@ -526,7 +657,6 @@ function FederalitoSplash(props: {
   const flash = flashRef.current;
 
   if (!video) {
-    console.error("[Pitch] No existe referencia al video.");
     return;
   }
 
@@ -562,7 +692,6 @@ function FederalitoSplash(props: {
     };
 
     video.onerror = function () {
-      console.error("[Pitch] Error cargando archivo de video:", video.error);
       try {
         video.pause();
         video.currentTime = 0;
@@ -595,9 +724,7 @@ function FederalitoSplash(props: {
     const playPromise = video.play();
 
     if (playPromise && typeof playPromise.catch === "function") {
-      playPromise.catch((e) => {
-        console.error("[Pitch] video.play() fue bloqueado o falló:", e);
-
+      playPromise.catch(() => {
         try {
           video.pause();
           video.currentTime = 0;
@@ -610,9 +737,7 @@ function FederalitoSplash(props: {
         props.setLegalError("");
       });
     }
-  } catch (e) {
-    console.error("[Pitch] Error ejecutando bienvenida:", e);
-
+  } catch {
     try {
       video.pause();
       video.currentTime = 0;
@@ -648,7 +773,7 @@ function FederalitoSplash(props: {
     
   const welcomeReturn =
     typeof window !== "undefined"
-      ? window.location.pathname + window.location.search
+      ? sanitizeInternalReturnPath(window.location.href, window.location.origin)
       : "/pitch";
 
   return (

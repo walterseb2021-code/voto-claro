@@ -3,6 +3,45 @@ import { createClient } from "@supabase/supabase-js";
 
 const VC_PITCH_COOKIE = "vc_pitch_token";
 const VC_GROUP_COOKIE = "vc_group";
+const MAX_PITCH_TOKEN_LENGTH = 2048;
+const noStoreHeaders = {
+  "Cache-Control": "no-store",
+};
+
+function jsonNoStore(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: noStoreHeaders,
+  });
+}
+
+function invalidAccess(status = 401) {
+  return jsonNoStore(
+    { error: "No se pudo validar el acceso.", code: "PITCH_ACCESS_INVALID" },
+    status
+  );
+}
+
+function unavailable() {
+  return jsonNoStore(
+    { error: "No se pudo validar el acceso.", code: "PITCH_ACCESS_UNAVAILABLE" },
+    503
+  );
+}
+
+function clearPitchCookies(response: NextResponse) {
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 0,
+  };
+
+  response.cookies.set(VC_PITCH_COOKIE, "", options);
+  response.cookies.set(VC_GROUP_COOKIE, "", options);
+  return response;
+}
 
 function tokenToGroup(token: string) {
   // GRUPOA-2026-01 -> GRUPOA
@@ -21,25 +60,96 @@ function getSupabaseAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json().catch(() => ({}));
-    const token = String((body as any)?.token ?? "").trim();
+function getRequestOrigin(req: Request) {
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
 
-    if (!token) {
-      return NextResponse.json({ error: "TOKEN_REQUIRED" }, { status: 400 });
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(req.url).origin;
+}
+
+function isLocalOrigin(origin: string) {
+  try {
+    const hostname = new URL(origin).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedOrigin(req: Request) {
+  const origin = req.headers.get("origin");
+  if (!origin) return true;
+
+  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
+    return true;
+  }
+
+  try {
+    return new URL(origin).origin === getRequestOrigin(req);
+  } catch {
+    return false;
+  }
+}
+
+function isJsonContentType(req: Request) {
+  const contentType = req.headers.get("content-type") ?? "";
+  return contentType.toLowerCase().split(";")[0].trim() === "application/json";
+}
+
+export async function POST(req: Request) {
+  let shouldClearPitchCookies = false;
+
+  try {
+    if (!isAllowedOrigin(req)) {
+      return invalidAccess(403);
+    }
+
+    if (!isJsonContentType(req)) {
+      return invalidAccess(400);
+    }
+
+    const body = await req.json().catch(() => null);
+
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return invalidAccess(400);
+    }
+
+    const rawToken = (body as { token?: unknown }).token;
+    shouldClearPitchCookies =
+      typeof rawToken === "string" && Boolean(rawToken.trim());
+
+    if (Object.keys(body).some((key) => key !== "token")) {
+      return shouldClearPitchCookies
+        ? clearPitchCookies(invalidAccess(400))
+        : invalidAccess(400);
+    }
+
+    if (typeof rawToken !== "string") {
+      return invalidAccess(400);
+    }
+
+    const token = rawToken.trim();
+
+    if (!token || token.length > MAX_PITCH_TOKEN_LENGTH) {
+      return shouldClearPitchCookies
+        ? clearPitchCookies(invalidAccess())
+        : invalidAccess();
     }
 
     const group = tokenToGroup(token);
     if (!group) {
-      return NextResponse.json({ error: "TOKEN_GROUP_PARSE_FAILED" }, { status: 401 });
+      return clearPitchCookies(invalidAccess());
     }
 
     const supabase = getSupabaseAdmin();
 
     const { data, error } = await supabase
       .from("votoclaro_public_links")
-      .select("token, route, is_active, expires_at")
+      .select("route, is_active, expires_at")
       .eq("token", token)
       .eq("route", "/pitch")
       .eq("is_active", true)
@@ -47,24 +157,22 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json(
-        { error: "SUPABASE_ERROR", detail: error.message },
-        { status: 500 }
-      );
+      console.error("[pitch-gate] access validation failed");
+      return clearPitchCookies(unavailable());
     }
 
     if (!data) {
-      return NextResponse.json({ error: "TOKEN_INVALID_OR_INACTIVE" }, { status: 401 });
+      return clearPitchCookies(invalidAccess());
     }
 
     if (data.expires_at) {
       const exp = new Date(String(data.expires_at)).getTime();
       if (Number.isFinite(exp) && Date.now() > exp) {
-        return NextResponse.json({ error: "TOKEN_EXPIRED" }, { status: 401 });
+        return clearPitchCookies(invalidAccess());
       }
     }
 
-    const res = NextResponse.json({ ok: true, group }, { status: 200 });
+    const res = jsonNoStore({ ok: true }, 200);
 
     // ✅ Cookie HttpOnly: gate fuerte para middleware
     res.cookies.set(VC_PITCH_COOKIE, token, {
@@ -85,11 +193,9 @@ export async function POST(req: Request) {
     });
 
     return res;
-  } catch (e: any) {
-    // ✅ devolvemos error real (para debug)
-    return NextResponse.json(
-      { error: "GATE_EXCEPTION", detail: String(e?.message ?? e) },
-      { status: 500 }
-    );
+  } catch {
+    console.error("[pitch-gate] access validation failed");
+    const response = unavailable();
+    return shouldClearPitchCookies ? clearPitchCookies(response) : response;
   }
 }
