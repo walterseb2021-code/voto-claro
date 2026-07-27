@@ -29,6 +29,14 @@ type LiveListResponse =
   | { ok: true; entries: LiveEntry[] }
   | { ok: false; error?: string };
 
+type AccessStatusResponse = {
+  accessAvailable?: boolean;
+};
+
+const ACCESS_CODE_PATTERN = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/;
+const INVALID_ACCESS_CODE_MESSAGE =
+  "Ingresa un código de acceso válido de 8 caracteres.";
+
 function platformLabel(p: LivePlatform) {
   switch (p) {
     case "YOUTUBE":
@@ -108,11 +116,21 @@ export default function CandidatePanelPage() {
   const [accessCodeInput, setAccessCodeInput] = useState("");
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [accessAvailabilityLoading, setAccessAvailabilityLoading] = useState(true);
+  const [accessAvailable, setAccessAvailable] = useState<boolean | null>(null);
+  const [accessStatusCandidateId, setAccessStatusCandidateId] = useState<string | null>(null);
+  const [accessAvailabilityError, setAccessAvailabilityError] = useState(false);
   const explicitLogoutRef = useRef(false);
   const mountedRef = useRef(false);
   const loadLivesAbortRef = useRef<AbortController | null>(null);
   const loadLivesRequestIdRef = useRef(0);
+  const accessStatusAbortRef = useRef<AbortController | null>(null);
+  const accessStatusRequestIdRef = useRef(0);
+  const currentAccessStatusCandidateIdRef = useRef<string | null>(null);
   const accessFailureAlertTimeoutRef = useRef<number | null>(null);
+
+  const currentAccessStatusCandidateId = candidate?.storageCandidateId ?? null;
+  currentAccessStatusCandidateIdRef.current = currentAccessStatusCandidateId;
 
   const [lives, setLives] = useState<LiveEntry[]>([]);
   const [liveLoading, setLiveLoading] = useState(false);
@@ -124,6 +142,12 @@ export default function CandidatePanelPage() {
     loadLivesRequestIdRef.current += 1;
     loadLivesAbortRef.current?.abort();
     loadLivesAbortRef.current = null;
+  }
+
+  function cancelActiveAccessStatus() {
+    accessStatusRequestIdRef.current += 1;
+    accessStatusAbortRef.current?.abort();
+    accessStatusAbortRef.current = null;
   }
 
   function startLoadLivesRequest() {
@@ -163,6 +187,129 @@ export default function CandidatePanelPage() {
     );
   }
 
+  function startAccessStatusRequest() {
+    const accessStatusCandidateIdForRequest = currentAccessStatusCandidateId;
+
+    if (
+      !mountedRef.current ||
+      !candidate ||
+      !accessStatusCandidateIdForRequest ||
+      currentAccessStatusCandidateIdRef.current !== accessStatusCandidateIdForRequest
+    ) {
+      return null;
+    }
+
+    cancelActiveAccessStatus();
+
+    const controller = new AbortController();
+    const requestId = accessStatusRequestIdRef.current + 1;
+    accessStatusRequestIdRef.current = requestId;
+    accessStatusAbortRef.current = controller;
+
+    return {
+      controller,
+      requestId,
+      candidateIdForRequest: candidateId,
+      accessStatusCandidateIdForRequest,
+    };
+  }
+
+  function canApplyAccessStatusRequest(
+    requestId: number,
+    controller: AbortController,
+    accessStatusCandidateIdForRequest: string
+  ) {
+    return (
+      mountedRef.current &&
+      accessStatusRequestIdRef.current === requestId &&
+      accessStatusAbortRef.current === controller &&
+      currentAccessStatusCandidateIdRef.current === accessStatusCandidateIdForRequest &&
+      !controller.signal.aborted
+    );
+  }
+
+  async function loadAccessAvailability() {
+    const request = startAccessStatusRequest();
+    if (!request) return;
+
+    const {
+      controller,
+      requestId,
+      candidateIdForRequest,
+      accessStatusCandidateIdForRequest,
+    } = request;
+    setAccessAvailabilityLoading(true);
+    setAccessAvailabilityError(false);
+    setAccessAvailable(null);
+    setAccessStatusCandidateId(null);
+
+    try {
+      const res = await fetch(
+        `/api/candidate/panel/access-status?candidateId=${encodeURIComponent(candidateIdForRequest)}`,
+        {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: controller.signal,
+        }
+      );
+
+      const data = (await res.json().catch(() => null)) as AccessStatusResponse | null;
+
+      if (
+        !canApplyAccessStatusRequest(
+          requestId,
+          controller,
+          accessStatusCandidateIdForRequest
+        )
+      ) {
+        return;
+      }
+
+      if (!res.ok || typeof data?.accessAvailable !== "boolean") {
+        setAccessAvailable(null);
+        setAccessStatusCandidateId(accessStatusCandidateIdForRequest);
+        setAccessAvailabilityError(true);
+        setAccessCodeInput("");
+        return;
+      }
+
+      setAccessAvailable(data.accessAvailable);
+      setAccessStatusCandidateId(accessStatusCandidateIdForRequest);
+      setAccessAvailabilityError(false);
+      if (!data.accessAvailable) {
+        setAccessCodeInput("");
+      }
+    } catch (error) {
+      if (isAbortError(error)) return;
+      if (
+        canApplyAccessStatusRequest(
+          requestId,
+          controller,
+          accessStatusCandidateIdForRequest
+        )
+      ) {
+        setAccessAvailable(null);
+        setAccessStatusCandidateId(accessStatusCandidateIdForRequest);
+        setAccessAvailabilityError(true);
+        setAccessCodeInput("");
+      }
+    } finally {
+      if (
+        canApplyAccessStatusRequest(
+          requestId,
+          controller,
+          accessStatusCandidateIdForRequest
+        )
+      ) {
+        setAccessAvailabilityLoading(false);
+      }
+      if (accessStatusAbortRef.current === controller) {
+        accessStatusAbortRef.current = null;
+      }
+    }
+  }
+
   function expireSession(message = "La sesión venció. Ingresa nuevamente el código de acceso.") {
     if (!mountedRef.current) return;
 
@@ -172,6 +319,7 @@ export default function CandidatePanelPage() {
     if (!explicitLogoutRef.current) {
       setNotice(message);
     }
+    void loadAccessAvailability();
   }
 
   function showAccessFailure(message: string) {
@@ -194,6 +342,7 @@ export default function CandidatePanelPage() {
     return () => {
       mountedRef.current = false;
       cancelActiveLoadLives();
+      cancelActiveAccessStatus();
       if (accessFailureAlertTimeoutRef.current !== null) {
         window.clearTimeout(accessFailureAlertTimeoutRef.current);
         accessFailureAlertTimeoutRef.current = null;
@@ -251,6 +400,11 @@ export default function CandidatePanelPage() {
   useEffect(() => {
     if (!candidate) {
       setSessionLoading(false);
+      setAccessAvailabilityLoading(false);
+      setAccessAvailable(null);
+      setAccessStatusCandidateId(null);
+      setAccessAvailabilityError(false);
+      cancelActiveAccessStatus();
       return;
     }
 
@@ -280,6 +434,7 @@ export default function CandidatePanelPage() {
         if (res.ok && data?.authenticated && matchesCandidate) {
           setAuthenticated(true);
           setSessionExpiresAt(data.expiresAt ?? null);
+          void loadAccessAvailability();
           await loadLives();
           return;
         }
@@ -287,10 +442,17 @@ export default function CandidatePanelPage() {
         setAuthenticated(false);
         setSessionExpiresAt(null);
         setLives([]);
+        await loadAccessAvailability();
 
         if (data?.authenticated && !matchesCandidate) {
           setNotice("Hay una sesión activa para otro candidato. Cierra sesión e ingresa el código correcto.");
         }
+      } catch {
+        if (cancelled) return;
+        setAuthenticated(false);
+        setSessionExpiresAt(null);
+        setLives([]);
+        await loadAccessAvailability();
       } finally {
         if (!cancelled) setSessionLoading(false);
       }
@@ -300,6 +462,7 @@ export default function CandidatePanelPage() {
 
     return () => {
       cancelled = true;
+      cancelActiveAccessStatus();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateId, candidate]);
@@ -345,6 +508,24 @@ export default function CandidatePanelPage() {
       return;
     }
 
+    const normalizedAccessCode = accessCodeInput.trim().toUpperCase();
+    if (!ACCESS_CODE_PATTERN.test(normalizedAccessCode)) {
+      setAccessCodeInput("");
+      setNotice(INVALID_ACCESS_CODE_MESSAGE);
+      return;
+    }
+
+    if (
+      unlockLoading ||
+      accessAvailabilityLoading ||
+      accessAvailabilityError ||
+      accessStatusCandidateId !== currentAccessStatusCandidateId ||
+      accessAvailable !== true
+    ) {
+      setAccessCodeInput("");
+      return;
+    }
+
     explicitLogoutRef.current = false;
     setUnlockLoading(true);
     setNotice(null);
@@ -354,7 +535,7 @@ export default function CandidatePanelPage() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateId, accessCode: accessCodeInput.trim() }),
+        body: JSON.stringify({ candidateId, accessCode: normalizedAccessCode }),
       });
 
       const data = (await res.json().catch(() => null)) as
@@ -373,6 +554,7 @@ export default function CandidatePanelPage() {
             ? "Demasiados intentos. Intenta nuevamente más tarde."
             : "No se pudo validar el acceso."
         );
+        void loadAccessAvailability();
         return;
       }
 
@@ -382,6 +564,7 @@ export default function CandidatePanelPage() {
       await loadLives();
     } catch {
       showAccessFailure("No se pudo validar el acceso.");
+      void loadAccessAvailability();
     } finally {
       if (mountedRef.current) {
         setUnlockLoading(false);
@@ -392,6 +575,7 @@ export default function CandidatePanelPage() {
   async function logout() {
     explicitLogoutRef.current = true;
     cancelActiveLoadLives();
+    cancelActiveAccessStatus();
     try {
       await fetch("/api/candidate/panel/logout", {
         method: "POST",
@@ -406,6 +590,7 @@ export default function CandidatePanelPage() {
       setAccessCodeInput("");
       setLiveLoading(false);
       setNotice("Sesión cerrada.");
+      void loadAccessAvailability();
     }
   }
 
@@ -510,6 +695,32 @@ export default function CandidatePanelPage() {
   const select =
     "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
+  const accessStatusMatchesCurrentCandidate =
+    currentAccessStatusCandidateId !== null &&
+    accessStatusCandidateId === currentAccessStatusCandidateId;
+  const accessAvailabilityPending =
+    currentAccessStatusCandidateId !== null &&
+    (accessAvailabilityLoading || !accessStatusMatchesCurrentCandidate);
+  const accessAvailabilityErrorForCurrentCandidate =
+    !accessAvailabilityPending &&
+    accessAvailabilityError &&
+    accessStatusMatchesCurrentCandidate;
+  const normalizedAccessCode = accessCodeInput.trim().toUpperCase();
+  const hasValidAccessCodeFormat = ACCESS_CODE_PATTERN.test(normalizedAccessCode);
+  const canEditAccessCode =
+    !unlockLoading &&
+    !accessAvailabilityPending &&
+    !accessAvailabilityErrorForCurrentCandidate &&
+    accessStatusMatchesCurrentCandidate &&
+    accessAvailable === true;
+  const canSubmitAccessCode =
+    canEditAccessCode &&
+    hasValidAccessCodeFormat;
+  const accessUnavailable =
+    !accessAvailabilityPending &&
+    !accessAvailabilityErrorForCurrentCandidate &&
+    accessStatusMatchesCurrentCandidate &&
+    accessAvailable === false;
 
   if (!candidate) {
     return (
@@ -574,6 +785,30 @@ export default function CandidatePanelPage() {
               </div>
             ) : null}
 
+            {accessAvailabilityPending ? (
+              <div className="mt-3 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+                Verificando disponibilidad del acceso...
+              </div>
+            ) : null}
+
+            {accessAvailabilityErrorForCurrentCandidate ? (
+              <div className="mt-3 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+                No se pudo verificar la disponibilidad del acceso. Recarga la página.
+              </div>
+            ) : null}
+
+            {accessUnavailable ? (
+              <>
+                <div className="mt-3 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+                  Acceso deshabilitado
+                </div>
+
+                <div className="mt-3 text-xs text-slate-600">
+                  El acceso privado de este candidato no se encuentra disponible.
+                </div>
+              </>
+            ) : null}
+
             <input
               type="password"
               value={accessCodeInput}
@@ -586,21 +821,23 @@ export default function CandidatePanelPage() {
               maxLength={8}
               placeholder="Código de acceso"
               className={input}
-              disabled={unlockLoading}
+              disabled={!canEditAccessCode}
             />
 
             <button
               type="button"
               onClick={tryUnlock}
               className={btn + " mt-3"}
-              disabled={unlockLoading}
+              disabled={!canSubmitAccessCode}
             >
               {unlockLoading ? "Validando..." : "Entrar"}
             </button>
 
-            <div className="mt-3 text-xs text-slate-600">
-              Si no tienes un código de acceso, pídeselo al administrador.
-            </div>
+            {!accessUnavailable ? (
+              <div className="mt-3 text-xs text-slate-600">
+                Si no tienes un código de acceso, pídeselo al administrador.
+              </div>
+            ) : null}
           </div>
         </section>
 
