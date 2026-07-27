@@ -7,13 +7,11 @@ import {
   getIpFingerprint,
   isActiveCredentialStatus,
   isValidCandidateAccessCode,
-  isValidPinFormat,
   normalizeCandidateAccessCode,
   recordCandidatePanelPinFailure,
   resetCandidatePanelRateLimit,
   resolveCandidate,
   revokeCandidatePanelSession,
-  safeComparePin,
   verifyCandidateAccessCode,
 } from "@/lib/candidatePanelAuth";
 import {
@@ -26,24 +24,43 @@ export const runtime = "nodejs";
 type UnlockBody = {
   candidateId?: unknown;
   accessCode?: unknown;
-  pin?: unknown;
 };
 
-const UNLOCK_KEYS = new Set(["candidateId", "accessCode", "pin"]);
+const UNLOCK_KEYS = new Set(["candidateId", "accessCode"]);
+const FORBIDDEN_LEGACY_KEYS = new Set([
+  "pin",
+  "candidatePin",
+  "legacyPin",
+  "code",
+  "password",
+]);
 
 type CredentialRow = {
   candidate_id: string;
-  pin: string | null;
   access_code_verifier: string | null;
   credential_revision: number | string | null;
   credential_status: string | null;
 };
 
+const noStoreHeaders = {
+  "Cache-Control": "no-store, private",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
+function jsonNoStore(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: noStoreHeaders,
+  });
+}
+
 function genericUnauthorized(status = 401) {
-  return NextResponse.json(
-    { ok: false, error: "No se pudo validar el acceso." },
-    { status }
-  );
+  return jsonNoStore({ ok: false, error: "No se pudo validar el acceso." }, status);
+}
+
+function serviceUnavailable() {
+  return jsonNoStore({ ok: false, error: "No disponible." }, 503);
 }
 
 function currentRevision(row: CredentialRow | null) {
@@ -72,22 +89,28 @@ export async function POST(req: NextRequest) {
     !body ||
     typeof body !== "object" ||
     Array.isArray(body) ||
-    Object.keys(body).some((key) => !UNLOCK_KEYS.has(key))
+    Object.keys(body).some(
+      (key) => !UNLOCK_KEYS.has(key) || FORBIDDEN_LEGACY_KEYS.has(key)
+    )
   ) {
     return genericUnauthorized(400);
   }
 
-  const candidateIdInput = String(body.candidateId ?? "").trim();
+  const hasCandidateId = Object.prototype.hasOwnProperty.call(body, "candidateId");
   const hasAccessCode = Object.prototype.hasOwnProperty.call(body, "accessCode");
-  const hasLegacyPin = Object.prototype.hasOwnProperty.call(body, "pin");
 
-  if (hasAccessCode === hasLegacyPin) {
+  if (
+    !hasCandidateId ||
+    !hasAccessCode ||
+    typeof body.candidateId !== "string" ||
+    typeof body.accessCode !== "string"
+  ) {
     return genericUnauthorized(400);
   }
 
-  const credentialInputRaw = String(
-    hasAccessCode ? body.accessCode ?? "" : body.pin ?? ""
-  ).trim();
+  const candidateIdInput = body.candidateId.trim();
+  const credentialInputRaw = body.accessCode.trim();
+  const normalizedAccessCode = normalizeCandidateAccessCode(credentialInputRaw);
 
   if (
     !candidateIdInput ||
@@ -95,7 +118,8 @@ export async function POST(req: NextRequest) {
     /[\u0000-\u001f]/.test(candidateIdInput) ||
     !credentialInputRaw ||
     credentialInputRaw.length > 64 ||
-    /[\u0000-\u001f]/.test(credentialInputRaw)
+    /[\u0000-\u001f]/.test(credentialInputRaw) ||
+    !isValidCandidateAccessCode(normalizedAccessCode)
   ) {
     return genericUnauthorized(400);
   }
@@ -107,7 +131,7 @@ export async function POST(req: NextRequest) {
 
   const ipFingerprint = getIpFingerprint(req);
   if (!ipFingerprint.ok) {
-    return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
+    return serviceUnavailable();
   }
 
   const rate = await checkCandidatePanelRateLimit(
@@ -115,7 +139,7 @@ export async function POST(req: NextRequest) {
     ipFingerprint.value
   );
   if (!rate.ok) {
-    return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
+    return serviceUnavailable();
   }
 
   if (!rate.allowed) {
@@ -125,16 +149,15 @@ export async function POST(req: NextRequest) {
   const supabase = getCandidatePanelAdminClient();
   const { data, error } = await supabase
     .from("votoclaro_candidate_pins")
-    .select("candidate_id,pin,access_code_verifier,credential_revision,credential_status")
+    .select("candidate_id,access_code_verifier,credential_revision,credential_status")
     .eq("candidate_id", candidate.storageCandidateId)
     .maybeSingle<CredentialRow>();
 
   if (error) {
     console.error("[candidate-panel] credential lookup failed", error.message);
-    return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
+    return serviceUnavailable();
   }
 
-  let valid = false;
   const expectedRevision = currentRevision(data ?? null);
 
   if (!isActiveCredentialStatus(data?.credential_status)) {
@@ -144,35 +167,25 @@ export async function POST(req: NextRequest) {
 
   if (expectedRevision === null) {
     console.error("[candidate-panel] invalid stored credential revision");
-    return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
+    return serviceUnavailable();
   }
 
-  if (typeof data?.access_code_verifier === "string" && data.access_code_verifier) {
-    const normalizedAccessCode = normalizeCandidateAccessCode(credentialInputRaw);
-    if (isValidCandidateAccessCode(normalizedAccessCode)) {
-      const accessCodeResult = await verifyCandidateAccessCode(
-        normalizedAccessCode,
-        data.access_code_verifier
-      );
-
-      if (!accessCodeResult.ok) {
-        console.error(
-          "[candidate-panel] stored credential configuration is invalid",
-          candidate.storageCandidateId
-        );
-        return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
-      }
-
-      valid = accessCodeResult.valid;
-    }
-  } else {
-    const storedPin = typeof data?.pin === "string" ? data.pin : null;
-    valid =
-      Boolean(storedPin && isValidPinFormat(storedPin) && isValidPinFormat(credentialInputRaw)) &&
-      safeComparePin(credentialInputRaw, storedPin as string);
+  if (typeof data?.access_code_verifier !== "string" || !data.access_code_verifier) {
+    console.error("[candidate-panel] stored credential configuration is invalid");
+    return serviceUnavailable();
   }
 
-  if (!valid) {
+  const accessCodeResult = await verifyCandidateAccessCode(
+    normalizedAccessCode,
+    data.access_code_verifier
+  );
+
+  if (!accessCodeResult.ok) {
+    console.error("[candidate-panel] stored credential configuration is invalid");
+    return serviceUnavailable();
+  }
+
+  if (!accessCodeResult.valid) {
     await recordCandidatePanelPinFailure(candidate.storageCandidateId, ipFingerprint.value);
     return genericUnauthorized(401);
   }
@@ -185,10 +198,10 @@ export async function POST(req: NextRequest) {
     expectedRevision
   );
   if (!session) {
-    return NextResponse.json({ ok: false, error: "No disponible." }, { status: 503 });
+    return serviceUnavailable();
   }
 
-  const response = NextResponse.json({
+  const response = jsonNoStore({
     ok: true,
     authenticated: true,
     candidateId: candidate.canonicalId,

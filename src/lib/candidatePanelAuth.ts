@@ -118,10 +118,6 @@ export function resolveCandidate(candidateId: unknown) {
   return resolveCandidatePanelIdentity(candidateId);
 }
 
-export function isValidPinFormat(pin: unknown) {
-  return /^\d{4}$/.test(String(pin ?? "").trim());
-}
-
 export function isActiveCredentialStatus(status: unknown) {
   return String(status ?? "").trim().toUpperCase() === "ACTIVE";
 }
@@ -274,13 +270,6 @@ export function hashCandidatePanelToken(token: string) {
 
 export function isValidCandidatePanelToken(token: unknown) {
   return TOKEN_RE.test(String(token ?? ""));
-}
-
-export function safeComparePin(inputPin: string, storedPin: string) {
-  const left = Buffer.from(inputPin, "utf8");
-  const right = Buffer.from(storedPin, "utf8");
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
 }
 
 export function getIpFingerprint(req: NextRequest): IpFingerprintResult {
