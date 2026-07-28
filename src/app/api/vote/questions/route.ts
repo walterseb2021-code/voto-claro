@@ -35,8 +35,18 @@ function getSupabaseAdmin() {
   });
 }
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
+function jsonNoStore(body: Record<string, unknown>, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function json(status: number, body: Record<string, unknown>) {
+  return jsonNoStore(body, { status });
+}
+
+function logOperationFailed() {
+  console.error("[vote-questions] operation failed");
 }
 
 function getRequestOrigin(req: Request) {
@@ -94,14 +104,18 @@ async function validatePitchToken(
     .maybeSingle();
 
   if (error) {
-    console.error("[vote/questions] pitch token validation failed", error);
+    logOperationFailed();
     return false;
   }
 
   if (!data) return false;
 
   if (data.expires_at) {
-    const exp = new Date(String(data.expires_at)).getTime();
+    const expiresAt = data.expires_at;
+    const exp =
+      typeof expiresAt === "string" || typeof expiresAt === "number"
+        ? new Date(expiresAt).getTime()
+        : NaN;
     if (Number.isFinite(exp) && Date.now() > exp) {
       return false;
     }
@@ -118,7 +132,7 @@ async function getActiveQuestions(supabase: ReturnType<typeof getSupabaseAdmin>)
   }
 
   if (rpcErr) {
-    console.error("[vote/questions] active questions rpc failed", rpcErr);
+    logOperationFailed();
   }
 
   const { data, error } = await supabase
@@ -129,7 +143,7 @@ async function getActiveQuestions(supabase: ReturnType<typeof getSupabaseAdmin>)
     .limit(1);
 
   if (error) {
-    console.error("[vote/questions] active questions lookup failed", error);
+    logOperationFailed();
     return null;
   }
 
@@ -160,11 +174,11 @@ export async function GET(req: Request) {
 
     const questions = await getActiveQuestions(supabase);
 
-    return NextResponse.json({
+    return json(200, {
       questions: questions ?? DEFAULT_QUESTIONS,
     });
-  } catch (e: any) {
-    console.error("[vote/questions] unexpected error", e);
+  } catch {
+    logOperationFailed();
     return json(500, { error: "No disponible" });
   }
 }

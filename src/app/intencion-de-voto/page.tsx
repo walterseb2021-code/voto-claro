@@ -33,6 +33,9 @@ type IntentionQuestions = {
   question_3: string;
 };
 
+const MIN_ANSWER_LENGTH = 10;
+const MAX_ANSWER_LENGTH = 1000;
+
 // ============================================
 // FUNCIONES DE FILTRO
 // ============================================
@@ -75,8 +78,12 @@ function validateAnswer(text: string): { valid: boolean; error?: string } {
   
   const trimmed = text.trim();
   
-  if (trimmed.length < 10) {
-    return { valid: false, error: "Cada respuesta debe tener al menos 10 caracteres" };
+  if (trimmed.length < MIN_ANSWER_LENGTH) {
+    return { valid: false, error: "Cada respuesta no vacía debe tener al menos 10 caracteres" };
+  }
+
+  if (trimmed.length > MAX_ANSWER_LENGTH) {
+    return { valid: false, error: "Cada respuesta puede contener como máximo 1000 caracteres." };
   }
   
   if (hasSoeces(trimmed)) {
@@ -97,14 +104,59 @@ function logoSrc(slug: string) {
   return `/voto/parties/${slug}.png`;
 }
 
-function getOrCreateDeviceId(): string {
-  if (typeof window === "undefined") return "";
-  const KEY = "vc_device_id";
-  const existing = localStorage.getItem(KEY);
-  if (existing && existing.length > 10) return existing;
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEVICE_ID_KEY = "vc_device_id";
+
+function readStoredDeviceId(): string | null {
+  try {
+    return localStorage.getItem(DEVICE_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDeviceId(value: string) {
+  try {
+    localStorage.setItem(DEVICE_ID_KEY, value);
+  } catch {
+    // El UUID queda disponible en memoria para esta instancia de la pagina.
+  }
+}
+
+function createDeviceId(): string {
+  if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
+    return "";
+  }
 
   const newId = crypto.randomUUID();
-  localStorage.setItem(KEY, newId);
+  return UUID_V4_RE.test(newId) ? newId : "";
+}
+
+function isAbortError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: string }).name === "AbortError"
+  );
+}
+
+function isResponseObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getOrCreateDeviceId(memoryDeviceId = ""): string {
+  if (UUID_V4_RE.test(memoryDeviceId)) return memoryDeviceId;
+  if (typeof window === "undefined") return "";
+
+  const existing = readStoredDeviceId();
+  if (existing && UUID_V4_RE.test(existing)) return existing;
+
+  const newId = createDeviceId();
+  if (!newId) return "";
+
+  writeStoredDeviceId(newId);
   return newId;
 }
 
@@ -148,6 +200,14 @@ function IntencionDeVotoContent() {
 const searchParams = useSearchParams();
 const token = searchParams.get("token");
 const introSpokenRef = useRef(false);
+const mountedRef = useRef(false);
+const memoryDeviceIdRef = useRef("");
+const voteSubmittingRef = useRef(false);
+const voteRequestIdRef = useRef(0);
+const voteAbortControllerRef = useRef<AbortController | null>(null);
+const answersSubmittingRef = useRef(false);
+const answersRequestIdRef = useRef(0);
+const answersAbortControllerRef = useRef<AbortController | null>(null);
 
   // Estados principales
   const [deviceId, setDeviceId] = useState<string>("");
@@ -156,6 +216,7 @@ const introSpokenRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userGroup, setUserGroup] = useState<string>("GRUPOB");
+  const [deviceIdUnavailable, setDeviceIdUnavailable] = useState(false);
 
   // Flujo de votación
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
@@ -163,6 +224,7 @@ const introSpokenRef = useRef(false);
   const [confirmedPartySlug, setConfirmedPartySlug] = useState<string | null>(null);
   const [confirmedPartyName, setConfirmedPartyName] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -187,12 +249,36 @@ const introSpokenRef = useRef(false);
   // FUNCIONES DE CARGA
   // ============================================
   useEffect(() => {
-    const id = getOrCreateDeviceId();
-    setDeviceId(id);
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      voteRequestIdRef.current += 1;
+      voteAbortControllerRef.current?.abort();
+      voteAbortControllerRef.current = null;
+      voteSubmittingRef.current = false;
+      answersRequestIdRef.current += 1;
+      answersAbortControllerRef.current?.abort();
+      answersAbortControllerRef.current = null;
+      answersSubmittingRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const id = getOrCreateDeviceId(memoryDeviceIdRef.current);
+    if (id) {
+      memoryDeviceIdRef.current = id;
+      setDeviceId(id);
+      setDeviceIdUnavailable(false);
+    } else {
+      setDeviceIdUnavailable(true);
+    }
     setUserGroup(getGroupFromToken());
   }, []);
 
-  async function loadActive() {
+  async function loadActive(options: { signal?: AbortSignal; skipVoteStatus?: boolean } = {}) {
+    if (!mountedRef.current) return;
+
     setLoading(true);
     setError(null);
     
@@ -200,6 +286,7 @@ const introSpokenRef = useRef(false);
       // 1. Cargar ronda global activa
       const res = await fetch("/api/vote/active", {
         cache: "no-store",
+        signal: options.signal,
       });
 
       const data = await res.json().catch(() => null);
@@ -208,6 +295,8 @@ const introSpokenRef = useRef(false);
         throw new Error(data?.error || 'No se pudo cargar la ronda actual');
       }
 
+      if (!mountedRef.current || options.signal?.aborted) return;
+
       const round = data.round;
       setGlobalRound(round);
       
@@ -215,32 +304,37 @@ const introSpokenRef = useRef(false);
       setParties(Array.isArray(data.options) ? data.options : []);
       
       // 3. Verificar si ya votó en esta ronda
-      if (round?.id && deviceId) {
-        await checkIfVotedInCurrentRound(deviceId, round.id);
+      if (!options.skipVoteStatus && round?.id && deviceId) {
+        await checkIfVotedInCurrentRound(deviceId);
       }
-    } catch (e) {
+    } catch (error) {
+      if (isAbortError(error) || options.signal?.aborted) return;
+      if (!mountedRef.current) return;
       setError('Error al cargar los datos');
     } finally {
+      if (!mountedRef.current || options.signal?.aborted) return;
       setLoading(false);
     }
   }
 
-  async function checkIfVotedInCurrentRound(devId: string, roundId: string) {
+  async function checkIfVotedInCurrentRound(devId: string) {
   try {
     const res = await fetch(
-      `/api/vote/status?device_id=${encodeURIComponent(devId)}&round_id=${roundId}`,
+      `/api/vote/status?device_id=${encodeURIComponent(devId)}`,
       {
         cache: "no-store",
       }
     );
     const data = await res.json();
 
-    if (res.ok && data?.voted && data?.party_id) {
-      const partyId = String(data.party_id);
+    if (!mountedRef.current) return;
+
+    if (res.ok && data?.voted && typeof data.party_id === "string") {
+      const partyId = data.party_id;
 
       setConfirmedPartyId(partyId);
 
-      const party = parties.find((o) => String(o.id) === partyId);
+      const party = parties.find((o) => o.id === partyId);
       if (party) {
         setConfirmedPartyName(party.name);
       } else {
@@ -282,10 +376,15 @@ const introSpokenRef = useRef(false);
   // ============================================
   // FUNCIONES DE PREGUNTAS
   // ============================================
-  async function loadActiveQuestions() {
+  async function loadActiveQuestions(options: { signal?: AbortSignal } = {}) {
     try {
-      const res = await fetch("/api/vote/questions", { cache: "no-store" });
+      const res = await fetch("/api/vote/questions", {
+        cache: "no-store",
+        signal: options.signal,
+      });
       const data = await res.json().catch(() => null);
+
+      if (!mountedRef.current || options.signal?.aborted) return false;
 
       if (res.ok && data?.questions) {
         setQuestions(data.questions);
@@ -297,14 +396,17 @@ const introSpokenRef = useRef(false);
           question_3: '¿Qué valores o principios de este partido se alinean con tu forma de pensar?'
         });
       }
-    } catch (e) {
-      console.error('Error cargando preguntas:', e);
+      return true;
+    } catch (error) {
+      if (isAbortError(error) || options.signal?.aborted) return false;
+      if (!mountedRef.current) return false;
       setQuestions({
         id: 'default',
         question_1: '¿Cuál es la principal razón por la que elegiste este partido?',
         question_2: '¿Qué propuesta o idea de este partido te parece más importante?',
         question_3: '¿Qué valores o principios de este partido se alinean con tu forma de pensar?'
       });
+      return true;
     }
   }
 
@@ -316,18 +418,19 @@ const introSpokenRef = useRef(false);
       );
       const data = await res.json().catch(() => null);
 
+      if (!mountedRef.current) return;
+
       if (!res.ok) throw new Error(data?.error || "No disponible");
       
       if (data?.answered === true) {
         setAnswersSubmitted(true);
       } else {
-        await loadActiveQuestions();
-        setShowQuestions(true);
+        const loaded = await loadActiveQuestions();
+        if (loaded && mountedRef.current) setShowQuestions(true);
       }
-    } catch (e) {
-      console.error('Error verificando respuestas:', e);
-      await loadActiveQuestions();
-      setShowQuestions(true);
+    } catch {
+      const loaded = await loadActiveQuestions();
+      if (loaded && mountedRef.current) setShowQuestions(true);
     }
   }
 
@@ -352,29 +455,43 @@ const introSpokenRef = useRef(false);
   if (confirmedPartySlug) return confirmedPartySlug;
   if (!confirmedPartyId) return null;
 
-  const opt = parties.find((o) => String(o.id) === String(confirmedPartyId));
+  const opt = parties.find((o) => o.id === confirmedPartyId);
   return opt?.slug ?? null;
 }, [confirmedPartySlug, confirmedPartyId, parties]);
   // ============================================
   // ENVÍO DE RESPUESTAS
   // ============================================
   async function submitAnswers() {
-    if (!deviceId || !globalRound?.id || !confirmedPartyId || !confirmedSlug || !questions) {
+    if (!mountedRef.current || answersSubmittingRef.current || answersSubmitted) return;
+
+    if (
+      !deviceId ||
+      !UUID_V4_RE.test(deviceId) ||
+      deviceIdUnavailable ||
+      !globalRound?.id ||
+      !confirmedPartyId ||
+      !confirmedSlug ||
+      !questions
+    ) {
       setQuestionsError('Faltan datos para enviar las respuestas');
       return;
     }
 
+    const answer1 = answers.answer_1.trim();
+    const answer2 = answers.answer_2.trim();
+    const answer3 = answers.answer_3.trim();
+
     // Validar que al menos una respuesta tenga texto
-    if (!answers.answer_1.trim() && !answers.answer_2.trim() && !answers.answer_3.trim()) {
+    if (!answer1 && !answer2 && !answer3) {
       setQuestionsError('Por favor responde al menos una pregunta');
       return;
     }
 
     // Validar cada respuesta individualmente
     const validations = {
-      answer_1: validateAnswer(answers.answer_1),
-      answer_2: validateAnswer(answers.answer_2),
-      answer_3: validateAnswer(answers.answer_3)
+      answer_1: validateAnswer(answer1),
+      answer_2: validateAnswer(answer2),
+      answer_3: validateAnswer(answer3)
     };
 
     setAnswerValidations({
@@ -388,43 +505,55 @@ const introSpokenRef = useRef(false);
       return;
     }
 
+    const requestId = ++answersRequestIdRef.current;
+    const controller = new AbortController();
+    answersAbortControllerRef.current?.abort();
+    answersAbortControllerRef.current = controller;
+    answersSubmittingRef.current = true;
     setSubmittingAnswers(true);
     setQuestionsError(null);
+
+    const isCurrentAnswersRequest = () =>
+      mountedRef.current &&
+      requestId === answersRequestIdRef.current &&
+      !controller.signal.aborted;
 
     try {
       const res = await fetch("/api/vote/answers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
+        signal: controller.signal,
         body: JSON.stringify({
           device_id: deviceId,
-          answer_1: answers.answer_1.trim(),
-          answer_2: answers.answer_2.trim(),
-          answer_3: answers.answer_3.trim(),
+          answer_1: answer1,
+          answer_2: answer2,
+          answer_3: answer3,
         }),
       });
 
       const data = await res.json().catch(() => null);
+      if (!isCurrentAnswersRequest()) return;
 
-      if (!res.ok) {
-        throw new Error(data?.error || 'Error al enviar las respuestas');
+      if (!res.ok || !isResponseObject(data) || data.ok !== true) {
+        setQuestionsError('Error al enviar las respuestas');
+        return;
       }
 
       setAnswersSubmitted(true);
       setShowQuestions(false);
       setNotice('¡Gracias por compartir tu opinión!');
-    } catch (e: any) {
-      console.error('Error enviando respuestas:', e);
-      
-      if (e.message?.includes('unique') || e.code === '23505') {
-        setQuestionsError('Ya respondiste estas preguntas en esta ronda.');
-        setAnswersSubmitted(true);
-        setShowQuestions(false);
-      } else {
-        setQuestionsError(e?.message || 'Error al enviar las respuestas');
-      }
+    } catch (error) {
+      if (isAbortError(error) || !isCurrentAnswersRequest()) return;
+      setQuestionsError('Error al enviar las respuestas');
     } finally {
-      setSubmittingAnswers(false);
+      if (mountedRef.current && requestId === answersRequestIdRef.current) {
+        answersSubmittingRef.current = false;
+        setSubmittingAnswers(false);
+        if (answersAbortControllerRef.current === controller) {
+          answersAbortControllerRef.current = null;
+        }
+      }
     }
   }
 
@@ -441,15 +570,18 @@ const introSpokenRef = useRef(false);
   }, [total]);
 
   function voteSelect(slug: string) {
-    if (locked) return;
+    if (locked || voteSubmittingRef.current) return;
     setPendingSlug(slug);
     setNotice(null);
     setShowReflection(slug === "nulo-blanco");
   }
 
   async function confirmVote() {
-    if (locked) return;
-    if (!deviceId) return;
+    if (locked || voteSubmittingRef.current) return;
+    if (!deviceId || !UUID_V4_RE.test(deviceId) || deviceIdUnavailable) {
+      setNotice("No fue posible preparar la participación en este navegador. Actualiza el navegador o inténtalo desde otro dispositivo.");
+      return;
+    }
     if (!pendingSlug) {
       setNotice("Selecciona una opción antes de confirmar tu participación.");
       return;
@@ -459,51 +591,110 @@ const introSpokenRef = useRef(false);
       return;
     }
 
+    const submittedOption = parties.find((o) => o.slug === pendingSlug);
+    if (!submittedOption) {
+      setNotice("Selecciona una opción antes de confirmar tu participación.");
+      return;
+    }
+
+    const requestId = ++voteRequestIdRef.current;
+    const controller = new AbortController();
+    voteAbortControllerRef.current?.abort();
+    voteAbortControllerRef.current = controller;
+    voteSubmittingRef.current = true;
+    setVoteSubmitting(true);
     setNotice("Registrando tu intención de participación…");
+
+    const isCurrentVoteRequest = () =>
+      mountedRef.current &&
+      requestId === voteRequestIdRef.current &&
+      !controller.signal.aborted;
 
     try {
       const res = await fetch("/api/vote/cast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
+        signal: controller.signal,
         body: JSON.stringify({
           device_id: deviceId,
-          party_slug: pendingSlug,
-          round_id: globalRound.id,  // ← enviamos la ronda global
+          party_slug: submittedOption.slug,
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!isCurrentVoteRequest()) return;
 
       if (!res.ok) {
-         setNotice(data?.error ?? "No se pudo registrar la participación.");
         if (res.status === 409) {
-          setLocked(true);
+          const statusRes = await fetch(
+            `/api/vote/status?device_id=${encodeURIComponent(deviceId)}`,
+            {
+              cache: "no-store",
+              signal: controller.signal,
+            }
+          );
+          const statusData = await statusRes.json().catch(() => null);
+          if (!isCurrentVoteRequest()) return;
+
+          if (
+            statusRes.ok &&
+            isResponseObject(statusData) &&
+            statusData?.voted === true &&
+            typeof statusData.party_id === "string"
+          ) {
+            const partyId = statusData.party_id;
+            const party = parties.find((o) => o.id === partyId);
+
+            setConfirmedPartyId(partyId);
+            setConfirmedPartySlug(party?.slug ?? null);
+            setConfirmedPartyName(party?.name ?? null);
+            setLocked(true);
+            setNotice("La participación ya fue registrada.");
+            return;
+          }
+
+          setNotice("No se pudo registrar.");
+          return;
         }
+         setNotice(data?.error ?? "No se pudo registrar la participación.");
+        return;
+      }
+
+      if (!isResponseObject(data) || data.ok !== true) {
+        setNotice("No se pudo registrar la participación.");
         return;
       }
 
       // OK - Voto registrado
       setLocked(true);
-      setConfirmedPartyId(String(data?.party?.id ?? ""));
-      setConfirmedPartySlug(String(data?.party?.slug ?? pendingSlug ?? "") || null);
-      
-      const party = parties.find(o => o.id === data?.party?.id);
-      if (party) {
-        setConfirmedPartyName(party.name);
-      }
+      setConfirmedPartyId(submittedOption.id);
+      setConfirmedPartySlug(submittedOption.slug);
+
+      setConfirmedPartyName(submittedOption.name);
       
       setNotice(`Listo. Tu participación en la ronda ${globalRound.name} quedó registrada.`);
-      if (pendingSlug === "nulo-blanco") setShowReflection(true);
+      if (submittedOption.slug === "nulo-blanco") setShowReflection(true);
 
-      await loadActive();
+      await loadActive({ signal: controller.signal, skipVoteStatus: true });
+      if (!isCurrentVoteRequest()) return;
       
       // Cargar preguntas para ESTA ronda
-      await loadActiveQuestions();
-      setShowQuestions(true);
+      const loaded = await loadActiveQuestions({ signal: controller.signal });
+      if (!isCurrentVoteRequest()) return;
+      if (loaded) setShowQuestions(true);
       
-    } catch (e) {
+    } catch (error) {
+      if (isAbortError(error) || !isCurrentVoteRequest()) return;
       setNotice("Error de conexión. Intenta nuevamente.");
+    } finally {
+      if (isCurrentVoteRequest()) {
+        voteSubmittingRef.current = false;
+        setVoteSubmitting(false);
+        if (voteAbortControllerRef.current === controller) {
+          voteAbortControllerRef.current = null;
+        }
+      }
     }
   }
 
@@ -644,8 +835,8 @@ useEffect(() => {
       enabledPartyList.find((p) => p.slug === pendingSlug)?.name || "";
 
     const hasNullBlankOption = enabledPartyList.some((p) => {
-      const name = String(p.name || "").toLowerCase();
-      const slug = String(p.slug || "").toLowerCase();
+      const name = p.name.toLowerCase();
+      const slug = p.slug.toLowerCase();
       return (
         name.includes("nulo") ||
         name.includes("blanco") ||
@@ -921,11 +1112,11 @@ useEffect(() => {
                       key={opt.id}
                       type="button"
                       onClick={() => voteSelect(opt.slug)}
-                      disabled={locked}
+                      disabled={locked || voteSubmitting}
                       className={[
                         "text-left w-full rounded-2xl border-[6px] p-4 shadow-sm transition",
                         "border-red-600",
-                        locked ? "opacity-95" : "hover:shadow-md",
+                        locked || voteSubmitting ? "opacity-95" : "hover:shadow-md",
                         isSelected
                           ? "bg-green-100"
                           : isBlank
@@ -966,6 +1157,12 @@ useEffect(() => {
                 })}
               </div>
 
+              {deviceIdUnavailable ? (
+                <div className="mt-6 p-4 rounded-xl border-2 border-red-500 bg-green-50 text-sm text-slate-900 text-center">
+                  No fue posible preparar la participación en este navegador. Actualiza el navegador o inténtalo desde otro dispositivo.
+                </div>
+              ) : null}
+
               {/* Reflexión para Nulo/Blanco */}
               {!locked && showReflection && pendingSlug === "nulo-blanco" ? (
                 <div className="mt-6 p-4 rounded-xl border-2 border-red-500 bg-green-50 text-sm text-slate-900 text-center">
@@ -991,15 +1188,15 @@ useEffect(() => {
                     <button
                       type="button"
                       onClick={confirmVote}
-                      disabled={!pendingSlug || !deviceId}
+                      disabled={!pendingSlug || !deviceId || deviceIdUnavailable || voteSubmitting}
                       className={[
                         "inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 text-sm font-semibold shadow-sm transition",
-                        pendingSlug
+                        pendingSlug && deviceId && !deviceIdUnavailable && !voteSubmitting
                           ? "bg-green-700 text-white hover:bg-green-800"
                           : "bg-slate-200 text-slate-600 cursor-not-allowed",
                       ].join(" ")}
                     >
-                      ✅ Confirmar intención en {globalRound?.name || 'ronda actual'}
+                      {voteSubmitting ? "Registrando..." : `✅ Confirmar intención en ${globalRound?.name || 'ronda actual'}`}
                     </button>
                   </>
                 ) : (
@@ -1027,7 +1224,7 @@ useEffect(() => {
   </p>
 
   <p className="text-xs text-slate-600 mt-1">
-    <span className="font-bold">Reglas:</span> Mínimo 10 caracteres por respuesta • Sin groserías • Sin enlaces
+    <span className="font-bold">Reglas:</span> Mínimo 10 y máximo 1000 caracteres por respuesta no vacía • Sin groserías • Sin enlaces
   </p>
 </div>
 
@@ -1041,13 +1238,14 @@ useEffect(() => {
                   value={answers.answer_1}
                   onChange={(e) => handleAnswerChange('answer_1', e.target.value)}
                   rows={3}
+                  maxLength={MAX_ANSWER_LENGTH}
                   className={`w-full rounded-xl border-2 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     !answerValidations.answer_1.valid && answers.answer_1.trim() 
                       ? 'border-red-600' 
                       : 'border-red-500'
                   }`}
                   placeholder="Escribe tu respuesta aquí..."
-                  disabled={submittingAnswers}
+                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId}
                 />
                 {!answerValidations.answer_1.valid && answers.answer_1.trim() && (
                   <p className="text-xs text-red-600 mt-1">{answerValidations.answer_1.error}</p>
@@ -1063,13 +1261,14 @@ useEffect(() => {
                   value={answers.answer_2}
                   onChange={(e) => handleAnswerChange('answer_2', e.target.value)}
                   rows={3}
+                  maxLength={MAX_ANSWER_LENGTH}
                   className={`w-full rounded-xl border-2 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     !answerValidations.answer_2.valid && answers.answer_2.trim() 
                       ? 'border-red-600' 
                       : 'border-red-500'
                   }`}
                   placeholder="Escribe tu respuesta aquí..."
-                  disabled={submittingAnswers}
+                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId}
                 />
                 {!answerValidations.answer_2.valid && answers.answer_2.trim() && (
                   <p className="text-xs text-red-600 mt-1">{answerValidations.answer_2.error}</p>
@@ -1085,13 +1284,14 @@ useEffect(() => {
                   value={answers.answer_3}
                   onChange={(e) => handleAnswerChange('answer_3', e.target.value)}
                   rows={3}
+                  maxLength={MAX_ANSWER_LENGTH}
                   className={`w-full rounded-xl border-2 p-3 text-sm bg-green-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     !answerValidations.answer_3.valid && answers.answer_3.trim() 
                       ? 'border-red-600' 
                       : 'border-red-500'
                   }`}
                   placeholder="Escribe tu respuesta aquí..."
-                  disabled={submittingAnswers}
+                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId}
                 />
                 {!answerValidations.answer_3.valid && answers.answer_3.trim() && (
                   <p className="text-xs text-red-600 mt-1">{answerValidations.answer_3.error}</p>
@@ -1108,10 +1308,10 @@ useEffect(() => {
                 <button
                   type="button"
                   onClick={submitAnswers}
-                  disabled={submittingAnswers}
+                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId || answersSubmitted}
                   className={[
                     "inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 text-sm font-semibold shadow-sm transition",
-                    submittingAnswers
+                    submittingAnswers || deviceIdUnavailable || !deviceId || answersSubmitted
                       ? "bg-slate-200 text-slate-600 cursor-not-allowed"
                       : "bg-green-700 text-white hover:bg-green-800",
                   ].join(" ")}

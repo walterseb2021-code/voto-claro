@@ -28,8 +28,18 @@ function getSupabaseAdmin() {
   });
 }
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
+function jsonNoStore(body: Record<string, unknown>, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function json(status: number, body: Record<string, unknown>) {
+  return jsonNoStore(body, { status });
+}
+
+function logOperationFailed() {
+  console.error("[vote-active] operation failed");
 }
 
 function getRequestOrigin(req: Request) {
@@ -87,14 +97,18 @@ async function validatePitchToken(
     .maybeSingle();
 
   if (error) {
-    console.error("[vote/active] pitch token validation failed", error);
+    logOperationFailed();
     return false;
   }
 
   if (!data) return false;
 
   if (data.expires_at) {
-    const exp = new Date(String(data.expires_at)).getTime();
+    const expiresAt = data.expires_at;
+    const exp =
+      typeof expiresAt === "string" || typeof expiresAt === "number"
+        ? new Date(expiresAt).getTime()
+        : NaN;
     if (Number.isFinite(exp) && Date.now() > exp) {
       return false;
     }
@@ -127,7 +141,7 @@ export async function GET(req: Request) {
 
     const { data: round, error: roundErr } = await supabase
       .from("vote_rounds")
-      .select("id,name,is_active,created_at,group_code")
+      .select("id,name,is_active")
       .eq("is_active", true)
       .eq("group_code", group)
       .order("created_at", { ascending: false })
@@ -135,7 +149,7 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (roundErr) {
-      console.error("[vote/active] active round lookup failed", roundErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -145,24 +159,24 @@ export async function GET(req: Request) {
 
     const { data: parties, error: partiesErr } = await supabase
       .from("vote_parties")
-      .select("id,round_id,slug,name,enabled,position,created_at,group_code")
+      .select("id,slug,name,enabled,position")
       .eq("group_code", group)
       .eq("enabled", true)
       .order("position", { ascending: true });
 
     if (partiesErr) {
-      console.error("[vote/active] parties lookup failed", partiesErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
     const { data: tallies, error: tallyErr } = await supabase
       .from("vote_tally")
-      .select("party_id,total_votes,group_code")
+      .select("party_id,total_votes")
       .eq("round_id", round.id)
       .eq("group_code", group);
 
     if (tallyErr) {
-      console.error("[vote/active] tally lookup failed", tallyErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -173,7 +187,6 @@ export async function GET(req: Request) {
 
     const options = (parties ?? []).map((p) => ({
       id: p.id,
-      round_id: p.round_id,
       slug: p.slug,
       name: p.name,
       enabled: p.enabled,
@@ -181,16 +194,20 @@ export async function GET(req: Request) {
       total_votes: tallyMap.get(p.id) ?? 0,
     }));
 
-    return NextResponse.json({
-      round,
+    return json(200, {
+      round: {
+        id: round.id,
+        name: round.name,
+        is_active: round.is_active,
+      },
       options,
       meta: {
         options_total: options.length,
         enabled_total: options.filter((o) => o.enabled).length,
       },
     });
-  } catch (e: any) {
-    console.error("[vote/active] unexpected error", e);
+  } catch {
+    logOperationFailed();
     return json(500, { error: "No disponible" });
   }
 }

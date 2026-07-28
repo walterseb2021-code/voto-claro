@@ -32,8 +32,40 @@ function getSupabaseAdmin() {
   });
 }
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
+function jsonNoStore(body: Record<string, unknown>, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function json(status: number, body: Record<string, unknown>) {
+  return jsonNoStore(body, { status });
+}
+
+function logOperationFailed() {
+  console.error("[vote-cast] operation failed");
+}
+
+function isJsonRequest(req: Request) {
+  const contentType = req.headers.get("content-type") ?? "";
+  return contentType.split(";")[0].trim().toLowerCase() === "application/json";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+  const actual = Object.keys(value);
+  return (
+    actual.length === keys.length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
 }
 
 function getRequestOrigin(req: Request) {
@@ -91,14 +123,18 @@ async function validatePitchToken(
     .maybeSingle();
 
   if (error) {
-    console.error("[vote/cast] pitch token validation failed", error);
+    logOperationFailed();
     return false;
   }
 
   if (!data) return false;
 
   if (data.expires_at) {
-    const exp = new Date(String(data.expires_at)).getTime();
+    const expiresAt = data.expires_at;
+    const exp =
+      typeof expiresAt === "string" || typeof expiresAt === "number"
+        ? new Date(expiresAt).getTime()
+        : NaN;
     if (Number.isFinite(exp) && Date.now() > exp) {
       return false;
     }
@@ -122,11 +158,27 @@ export async function POST(req: Request) {
       return json(403, { error: "No autorizado" });
     }
 
-    const payload = await req.json().catch(() => null);
-    const device_id = (payload?.device_id ?? "").toString().trim();
-    const party_slug = (payload?.party_slug ?? "").toString().trim();
+    if (!isJsonRequest(req)) {
+      return json(415, { error: "Solicitud invalida" });
+    }
 
-    if (!UUID_RE.test(device_id) || !PARTY_SLUG_RE.test(party_slug)) {
+    const payload = await req.json().catch(() => null);
+    if (!isPlainObject(payload) || !hasExactKeys(payload, ["device_id", "party_slug"])) {
+      return json(400, { error: "Solicitud invalida" });
+    }
+
+    if (typeof payload.device_id !== "string" || typeof payload.party_slug !== "string") {
+      return json(400, { error: "Solicitud invalida" });
+    }
+
+    const device_id = payload.device_id.trim();
+    const party_slug = payload.party_slug.trim();
+
+    if (
+      device_id !== payload.device_id ||
+      !UUID_RE.test(device_id) ||
+      !PARTY_SLUG_RE.test(party_slug)
+    ) {
       return json(400, { error: "Solicitud invalida" });
     }
 
@@ -148,7 +200,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (roundErr) {
-      console.error("[vote/cast] active round lookup failed", roundErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -156,7 +208,7 @@ export async function POST(req: Request) {
 
     const { data: party, error: partyErr } = await supabase
       .from("vote_parties")
-      .select("id,round_id,slug,name,enabled,position,group_code")
+      .select("id,slug,enabled")
       .eq("round_id", round.id)
       .eq("slug", party_slug)
       .eq("group_code", group)
@@ -164,22 +216,20 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (partyErr) {
-      console.error("[vote/cast] party lookup failed", partyErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
     if (!party || !party.enabled) return json(404, { error: "No disponible" });
 
-    const { data: cast, error: castErr } = await supabase
+    const { error: castErr } = await supabase
       .from("vote_casts")
       .insert({
         round_id: round.id,
         party_id: party.id,
         device_id,
         group_code: group,
-      })
-      .select("id,round_id,party_id,device_id,group_code,created_at")
-      .maybeSingle();
+      });
 
     if (castErr) {
       const code = (castErr as any).code;
@@ -187,39 +237,15 @@ export async function POST(req: Request) {
         return json(409, { error: "No se pudo registrar" });
       }
 
-      console.error("[vote/cast] vote insert failed", castErr);
+      logOperationFailed();
       return json(500, { error: "No se pudo registrar" });
-    }
-
-    const { data: tally, error: tallyErr } = await supabase
-      .from("vote_tally")
-      .select("total_votes,group_code")
-      .eq("round_id", round.id)
-      .eq("party_id", party.id)
-      .eq("group_code", group)
-      .limit(1)
-      .maybeSingle();
-
-    if (tallyErr) {
-      console.error("[vote/cast] tally lookup failed", tallyErr);
-      return json(200, {
-        ok: true,
-        round,
-        party,
-        cast,
-        total_votes: null,
-      });
     }
 
     return json(200, {
       ok: true,
-      round,
-      party,
-      cast,
-      total_votes: Number(tally?.total_votes ?? 0),
     });
-  } catch (e: any) {
-    console.error("[vote/cast] unexpected error", e);
+  } catch {
+    logOperationFailed();
     return json(500, { error: "No se pudo registrar" });
   }
 }

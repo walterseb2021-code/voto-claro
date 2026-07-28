@@ -31,8 +31,40 @@ function getSupabaseAdmin() {
   });
 }
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
+function jsonNoStore(body: Record<string, unknown>, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function json(status: number, body: Record<string, unknown>) {
+  return jsonNoStore(body, { status });
+}
+
+function logOperationFailed() {
+  console.error("[vote-answers] operation failed");
+}
+
+function isJsonRequest(req: Request) {
+  const contentType = req.headers.get("content-type") ?? "";
+  return contentType.split(";")[0].trim().toLowerCase() === "application/json";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+  const actual = Object.keys(value);
+  return (
+    actual.length === keys.length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
 }
 
 function getRequestOrigin(req: Request) {
@@ -90,14 +122,18 @@ async function validatePitchToken(
     .maybeSingle();
 
   if (error) {
-    console.error("[vote/answers] pitch token validation failed", error);
+    logOperationFailed();
     return false;
   }
 
   if (!data) return false;
 
   if (data.expires_at) {
-    const exp = new Date(String(data.expires_at)).getTime();
+    const expiresAt = data.expires_at;
+    const exp =
+      typeof expiresAt === "string" || typeof expiresAt === "number"
+        ? new Date(expiresAt).getTime()
+        : NaN;
     if (Number.isFinite(exp) && Date.now() > exp) {
       return false;
     }
@@ -153,11 +189,9 @@ function hasLinks(text: string) {
   return /https?:\/\/|www\./i.test(text);
 }
 
-function normalizeAnswer(value: unknown) {
-  return String(value ?? "").trim();
-}
-
 function isValidAnswer(text: string) {
+  if (text.length === 0) return true;
+
   return (
     text.length >= 10 &&
     text.length <= MAX_ANSWER_LENGTH &&
@@ -174,7 +208,7 @@ async function getActiveQuestions(supabase: ReturnType<typeof getSupabaseAdmin>)
   }
 
   if (rpcErr) {
-    console.error("[vote/answers] active questions rpc failed", rpcErr);
+    logOperationFailed();
   }
 
   const { data, error } = await supabase
@@ -185,7 +219,7 @@ async function getActiveQuestions(supabase: ReturnType<typeof getSupabaseAdmin>)
     .limit(1);
 
   if (error) {
-    console.error("[vote/answers] active questions lookup failed", error);
+    logOperationFailed();
     return null;
   }
 
@@ -208,9 +242,15 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const deviceId = String(searchParams.get("device_id") ?? "").trim();
+    const deviceIdParam = searchParams.get("device_id");
 
-    if (!UUID_RE.test(deviceId)) {
+    if (typeof deviceIdParam !== "string") {
+      return json(400, { error: "Solicitud invalida" });
+    }
+
+    const deviceId = deviceIdParam.trim();
+
+    if (deviceId !== deviceIdParam || !UUID_RE.test(deviceId)) {
       return json(400, { error: "Solicitud invalida" });
     }
 
@@ -231,7 +271,7 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (roundErr) {
-      console.error("[vote/answers] GET active round lookup failed", roundErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -249,7 +289,7 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (castErr) {
-      console.error("[vote/answers] GET vote lookup failed", castErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -267,13 +307,13 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (existingErr) {
-      console.error("[vote/answers] GET answer lookup failed", existingErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
     return json(200, { answered: !!existing });
-  } catch (e: any) {
-    console.error("[vote/answers] GET unexpected error", e);
+  } catch {
+    logOperationFailed();
     return json(500, { error: "No disponible" });
   }
 }
@@ -293,14 +333,39 @@ export async function POST(req: Request) {
       return json(403, { error: "No autorizado" });
     }
 
+    if (!isJsonRequest(req)) {
+      return json(415, { error: "Solicitud invalida" });
+    }
+
     const payload = await req.json().catch(() => null);
-    const deviceId = String(payload?.device_id ?? "").trim();
-    const answer1 = normalizeAnswer(payload?.answer_1);
-    const answer2 = normalizeAnswer(payload?.answer_2);
-    const answer3 = normalizeAnswer(payload?.answer_3);
+    if (
+      !isPlainObject(payload) ||
+      !hasExactKeys(payload, ["device_id", "answer_1", "answer_2", "answer_3"])
+    ) {
+      return json(400, { error: "Solicitud invalida" });
+    }
 
     if (
+      typeof payload.device_id !== "string" ||
+      typeof payload.answer_1 !== "string" ||
+      typeof payload.answer_2 !== "string" ||
+      typeof payload.answer_3 !== "string"
+    ) {
+      return json(400, { error: "Solicitud invalida" });
+    }
+
+    const deviceId = payload.device_id.trim();
+    const answer1 = payload.answer_1.trim();
+    const answer2 = payload.answer_2.trim();
+    const answer3 = payload.answer_3.trim();
+    const hasAtLeastOneAnswer = [answer1, answer2, answer3].some(
+      (answer) => answer.length > 0
+    );
+
+    if (
+      deviceId !== payload.device_id ||
       !UUID_RE.test(deviceId) ||
+      !hasAtLeastOneAnswer ||
       !isValidAnswer(answer1) ||
       !isValidAnswer(answer2) ||
       !isValidAnswer(answer3)
@@ -325,7 +390,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (roundErr) {
-      console.error("[vote/answers] active round lookup failed", roundErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -343,7 +408,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (castErr) {
-      console.error("[vote/answers] vote lookup failed", castErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -361,7 +426,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (partyErr) {
-      console.error("[vote/answers] party lookup failed", partyErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -381,12 +446,12 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (existingErr) {
-      console.error("[vote/answers] duplicate lookup failed", existingErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
     if (existing) {
-      return json(200, { ok: true, message: "Respuestas guardadas" });
+      return json(200, { ok: true });
     }
 
     const { error: insertErr } = await supabase.from("vote_intention_answers").insert({
@@ -403,16 +468,16 @@ export async function POST(req: Request) {
 
     if (insertErr) {
       if ((insertErr as any).code === "23505") {
-        return json(200, { ok: true, message: "Respuestas guardadas" });
+        return json(200, { ok: true });
       }
 
-      console.error("[vote/answers] answer insert failed", insertErr);
+      logOperationFailed();
       return json(500, { error: "No se pudo guardar" });
     }
 
-    return json(200, { ok: true, message: "Respuestas guardadas" });
-  } catch (e: any) {
-    console.error("[vote/answers] unexpected error", e);
+    return json(200, { ok: true });
+  } catch {
+    logOperationFailed();
     return json(500, { error: "No disponible" });
   }
 }

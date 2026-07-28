@@ -30,8 +30,18 @@ function getSupabaseAdmin() {
   });
 }
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
+function jsonNoStore(body: Record<string, unknown>, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function json(status: number, body: Record<string, unknown>) {
+  return jsonNoStore(body, { status });
+}
+
+function logOperationFailed() {
+  console.error("[vote-status] operation failed");
 }
 
 function getRequestOrigin(req: Request) {
@@ -89,14 +99,18 @@ async function validatePitchToken(
     .maybeSingle();
 
   if (error) {
-    console.error("[vote/status] pitch token validation failed", error);
+    logOperationFailed();
     return false;
   }
 
   if (!data) return false;
 
   if (data.expires_at) {
-    const exp = new Date(String(data.expires_at)).getTime();
+    const expiresAt = data.expires_at;
+    const exp =
+      typeof expiresAt === "string" || typeof expiresAt === "number"
+        ? new Date(expiresAt).getTime()
+        : NaN;
     if (Number.isFinite(exp) && Date.now() > exp) {
       return false;
     }
@@ -121,9 +135,15 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const deviceId = String(searchParams.get("device_id") ?? "").trim();
+    const deviceIdParam = searchParams.get("device_id");
 
-    if (!UUID_RE.test(deviceId)) {
+    if (typeof deviceIdParam !== "string") {
+      return json(400, { error: "Solicitud invalida" });
+    }
+
+    const deviceId = deviceIdParam.trim();
+
+    if (deviceId !== deviceIdParam || !UUID_RE.test(deviceId)) {
       return json(400, { error: "Solicitud invalida" });
     }
 
@@ -145,7 +165,7 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (roundErr) {
-      console.error("[vote/status] active round lookup failed", roundErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
@@ -158,20 +178,24 @@ export async function GET(req: Request) {
       .select("party_id")
       .eq("round_id", round.id)
       .eq("device_id", deviceId)
+      .eq("group_code", group)
       .maybeSingle();
 
     if (castErr) {
-      console.error("[vote/status] vote status lookup failed", castErr);
+      logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
-    return NextResponse.json({
-      voted: !!cast,
-      party_id: cast?.party_id ?? null,
-      round_id: round.id,
+    if (!cast?.party_id) {
+      return json(200, { voted: false });
+    }
+
+    return json(200, {
+      voted: true,
+      party_id: cast.party_id,
     });
-  } catch (e: any) {
-    console.error("[vote/status] unexpected error", e);
+  } catch {
+    logOperationFailed();
     return json(500, { error: "No disponible" });
   }
 }
