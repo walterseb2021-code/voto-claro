@@ -1,87 +1,392 @@
 // src/app/api/vote/admin/rounds/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
+import { requireAdmin } from "@/lib/adminAuth";
+import {
+  VoteSessionConfigurationError,
+  assertVoteSessionConfiguration,
+} from "@/lib/voteSession";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const DEFAULT_GROUP_CODE = "GRUPOB";
 const GROUP_RE = /^GRUPO[A-Z]$/;
-const ROUND_SELECT = "id,name,is_active,created_at,group_code";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RFC3339_WITH_ZONE_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const CONTENT_LENGTH_RE = /^(0|[1-9][0-9]*)$/;
+const MAX_BODY_BYTES = 1024;
+const ROUND_SELECT =
+  "id,name,is_active,created_at,group_code,identity_mode,ends_at,lifecycle_state,activated_at,closed_at";
 
-function jsonError(message: string, status = 400) {
-  return NextResponse.json({ ok: false, error: message }, { status });
+type IdentityMode = "legacy_device" | "secure_session";
+type LifecycleState = "legacy" | "draft" | "active" | "closed";
+
+type RoundRow = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  group_code: string;
+  identity_mode: IdentityMode;
+  ends_at: string | null;
+  lifecycle_state: LifecycleState;
+  activated_at: string | null;
+  closed_at: string | null;
+};
+
+type BodyReadResult =
+  | { ok: true; body: Record<string, unknown> }
+  | { ok: false };
+
+const noStoreHeaders = {
+  "Cache-Control": "no-store, max-age=0, private",
+  Pragma: "no-cache",
+  Vary: "Cookie, Origin",
+};
+
+function json(status: number, body: Record<string, unknown>) {
+  return NextResponse.json(body, {
+    status,
+    headers: noStoreHeaders,
+  });
 }
 
-function normalizeGroupCode(value: unknown) {
-  const group = String(value ?? "").trim().toUpperCase();
-  if (!group) return DEFAULT_GROUP_CODE;
-  return GROUP_RE.test(group) ? group : null;
-}
-
-function logAndHide(context: string, error: unknown) {
-  console.error(`[vote/admin/rounds] ${context}`, error);
-  return jsonError("No disponible.", 500);
-}
-
-async function requireAdmin(req: NextRequest) {
-  try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
-
-    if (!url || !anon || !adminEmail) {
-      return { ok: false as const, error: "UNAUTHORIZED" as const, cookiesToSet: [] as any[] };
-    }
-
-    const cookiesToSet: any[] = [];
-
-    const supabase = createServerClient(url, anon, {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll(list) {
-          cookiesToSet.push(...list);
-        },
-      },
-    });
-
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data?.user) {
-      return { ok: false as const, error: "UNAUTHORIZED" as const, cookiesToSet };
-    }
-
-    const userEmail = (data.user.email ?? "").trim().toLowerCase();
-    if (userEmail !== adminEmail) {
-      return { ok: false as const, error: "FORBIDDEN" as const, cookiesToSet };
-    }
-
-    return { ok: true as const, cookiesToSet };
-  } catch {
-    return { ok: false as const, error: "UNAUTHORIZED" as const, cookiesToSet: [] as any[] };
+function applyAdminCookies(
+  response: NextResponse,
+  cookiesToSet: Array<{ name: string; value: string; options: Record<string, unknown> }>
+) {
+  for (const { name, value, options } of cookiesToSet) {
+    response.cookies.set(name, value, options);
   }
+
+  return response;
+}
+
+function adminError(status: 401 | 403) {
+  return json(status, {
+    error: status === 401 ? "admin_session_expired" : "request_invalid",
+  });
+}
+
+function requestInvalid() {
+  return json(400, { error: "request_invalid" });
+}
+
+function logOperationFailed(context: string) {
+  console.error(`[vote-admin-rounds] ${context}`);
 }
 
 function getAdminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error("Faltan variables de entorno de Supabase (URL o SERVICE_ROLE).");
+    throw new Error("Admin vote round dependency unavailable.");
   }
 
-  return createClient(url, serviceKey, { auth: { persistSession: false } });
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function isValidGroupCode(value: unknown): value is string {
+  return typeof value === "string" && GROUP_RE.test(value);
+}
+
+function isValidUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+function isIdentityMode(value: unknown): value is IdentityMode {
+  return value === "legacy_device" || value === "secure_session";
+}
+
+function isLifecycleState(value: unknown): value is LifecycleState {
+  return (
+    value === "legacy" ||
+    value === "draft" ||
+    value === "active" ||
+    value === "closed"
+  );
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isRoundRow(value: unknown): value is RoundRow {
+  if (!isPlainObject(value)) return false;
+
+  return (
+    isValidUuid(value.id) &&
+    typeof value.name === "string" &&
+    isValidGroupCode(value.group_code) &&
+    isIdentityMode(value.identity_mode) &&
+    isLifecycleState(value.lifecycle_state) &&
+    typeof value.is_active === "boolean" &&
+    typeof value.created_at === "string" &&
+    isNullableString(value.ends_at) &&
+    isNullableString(value.activated_at) &&
+    isNullableString(value.closed_at)
+  );
+}
+
+function isJsonRequest(req: NextRequest) {
+  const contentType = req.headers.get("content-type") ?? "";
+  return contentType.split(";")[0].trim().toLowerCase() === "application/json";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+  const actual = Object.keys(value);
+  return (
+    actual.length === keys.length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
+}
+
+function validateContentLength(req: NextRequest) {
+  const rawLength = req.headers.get("content-length");
+  if (rawLength === null) return true;
+  if (!CONTENT_LENGTH_RE.test(rawLength)) return false;
+
+  const length = Number(rawLength);
+  return Number.isSafeInteger(length) && length <= MAX_BODY_BYTES;
+}
+
+async function readBoundedText(req: NextRequest) {
+  if (!validateContentLength(req)) return null;
+  if (!req.body) return null;
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      received += value.byteLength;
+      if (received > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (received === 0) return null;
+
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+async function readJsonBody(req: NextRequest): Promise<BodyReadResult> {
+  if (!isJsonRequest(req)) return { ok: false };
+
+  const text = await readBoundedText(req);
+  if (!text) return { ok: false };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false };
+  }
+
+  if (!isPlainObject(parsed) || Object.keys(parsed).length === 0) {
+    return { ok: false };
+  }
+
+  return { ok: true, body: parsed };
+}
+
+function isAllowedAdminMutationOrigin(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  if (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") {
+    return false;
+  }
+
+  if (
+    parsedOrigin.username ||
+    parsedOrigin.password ||
+    parsedOrigin.pathname !== "/" ||
+    parsedOrigin.search ||
+    parsedOrigin.hash
+  ) {
+    return false;
+  }
+
+  return parsedOrigin.origin === req.nextUrl.origin;
+}
+
+function parseFutureRfc3339(value: string) {
+  if (!RFC3339_WITH_ZONE_RE.test(value)) return null;
+
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  if (date.getTime() <= Date.now()) return null;
+
+  return date.toISOString();
+}
+
+function parseCreatePayload(body: Record<string, unknown>) {
+  if (!hasExactKeys(body, ["name", "group_code", "identity_mode", "ends_at"])) {
+    return null;
+  }
+
+  if (
+    typeof body.name !== "string" ||
+    typeof body.group_code !== "string" ||
+    !isIdentityMode(body.identity_mode)
+  ) {
+    return null;
+  }
+
+  const name = body.name.trim();
+  const groupCode = body.group_code.trim();
+  const identityMode = body.identity_mode;
+
+  if (!name || name.length > 160 || !GROUP_RE.test(groupCode)) {
+    return null;
+  }
+
+  if (identityMode === "legacy_device") {
+    if (body.ends_at !== null) return null;
+    return { name, groupCode, identityMode, endsAt: null };
+  }
+
+  if (typeof body.ends_at !== "string") return null;
+  const endsAt = parseFutureRfc3339(body.ends_at);
+  if (!endsAt) return null;
+
+  return { name, groupCode, identityMode, endsAt };
+}
+
+function parseRoundIdPayload(body: Record<string, unknown>) {
+  if (!hasExactKeys(body, ["round_id"])) return null;
+  if (!isValidUuid(body.round_id)) return null;
+
+  return { roundId: body.round_id.trim() };
+}
+
+function secureSessionAvailable() {
+  try {
+    assertVoteSessionConfiguration();
+    return true;
+  } catch (error) {
+    if (error instanceof VoteSessionConfigurationError) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+function extractRpcCode(error: unknown) {
+  if (!isPlainObject(error)) return "";
+
+  const values = [
+    error.code,
+    error.message,
+    error.details,
+    error.hint,
+  ].filter((value): value is string => typeof value === "string");
+
+  return values.join(" ");
+}
+
+function mapActivateError(error: unknown) {
+  const text = extractRpcCode(error);
+
+  if (text.includes("vote_round_not_found")) return json(404, { error: "round_not_found" });
+
+  if (
+    text.includes("vote_round_not_draft") ||
+    text.includes("vote_round_has_sessions") ||
+    text.includes("vote_round_has_casts") ||
+    text.includes("vote_round_has_answers") ||
+    text.includes("vote_round_ends_at_invalid") ||
+    text.includes("vote_round_state_invalid")
+  ) {
+    return json(409, { error: "round_not_draft" });
+  }
+
+  logOperationFailed("activate rpc failed");
+  return json(500, { error: "temporary_error" });
+}
+
+function mapCloseError(error: unknown) {
+  const text = extractRpcCode(error);
+
+  if (text.includes("vote_round_not_found")) return json(404, { error: "round_not_found" });
+  if (text.includes("vote_round_not_active")) return json(409, { error: "round_not_active" });
+  if (text.includes("vote_round_state_invalid")) return json(409, { error: "round_not_active" });
+
+  logOperationFailed("close rpc failed");
+  return json(500, { error: "temporary_error" });
+}
+
+function parseSingleRpcRound(data: unknown) {
+  if (!Array.isArray(data) || data.length !== 1 || !isRoundRow(data[0])) {
+    return null;
+  }
+
+  return data[0];
+}
+
+function rpcRoundInvalid(context: string) {
+  logOperationFailed(context);
+  return json(500, { error: "temporary_error" });
 }
 
 export async function GET(req: NextRequest) {
   const gate = await requireAdmin(req);
-  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
+  if (!gate.ok) return applyAdminCookies(adminError(gate.status), gate.cookiesToSet);
 
-  const groupCode = normalizeGroupCode(req.nextUrl.searchParams.get("group_code"));
-  if (!groupCode) return jsonError("Solicitud invalida.", 400);
+  const groupCode = req.nextUrl.searchParams.get("group_code");
+  if (!isValidGroupCode(groupCode)) {
+    return applyAdminCookies(requestInvalid(), gate.cookiesToSet);
+  }
 
   try {
+    const available = secureSessionAvailable();
     const supabaseAdmin = getAdminSupabase();
     const { data, error } = await supabaseAdmin
       .from("vote_rounds")
@@ -90,160 +395,172 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (error) return logAndHide("GET rounds failed", error);
-
-    const res = NextResponse.json({
-      ok: true,
-      group_code: groupCode,
-      rounds: data ?? [],
-    });
-
-    for (const { name, value, options } of gate.cookiesToSet) {
-      res.cookies.set(name, value, options);
+    if (error) {
+      logOperationFailed("get rounds failed");
+      return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
     }
 
-    return res;
-  } catch (e) {
-    return logAndHide("GET unexpected error", e);
+    return applyAdminCookies(
+      json(200, {
+        rounds: data ?? [],
+        secure_session_available: available,
+      }),
+      gate.cookiesToSet
+    );
+  } catch {
+    logOperationFailed("get unexpected failure");
+    return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
   }
 }
 
 export async function POST(req: NextRequest) {
   const gate = await requireAdmin(req);
-  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
-
-  let body: any = {};
-  try {
-    body = await req.json();
-  } catch {
-    return jsonError("Solicitud invalida.");
+  if (!gate.ok) return applyAdminCookies(adminError(gate.status), gate.cookiesToSet);
+  if (!isAllowedAdminMutationOrigin(req)) {
+    return applyAdminCookies(json(403, { error: "request_invalid" }), gate.cookiesToSet);
   }
 
-  const name = String(body?.name ?? "").trim();
-  const groupCode = normalizeGroupCode(body?.group_code);
-  if (!name) return jsonError("Nombre requerido.");
-  if (!groupCode) return jsonError("Solicitud invalida.", 400);
+  const body = await readJsonBody(req);
+  if (!body.ok) return applyAdminCookies(requestInvalid(), gate.cookiesToSet);
+
+  const payload = parseCreatePayload(body.body);
+  if (!payload) return applyAdminCookies(requestInvalid(), gate.cookiesToSet);
 
   try {
     const supabaseAdmin = getAdminSupabase();
+    const { data, error } = await supabaseAdmin.rpc("create_vote_round_draft", {
+      p_name: payload.name,
+      p_group_code: payload.groupCode,
+      p_identity_mode: payload.identityMode,
+      p_ends_at: payload.endsAt,
+    });
 
-    const { data: created, error: insErr } = await supabaseAdmin
-      .from("vote_rounds")
-      .insert({ name, is_active: true, group_code: groupCode })
-      .select(ROUND_SELECT)
-      .single();
-
-    if (insErr) return logAndHide("POST insert failed", insErr);
-    if (!created?.id) return jsonError("No se pudo crear la ronda.", 500);
-
-    const { error: updErr } = await supabaseAdmin
-      .from("vote_rounds")
-      .update({ is_active: false })
-      .eq("group_code", groupCode)
-      .neq("id", created.id);
-
-    if (updErr) return logAndHide("POST deactivate siblings failed", updErr);
-
-    const res = NextResponse.json({ ok: true, round: created });
-
-    for (const { name, value, options } of gate.cookiesToSet) {
-      res.cookies.set(name, value, options);
+    if (error) {
+      logOperationFailed("create draft rpc failed");
+      return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
     }
 
-    return res;
-  } catch (e) {
-    return logAndHide("POST unexpected error", e);
+    const round = parseSingleRpcRound(data);
+    if (!round) {
+      return applyAdminCookies(
+        rpcRoundInvalid("create draft rpc returned invalid row"),
+        gate.cookiesToSet
+      );
+    }
+
+    return applyAdminCookies(json(201, { round }), gate.cookiesToSet);
+  } catch {
+    logOperationFailed("create unexpected failure");
+    return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
   }
 }
 
 export async function PUT(req: NextRequest) {
   const gate = await requireAdmin(req);
-  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
-
-  let body: any = {};
-  try {
-    body = await req.json();
-  } catch {
-    return jsonError("Solicitud invalida.");
+  if (!gate.ok) return applyAdminCookies(adminError(gate.status), gate.cookiesToSet);
+  if (!isAllowedAdminMutationOrigin(req)) {
+    return applyAdminCookies(json(403, { error: "request_invalid" }), gate.cookiesToSet);
   }
 
-  const round_id = String(body?.round_id ?? "").trim();
-  const groupCode = normalizeGroupCode(body?.group_code);
-  if (!round_id) return jsonError("round_id es requerido.");
-  if (!groupCode) return jsonError("Solicitud invalida.", 400);
+  const body = await readJsonBody(req);
+  if (!body.ok) return applyAdminCookies(requestInvalid(), gate.cookiesToSet);
+
+  const payload = parseRoundIdPayload(body.body);
+  if (!payload) return applyAdminCookies(requestInvalid(), gate.cookiesToSet);
 
   try {
     const supabaseAdmin = getAdminSupabase();
-
-    const { data: activated, error: actErr } = await supabaseAdmin
+    const { data: target, error: targetError } = await supabaseAdmin
       .from("vote_rounds")
-      .update({ is_active: true })
-      .eq("id", round_id)
-      .eq("group_code", groupCode)
-      .select(ROUND_SELECT)
-      .maybeSingle();
+      .select("id,identity_mode,lifecycle_state,ends_at,group_code,is_active")
+      .eq("id", payload.roundId)
+      .limit(1)
+      .maybeSingle<Pick<
+        RoundRow,
+        "id" | "identity_mode" | "lifecycle_state" | "ends_at" | "group_code" | "is_active"
+      >>();
 
-    if (actErr) return logAndHide("PUT activate failed", actErr);
-    if (!activated?.id) return jsonError("No disponible.", 404);
-
-    const { error: updErr } = await supabaseAdmin
-      .from("vote_rounds")
-      .update({ is_active: false })
-      .eq("group_code", groupCode)
-      .neq("id", round_id);
-
-    if (updErr) return logAndHide("PUT deactivate siblings failed", updErr);
-
-    const res = NextResponse.json({ ok: true, round_id, round: activated });
-
-    for (const { name, value, options } of gate.cookiesToSet) {
-      res.cookies.set(name, value, options);
+    if (targetError) {
+      logOperationFailed("activate target lookup failed");
+      return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
     }
 
-    return res;
-  } catch (e) {
-    return logAndHide("PUT unexpected error", e);
+    if (!target?.id) {
+      return applyAdminCookies(json(404, { error: "round_not_found" }), gate.cookiesToSet);
+    }
+
+    if (target.lifecycle_state !== "draft") {
+      return applyAdminCookies(json(409, { error: "round_not_draft" }), gate.cookiesToSet);
+    }
+
+    if (target.identity_mode === "secure_session") {
+      try {
+        assertVoteSessionConfiguration();
+      } catch (error) {
+        if (error instanceof VoteSessionConfigurationError) {
+          return applyAdminCookies(
+            json(503, { error: "configuration_unavailable" }),
+            gate.cookiesToSet
+          );
+        }
+
+        throw error;
+      }
+    }
+
+    const { data, error } = await supabaseAdmin.rpc("activate_vote_round_draft", {
+      p_round_id: payload.roundId,
+    });
+
+    if (error) return applyAdminCookies(mapActivateError(error), gate.cookiesToSet);
+
+    const round = parseSingleRpcRound(data);
+    if (!round) {
+      return applyAdminCookies(
+        rpcRoundInvalid("activate rpc returned invalid row"),
+        gate.cookiesToSet
+      );
+    }
+
+    return applyAdminCookies(json(200, { round }), gate.cookiesToSet);
+  } catch {
+    logOperationFailed("activate unexpected failure");
+    return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
   }
 }
 
 export async function PATCH(req: NextRequest) {
   const gate = await requireAdmin(req);
-  if (!gate.ok) return jsonError(gate.error, gate.error === "FORBIDDEN" ? 403 : 401);
-
-  let body: any = {};
-  try {
-    body = await req.json();
-  } catch {
-    return jsonError("Solicitud invalida.");
+  if (!gate.ok) return applyAdminCookies(adminError(gate.status), gate.cookiesToSet);
+  if (!isAllowedAdminMutationOrigin(req)) {
+    return applyAdminCookies(json(403, { error: "request_invalid" }), gate.cookiesToSet);
   }
 
-  const round_id = String(body?.round_id ?? "").trim();
-  const groupCode = normalizeGroupCode(body?.group_code);
-  if (!round_id) return jsonError("round_id es requerido.");
-  if (!groupCode) return jsonError("Solicitud invalida.", 400);
+  const body = await readJsonBody(req);
+  if (!body.ok) return applyAdminCookies(requestInvalid(), gate.cookiesToSet);
+
+  const payload = parseRoundIdPayload(body.body);
+  if (!payload) return applyAdminCookies(requestInvalid(), gate.cookiesToSet);
 
   try {
     const supabaseAdmin = getAdminSupabase();
+    const { data, error } = await supabaseAdmin.rpc("close_active_vote_round", {
+      p_round_id: payload.roundId,
+    });
 
-    const { data: closed, error } = await supabaseAdmin
-      .from("vote_rounds")
-      .update({ is_active: false })
-      .eq("id", round_id)
-      .eq("group_code", groupCode)
-      .select(ROUND_SELECT)
-      .maybeSingle();
+    if (error) return applyAdminCookies(mapCloseError(error), gate.cookiesToSet);
 
-    if (error) return logAndHide("PATCH close failed", error);
-    if (!closed?.id) return jsonError("No disponible.", 404);
-
-    const res = NextResponse.json({ ok: true, round_id, round: closed, closed: true });
-
-    for (const { name, value, options } of gate.cookiesToSet) {
-      res.cookies.set(name, value, options);
+    const round = parseSingleRpcRound(data);
+    if (!round) {
+      return applyAdminCookies(
+        rpcRoundInvalid("close rpc returned invalid row"),
+        gate.cookiesToSet
+      );
     }
 
-    return res;
-  } catch (e) {
-    return logAndHide("PATCH unexpected error", e);
+    return applyAdminCookies(json(200, { round }), gate.cookiesToSet);
+  } catch {
+    logOperationFailed("close unexpected failure");
+    return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
   }
 }
