@@ -33,6 +33,8 @@ type IntentionQuestions = {
   question_3: string;
 };
 
+type VoteIdentityMode = "legacy_device" | "secure_session";
+
 const MIN_ANSWER_LENGTH = 10;
 const MAX_ANSWER_LENGTH = 1000;
 
@@ -146,6 +148,42 @@ function isResponseObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isVoteIdentityMode(value: unknown): value is VoteIdentityMode {
+  return value === "legacy_device" || value === "secure_session";
+}
+
+function statusUrlForMode(mode: VoteIdentityMode, deviceId: string): string | null {
+  if (mode === "secure_session") return "/api/vote/status";
+  if (!UUID_V4_RE.test(deviceId)) return null;
+  return `/api/vote/status?device_id=${encodeURIComponent(deviceId)}`;
+}
+
+function answersUrlForMode(mode: VoteIdentityMode, deviceId: string): string | null {
+  if (mode === "secure_session") return "/api/vote/answers";
+  if (!UUID_V4_RE.test(deviceId)) return null;
+  return `/api/vote/answers?device_id=${encodeURIComponent(deviceId)}`;
+}
+
+function castBodyForMode(
+  mode: VoteIdentityMode,
+  deviceId: string,
+  partySlug: string
+): Record<string, string> | null {
+  if (mode === "secure_session") return { party_slug: partySlug };
+  if (!UUID_V4_RE.test(deviceId)) return null;
+  return { device_id: deviceId, party_slug: partySlug };
+}
+
+function answersBodyForMode(
+  mode: VoteIdentityMode,
+  deviceId: string,
+  values: { answer_1: string; answer_2: string; answer_3: string }
+): Record<string, string> | null {
+  if (mode === "secure_session") return values;
+  if (!UUID_V4_RE.test(deviceId)) return null;
+  return { device_id: deviceId, ...values };
+}
+
 function getOrCreateDeviceId(memoryDeviceId = ""): string {
   if (UUID_V4_RE.test(memoryDeviceId)) return memoryDeviceId;
   if (typeof window === "undefined") return "";
@@ -210,6 +248,7 @@ const answersRequestIdRef = useRef(0);
 const answersAbortControllerRef = useRef<AbortController | null>(null);
 
   // Estados principales
+  const [voteIdentityMode, setVoteIdentityMode] = useState<VoteIdentityMode | null>(null);
   const [deviceId, setDeviceId] = useState<string>("");
   const [globalRound, setGlobalRound] = useState<GlobalRound | null>(null);
   const [parties, setParties] = useState<VoteOption[]>([]);
@@ -265,18 +304,16 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
   }, []);
 
   useEffect(() => {
-    const id = getOrCreateDeviceId(memoryDeviceIdRef.current);
-    if (id) {
-      memoryDeviceIdRef.current = id;
-      setDeviceId(id);
-      setDeviceIdUnavailable(false);
-    } else {
-      setDeviceIdUnavailable(true);
-    }
     setUserGroup(getGroupFromToken());
   }, []);
 
-  async function loadActive(options: { signal?: AbortSignal; skipVoteStatus?: boolean } = {}) {
+  async function loadActive(
+    options: {
+      signal?: AbortSignal;
+      skipVoteStatus?: boolean;
+      deferLoadingDone?: boolean;
+    } = {}
+  ) {
     if (!mountedRef.current) return;
 
     setLoading(true);
@@ -301,63 +338,27 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
       setGlobalRound(round);
       
       // 2. Cargar partidos del grupo del usuario
-      setParties(Array.isArray(data.options) ? data.options : []);
+      const loadedParties = Array.isArray(data.options) ? data.options : [];
+      setParties(loadedParties);
       
-      // 3. Verificar si ya votó en esta ronda
-      if (!options.skipVoteStatus && round?.id && deviceId) {
-        await checkIfVotedInCurrentRound(deviceId);
-      }
+      return { round, parties: loadedParties };
     } catch (error) {
       if (isAbortError(error) || options.signal?.aborted) return;
       if (!mountedRef.current) return;
       setError('Error al cargar los datos');
     } finally {
       if (!mountedRef.current || options.signal?.aborted) return;
-      setLoading(false);
+      if (!options.deferLoadingDone) setLoading(false);
     }
   }
 
-  async function checkIfVotedInCurrentRound(devId: string) {
-  try {
-    const res = await fetch(
-      `/api/vote/status?device_id=${encodeURIComponent(devId)}`,
-      {
-        cache: "no-store",
-      }
-    );
-    const data = await res.json();
-
-    if (!mountedRef.current) return;
-
-    if (res.ok && data?.voted && typeof data.party_id === "string") {
-      const partyId = data.party_id;
-
-      setConfirmedPartyId(partyId);
-
-      const party = parties.find((o) => o.id === partyId);
-      if (party) {
-        setConfirmedPartyName(party.name);
-      } else {
-        setConfirmedPartyName(null);
-      }
-
-      setLocked(true);
-      setNotice(`Ya registraste tu participación en la ronda ${globalRound?.name || "actual"}.`);
-
-      // Verificar si ya respondió las preguntas en ESTA ronda
-      await checkIfAlreadyAnswered(devId);
-    }
-  } catch {
-    // Silencio
-  }
-}
-
-  async function runGate() {
+  async function runGate(signal?: AbortSignal) {
     if (!token) return;
     try {
       await fetch("/api/gate/pitch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({ token }),
       });
     } catch {
@@ -365,13 +366,156 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
     }
   }
 
-  useEffect(() => {
-    async function init() {
-      await runGate();
-      await loadActive();
+  async function resolveVoteIdentityMode(signal?: AbortSignal) {
+    const res = await fetch("/api/vote/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+      signal,
+      body: JSON.stringify({}),
+    });
+    const data = await res.json().catch(() => null);
+
+    if (
+      !res.ok ||
+      !isResponseObject(data) ||
+      data.ok !== true ||
+      !isVoteIdentityMode(data.mode)
+    ) {
+      throw new Error("vote session unavailable");
     }
+
+    return data.mode;
+  }
+
+  function restoreConfirmedVoteFromStatus(
+    mode: VoteIdentityMode,
+    data: Record<string, unknown>,
+    availableParties: VoteOption[]
+  ) {
+    if (data.voted === false) return false;
+    if (data.voted !== true) throw new Error("vote status invalid");
+
+    if (mode === "legacy_device") {
+      if (typeof data.party_id !== "string" || data.party_id.trim() === "") {
+        throw new Error("vote status invalid");
+      }
+
+      const party = availableParties.find((o) => o.id === data.party_id);
+      if (!party) throw new Error("vote status invalid");
+
+      setConfirmedPartyId(party.id);
+      setConfirmedPartySlug(party.slug);
+      setConfirmedPartyName(party.name);
+      return true;
+    }
+
+    if (typeof data.party_slug !== "string" || data.party_slug.trim() === "") {
+      throw new Error("vote status invalid");
+    }
+
+    const party = availableParties.find((o) => o.slug === data.party_slug);
+    if (!party) throw new Error("vote status invalid");
+
+    setConfirmedPartyId(party.id);
+    setConfirmedPartySlug(party.slug);
+    setConfirmedPartyName(party.name);
+    return true;
+  }
+
+  async function checkIfVotedInCurrentRoundForMode(
+    mode: VoteIdentityMode,
+    devId: string,
+    availableParties: VoteOption[],
+    roundName: string,
+    signal?: AbortSignal
+  ) {
+    const statusUrl = statusUrlForMode(mode, devId);
+    if (!statusUrl) return;
+
+    const res = await fetch(statusUrl, {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal,
+    });
+    const data = await res.json().catch(() => null);
+
+    if (!mountedRef.current || signal?.aborted) return;
+    if (!res.ok || !isResponseObject(data)) throw new Error("vote status unavailable");
+
+    const restored = restoreConfirmedVoteFromStatus(mode, data, availableParties);
+    if (!restored) return;
+
+    setLocked(true);
+    setNotice(`Ya registraste tu participación en la ronda ${roundName || "actual"}.`);
+
+    await checkIfAlreadyAnswered(mode, devId, signal);
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function init() {
+      try {
+        await runGate(controller.signal);
+        if (!mountedRef.current || controller.signal.aborted) return;
+
+        const activeData = await loadActive({
+          signal: controller.signal,
+          skipVoteStatus: true,
+          deferLoadingDone: true,
+        });
+        if (!mountedRef.current || controller.signal.aborted || !activeData?.round?.id) {
+          return;
+        }
+
+        const mode = await resolveVoteIdentityMode(controller.signal);
+        if (!mountedRef.current || controller.signal.aborted) return;
+
+        setVoteIdentityMode(mode);
+
+        let resolvedDeviceId = "";
+        if (mode === "legacy_device") {
+          const id = getOrCreateDeviceId(memoryDeviceIdRef.current);
+          if (id) {
+            memoryDeviceIdRef.current = id;
+            setDeviceId(id);
+            setDeviceIdUnavailable(false);
+            resolvedDeviceId = id;
+          } else {
+            setDeviceId("");
+            setDeviceIdUnavailable(true);
+          }
+        } else {
+          memoryDeviceIdRef.current = "";
+          setDeviceId("");
+          setDeviceIdUnavailable(false);
+        }
+
+        await checkIfVotedInCurrentRoundForMode(
+          mode,
+          resolvedDeviceId,
+          activeData.parties,
+          activeData.round.name,
+          controller.signal
+        );
+      } catch (error) {
+        if (isAbortError(error) || controller.signal.aborted) return;
+        if (!mountedRef.current) return;
+        setError('Error al cargar los datos');
+      } finally {
+        if (!mountedRef.current || controller.signal.aborted) return;
+        setLoading(false);
+      }
+    }
+
     init();
-  }, [deviceId, userGroup]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [token]);
 
   // ============================================
   // FUNCIONES DE PREGUNTAS
@@ -410,27 +554,37 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
     }
   }
 
-  async function checkIfAlreadyAnswered(devId: string) {
+  async function checkIfAlreadyAnswered(
+    mode: VoteIdentityMode,
+    devId: string,
+    signal?: AbortSignal
+  ) {
     try {
-      const res = await fetch(
-        `/api/vote/answers?device_id=${encodeURIComponent(devId)}`,
-        { cache: "no-store" }
-      );
+      const answersUrl = answersUrlForMode(mode, devId);
+      if (!answersUrl) throw new Error("No disponible");
+
+      const res = await fetch(answersUrl, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal,
+      });
       const data = await res.json().catch(() => null);
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || signal?.aborted) return;
 
-      if (!res.ok) throw new Error(data?.error || "No disponible");
+      if (!res.ok || !isResponseObject(data) || typeof data.answered !== "boolean") {
+        throw new Error("vote answers unavailable");
+      }
       
-      if (data?.answered === true) {
+      if (data.answered === true) {
         setAnswersSubmitted(true);
       } else {
-        const loaded = await loadActiveQuestions();
+        const loaded = await loadActiveQuestions({ signal });
         if (loaded && mountedRef.current) setShowQuestions(true);
       }
-    } catch {
-      const loaded = await loadActiveQuestions();
-      if (loaded && mountedRef.current) setShowQuestions(true);
+    } catch (error) {
+      if (isAbortError(error) || signal?.aborted) return;
+      throw new Error("vote answers unavailable");
     }
   }
 
@@ -458,20 +612,31 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
   const opt = parties.find((o) => o.id === confirmedPartyId);
   return opt?.slug ?? null;
 }, [confirmedPartySlug, confirmedPartyId, parties]);
+
+  const canUseVoteIdentity =
+    voteIdentityMode === "secure_session" ||
+    (voteIdentityMode === "legacy_device" &&
+      Boolean(deviceId) &&
+      UUID_V4_RE.test(deviceId) &&
+      !deviceIdUnavailable);
   // ============================================
   // ENVÍO DE RESPUESTAS
   // ============================================
   async function submitAnswers() {
     if (!mountedRef.current || answersSubmittingRef.current || answersSubmitted) return;
 
+    const mode = voteIdentityMode;
+
     if (
-      !deviceId ||
-      !UUID_V4_RE.test(deviceId) ||
-      deviceIdUnavailable ||
+      !mode ||
       !globalRound?.id ||
-      !confirmedPartyId ||
       !confirmedSlug ||
-      !questions
+      !questions ||
+      (mode === "legacy_device" &&
+        (!deviceId ||
+          !UUID_V4_RE.test(deviceId) ||
+          deviceIdUnavailable ||
+          !confirmedPartyId))
     ) {
       setQuestionsError('Faltan datos para enviar las respuestas');
       return;
@@ -519,17 +684,23 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
       !controller.signal.aborted;
 
     try {
+      const requestBody = answersBodyForMode(mode, deviceId, {
+        answer_1: answer1,
+        answer_2: answer2,
+        answer_3: answer3,
+      });
+      if (!requestBody) {
+        setQuestionsError('Faltan datos para enviar las respuestas');
+        return;
+      }
+
       const res = await fetch("/api/vote/answers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
+        credentials: "same-origin",
         signal: controller.signal,
-        body: JSON.stringify({
-          device_id: deviceId,
-          answer_1: answer1,
-          answer_2: answer2,
-          answer_3: answer3,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await res.json().catch(() => null);
@@ -578,7 +749,17 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
 
   async function confirmVote() {
     if (locked || voteSubmittingRef.current) return;
-    if (!deviceId || !UUID_V4_RE.test(deviceId) || deviceIdUnavailable) {
+    const mode = voteIdentityMode;
+
+    if (!mode) {
+      setNotice("No hay una ronda activa.");
+      return;
+    }
+
+    if (
+      mode === "legacy_device" &&
+      (!deviceId || !UUID_V4_RE.test(deviceId) || deviceIdUnavailable)
+    ) {
       setNotice("No fue posible preparar la participación en este navegador. Actualiza el navegador o inténtalo desde otro dispositivo.");
       return;
     }
@@ -603,6 +784,13 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
     voteAbortControllerRef.current = controller;
     voteSubmittingRef.current = true;
     setVoteSubmitting(true);
+    const requestBody = castBodyForMode(mode, deviceId, submittedOption.slug);
+    if (!requestBody) {
+      setNotice("No hay una ronda activa.");
+      voteSubmittingRef.current = false;
+      setVoteSubmitting(false);
+      return;
+    }
     setNotice("Registrando tu intención de participación…");
 
     const isCurrentVoteRequest = () =>
@@ -615,11 +803,9 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
+        credentials: "same-origin",
         signal: controller.signal,
-        body: JSON.stringify({
-          device_id: deviceId,
-          party_slug: submittedOption.slug,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await res.json().catch(() => null);
@@ -627,10 +813,17 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
 
       if (!res.ok) {
         if (res.status === 409) {
+          const statusUrl = statusUrlForMode(mode, deviceId);
+          if (!statusUrl) {
+            setNotice("No se pudo registrar.");
+            return;
+          }
+
           const statusRes = await fetch(
-            `/api/vote/status?device_id=${encodeURIComponent(deviceId)}`,
+            statusUrl,
             {
               cache: "no-store",
+              credentials: "same-origin",
               signal: controller.signal,
             }
           );
@@ -640,15 +833,8 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
           if (
             statusRes.ok &&
             isResponseObject(statusData) &&
-            statusData?.voted === true &&
-            typeof statusData.party_id === "string"
+            restoreConfirmedVoteFromStatus(mode, statusData, parties)
           ) {
-            const partyId = statusData.party_id;
-            const party = parties.find((o) => o.id === partyId);
-
-            setConfirmedPartyId(partyId);
-            setConfirmedPartySlug(party?.slug ?? null);
-            setConfirmedPartyName(party?.name ?? null);
             setLocked(true);
             setNotice("La participación ya fue registrada.");
             return;
@@ -1188,10 +1374,10 @@ useEffect(() => {
                     <button
                       type="button"
                       onClick={confirmVote}
-                      disabled={!pendingSlug || !deviceId || deviceIdUnavailable || voteSubmitting}
+                      disabled={!pendingSlug || !canUseVoteIdentity || voteSubmitting}
                       className={[
                         "inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 text-sm font-semibold shadow-sm transition",
-                        pendingSlug && deviceId && !deviceIdUnavailable && !voteSubmitting
+                        pendingSlug && canUseVoteIdentity && !voteSubmitting
                           ? "bg-green-700 text-white hover:bg-green-800"
                           : "bg-slate-200 text-slate-600 cursor-not-allowed",
                       ].join(" ")}
@@ -1245,7 +1431,7 @@ useEffect(() => {
                       : 'border-red-500'
                   }`}
                   placeholder="Escribe tu respuesta aquí..."
-                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId}
+                  disabled={submittingAnswers || !canUseVoteIdentity}
                 />
                 {!answerValidations.answer_1.valid && answers.answer_1.trim() && (
                   <p className="text-xs text-red-600 mt-1">{answerValidations.answer_1.error}</p>
@@ -1268,7 +1454,7 @@ useEffect(() => {
                       : 'border-red-500'
                   }`}
                   placeholder="Escribe tu respuesta aquí..."
-                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId}
+                  disabled={submittingAnswers || !canUseVoteIdentity}
                 />
                 {!answerValidations.answer_2.valid && answers.answer_2.trim() && (
                   <p className="text-xs text-red-600 mt-1">{answerValidations.answer_2.error}</p>
@@ -1291,7 +1477,7 @@ useEffect(() => {
                       : 'border-red-500'
                   }`}
                   placeholder="Escribe tu respuesta aquí..."
-                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId}
+                  disabled={submittingAnswers || !canUseVoteIdentity}
                 />
                 {!answerValidations.answer_3.valid && answers.answer_3.trim() && (
                   <p className="text-xs text-red-600 mt-1">{answerValidations.answer_3.error}</p>
@@ -1308,10 +1494,10 @@ useEffect(() => {
                 <button
                   type="button"
                   onClick={submitAnswers}
-                  disabled={submittingAnswers || deviceIdUnavailable || !deviceId || answersSubmitted}
+                  disabled={submittingAnswers || !canUseVoteIdentity || answersSubmitted}
                   className={[
                     "inline-flex items-center gap-2 rounded-xl px-5 py-3 border-2 border-red-500 text-sm font-semibold shadow-sm transition",
-                    submittingAnswers || deviceIdUnavailable || !deviceId || answersSubmitted
+                    submittingAnswers || !canUseVoteIdentity || answersSubmitted
                       ? "bg-slate-200 text-slate-600 cursor-not-allowed"
                       : "bg-green-700 text-white hover:bg-green-800",
                   ].join(" ")}
