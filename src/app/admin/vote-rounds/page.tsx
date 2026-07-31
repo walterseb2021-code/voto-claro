@@ -20,10 +20,24 @@ type Round = {
   lifecycle_state: LifecycleState;
   activated_at: string | null;
   closed_at: string | null;
+  parties_total: number;
+  enabled_parties_count: number;
+  catalog_ready: boolean;
+};
+
+type SourceRound = {
+  id: string;
+  name: string;
+  group_code: string;
+  lifecycle_state: Exclude<LifecycleState, "draft">;
+  is_active: boolean;
+  parties_total: number;
+  enabled_parties_count: number;
 };
 
 type RoundsPayload = {
   rounds: Round[];
+  source_rounds: SourceRound[];
   secure_session_available: boolean;
 };
 
@@ -103,32 +117,66 @@ function isGroupCodeOption(value: unknown): value is GroupCode {
 
 function isRound(value: unknown): value is Round {
   if (!isPlainObject(value)) return false;
+  const record = value as Record<string, unknown>;
 
   return (
-    typeof value.id === "string" &&
-    UUID_RE.test(value.id) &&
-    typeof value.name === "string" &&
-    typeof value.is_active === "boolean" &&
-    typeof value.created_at === "string" &&
-    typeof value.group_code === "string" &&
-    GROUP_RE.test(value.group_code) &&
-    isIdentityMode(value.identity_mode) &&
-    isNullableString(value.ends_at) &&
-    isLifecycleState(value.lifecycle_state) &&
-    isNullableString(value.activated_at) &&
-    isNullableString(value.closed_at)
+    typeof record.id === "string" &&
+    UUID_RE.test(record.id) &&
+    typeof record.name === "string" &&
+    typeof record.is_active === "boolean" &&
+    typeof record.created_at === "string" &&
+    typeof record.group_code === "string" &&
+    GROUP_RE.test(record.group_code) &&
+    isIdentityMode(record.identity_mode) &&
+    isNullableString(record.ends_at) &&
+    isLifecycleState(record.lifecycle_state) &&
+    isNullableString(record.activated_at) &&
+    isNullableString(record.closed_at) &&
+    typeof record.parties_total === "number" &&
+    Number.isInteger(record.parties_total) &&
+    record.parties_total >= 0 &&
+    typeof record.enabled_parties_count === "number" &&
+    Number.isInteger(record.enabled_parties_count) &&
+    record.enabled_parties_count >= 0 &&
+    typeof record.catalog_ready === "boolean"
+  );
+}
+
+function isSourceRound(value: unknown): value is SourceRound {
+  if (!isPlainObject(value)) return false;
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.id === "string" &&
+    UUID_RE.test(record.id) &&
+    typeof record.name === "string" &&
+    typeof record.group_code === "string" &&
+    GROUP_RE.test(record.group_code) &&
+    isLifecycleState(record.lifecycle_state) &&
+    record.lifecycle_state !== "draft" &&
+    typeof record.is_active === "boolean" &&
+    typeof record.parties_total === "number" &&
+    Number.isInteger(record.parties_total) &&
+    record.parties_total >= 0 &&
+    typeof record.enabled_parties_count === "number" &&
+    Number.isInteger(record.enabled_parties_count) &&
+    record.enabled_parties_count > 0
   );
 }
 
 function parseRoundsPayload(value: unknown, expectedGroup: string): RoundsPayload | null {
   if (!isPlainObject(value)) return null;
   if (!Array.isArray(value.rounds)) return null;
+  if (!Array.isArray(value.source_rounds)) return null;
   if (typeof value.secure_session_available !== "boolean") return null;
   if (!value.rounds.every(isRound)) return null;
   if (!value.rounds.every((round) => round.group_code === expectedGroup)) return null;
+  if (!value.source_rounds.every(isSourceRound)) return null;
+  if (!value.source_rounds.every((round) => round.group_code === expectedGroup)) return null;
 
   return {
     rounds: value.rounds,
+    source_rounds: value.source_rounds,
     secure_session_available: value.secure_session_available,
   };
 }
@@ -282,6 +330,7 @@ export default function AdminVoteRoundsPage() {
   }, []);
 
   const [rounds, setRounds] = useState<Round[]>([]);
+  const [sourceRounds, setSourceRounds] = useState<SourceRound[]>([]);
   const [operation, setOperation] = useState<Operation | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<GroupCode>("GRUPOB");
@@ -291,6 +340,7 @@ export default function AdminVoteRoundsPage() {
   const [newIdentityMode, setNewIdentityMode] =
     useState<IdentityMode>("legacy_device");
   const [newEndsAtLocal, setNewEndsAtLocal] = useState("");
+  const [selectedSourceRoundId, setSelectedSourceRoundId] = useState("");
   const loadRequestIdRef = useRef(0);
 
   const busy = operation !== null;
@@ -299,6 +349,8 @@ export default function AdminVoteRoundsPage() {
     loadRequestIdRef.current += 1;
     setOperation("load");
     setRounds([]);
+    setSourceRounds([]);
+    setSelectedSourceRoundId("");
     setSecureSessionAvailable(false);
     setNotice(null);
     setSelectedGroup(groupCode);
@@ -337,6 +389,8 @@ export default function AdminVoteRoundsPage() {
         if (!isCurrentRequest()) return false;
         await handleError(res, data);
         setRounds([]);
+        setSourceRounds([]);
+        setSelectedSourceRoundId("");
         setSecureSessionAvailable(false);
         return false;
       }
@@ -346,18 +400,34 @@ export default function AdminVoteRoundsPage() {
         if (!isCurrentRequest()) return false;
         setNotice("Solicitud inválida.");
         setRounds([]);
+        setSourceRounds([]);
+        setSelectedSourceRoundId("");
         setSecureSessionAvailable(false);
         return false;
       }
 
       if (!isCurrentRequest()) return false;
       setRounds(payload.rounds);
+      setSourceRounds(payload.source_rounds);
+      setSelectedSourceRoundId((currentSourceRoundId) => {
+        if (payload.source_rounds.length === 1) return payload.source_rounds[0].id;
+        if (
+          currentSourceRoundId &&
+          payload.source_rounds.some((round) => round.id === currentSourceRoundId)
+        ) {
+          return currentSourceRoundId;
+        }
+
+        return "";
+      });
       setSecureSessionAvailable(payload.secure_session_available);
       return true;
     } catch {
       if (!isCurrentRequest()) return false;
       setNotice("Error temporal.");
       setRounds([]);
+      setSourceRounds([]);
+      setSelectedSourceRoundId("");
       setSecureSessionAvailable(false);
       return false;
     } finally {
@@ -384,6 +454,15 @@ export default function AdminVoteRoundsPage() {
     [selectedGroup, visibleRounds]
   );
 
+  const selectedSourceRound = useMemo(
+    () =>
+      sourceRounds.find(
+        (round) =>
+          round.id === selectedSourceRoundId && round.group_code === selectedGroup
+      ) ?? null,
+    [selectedGroup, selectedSourceRoundId, sourceRounds]
+  );
+
   async function createRound() {
     if (busy) return;
 
@@ -402,6 +481,11 @@ export default function AdminVoteRoundsPage() {
       }
     }
 
+    if (!selectedSourceRound) {
+      setNotice("Solicitud inválida.");
+      return;
+    }
+
     setOperation("create");
     setNotice("Creando borrador…");
     try {
@@ -414,6 +498,7 @@ export default function AdminVoteRoundsPage() {
           group_code: selectedGroup,
           identity_mode: newIdentityMode,
           ends_at: endsAt,
+          source_round_id: selectedSourceRound.id,
         }),
       });
       const data = await readJson(res);
@@ -438,6 +523,7 @@ export default function AdminVoteRoundsPage() {
   async function activateRound(round: Round) {
     if (busy || round.lifecycle_state !== "draft") return;
     if (round.group_code !== selectedGroup) return;
+    if (!round.catalog_ready) return;
     if (round.identity_mode === "secure_session" && !secureSessionAvailable) return;
 
     const secureLine =
@@ -722,11 +808,36 @@ export default function AdminVoteRoundsPage() {
               </div>
             ) : null}
 
+            <label className="mt-3 block text-xs font-extrabold text-slate-700">
+              Ronda fuente de partidos
+              <select
+                value={selectedSourceRoundId}
+                onChange={(event) => setSelectedSourceRoundId(event.target.value)}
+                className={select + " block mt-2 w-full"}
+                disabled={busy || sourceRounds.length === 0}
+              >
+                {sourceRounds.length === 1 ? null : (
+                  <option value="">Selecciona una ronda fuente</option>
+                )}
+                {sourceRounds.map((round) => (
+                  <option key={round.id} value={round.id}>
+                    {round.name} — {round.enabled_parties_count} partidos habilitados
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {sourceRounds.length === 0 ? (
+              <div className="mt-3 text-xs font-semibold text-red-700">
+                No hay ronda fuente elegible para este grupo.
+              </div>
+            ) : null}
+
             <button
               type="button"
               onClick={createRound}
               className={btn + " mt-3"}
-              disabled={busy}
+              disabled={busy || !selectedSourceRound}
             >
               {operation === "create" ? "Creando…" : "➕ Crear borrador"}
             </button>
@@ -747,10 +858,15 @@ export default function AdminVoteRoundsPage() {
                     round.group_code === selectedGroup &&
                     round.identity_mode === "secure_session" &&
                     !secureSessionAvailable;
+                  const activateBlockedByCatalog =
+                    round.lifecycle_state === "draft" &&
+                    round.group_code === selectedGroup &&
+                    !round.catalog_ready;
                   const canActivate =
                     round.group_code === selectedGroup &&
                     round.lifecycle_state === "draft" &&
-                    !activateBlockedByConfig;
+                    !activateBlockedByConfig &&
+                    !activateBlockedByCatalog;
                   const canClose =
                     round.group_code === selectedGroup &&
                     (round.lifecycle_state === "active" ||
@@ -776,6 +892,10 @@ export default function AdminVoteRoundsPage() {
                         <div className="mt-1 text-[11px] text-slate-600">
                           Fecha de cierre: {formatPeruDate(round.ends_at)}
                         </div>
+                        <div className="mt-1 text-[11px] text-slate-600">
+                          Partidos habilitados: {round.enabled_parties_count} ·{" "}
+                          {round.catalog_ready ? "Catálogo listo" : "Catálogo pendiente"}
+                        </div>
                         <div className="mt-2 flex gap-2 flex-wrap">
                           <Pill>{statusLabel(round)}</Pill>
                           <Pill>{round.group_code}</Pill>
@@ -792,6 +912,8 @@ export default function AdminVoteRoundsPage() {
                             title={
                               activateBlockedByConfig
                                 ? "Configuración segura no disponible"
+                                : activateBlockedByCatalog
+                                  ? "Catálogo pendiente"
                                 : "Activa este borrador"
                             }
                           >

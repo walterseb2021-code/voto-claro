@@ -36,6 +36,44 @@ type RoundRow = {
   closed_at: string | null;
 };
 
+type RoundWithCatalog = RoundRow & {
+  parties_total: number;
+  enabled_parties_count: number;
+  catalog_ready: boolean;
+};
+
+type SourceRound = {
+  id: string;
+  name: string;
+  group_code: string;
+  lifecycle_state: Exclude<LifecycleState, "draft">;
+  is_active: boolean;
+  parties_total: number;
+  enabled_parties_count: number;
+};
+
+type PartyCatalogRow = {
+  round_id: string | null;
+  group_code: string | null;
+  slug: string | null;
+  enabled: boolean | null;
+};
+
+type CatalogStats = {
+  partiesTotal: number;
+  enabledPartiesCount: number;
+  slugs: Set<string>;
+  hasBlankSlug: boolean;
+  hasDuplicateSlug: boolean;
+  hasGroupMismatch: boolean;
+};
+
+type CreateRoundWithPartiesRow = RoundRow & {
+  parties_copied: number;
+  enabled_parties_copied: number;
+  source_round_id: string;
+};
+
 type BodyReadResult =
   | { ok: true; body: Record<string, unknown> }
   | { ok: false };
@@ -117,6 +155,10 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
 function isRoundRow(value: unknown): value is RoundRow {
   if (!isPlainObject(value)) return false;
 
@@ -132,6 +174,103 @@ function isRoundRow(value: unknown): value is RoundRow {
     isNullableString(value.activated_at) &&
     isNullableString(value.closed_at)
   );
+}
+
+function isCreateRoundWithPartiesRow(value: unknown): value is CreateRoundWithPartiesRow {
+  if (!isPlainObject(value) || !isRoundRow(value)) return false;
+  const record = value as Record<string, unknown>;
+
+  return (
+    isPositiveInteger(record.parties_copied) &&
+    isPositiveInteger(record.enabled_parties_copied) &&
+    isValidUuid(record.source_round_id)
+  );
+}
+
+function emptyCatalogStats(): CatalogStats {
+  return {
+    partiesTotal: 0,
+    enabledPartiesCount: 0,
+    slugs: new Set<string>(),
+    hasBlankSlug: false,
+    hasDuplicateSlug: false,
+    hasGroupMismatch: false,
+  };
+}
+
+function buildCatalogStats(rounds: RoundRow[], parties: PartyCatalogRow[]) {
+  const groupByRoundId = new Map(rounds.map((round) => [round.id, round.group_code]));
+  const statsByRoundId = new Map<string, CatalogStats>();
+
+  for (const round of rounds) {
+    statsByRoundId.set(round.id, emptyCatalogStats());
+  }
+
+  for (const party of parties) {
+    if (!party.round_id || !statsByRoundId.has(party.round_id)) continue;
+
+    const stats = statsByRoundId.get(party.round_id);
+    if (!stats) continue;
+
+    stats.partiesTotal += 1;
+    if (party.enabled === true) stats.enabledPartiesCount += 1;
+
+    if (party.group_code !== groupByRoundId.get(party.round_id)) {
+      stats.hasGroupMismatch = true;
+    }
+
+    const slug = typeof party.slug === "string" ? party.slug.trim() : "";
+    if (!slug) {
+      stats.hasBlankSlug = true;
+    } else if (stats.slugs.has(slug)) {
+      stats.hasDuplicateSlug = true;
+    } else {
+      stats.slugs.add(slug);
+    }
+  }
+
+  return statsByRoundId;
+}
+
+function attachCatalog(rounds: RoundRow[], parties: PartyCatalogRow[]) {
+  const statsByRoundId = buildCatalogStats(rounds, parties);
+
+  const roundsWithCatalog: RoundWithCatalog[] = rounds.map((round) => {
+    const stats = statsByRoundId.get(round.id) ?? emptyCatalogStats();
+    const catalogReady =
+      stats.enabledPartiesCount > 0 &&
+      !stats.hasBlankSlug &&
+      !stats.hasDuplicateSlug &&
+      !stats.hasGroupMismatch;
+
+    return {
+      ...round,
+      parties_total: stats.partiesTotal,
+      enabled_parties_count: stats.enabledPartiesCount,
+      catalog_ready: catalogReady,
+    };
+  });
+
+  const sourceRounds: SourceRound[] = roundsWithCatalog
+    .filter(
+      (
+        round
+      ): round is RoundWithCatalog & { lifecycle_state: Exclude<LifecycleState, "draft"> } =>
+        round.catalog_ready &&
+        round.enabled_parties_count > 0 &&
+        round.lifecycle_state !== "draft"
+    )
+    .map((round) => ({
+      id: round.id,
+      name: round.name,
+      group_code: round.group_code,
+      lifecycle_state: round.lifecycle_state,
+      is_active: round.is_active,
+      parties_total: round.parties_total,
+      enabled_parties_count: round.enabled_parties_count,
+    }));
+
+  return { roundsWithCatalog, sourceRounds };
 }
 
 function isJsonRequest(req: NextRequest) {
@@ -267,14 +406,23 @@ function parseFutureRfc3339(value: string) {
 }
 
 function parseCreatePayload(body: Record<string, unknown>) {
-  if (!hasExactKeys(body, ["name", "group_code", "identity_mode", "ends_at"])) {
+  if (
+    !hasExactKeys(body, [
+      "name",
+      "group_code",
+      "identity_mode",
+      "ends_at",
+      "source_round_id",
+    ])
+  ) {
     return null;
   }
 
   if (
     typeof body.name !== "string" ||
     typeof body.group_code !== "string" ||
-    !isIdentityMode(body.identity_mode)
+    !isIdentityMode(body.identity_mode) ||
+    !isValidUuid(body.source_round_id)
   ) {
     return null;
   }
@@ -289,14 +437,14 @@ function parseCreatePayload(body: Record<string, unknown>) {
 
   if (identityMode === "legacy_device") {
     if (body.ends_at !== null) return null;
-    return { name, groupCode, identityMode, endsAt: null };
+    return { name, groupCode, identityMode, endsAt: null, sourceRoundId: body.source_round_id.trim() };
   }
 
   if (typeof body.ends_at !== "string") return null;
   const endsAt = parseFutureRfc3339(body.ends_at);
   if (!endsAt) return null;
 
-  return { name, groupCode, identityMode, endsAt };
+  return { name, groupCode, identityMode, endsAt, sourceRoundId: body.source_round_id.trim() };
 }
 
 function parseRoundIdPayload(body: Record<string, unknown>) {
@@ -371,6 +519,18 @@ function parseSingleRpcRound(data: unknown) {
   return data[0];
 }
 
+function parseSingleCreateRpcRound(data: unknown) {
+  if (
+    !Array.isArray(data) ||
+    data.length !== 1 ||
+    !isCreateRoundWithPartiesRow(data[0])
+  ) {
+    return null;
+  }
+
+  return data[0];
+}
+
 function rpcRoundInvalid(context: string) {
   logOperationFailed(context);
   return json(500, { error: "temporary_error" });
@@ -400,9 +560,37 @@ export async function GET(req: NextRequest) {
       return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
     }
 
+    const rounds = data ?? [];
+    if (!rounds.every(isRoundRow)) {
+      return applyAdminCookies(
+        rpcRoundInvalid("get rounds returned invalid rows"),
+        gate.cookiesToSet
+      );
+    }
+
+    let parties: PartyCatalogRow[] = [];
+    const roundIds = rounds.map((round) => round.id);
+    if (roundIds.length > 0) {
+      const { data: partyData, error: partyError } = await supabaseAdmin
+        .from("vote_parties")
+        .select("round_id,group_code,slug,enabled")
+        .in("round_id", roundIds)
+        .limit(10000);
+
+      if (partyError) {
+        logOperationFailed("get party catalog metrics failed");
+        return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
+      }
+
+      parties = (partyData ?? []) as PartyCatalogRow[];
+    }
+
+    const { roundsWithCatalog, sourceRounds } = attachCatalog(rounds, parties);
+
     return applyAdminCookies(
       json(200, {
-        rounds: data ?? [],
+        rounds: roundsWithCatalog,
+        source_rounds: sourceRounds,
         secure_session_available: available,
       }),
       gate.cookiesToSet
@@ -428,11 +616,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const supabaseAdmin = getAdminSupabase();
-    const { data, error } = await supabaseAdmin.rpc("create_vote_round_draft", {
+    const { data, error } = await supabaseAdmin.rpc("create_vote_round_draft_with_parties", {
       p_name: payload.name,
       p_group_code: payload.groupCode,
       p_identity_mode: payload.identityMode,
       p_ends_at: payload.endsAt,
+      p_source_round_id: payload.sourceRoundId,
     });
 
     if (error) {
@@ -440,8 +629,17 @@ export async function POST(req: NextRequest) {
       return applyAdminCookies(json(500, { error: "temporary_error" }), gate.cookiesToSet);
     }
 
-    const round = parseSingleRpcRound(data);
-    if (!round) {
+    const round = parseSingleCreateRpcRound(data);
+    if (
+      !round ||
+      round.group_code !== payload.groupCode ||
+      round.identity_mode !== payload.identityMode ||
+      round.lifecycle_state !== "draft" ||
+      round.is_active !== false ||
+      round.source_round_id !== payload.sourceRoundId ||
+      !isPositiveInteger(round.parties_copied) ||
+      !isPositiveInteger(round.enabled_parties_copied)
+    ) {
       return applyAdminCookies(
         rpcRoundInvalid("create draft rpc returned invalid row"),
         gate.cookiesToSet
