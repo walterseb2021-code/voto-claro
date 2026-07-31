@@ -6,6 +6,21 @@ export const runtime = "nodejs";
 
 const GROUP_RE = /^GRUPO[A-Z]$/;
 
+type IdentityMode = "legacy_device" | "secure_session";
+
+type LifecycleState = "legacy" | "draft" | "active" | "closed";
+
+type RoundRow = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  group_code: string;
+  identity_mode: string | null;
+  ends_at: string | null;
+  created_at: string | null;
+  lifecycle_state: string | null;
+};
+
 function tokenToGroup(token: string) {
   const m = token.match(/^(GRUPO[A-Z])-/);
   return m ? m[1] : null;
@@ -40,6 +55,53 @@ function json(status: number, body: Record<string, unknown>) {
 
 function logOperationFailed() {
   console.error("[vote-active] operation failed");
+}
+
+function parseDate(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function parseIdentityMode(value: string | null): IdentityMode | null {
+  if (value === "legacy_device" || value === "secure_session") return value;
+  return null;
+}
+
+function parseLifecycleState(value: string | null): LifecycleState | null {
+  if (
+    value === "legacy" ||
+    value === "draft" ||
+    value === "active" ||
+    value === "closed"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function isUsableActiveRound(round: RoundRow, group: string) {
+  if (round.group_code !== group || round.is_active !== true) return false;
+  if (typeof round.id !== "string" || typeof round.name !== "string") return false;
+
+  const identityMode = parseIdentityMode(round.identity_mode);
+  const lifecycleState = parseLifecycleState(round.lifecycle_state);
+  if (!identityMode || !lifecycleState) return false;
+
+  if (identityMode === "legacy_device") {
+    return lifecycleState === "legacy" || lifecycleState === "active";
+  }
+
+  if (lifecycleState !== "active") return false;
+
+  const createdAt = parseDate(round.created_at);
+  const endsAt = parseDate(round.ends_at);
+  if (!createdAt || !endsAt) return false;
+  if (endsAt.getTime() <= createdAt.getTime()) return false;
+  if (endsAt.getTime() <= Date.now()) return false;
+
+  return true;
 }
 
 function getRequestOrigin(req: Request) {
@@ -139,34 +201,52 @@ export async function GET(req: Request) {
       return json(401, { error: "No autorizado" });
     }
 
-    const { data: round, error: roundErr } = await supabase
+    const { data: rounds, error: roundErr } = await supabase
       .from("vote_rounds")
-      .select("id,name,is_active")
+      .select(
+        "id,name,is_active,group_code,identity_mode,ends_at,created_at,lifecycle_state"
+      )
       .eq("is_active", true)
       .eq("group_code", group)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(2)
+      .returns<RoundRow[]>();
 
     if (roundErr) {
       logOperationFailed();
       return json(500, { error: "No disponible" });
     }
 
-    if (!round) {
+    if (!rounds || rounds.length === 0) {
       return json(404, { error: "No disponible" });
+    }
+
+    if (rounds.length !== 1) {
+      logOperationFailed();
+      return json(503, { error: "No disponible" });
+    }
+
+    const round = rounds[0];
+    if (!isUsableActiveRound(round, group)) {
+      return json(503, { error: "No disponible" });
     }
 
     const { data: parties, error: partiesErr } = await supabase
       .from("vote_parties")
       .select("id,slug,name,enabled,position")
+      .eq("round_id", round.id)
       .eq("group_code", group)
       .eq("enabled", true)
-      .order("position", { ascending: true });
+      .order("position", { ascending: true })
+      .order("slug", { ascending: true });
 
     if (partiesErr) {
       logOperationFailed();
-      return json(500, { error: "No disponible" });
+      return json(503, { error: "No disponible" });
+    }
+
+    if (!parties || parties.length === 0) {
+      return json(503, { error: "No disponible" });
     }
 
     const { data: tallies, error: tallyErr } = await supabase
@@ -194,12 +274,14 @@ export async function GET(req: Request) {
       total_votes: tallyMap.get(p.id) ?? 0,
     }));
 
+    const publicRound = {
+      id: round.id,
+      name: round.name,
+      is_active: round.is_active,
+    };
+
     return json(200, {
-      round: {
-        id: round.id,
-        name: round.name,
-        is_active: round.is_active,
-      },
+      round: publicRound,
       options,
       meta: {
         options_total: options.length,
