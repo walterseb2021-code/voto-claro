@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+  [switch]$SelfTest,
   [string]$HostName,
   [ValidateRange(1, 65535)]
   [int]$Port = 5432,
@@ -10,6 +11,46 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$currentStage = "initialization"
+
+function Set-Stage {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Stage
+  )
+
+  $script:currentStage = $Stage
+}
+
+function Throw-SafeError {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Code
+  )
+
+  throw "VC_SAFE_REASON::$Code"
+}
+
+function Get-SafeReason {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$ErrorRecord
+  )
+
+  $exception = $ErrorRecord.Exception
+  $depth = 0
+  while ($null -ne $exception -and $depth -lt 5) {
+    if ($null -ne $exception.Message -and $exception.Message -match "^VC_SAFE_REASON::([a-z0-9_]+)$") {
+      return $Matches[1]
+    }
+
+    $exception = $exception.InnerException
+    $depth += 1
+  }
+
+  return "unexpected_failure"
+}
 
 function Read-RequiredText {
   param(
@@ -201,35 +242,94 @@ function Resolve-OutputTargets {
   }
 }
 
-function Update-DollarQuoteState {
+function Get-OutsideDollarQuoteSegments {
   param(
     [Parameter(Mandatory = $true)]
+    [AllowEmptyString()]
     [string]$Line,
-    [Parameter(Mandatory = $true)]
     [AllowNull()]
+    [AllowEmptyString()]
     [string]$CurrentTag
   )
 
   if ($Line.TrimStart().StartsWith("--", [System.StringComparison]::Ordinal)) {
-    return $CurrentTag
+    return [pscustomobject]@{
+      Segments = @()
+      Tag = $CurrentTag
+    }
   }
 
+  $segments = New-Object System.Collections.Generic.List[string]
   $tag = $CurrentTag
+  if ([string]::IsNullOrEmpty($tag)) {
+    $tag = $null
+  }
+  $position = 0
   $matches = [regex]::Matches($Line, "\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 
   foreach ($match in $matches) {
-    $value = $match.Value
     if ($null -eq $tag) {
-      $tag = $value
+      if ($match.Index -gt $position) {
+        [void]$segments.Add($Line.Substring($position, $match.Index - $position))
+      }
+      $tag = $match.Value
+      $position = $match.Index + $match.Length
       continue
     }
 
-    if ($value -eq $tag) {
+    if ($match.Value -eq $tag) {
       $tag = $null
+      $position = $match.Index + $match.Length
     }
   }
 
-  return $tag
+  if ($null -eq $tag -and $position -lt $Line.Length) {
+    [void]$segments.Add($Line.Substring($position))
+  }
+
+  return [pscustomobject]@{
+    Segments = @($segments.ToArray())
+    Tag = $tag
+  }
+}
+
+function Assert-SegmentParserResult {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowNull()]
+    [object]$Result
+  )
+
+  if ($null -eq $Result) {
+    Throw-SafeError -Code "sql_segment_parser_contract_invalid"
+  }
+
+  $resultObjects = @($Result)
+  if ($resultObjects.Count -ne 1) {
+    Throw-SafeError -Code "sql_segment_parser_contract_invalid"
+  }
+
+  $singleResult = $resultObjects[0]
+  if ($singleResult -isnot [pscustomobject]) {
+    Throw-SafeError -Code "sql_segment_parser_contract_invalid"
+  }
+
+  if ($null -eq $singleResult.PSObject.Properties["Segments"] -or
+      $null -eq $singleResult.PSObject.Properties["Tag"]) {
+    Throw-SafeError -Code "sql_segment_parser_contract_invalid"
+  }
+
+  if ($null -ne $singleResult.Tag -and $singleResult.Tag -isnot [string]) {
+    Throw-SafeError -Code "sql_segment_parser_contract_invalid"
+  }
+
+  if ($null -eq $singleResult.Segments -or
+      $singleResult.Segments -isnot [System.Collections.IEnumerable] -or
+      $singleResult.Segments -is [string]) {
+    Throw-SafeError -Code "sql_segment_parser_contract_invalid"
+  }
+
+  return $singleResult
 }
 
 function Get-SensitiveIndicatorCount {
@@ -238,30 +338,67 @@ function Get-SensitiveIndicatorCount {
     [string]$SqlPath
   )
 
-  $count = 0
-  $patterns = @(
-    "(?i)postgresql://",
-    "(?i)postgres://",
-    "(?i)password\s*=",
-    "(?i)\bbearer\s+\S+",
-    "\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
-    "\bsk-[A-Za-z0-9_-]{10,}",
-    "\bSUPABASE_SERVICE_ROLE_KEY\b",
-    "\bSERVICE_ROLE_KEY\b",
-    "\bPRIVATE_KEY\b"
-  )
+  Set-Stage -Stage "scan_sql_sensitive"
+  try {
+    $count = 0
+    $patterns = @(
+      "(?i)postgresql://",
+      "(?i)postgres://",
+      "(?i)password\s*=",
+      "(?i)\bbearer\s+\S+",
+      "\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
+      "\bsk-[A-Za-z0-9_-]{10,}",
+      "\bSUPABASE_SERVICE_ROLE_KEY\b",
+      "\bSERVICE_ROLE_KEY\b",
+      "\bPRIVATE_KEY\b"
+    )
 
-  foreach ($line in [System.IO.File]::ReadLines($SqlPath)) {
-    if ($line.TrimStart().StartsWith("--", [System.StringComparison]::Ordinal)) {
-      continue
+    $insideBlockComment = $false
+    foreach ($line in [System.IO.File]::ReadLines($SqlPath)) {
+      if (-not $insideBlockComment -and $line.TrimStart().StartsWith("--", [System.StringComparison]::Ordinal)) {
+        continue
+      }
+
+      $scanText = New-Object System.Text.StringBuilder
+      $position = 0
+      while ($position -lt $line.Length) {
+        if ($insideBlockComment) {
+          $blockEnd = $line.IndexOf("*/", $position, [System.StringComparison]::Ordinal)
+          if ($blockEnd -lt 0) {
+            $position = $line.Length
+          } else {
+            $insideBlockComment = $false
+            $position = $blockEnd + 2
+          }
+          continue
+        }
+
+        $blockStart = $line.IndexOf("/*", $position, [System.StringComparison]::Ordinal)
+        if ($blockStart -lt 0) {
+          [void]$scanText.Append($line.Substring($position))
+          $position = $line.Length
+        } else {
+          if ($blockStart -gt $position) {
+            [void]$scanText.Append($line.Substring($position, $blockStart - $position))
+          }
+          $insideBlockComment = $true
+          $position = $blockStart + 2
+        }
+      }
+
+      foreach ($pattern in $patterns) {
+        $count += [regex]::Matches($scanText.ToString(), $pattern).Count
+      }
     }
 
-    foreach ($pattern in $patterns) {
-      $count += [regex]::Matches($line, $pattern).Count
+    return $count
+  } catch {
+    $safeReason = Get-SafeReason -ErrorRecord $_
+    if ($safeReason -ne "unexpected_failure") {
+      Throw-SafeError -Code $safeReason
     }
+    Throw-SafeError -Code "sql_sensitive_scan_failed"
   }
-
-  return $count
 }
 
 function Get-DumpPatternSummary {
@@ -286,63 +423,79 @@ function Get-DumpPatternSummary {
     SuspiciousIndicatorCount = 0
   }
 
-  $dollarTag = $null
-  foreach ($line in [System.IO.File]::ReadLines($SqlPath)) {
-    $lineHasDollarQuote = [regex]::IsMatch($line, "\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
-    $insideFunctionBody = $null -ne $dollarTag
+  Set-Stage -Stage "scan_sql_structure"
+  try {
+    $dollarTag = $null
+    foreach ($line in [System.IO.File]::ReadLines($SqlPath)) {
+      $split = Assert-SegmentParserResult -Result (Get-OutsideDollarQuoteSegments -Line $line -CurrentTag $dollarTag)
 
-    if (-not $insideFunctionBody -and -not $lineHasDollarQuote) {
-      if ($line -match "^\s*COPY\s+.+\s+FROM\s+stdin;\s*$" -or
-          $line -match "^\s*INSERT\s+INTO\s+" -or
-          $line -match "^\s*\\\.\s*$") {
-        $summary.HasDataLoadLine = $true
+      foreach ($segment in $split.Segments) {
+        if ($segment -match "^\s*COPY\s+.+\s+FROM\s+stdin;\s*$" -or
+            $segment -match "^\s*INSERT\s+INTO\s+") {
+          $summary.HasDataLoadLine = $true
+        }
+
+        if ($segment -match "^\s*\\\.\s*$") {
+          $summary.HasDataLoadLine = $true
+        }
+
+        if ($segment -match "^\s*CREATE\s+DATABASE\b" -or
+            $segment -match "^\s*DROP\s+DATABASE\b" -or
+            $segment -match "^\s*DROP\s+SCHEMA\b" -or
+            $segment -match "^\s*DROP\s+TABLE\b" -or
+            $segment -match "^\s*TRUNCATE\b") {
+          $summary.HasDangerousDdl = $true
+        }
+
+        if ($segment -match "^\s*CREATE\s+(UNLOGGED\s+)?TABLE\s+(ONLY\s+)?public\.") {
+          $summary.HasCreateTable = $true
+          $summary.CreateTableCount += 1
+        }
+
+        if ($segment -match "^\s*CREATE\s+SCHEMA\s+public\b" -or
+            $segment -match "^\s*ALTER\s+SCHEMA\s+public\b" -or
+            $segment -match "^\s*CREATE\s+(UNLOGGED\s+)?TABLE\s+(ONLY\s+)?public\." -or
+            $segment -match "^\s*CREATE\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE)\s+public\." -or
+            $segment -match "^\s*CREATE\s+SEQUENCE\s+public\." -or
+            $segment -match "^\s*ALTER\s+TABLE\s+(ONLY\s+)?public\.") {
+          $summary.HasPublicDefinition = $true
+        }
+
+        if ($segment -match "^\s*CREATE\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE)\b") {
+          $summary.CreateFunctionOrProcedureCount += 1
+        }
+        if ($segment -match "^\s*CREATE\s+(UNIQUE\s+)?INDEX\b") {
+          $summary.CreateIndexCount += 1
+        }
+        if ($segment -match "^\s*CREATE\s+TRIGGER\b") {
+          $summary.CreateTriggerCount += 1
+        }
+        if ($segment -match "^\s*CREATE\s+POLICY\b") {
+          $summary.CreatePolicyCount += 1
+        }
+        if ($segment -match "^\s*ALTER\s+TABLE\b.+\bENABLE\s+ROW\s+LEVEL\s+SECURITY\b") {
+          $summary.EnableRlsCount += 1
+        }
+        if ($segment -match "^\s*GRANT\b") {
+          $summary.GrantCount += 1
+        }
+        if ($segment -match "^\s*REVOKE\b") {
+          $summary.RevokeCount += 1
+        }
       }
 
-      if ($line -match "^\s*CREATE\s+DATABASE\b" -or
-          $line -match "^\s*DROP\s+DATABASE\b" -or
-          $line -match "^\s*DROP\s+SCHEMA\b" -or
-          $line -match "^\s*DROP\s+TABLE\b" -or
-          $line -match "^\s*TRUNCATE\b") {
-        $summary.HasDangerousDdl = $true
-      }
-
-      if ($line -match "^\s*CREATE\s+TABLE\b") {
-        $summary.HasCreateTable = $true
-        $summary.CreateTableCount += 1
-      }
-
-      if ($line -match "\bpublic\.|SCHEMA\s+public\b") {
-        $summary.HasPublicDefinition = $true
-      }
-
-      if ($line -match "^\s*CREATE\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE)\b") {
-        $summary.CreateFunctionOrProcedureCount += 1
-      }
-      if ($line -match "^\s*CREATE\s+(UNIQUE\s+)?INDEX\b") {
-        $summary.CreateIndexCount += 1
-      }
-      if ($line -match "^\s*CREATE\s+TRIGGER\b") {
-        $summary.CreateTriggerCount += 1
-      }
-      if ($line -match "^\s*CREATE\s+POLICY\b") {
-        $summary.CreatePolicyCount += 1
-      }
-      if ($line -match "^\s*ALTER\s+TABLE\b.+\bENABLE\s+ROW\s+LEVEL\s+SECURITY\b") {
-        $summary.EnableRlsCount += 1
-      }
-      if ($line -match "^\s*GRANT\b") {
-        $summary.GrantCount += 1
-      }
-      if ($line -match "^\s*REVOKE\b") {
-        $summary.RevokeCount += 1
-      }
+      $dollarTag = $split.Tag
     }
 
-    $dollarTag = Update-DollarQuoteState -Line $line -CurrentTag $dollarTag
+    $summary.SuspiciousIndicatorCount = Get-SensitiveIndicatorCount -SqlPath $SqlPath
+    return [pscustomobject]$summary
+  } catch {
+    $safeReason = Get-SafeReason -ErrorRecord $_
+    if ($safeReason -ne "unexpected_failure") {
+      Throw-SafeError -Code $safeReason
+    }
+    Throw-SafeError -Code "sql_structure_scan_failed"
   }
-
-  $summary.SuspiciousIndicatorCount = Get-SensitiveIndicatorCount -SqlPath $SqlPath
-  return [pscustomobject]$summary
 }
 
 function Assert-ValidSchemaOnlyDump {
@@ -353,39 +506,52 @@ function Assert-ValidSchemaOnlyDump {
     [string]$RepoRoot
   )
 
-  if (-not (Test-Path -LiteralPath $SqlPath -PathType Leaf)) {
-    throw "Validation failed: SQL file was not created."
-  }
+  try {
+    Set-Stage -Stage "validate_sql_file_exists"
+    if (-not (Test-Path -LiteralPath $SqlPath -PathType Leaf)) {
+      Throw-SafeError -Code "sql_file_missing"
+    }
 
-  $item = Get-Item -LiteralPath $SqlPath
-  if ($item.Length -le 0) {
-    throw "Validation failed: SQL file is empty."
-  }
+    Set-Stage -Stage "validate_sql_file_size"
+    $item = Get-Item -LiteralPath $SqlPath
+    if ($item.Length -le 0) {
+      Throw-SafeError -Code "sql_file_empty"
+    }
 
-  if ([System.IO.Path]::GetExtension($SqlPath) -ne ".sql") {
-    throw "Validation failed: final SQL extension must be .sql."
-  }
+    Set-Stage -Stage "validate_sql_extension"
+    if ([System.IO.Path]::GetExtension($SqlPath) -ne ".sql") {
+      Throw-SafeError -Code "sql_extension_invalid"
+    }
 
-  if (Test-IsPathInsideDirectory -ChildPath $SqlPath -ParentPath $RepoRoot) {
-    throw "Validation failed: output path is inside the repository."
-  }
+    Set-Stage -Stage "validate_sql_location"
+    if (Test-IsPathInsideDirectory -ChildPath $SqlPath -ParentPath $RepoRoot) {
+      Throw-SafeError -Code "sql_inside_repository"
+    }
 
-  $summary = Get-DumpPatternSummary -SqlPath $SqlPath
+    $summary = Get-DumpPatternSummary -SqlPath $SqlPath
 
-  if ($summary.HasDataLoadLine) {
-    throw "Validation failed: data-loading dump line detected."
-  }
-  if ($summary.HasDangerousDdl) {
-    throw "Validation failed: destructive database or table statement detected."
-  }
-  if (-not $summary.HasCreateTable) {
-    throw "Validation failed: CREATE TABLE was not found."
-  }
-  if (-not $summary.HasPublicDefinition) {
-    throw "Validation failed: no public schema definition was found."
-  }
+    Set-Stage -Stage "evaluate_sql_rules"
+    if ($summary.HasDataLoadLine) {
+      Throw-SafeError -Code "sql_data_load_detected"
+    }
+    if ($summary.HasDangerousDdl) {
+      Throw-SafeError -Code "sql_dangerous_ddl_detected"
+    }
+    if (-not $summary.HasPublicDefinition) {
+      Throw-SafeError -Code "sql_public_definition_missing"
+    }
+    if (-not $summary.HasCreateTable) {
+      Throw-SafeError -Code "sql_create_table_missing"
+    }
 
-  return $summary
+    return $summary
+  } catch {
+    $safeReason = Get-SafeReason -ErrorRecord $_
+    if ($safeReason -ne "unexpected_failure") {
+      Throw-SafeError -Code $safeReason
+    }
+    Throw-SafeError -Code "sql_validation_internal_failed"
+  }
 }
 
 function New-ManifestFile {
@@ -448,29 +614,29 @@ function Assert-ValidManifest {
   )
 
   if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
-    throw "Validation failed: manifest was not created."
+    Throw-SafeError -Code "manifest_missing"
   }
 
   $item = Get-Item -LiteralPath $ManifestPath
   if ($item.Length -le 0) {
-    throw "Validation failed: manifest is empty."
+    Throw-SafeError -Code "manifest_empty"
   }
 
   $lines = Get-Content -LiteralPath $ManifestPath
   if (@($lines | Where-Object { $_ -eq "DATA_ROWS_EXPORTED=false" }).Count -ne 1) {
-    throw "Validation failed: manifest DATA_ROWS_EXPORTED marker is invalid."
+    Throw-SafeError -Code "manifest_data_marker_invalid"
   }
   if (@($lines | Where-Object { $_ -eq "MANUAL_SECRET_REVIEW_REQUIRED=true" }).Count -ne 1) {
-    throw "Validation failed: manifest manual review marker is invalid."
+    Throw-SafeError -Code "manifest_review_marker_invalid"
   }
   if (@($lines | Where-Object { $_ -eq "SAFE_TO_COMMIT=false" }).Count -ne 1) {
-    throw "Validation failed: manifest safe-to-commit marker is invalid."
+    Throw-SafeError -Code "manifest_commit_marker_invalid"
   }
   if (@($lines | Where-Object { $_ -eq "sha256=$ExpectedSha256" }).Count -ne 1) {
-    throw "Validation failed: manifest SHA-256 is invalid."
+    Throw-SafeError -Code "manifest_hash_invalid"
   }
   if (@($lines | Where-Object { $_ -match "(?i)PGPASSWORD|password\s*=|postgresql://|postgres://" }).Count -ne 0) {
-    throw "Validation failed: manifest contains sensitive connection material."
+    Throw-SafeError -Code "manifest_sensitive_material_detected"
   }
 }
 
@@ -492,6 +658,360 @@ function Get-RequiredApplication {
   return $command
 }
 
+function Write-TestSqlFile {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [string[]]$Lines
+  )
+
+  Set-Content -LiteralPath $Path -Value $Lines -Encoding UTF8
+}
+
+function Invoke-ExpectSqlPass {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [string]$RepoRoot
+  )
+
+  Assert-ValidSchemaOnlyDump -SqlPath $Path -RepoRoot $RepoRoot | Out-Null
+}
+
+function Invoke-ExpectSqlFailure {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [string]$RepoRoot,
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedReason
+  )
+
+  try {
+    Assert-ValidSchemaOnlyDump -SqlPath $Path -RepoRoot $RepoRoot | Out-Null
+    throw "Expected validation failure did not occur."
+  } catch {
+    $reason = Get-SafeReason -ErrorRecord $_
+    if ($reason -ne $ExpectedReason) {
+      throw "Unexpected self-test validation reason."
+    }
+  }
+}
+
+function Invoke-ExpectManifestPass {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedSha256
+  )
+
+  Assert-ValidManifest -ManifestPath $Path -ExpectedSha256 $ExpectedSha256
+}
+
+function Invoke-ExpectManifestFailure {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedSha256,
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedReason
+  )
+
+  try {
+    Assert-ValidManifest -ManifestPath $Path -ExpectedSha256 $ExpectedSha256
+    throw "Expected manifest validation failure did not occur."
+  } catch {
+    $reason = Get-SafeReason -ErrorRecord $_
+    if ($reason -ne $ExpectedReason) {
+      throw "Unexpected self-test manifest reason."
+    }
+  }
+}
+
+function Invoke-ExpectSensitiveIndicatorCount {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [int]$ExpectedCount
+  )
+
+  $actualCount = Get-SensitiveIndicatorCount -SqlPath $Path
+  if ($actualCount -ne $ExpectedCount) {
+    throw "Unexpected self-test sensitive indicator count."
+  }
+}
+
+function Invoke-ExpectSegmentParserContract {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyString()]
+    [string]$Line,
+    [AllowNull()]
+    [AllowEmptyString()]
+    [string]$CurrentTag,
+    [AllowNull()]
+    [string]$ExpectedTag
+  )
+
+  $parserOutput = @(Get-OutsideDollarQuoteSegments -Line $Line -CurrentTag $CurrentTag)
+  if ($parserOutput.Count -ne 1) {
+    throw "Unexpected self-test parser output count."
+  }
+
+  $result = Assert-SegmentParserResult -Result $parserOutput[0]
+  if ($result -is [int]) {
+    throw "Unexpected self-test parser numeric output."
+  }
+
+  $actualTag = $result.Tag
+  $normalizedExpectedTag = $ExpectedTag
+  if ([string]::IsNullOrEmpty($actualTag)) {
+    $actualTag = $null
+  }
+  if ([string]::IsNullOrEmpty($normalizedExpectedTag)) {
+    $normalizedExpectedTag = $null
+  }
+
+  if ($actualTag -ne $normalizedExpectedTag) {
+    throw "Unexpected self-test parser tag."
+  }
+}
+
+function Invoke-SelfTest {
+  $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("vc-schema-selftest-" + [Guid]::NewGuid().ToString("N"))
+
+  try {
+    New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+    $repoRootForTest = Get-NormalizedFullPath -PathValue (Join-Path $PSScriptRoot "..\..")
+
+    Invoke-ExpectSegmentParserContract `
+      -Line "CREATE TABLE public.demo (id integer);" `
+      -CurrentTag $null `
+      -ExpectedTag $null
+    Invoke-ExpectSegmentParserContract `
+      -Line "CREATE FUNCTION public.demo() RETURNS void AS `$function`$" `
+      -CurrentTag $null `
+      -ExpectedTag "`$function`$"
+    Invoke-ExpectSegmentParserContract `
+      -Line "INSERT INTO public.demo VALUES (1);" `
+      -CurrentTag "`$function`$" `
+      -ExpectedTag "`$function`$"
+    Invoke-ExpectSegmentParserContract `
+      -Line "`$function`$ LANGUAGE plpgsql;" `
+      -CurrentTag "`$function`$" `
+      -ExpectedTag $null
+    Invoke-ExpectSegmentParserContract `
+      -Line "SELECT `$a`$one`$a`$, `$b`$two`$b`$;" `
+      -CurrentTag $null `
+      -ExpectedTag $null
+    Invoke-ExpectSegmentParserContract `
+      -Line "-- CREATE TABLE public.demo (id integer);" `
+      -CurrentTag $null `
+      -ExpectedTag $null
+    Invoke-ExpectSegmentParserContract `
+      -Line "" `
+      -CurrentTag $null `
+      -ExpectedTag $null
+
+    $pgDump17Sql = Join-Path $tempRoot "pg-dump-17.sql"
+    Write-TestSqlFile -Path $pgDump17Sql -Lines @(
+      "\restrict token_sintetico"
+      "SET statement_timeout = 0;"
+      "SET lock_timeout = 0;"
+      "SET client_encoding = 'UTF8';"
+      "SET standard_conforming_strings = on;"
+      "CREATE TABLE public.demo ("
+      "  id integer NOT NULL,"
+      "  name text"
+      ");"
+      "CREATE SEQUENCE public.demo_id_seq"
+      "  AS integer"
+      "  START WITH 1"
+      "  INCREMENT BY 1"
+      "  NO MINVALUE"
+      "  NO MAXVALUE"
+      "  CACHE 1;"
+      "ALTER TABLE ONLY public.demo ALTER COLUMN id SET DEFAULT nextval('public.demo_id_seq'::regclass);"
+      "CREATE FUNCTION public.demo_fn() RETURNS trigger"
+      "LANGUAGE plpgsql"
+      "AS `$function`$"
+      "BEGIN"
+      "  INSERT INTO public.demo VALUES (NEW.id);"
+      "  RETURN NEW;"
+      "END;"
+      "`$function`$;"
+      "CREATE INDEX demo_id_idx ON public.demo (id);"
+      "CREATE TRIGGER demo_trigger BEFORE INSERT ON public.demo FOR EACH ROW EXECUTE FUNCTION public.demo_fn();"
+      "ALTER TABLE public.demo ENABLE ROW LEVEL SECURITY;"
+      "CREATE POLICY demo_select ON public.demo FOR SELECT USING (true);"
+      "REVOKE ALL ON TABLE public.demo FROM PUBLIC;"
+      "GRANT SELECT ON TABLE public.demo TO authenticated;"
+      "\unrestrict token_sintetico"
+    )
+    Invoke-ExpectSqlPass -Path $pgDump17Sql -RepoRoot $repoRootForTest
+
+    $validSql = Join-Path $tempRoot "valid.sql"
+    Write-TestSqlFile -Path $validSql -Lines @(
+      "CREATE TABLE public.demo ("
+      "  id integer"
+      ");"
+      "CREATE FUNCTION public.demo_fn() RETURNS void AS `$function`$"
+      "BEGIN"
+      "  INSERT INTO public.demo VALUES (1);"
+      "END"
+      "`$function`$ LANGUAGE plpgsql;"
+    )
+    Invoke-ExpectSqlPass -Path $validSql -RepoRoot $repoRootForTest
+
+    $copySql = Join-Path $tempRoot "copy.sql"
+    Write-TestSqlFile -Path $copySql -Lines @(
+      "CREATE TABLE public.demo (id integer);"
+      "COPY public.demo (id) FROM stdin;"
+      "1"
+      "\."
+    )
+    Invoke-ExpectSqlFailure -Path $copySql -RepoRoot $repoRootForTest -ExpectedReason "sql_data_load_detected"
+
+    $insertSql = Join-Path $tempRoot "insert.sql"
+    Write-TestSqlFile -Path $insertSql -Lines @(
+      "CREATE TABLE public.demo (id integer);"
+      "INSERT INTO public.demo VALUES (1);"
+    )
+    Invoke-ExpectSqlFailure -Path $insertSql -RepoRoot $repoRootForTest -ExpectedReason "sql_data_load_detected"
+
+    $dropSql = Join-Path $tempRoot "drop.sql"
+    Write-TestSqlFile -Path $dropSql -Lines @(
+      "CREATE TABLE public.demo (id integer);"
+      "DROP TABLE public.demo;"
+    )
+    Invoke-ExpectSqlFailure -Path $dropSql -RepoRoot $repoRootForTest -ExpectedReason "sql_dangerous_ddl_detected"
+
+    $secretFunctionSql = Join-Path $tempRoot "secret-function.sql"
+    Write-TestSqlFile -Path $secretFunctionSql -Lines @(
+      "CREATE TABLE public.demo (id integer);"
+      "CREATE FUNCTION public.secret_test() RETURNS void AS `$function`$"
+      "BEGIN"
+      "  PERFORM 'SUPABASE_SERVICE_ROLE_KEY';"
+      "END"
+      "`$function`$ LANGUAGE plpgsql;"
+    )
+    $secretFunctionSummary = Assert-ValidSchemaOnlyDump -SqlPath $secretFunctionSql -RepoRoot $repoRootForTest
+    if ($secretFunctionSummary.SuspiciousIndicatorCount -le 0) {
+      throw "Unexpected self-test sensitive indicator count."
+    }
+
+    $lineCommentSecretSql = Join-Path $tempRoot "line-comment-secret.sql"
+    Write-TestSqlFile -Path $lineCommentSecretSql -Lines @(
+      "-- SUPABASE_SERVICE_ROLE_KEY"
+      "CREATE TABLE public.demo (id integer);"
+    )
+    Invoke-ExpectSensitiveIndicatorCount -Path $lineCommentSecretSql -ExpectedCount 0
+
+    $blockCommentSecretSql = Join-Path $tempRoot "block-comment-secret.sql"
+    Write-TestSqlFile -Path $blockCommentSecretSql -Lines @(
+      "/*"
+      "SUPABASE_SERVICE_ROLE_KEY"
+      "*/"
+      "CREATE TABLE public.demo (id integer);"
+    )
+    Invoke-ExpectSensitiveIndicatorCount -Path $blockCommentSecretSql -ExpectedCount 0
+
+    $serviceRoleSql = Join-Path $tempRoot "service-role.sql"
+    Write-TestSqlFile -Path $serviceRoleSql -Lines @(
+      "CREATE TABLE public.demo (id integer);"
+      "GRANT EXECUTE ON FUNCTION public.demo() TO service_role;"
+    )
+    Invoke-ExpectSensitiveIndicatorCount -Path $serviceRoleSql -ExpectedCount 0
+
+    $dropFunctionSql = Join-Path $tempRoot "drop-function.sql"
+    Write-TestSqlFile -Path $dropFunctionSql -Lines @(
+      "CREATE TABLE public.demo (id integer);"
+      "CREATE FUNCTION public.demo_drop_fn() RETURNS void AS `$$"
+      "BEGIN"
+      "  DROP TABLE public.demo;"
+      "END"
+      "`$$ LANGUAGE plpgsql;"
+    )
+    Invoke-ExpectSqlPass -Path $dropFunctionSql -RepoRoot $repoRootForTest
+
+    $commentSql = Join-Path $tempRoot "comment.sql"
+    Write-TestSqlFile -Path $commentSql -Lines @(
+      "-- COPY public.demo (id) FROM stdin;"
+      "-- INSERT INTO public.demo VALUES (1);"
+      "-- DROP TABLE public.demo;"
+      "CREATE TABLE ONLY public.demo (id integer);"
+    )
+    Invoke-ExpectSqlPass -Path $commentSql -RepoRoot $repoRootForTest
+
+    $noCreateTableSql = Join-Path $tempRoot "no-create-table.sql"
+    Write-TestSqlFile -Path $noCreateTableSql -Lines @(
+      "CREATE SCHEMA public;"
+      "CREATE FUNCTION public.demo_fn() RETURNS void AS `$$"
+      "BEGIN"
+      "  NULL;"
+      "END"
+      "`$$ LANGUAGE plpgsql;"
+    )
+    Invoke-ExpectSqlFailure -Path $noCreateTableSql -RepoRoot $repoRootForTest -ExpectedReason "sql_create_table_missing"
+
+    $noPublicSql = Join-Path $tempRoot "no-public.sql"
+    Write-TestSqlFile -Path $noPublicSql -Lines @(
+      "CREATE TABLE demo (id integer);"
+    )
+    Invoke-ExpectSqlFailure -Path $noPublicSql -RepoRoot $repoRootForTest -ExpectedReason "sql_public_definition_missing"
+
+    $manifestSqlHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $validSql).Hash
+    $validManifest = Join-Path $tempRoot "valid.manifest.txt"
+    $summary = Assert-ValidSchemaOnlyDump -SqlPath $validSql -RepoRoot $repoRootForTest
+    $validSqlItem = Get-Item -LiteralPath $validSql
+    New-ManifestFile `
+      -ManifestPath $validManifest `
+      -SqlPath $validSql `
+      -Sha256 $manifestSqlHash `
+      -SizeBytes $validSqlItem.Length `
+      -PgDumpVersion "selftest" `
+      -HostNameValue "example-host" `
+      -PortValue 5432 `
+      -DatabaseValue "example_db" `
+      -UserNameValue "example_user" `
+      -Summary $summary
+    Invoke-ExpectManifestPass -Path $validManifest -ExpectedSha256 $manifestSqlHash
+
+    $missingMarkerManifest = Join-Path $tempRoot "missing-marker.manifest.txt"
+    Set-Content -LiteralPath $missingMarkerManifest -Encoding UTF8 -Value @(
+      "sha256=$manifestSqlHash"
+      "DATA_ROWS_EXPORTED=false"
+      "SAFE_TO_COMMIT=false"
+    )
+    Invoke-ExpectManifestFailure `
+      -Path $missingMarkerManifest `
+      -ExpectedSha256 $manifestSqlHash `
+      -ExpectedReason "manifest_review_marker_invalid"
+
+    $wrongHashManifest = Join-Path $tempRoot "wrong-hash.manifest.txt"
+    Set-Content -LiteralPath $wrongHashManifest -Encoding UTF8 -Value @(
+      "sha256=invalid"
+      "DATA_ROWS_EXPORTED=false"
+      "MANUAL_SECRET_REVIEW_REQUIRED=true"
+      "SAFE_TO_COMMIT=false"
+    )
+    Invoke-ExpectManifestFailure `
+      -Path $wrongHashManifest `
+      -ExpectedSha256 $manifestSqlHash `
+      -ExpectedReason "manifest_hash_invalid"
+  } finally {
+    if (Test-Path -LiteralPath $tempRoot) {
+      Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
 $tempSqlPath = $null
 $tempManifestPath = $null
 $finalSqlPath = $null
@@ -510,6 +1030,16 @@ $hadPreviousPgSslMode = $false
 $hadPreviousPgConnectTimeout = $false
 
 try {
+  if ($SelfTest) {
+    Set-Stage -Stage "self_test"
+    Invoke-SelfTest
+    Set-Stage -Stage "completed"
+    $completedSuccessfully = $true
+    Write-Output "SELF_TEST_OK"
+    exit 0
+  }
+
+  Set-Stage -Stage "resolve_inputs"
   $repoRoot = Get-NormalizedFullPath -PathValue (Join-Path $PSScriptRoot "..\..")
 
   if ($null -eq $HostName) {
@@ -541,6 +1071,7 @@ try {
   $finalManifestPath = $targets.ManifestPath
   $outputDirectory = $targets.Directory
 
+  Set-Stage -Stage "locate_pg_dump"
   $pgDumpCommand = Get-RequiredApplication
   $pgDumpVersion = (Get-Item -LiteralPath $pgDumpCommand.Source).VersionInfo.ProductVersion
   if ([string]::IsNullOrWhiteSpace($pgDumpVersion)) {
@@ -551,28 +1082,28 @@ try {
   Write-Output "SOLO ESQUEMA"
   Write-Output "SIN FILAS"
   Write-Output "NO APLICA CAMBIOS"
-  Write-Output "Host: $HostName"
-  Write-Output "Port: $Port"
-  Write-Output "Database: $Database"
-  Write-Output "User: $UserName"
   Write-Output "Final SQL path: $finalSqlPath"
   Write-Output "Manifest path: $finalManifestPath"
   Write-Output "pg_dump version: $pgDumpVersion"
 
+  Set-Stage -Stage "confirm_operation"
   $confirmation = Read-Host -Prompt "Type SCHEMA-ONLY-VOTO-CLARO to continue"
   if ($confirmation -ne "SCHEMA-ONLY-VOTO-CLARO") {
     throw "Confirmation did not match."
   }
 
+  Set-Stage -Stage "read_password"
   $securePassword = Read-Host -AsSecureString -Prompt "Database password"
   if ($null -eq $securePassword -or $securePassword.Length -eq 0) {
     throw "Password was not provided."
   }
 
+  Set-Stage -Stage "prepare_temp_files"
   New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
   $tempSqlPath = Join-Path $outputDirectory (".tmp-" + [Guid]::NewGuid().ToString("N") + ".sql")
   $tempManifestPath = Join-Path $outputDirectory (".tmp-" + [Guid]::NewGuid().ToString("N") + ".manifest.txt")
 
+  Set-Stage -Stage "configure_environment"
   $hadPreviousPgPassword = [System.Environment]::GetEnvironmentVariable("PGPASSWORD", "Process") -ne $null
   $hadPreviousPgSslMode = [System.Environment]::GetEnvironmentVariable("PGSSLMODE", "Process") -ne $null
   $hadPreviousPgConnectTimeout = [System.Environment]::GetEnvironmentVariable("PGCONNECT_TIMEOUT", "Process") -ne $null
@@ -607,17 +1138,22 @@ try {
     "--file", $tempSqlPath
   )
 
+  Set-Stage -Stage "run_pg_dump"
   Write-Output "Starting schema-only export to temporary file."
   & $pgDumpCommand.Source @pgDumpArguments
   if ($LASTEXITCODE -ne 0) {
-    throw "Export command failed."
+    Throw-SafeError -Code "external_command_failed"
   }
 
   Write-Output "Validating temporary SQL file."
+  Set-Stage -Stage "validate_sql"
   $summary = Assert-ValidSchemaOnlyDump -SqlPath $tempSqlPath -RepoRoot $repoRoot
+
+  Set-Stage -Stage "hash_sql"
   $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $tempSqlPath
   $tempItem = Get-Item -LiteralPath $tempSqlPath
 
+  Set-Stage -Stage "write_manifest"
   New-ManifestFile `
     -ManifestPath $tempManifestPath `
     -SqlPath $finalSqlPath `
@@ -630,23 +1166,28 @@ try {
     -UserNameValue $UserName `
     -Summary $summary
 
+  Set-Stage -Stage "validate_manifest"
   Assert-ValidManifest -ManifestPath $tempManifestPath -ExpectedSha256 $hash.Hash
 
+  Set-Stage -Stage "move_sql"
   Move-Item -LiteralPath $tempSqlPath -Destination $finalSqlPath
   $tempSqlPath = $null
   $finalSqlCreatedThisRun = $true
 
+  Set-Stage -Stage "move_manifest"
   Move-Item -LiteralPath $tempManifestPath -Destination $finalManifestPath
   $tempManifestPath = $null
   $finalManifestCreatedThisRun = $true
 
+  Set-Stage -Stage "verify_final_files"
   if (-not (Test-Path -LiteralPath $finalSqlPath -PathType Leaf)) {
-    throw "Final SQL was not accepted."
+    Throw-SafeError -Code "final_sql_missing"
   }
   if (-not (Test-Path -LiteralPath $finalManifestPath -PathType Leaf)) {
-    throw "Final manifest was not accepted."
+    Throw-SafeError -Code "final_manifest_missing"
   }
 
+  Set-Stage -Stage "completed"
   $completedSuccessfully = $true
 
   Write-Output "Validation passed."
@@ -670,7 +1211,10 @@ try {
   Write-Output "MANUAL_SECRET_REVIEW_REQUIRED=true"
   Write-Output "SAFE_TO_COMMIT=false"
 } catch {
-  Write-Output "Schema-only export failed. No SQL file was accepted."
+  $safeReason = Get-SafeReason -ErrorRecord $_
+  Write-Output "Schema-only export failed."
+  Write-Output "stage=$currentStage"
+  Write-Output "reason=$safeReason"
   exit 1
 } finally {
   [System.Environment]::SetEnvironmentVariable("PGPASSWORD", $null, "Process")
