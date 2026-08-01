@@ -49,8 +49,11 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $toolDir "..\..\.."))
 $readme = Join-Path $toolDir "README.txt"
 $script:InvokePath = Join-Path $toolDir "Invoke-IsolatedBaselineTest.ps1"
 $validator = Join-Path $toolDir "Validate-IsolatedBaselineTestTool.ps1"
+$compatSql = Join-Path $toolDir "local-compat-preflight.candidate.sql"
+$compatManifest = Join-Path $toolDir "local-compat-preflight.candidate.manifest.txt"
+$compatValidator = Join-Path $toolDir "Validate-LocalCompatPreflightCandidate.ps1"
 
-foreach ($file in @($readme, $script:InvokePath, $validator)) {
+foreach ($file in @($readme, $script:InvokePath, $validator, $compatSql, $compatManifest, $compatValidator)) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
     Fail -Code "file_missing"
   }
@@ -69,9 +72,18 @@ $validatorErrors = $null
 if ($validatorErrors.Count -ne 0) {
   Fail -Code "validator_parse_failed"
 }
+$compatValidatorTokens = $null
+$compatValidatorErrors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($compatValidator, [ref]$compatValidatorTokens, [ref]$compatValidatorErrors) | Out-Null
+if ($compatValidatorErrors.Count -ne 0) {
+  Fail -Code "compat_validator_parse_failed"
+}
 
 $text = Get-Content -LiteralPath $script:InvokePath -Raw
 $readmeText = Get-Content -LiteralPath $readme -Raw
+$compatSqlText = Get-Content -LiteralPath $compatSql -Raw
+$compatManifestText = Get-Content -LiteralPath $compatManifest -Raw
+$compatValidatorText = Get-Content -LiteralPath $compatValidator -Raw
 
 $commands = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
 $commandNames = @($commands | ForEach-Object { $_.GetCommandName() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -108,6 +120,8 @@ if (-not $planFunction.Success) { Fail -Code "plan_function_missing" }
 Assert-NotContains -Text $planFunction.Value -Pattern "initdb|pg_ctl|createdb|dropdb|psql|pg_restore|pg_dump|pg_isready|postgres\.exe|Remove-Item|New-Item|Read-Host" -Code "plan_contains_forbidden_operation"
 
 Assert-Contains -Text $text -Pattern '\$script:AllowedHost\s*=\s*"127\.0\.0\.1"' -Code "fixed_host_missing"
+Assert-Contains -Text $text -Pattern '\[string\]\$PostgresBin\s*=\s*\(Join-Path \$env:LOCALAPPDATA "VotoClaro\\PostgreSQL\\17\.10-complete\\bin"\)' -Code "dynamic_postgresbin_missing"
+Assert-NotContains -Text $text -Pattern "C:\\Users\\|HP\\AppData" -Code "hardcoded_user_path_detected"
 Assert-NotContains -Text $text -Pattern "localhost" -Code "localhost_operational_host_detected"
 Assert-NotContains -Text $text -Pattern "supabase\.co|pooler\.supabase\.com|amazonaws\.com" -Code "remote_host_literal_detected"
 Assert-NotContains -Text $text -Pattern "NEXT_PUBLIC_SUPABASE_URL|SUPABASE_URL|DATABASE_URL|POSTGRES_URL" -Code "forbidden_env_variable_detected"
@@ -128,9 +142,40 @@ Assert-Contains -Text $text -Pattern "Get-FutureInitDbArgumentTemplate" -Code "i
 Assert-Contains -Text $text -Pattern "Get-FuturePsqlArgumentTemplate" -Code "psql_argument_template_missing"
 Assert-Contains -Text $text -Pattern "return @\(" -Code "array_argument_template_missing"
 Assert-NotContains -Text $text -Pattern 'ArgumentList\s+\([^\)]*-join|ArgumentList\s+"' -Code "unsafe_argument_list_detected"
+Assert-Contains -Text $text -Pattern "Invoke-LocalCompatPreflightValidator" -Code "compat_preflight_validator_missing"
+Assert-Contains -Text $text -Pattern "Validate-LocalCompatPreflightCandidate\.ps1" -Code "compat_validator_not_referenced"
+Assert-NotContains -Text $text -Pattern "local-compat-preflight\.candidate\.sql[^\r\n]*(psql|--file|Invoke-Expression)" -Code "compat_sql_execution_detected"
+Assert-NotContains -Text $compatManifestText -Pattern "ready_for_execution=true|ready_for_apply=true|safe_to_apply_production=true|safe_to_apply_remote=true" -Code "compat_manifest_unsafe"
+Assert-Contains -Text $compatManifestText -Pattern "ready_for_execution=false" -Code "compat_manifest_ready_missing"
+Assert-Contains -Text $compatManifestText -Pattern "ready_for_apply=false" -Code "compat_manifest_apply_missing"
+Assert-Contains -Text $compatManifestText -Pattern "pgcrypto_control_present=true" -Code "compat_manifest_pgcrypto_missing"
+Assert-Contains -Text $compatManifestText -Pattern "extension_strategy=INSTALL_EXTENSION_LOCAL" -Code "compat_manifest_extension_strategy_missing"
+Assert-Contains -Text $compatManifestText -Pattern "extension_count=1" -Code "compat_manifest_extension_count_missing"
+Assert-Contains -Text $compatManifestText -Pattern "unresolved_dependency_count=0" -Code "compat_manifest_unresolved_count_invalid"
+Assert-Contains -Text $compatManifestText -Pattern "compatibility_strategy_complete=true" -Code "compat_manifest_strategy_incomplete"
+if (@([regex]::Matches($compatSqlText, "(?im)^\s*CREATE\s+EXTENSION\b")).Count -ne 1) {
+  Fail -Code "compat_sql_extension_count_invalid"
+}
+Assert-Contains -Text $compatSqlText -Pattern "(?im)^\s*CREATE\s+EXTENSION\s+pgcrypto\s+WITH\s+SCHEMA\s+extensions\s*;" -Code "compat_sql_pgcrypto_statement_missing"
+Assert-NotContains -Text $compatSqlText -Pattern "(?im)^\s*CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\b|CREATE\s+FUNCTION\s+(extensions\.)?gen_random_uuid|WITH\s+SCHEMA\s+public" -Code "compat_sql_extension_statement_invalid"
+Assert-NotContains -Text $compatSql -Pattern "\\supabase\\migrations\\" -Code "compat_preflight_inside_migrations"
+$compatAstTokensForCommands = $null
+$compatAstErrorsForCommands = $null
+$compatAstForCommands = [System.Management.Automation.Language.Parser]::ParseFile($compatValidator, [ref]$compatAstTokensForCommands, [ref]$compatAstErrorsForCommands)
+$compatAstCommands = @($compatAstForCommands.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
+foreach ($compatCommand in $compatAstCommands) {
+  $compatCommandName = $compatCommand.GetCommandName()
+  if (@("psql","initdb","pg_ctl","createdb","dropdb","pg_restore","pg_dump","pg_isready","docker","supabase") -contains $compatCommandName) {
+    Fail -Code "compat_validator_forbidden_tool"
+  }
+}
 
 foreach ($code in @(
     "postgres_tools_missing",
+    "postgres_package_incomplete",
+    "postgres_bki_missing",
+    "pgcrypto_control_missing",
+    "pgcrypto_library_missing",
     "postgres_major_invalid",
     "port_invalid",
     "port_reserved",
@@ -172,6 +217,16 @@ foreach ($line in @(
     "human_approval_required_for_apply=true",
     "human_approval_required_for_destroy=true",
     "destroy_requires_separate_action=true"
+    "local_compat_preflight_valid="
+    "local_compat_preflight_ready_for_execution="
+    "local_compat_preflight_human_review_required="
+    "local_compat_preflight_extension_strategy="
+    "local_compat_preflight_unresolved_dependency_count="
+    "compatibility_strategy_complete="
+    "complete_postgres_package="
+    "postgres_bki_present="
+    "pgcrypto_control_present="
+    "pgcrypto_library_present="
   )) {
   Assert-Contains -Text $text -Pattern ([regex]::Escape($line)) -Code ("plan_output_missing_" + ($line -replace "[^a-z_]", ""))
 }
@@ -182,6 +237,13 @@ foreach ($needle in @(
     "auth.users",
     "storage.objects",
     "extensions.gen_random_uuid",
+    "preflight local",
+    "compatibilidad minima",
+    "Auth no funcional",
+    "Storage no funcional",
+    "Realtime no funcional",
+    "cron no funcional",
+    "Apply continua bloqueado",
     "GRANT",
     "REVOKE",
     "FullTest no destruye",
@@ -199,6 +261,18 @@ foreach ($expectedLine in @(
     "ready_for_apply=false",
     "ready_for_verify=false",
     "ready_for_destroy=false",
+    "postgres_major=17",
+    "postgres_version=17.10",
+    "complete_postgres_package=true",
+    "postgres_bki_present=true",
+    "pgcrypto_control_present=true",
+    "pgcrypto_library_present=true",
+    "local_compat_preflight_valid=true",
+    "local_compat_preflight_extension_strategy=INSTALL_EXTENSION_LOCAL",
+    "local_compat_preflight_unresolved_dependency_count=0",
+    "local_compat_preflight_ready_for_execution=false",
+    "local_compat_preflight_human_review_required=true",
+    "compatibility_strategy_complete=true",
     "grant_revoke_source_counts_only=true",
     "restored_acl_semantic_verification_required=true",
     "human_approval_required_for_create=true",
@@ -216,6 +290,9 @@ if (-not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match 
     -not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "storage.objects") -or
     -not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "extensions.gen_random_uuid")) {
   Fail -Code "dependency_names_missing"
+}
+if (-not (($planOutput | Where-Object { $_ -like "local_compat_preflight_dependency_names=*" }) -match "extensions.gen_random_uuid")) {
+  Fail -Code "compat_dependency_names_missing"
 }
 
 Assert-ToolFailure -Arguments @("-Action","Create") -ExpectedReason "action_not_approved" -Code "create_not_blocked"

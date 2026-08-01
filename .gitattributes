@@ -1,1 +1,2 @@
 scripts/staging/baseline-candidate/public-schema-baseline.candidate.sql -text
+scripts/staging/isolated-postgres-baseline-test/local-compat-preflight.candidate.sql -text

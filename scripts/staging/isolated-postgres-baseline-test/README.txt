@@ -8,9 +8,9 @@ Alcance aprobado ahora
 
 Solo la accion Plan esta preparada para ejecutarse en esta fase. Ninguna accion distinta de Plan esta aprobada todavia.
 
-ready_for_create no equivale a autorizacion humana. Solo indica que las herramientas, el puerto, la ruta, los nombres y la baseline pasan controles locales de preparacion.
+ready_for_create no equivale a autorizacion humana. Solo indica que las herramientas, el puerto, la ruta, los nombres, la baseline, el paquete PostgreSQL completo y el preflight local pasan controles locales de preparacion.
 
-Apply permanece bloqueado por dependencias hasta que exista una estrategia local aprobada.
+Apply permanece bloqueado aunque la estrategia local de compatibilidad este completa.
 
 Acciones
 
@@ -18,7 +18,7 @@ Plan: solo lectura. Valida herramientas, puerto, nombres, DataRoot futuro, basel
 
 Create: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta y crear un cluster local temporal.
 
-Apply: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta, preflight local aprobado y base vacia.
+Apply: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta, preflight local aprobado, base vacia y autorizacion humana explicita.
 
 Verify: bloqueada en esta version. En una fase futura debera validar estado restaurado mediante consultas controladas.
 
@@ -48,6 +48,14 @@ El usuario administrador local futuro queda definido como vc_isolated_admin.
 
 No se deben usar postgres, service_role, anon, authenticated ni el usuario de Windows como administrador de la prueba.
 
+Paquete PostgreSQL local
+
+El paquete PostgreSQL completo esperado se resuelve dinamicamente bajo:
+
+LOCALAPPDATA\VotoClaro\PostgreSQL\17.10-complete
+
+La herramienta exige binarios, share\postgres.bki, share\extension\pgcrypto.control y lib\pgcrypto.dll. Una instalacion parcial debe ser rechazada aunque exista postgres.exe.
+
 Dependencias tecnicas detectadas
 
 Roles: anon, authenticated, postgres, service_role.
@@ -60,11 +68,15 @@ Objeto Storage: storage.objects.
 
 Funcion externa: extensions.gen_random_uuid.
 
-Estrategia pendiente
+Estrategia local candidata
 
-La compatibilidad local debe prepararse en una fase futura mediante un preflight temporal exclusivo del cluster local. No debe ubicarse en supabase/migrations, no debe modificar la baseline, no debe crear datos y no debe reutilizarse en produccion.
+La compatibilidad local se prepara mediante un preflight temporal exclusivo del cluster local. No debe ubicarse en supabase/migrations, no debe modificar la baseline, no debe crear datos y no debe reutilizarse en produccion.
 
-Las estrategias posibles son PRECREATE_ROLE_LOCAL, PRECREATE_EMPTY_SCHEMA_LOCAL, CREATE_MINIMAL_STUB_LOCAL y REQUIRES_MANUAL_REVIEW. No se deben implementar stubs automaticamente sin aprobacion explicita.
+Las estrategias aplicadas son PRECREATE_ROLE_LOCAL, PRECREATE_EMPTY_SCHEMA_LOCAL, CREATE_MINIMAL_STUB_LOCAL e INSTALL_EXTENSION_LOCAL.
+
+pgcrypto esta disponible en el paquete PostgreSQL completo bajo LOCALAPPDATA. La dependencia extensions.gen_random_uuid se resuelve mediante CREATE EXTENSION pgcrypto WITH SCHEMA extensions en el preflight candidato, sin wrapper manual y sin IF NOT EXISTS.
+
+unresolved_dependency_count=0 indica que la estrategia tecnica candidata esta completa; no autoriza Create ni Apply.
 
 GRANT, REVOKE y ACL
 
@@ -93,3 +105,45 @@ La baseline candidata sigue sin ser migration activa.
 No contiene datos ni seeds.
 
 Permanece fuera de supabase/migrations.
+
+Preflight local de compatibilidad
+
+El preflight local candidato es un archivo SQL separado, revisable y exclusivo para un futuro cluster PostgreSQL local aislado. No es migration, no pertenece a produccion, no pertenece a staging remoto y no debe ejecutarse en esta fase.
+
+Su objetivo es preparar compatibilidad minima para que una restauracion futura de la baseline pueda avanzar en PostgreSQL puro. No crea servicios Supabase reales.
+
+El preflight sigue candidate.
+
+ready_for_execution=false.
+
+ready_for_apply=false.
+
+Compatibilidad minima
+
+Roles simulados: anon, authenticated, postgres y service_role. Se declaran como roles locales NOLOGIN sin privilegios administrativos.
+
+Schemas simulados: auth, storage y extensions.
+
+Tablas stub vacias:
+
+auth.users: solo incluye la columna id, porque la baseline la referencia como clave externa.
+
+storage.objects: tabla vacia por construccion, porque la baseline referencia la relacion pero no requiere columnas para parsear el artefacto.
+
+Limitaciones
+
+Auth no funcional.
+
+Storage no funcional.
+
+Realtime no funcional.
+
+cron no funcional.
+
+PostgreSQL puro todavia no valida Auth, Storage, Realtime o cron funcionales.
+
+El preflight y la baseline siguen sin autorizacion de ejecucion.
+
+Apply continua bloqueado.
+
+La siguiente fase debe ser revision semantica del preflight local candidato antes de cualquier Create o Apply.

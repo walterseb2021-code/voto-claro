@@ -2,7 +2,7 @@
 param(
   [ValidateSet("Plan","Create","Apply","Verify","Destroy","FullTest")]
   [string]$Action = "Plan",
-  [string]$PostgresBin = "C:\Program Files\PostgreSQL\17\bin",
+  [string]$PostgresBin = (Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL\17.10-complete\bin"),
   [int]$Port = 55432,
   [string]$ClusterName = "vc_staging_baseline_test_local",
   [string]$DatabaseName = "vc_staging_baseline_test_db",
@@ -28,6 +28,10 @@ $script:RequiredConfirmations = @{
 }
 $script:SafeCodes = @(
   "postgres_tools_missing",
+  "postgres_package_incomplete",
+  "postgres_bki_missing",
+  "pgcrypto_control_missing",
+  "pgcrypto_library_missing",
   "postgres_major_invalid",
   "port_invalid",
   "port_reserved",
@@ -344,10 +348,35 @@ function Get-ToolPath {
   return Join-Path $BinRoot ($ToolName + ".exe")
 }
 
-function Assert-PostgresTools {
+function Get-PostgresPackageInfo {
   param([Parameter(Mandatory = $true)][string]$BinRoot)
   Assert-SafeParameterText -Value $BinRoot -Code "postgres_tools_missing"
   $binFull = [System.IO.Path]::GetFullPath($BinRoot)
+  $root = [System.IO.Path]::GetFullPath((Join-Path $binFull ".."))
+  $share = Join-Path $root "share"
+  $lib = Join-Path $root "lib"
+  $postgresBki = Join-Path $share "postgres.bki"
+  $pgcryptoControl = Join-Path $share "extension\pgcrypto.control"
+  $pgcryptoLibrary = Join-Path $lib "pgcrypto.dll"
+  $complete = (Test-Path -LiteralPath $postgresBki -PathType Leaf) -and
+    (Test-Path -LiteralPath $pgcryptoControl -PathType Leaf) -and
+    (Test-Path -LiteralPath $pgcryptoLibrary -PathType Leaf)
+  return [pscustomobject]@{
+    Root = $root
+    Bin = $binFull
+    Complete = $complete
+    PostgresBkiPresent = (Test-Path -LiteralPath $postgresBki -PathType Leaf)
+    PgcryptoControlPresent = (Test-Path -LiteralPath $pgcryptoControl -PathType Leaf)
+    PgcryptoLibraryPresent = (Test-Path -LiteralPath $pgcryptoLibrary -PathType Leaf)
+    Major = "17"
+    Version = "17.10"
+  }
+}
+
+function Assert-PostgresTools {
+  param([Parameter(Mandatory = $true)][string]$BinRoot)
+  $package = Get-PostgresPackageInfo -BinRoot $BinRoot
+  $binFull = $package.Bin
   $required = @("initdb","pg_ctl","postgres","psql","createdb","dropdb","pg_isready")
   foreach ($tool in $required) {
     $path = Get-ToolPath -BinRoot $binFull -ToolName $tool
@@ -359,9 +388,14 @@ function Assert-PostgresTools {
       Throw-SafeError -Code "postgres_tools_missing"
     }
   }
-  if ($binFull -notmatch "\\PostgreSQL\\17\\bin$") {
+  if ($binFull -notmatch "\\VotoClaro\\PostgreSQL\\17\.10-complete\\bin$") {
     Throw-SafeError -Code "postgres_major_invalid"
   }
+  if (-not $package.PostgresBkiPresent) { Throw-SafeError -Code "postgres_bki_missing" }
+  if (-not $package.PgcryptoControlPresent) { Throw-SafeError -Code "pgcrypto_control_missing" }
+  if (-not $package.PgcryptoLibraryPresent) { Throw-SafeError -Code "pgcrypto_library_missing" }
+  if (-not $package.Complete) { Throw-SafeError -Code "postgres_package_incomplete" }
+  return $package
 }
 
 function Test-LocalServerDetected {
@@ -408,6 +442,48 @@ function Invoke-BaselineValidator {
   return $true
 }
 
+function Invoke-LocalCompatPreflightValidator {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot)
+  $validator = Join-Path $RepoRoot "scripts\staging\isolated-postgres-baseline-test\Validate-LocalCompatPreflightCandidate.ps1"
+  $manifest = Join-Path $RepoRoot "scripts\staging\isolated-postgres-baseline-test\local-compat-preflight.candidate.manifest.txt"
+  $result = [ordered]@{
+    Valid = $false
+    ReadyForExecution = "false"
+    HumanReviewRequired = "true"
+    CompatibilityStrategyComplete = "false"
+    DependencyNames = "none"
+    AuthStubCreated = "false"
+    StorageStubCreated = "false"
+    ExtensionStrategy = "none"
+    UnresolvedDependencyCount = "0"
+  }
+  if (-not (Test-Path -LiteralPath $validator -PathType Leaf) -or -not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+    return [pscustomobject]$result
+  }
+  $output = @(powershell -ExecutionPolicy Bypass -File $validator)
+  if ($LASTEXITCODE -ne 0 -or $output -notcontains "LOCAL_COMPAT_PREFLIGHT_CANDIDATE_VALID") {
+    return [pscustomobject]$result
+  }
+  $map = @{}
+  foreach ($line in Get-Content -LiteralPath $manifest) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    $separator = $line.IndexOf("=")
+    if ($separator -gt 0) {
+      $map[$line.Substring(0, $separator)] = $line.Substring($separator + 1)
+    }
+  }
+  $result.Valid = $true
+  $result.ReadyForExecution = $map["ready_for_execution"]
+  $result.HumanReviewRequired = $map["requires_human_review"]
+  $result.CompatibilityStrategyComplete = $(if ($map["unresolved_dependency_count"] -eq "0") { "true" } else { "false" })
+  $result.DependencyNames = $map["dependency_names"]
+  $result.AuthStubCreated = $map["auth_stub_created"]
+  $result.StorageStubCreated = $map["storage_stub_created"]
+  $result.ExtensionStrategy = $map["extension_strategy"]
+  $result.UnresolvedDependencyCount = $map["unresolved_dependency_count"]
+  return [pscustomobject]$result
+}
+
 function Get-DependencyScan {
   param([Parameter(Mandatory = $true)][string]$RepoRoot)
   $baseline = Join-Path $RepoRoot "scripts\staging\baseline-candidate\public-schema-baseline.candidate.sql"
@@ -441,7 +517,7 @@ function Get-DependencyScan {
     $knownExternalObjects = @(
       @{ Name = "auth.users"; Category = "auth_object"; Strategy = "CREATE_MINIMAL_STUB_LOCAL"; Simulate = "true" },
       @{ Name = "storage.objects"; Category = "storage_object"; Strategy = "CREATE_MINIMAL_STUB_LOCAL"; Simulate = "true" },
-      @{ Name = "extensions.gen_random_uuid"; Category = "external_function"; Strategy = "REQUIRES_MANUAL_REVIEW"; Simulate = "indeterminado" }
+      @{ Name = "extensions.gen_random_uuid"; Category = "external_function"; Strategy = "INSTALL_EXTENSION_LOCAL"; Simulate = "true" }
     )
     foreach ($item in $knownExternalObjects) {
       $count = [regex]::Matches($text, [regex]::Escape($item.Name)).Count
@@ -587,7 +663,7 @@ function Test-ReadyForDestroy {
 function Invoke-Plan {
   Set-Stage -Stage "plan"
   $repoRoot = Get-RepoRoot
-  Assert-PostgresTools -BinRoot $PostgresBin
+  $postgresPackage = Assert-PostgresTools -BinRoot $PostgresBin
   Assert-LocalAdminUser -Value $script:LocalAdminUser
   Assert-Port -Value $Port
   Assert-ClusterName -Value $ClusterName
@@ -598,13 +674,19 @@ function Invoke-Plan {
   $portAvailable = Test-PortAvailable -Value $Port
   $localServerDetected = Test-LocalServerDetected
   $dependencies = Get-DependencyScan -RepoRoot $repoRoot
+  $localCompat = Invoke-LocalCompatPreflightValidator -RepoRoot $repoRoot
   $readyForCreate = $baselineValid -and $portAvailable -and (-not $localServerDetected)
   $readyForApply = $false
   $readyForVerify = $false
   $readyForDestroy = Test-ReadyForDestroy -ResolvedDataRoot $resolvedDataRoot -RepoRoot $repoRoot
 
   Write-Output "ISOLATED_BASELINE_TEST_PLAN_OK"
-  Write-Output "postgres_major=17"
+  Write-Output "postgres_major=$($postgresPackage.Major)"
+  Write-Output "postgres_version=$($postgresPackage.Version)"
+  Write-Output "complete_postgres_package=$(([string]$postgresPackage.Complete).ToLowerInvariant())"
+  Write-Output "postgres_bki_present=$(([string]$postgresPackage.PostgresBkiPresent).ToLowerInvariant())"
+  Write-Output "pgcrypto_control_present=$(([string]$postgresPackage.PgcryptoControlPresent).ToLowerInvariant())"
+  Write-Output "pgcrypto_library_present=$(([string]$postgresPackage.PgcryptoLibraryPresent).ToLowerInvariant())"
   Write-Output "host=$script:AllowedHost"
   Write-Output "port=$Port"
   Write-Output "cluster_name_valid=true"
@@ -616,6 +698,15 @@ function Invoke-Plan {
   Write-Output "required_dependencies_count=$($dependencies.RequiredDependenciesCount)"
   Write-Output "dependency_names=$($dependencies.DependencyNames)"
   Write-Output "missing_dependency_categories=$($dependencies.MissingDependencyCategories)"
+  Write-Output "local_compat_preflight_valid=$(([string]$localCompat.Valid).ToLowerInvariant())"
+  Write-Output "local_compat_preflight_dependency_names=$($localCompat.DependencyNames)"
+  Write-Output "local_compat_preflight_auth_stub_created=$($localCompat.AuthStubCreated)"
+  Write-Output "local_compat_preflight_storage_stub_created=$($localCompat.StorageStubCreated)"
+  Write-Output "local_compat_preflight_extension_strategy=$($localCompat.ExtensionStrategy)"
+  Write-Output "local_compat_preflight_unresolved_dependency_count=$($localCompat.UnresolvedDependencyCount)"
+  Write-Output "local_compat_preflight_ready_for_execution=$($localCompat.ReadyForExecution)"
+  Write-Output "local_compat_preflight_human_review_required=$($localCompat.HumanReviewRequired)"
+  Write-Output "compatibility_strategy_complete=$($localCompat.CompatibilityStrategyComplete)"
   Write-Output "ready_for_create=$(([string]$readyForCreate).ToLowerInvariant())"
   Write-Output "ready_for_apply=$(([string]$readyForApply).ToLowerInvariant())"
   Write-Output "ready_for_verify=$(([string]$readyForVerify).ToLowerInvariant())"
