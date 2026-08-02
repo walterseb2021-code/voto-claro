@@ -102,6 +102,20 @@ Create y CleanupPartialCreate comparan tokens con StringComparison.Ordinal. El t
 
 No volver a ejecutar CleanupPartialCreate hasta auditar y versionar esta correccion. El estado parcial queda intacto. No se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
 
+Incidente cleanup_preflight / cleanup_failed
+
+Despues de versionar la autorizacion, una ejecucion autorizada de CleanupPartialCreate avanzo hasta cleanup_preflight y fallo con cleanup_failed. El estado parcial conocido quedo intacto: IsolatedRoot e InstanceRoot siguieron presentes y no se observo eliminacion parcial.
+
+La causa exacta no era identificable porque el catch generico ocultaba la excepcion real, el substage preciso y el tipo seguro de fallo.
+
+CleanupPartialCreate ahora usa substages cerrados para layout, ambiente, Git, rutas, atributos, estado exacto, firma inicial, actividad, revalidacion, borrado de instancia, borrado de raiz y postcheck.
+
+Los reason de cleanup son codigos cerrados. Las excepciones no seguras se clasifican mediante una allowlist de exception_type y nunca imprimen mensajes, rutas, SID, usuario, secretos, stack trace ni objetos completos.
+
+Directory.Delete de InstanceRoot solo puede ejecutarse con stage cleanup_delete_instance. Directory.Delete de IsolatedRoot solo puede ejecutarse con stage cleanup_delete_root. Ningun borrado ocurre durante substages de preflight o revalidacion.
+
+No volver a intentar CleanupPartialCreate hasta auditar y versionar esta instrumentacion. No se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
+
 Apply: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta, preflight local aprobado, base vacia y autorizacion humana explicita.
 
 Verify: bloqueada en esta version. En una fase futura debera validar estado restaurado mediante consultas controladas.

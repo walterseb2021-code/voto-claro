@@ -19,6 +19,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $script:CurrentStage = "initialization"
+$script:CurrentExceptionType = $null
 $script:AllowedHost = "127.0.0.1"
 $script:MarkerFileName = "VC_ISOLATED_BASELINE_TEST.marker"
 $script:ClusterPrefix = "vc_staging_baseline_test_"
@@ -63,6 +64,21 @@ $script:SafeCodes = @(
   "cleanup_repo_not_clean",
   "cleanup_branch_not_allowed",
   "cleanup_head_not_synced",
+  "cleanup_layout_failed",
+  "cleanup_git_invalid",
+  "cleanup_paths_invalid",
+  "cleanup_attributes_invalid",
+  "cleanup_reparse_detected",
+  "cleanup_enumeration_denied",
+  "cleanup_enumeration_failed",
+  "cleanup_instance_not_empty",
+  "cleanup_signature_failed",
+  "cleanup_activity_detected",
+  "cleanup_state_changed",
+  "cleanup_delete_instance_failed",
+  "cleanup_delete_root_failed",
+  "cleanup_postcheck_failed",
+  "cleanup_preflight_unknown",
   "cleanup_environment_invalid",
   "cleanup_postgres_package_incomplete",
   "cleanup_path_validation_failed",
@@ -80,7 +96,6 @@ $script:SafeCodes = @(
   "cleanup_parent_not_empty",
   "cleanup_parent_delete_failed",
   "cleanup_partial_success_parent_remains",
-  "cleanup_failed",
   "repo_not_clean",
   "branch_not_allowed",
   "git_repository_invalid",
@@ -199,6 +214,147 @@ function Get-SafeReason {
     $depth += 1
   }
   return "unexpected_failure"
+}
+
+function Get-CleanupSafeFailure {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Stage,
+    [AllowNull()][object]$Exception
+  )
+  $allowedReasons = @(
+    "cleanup_layout_failed",
+    "cleanup_environment_invalid",
+    "cleanup_git_invalid",
+    "cleanup_paths_invalid",
+    "cleanup_attributes_invalid",
+    "cleanup_reparse_detected",
+    "cleanup_enumeration_denied",
+    "cleanup_enumeration_failed",
+    "cleanup_unexpected_content",
+    "cleanup_instance_not_empty",
+    "cleanup_signature_failed",
+    "cleanup_activity_detected",
+    "cleanup_state_changed",
+    "cleanup_delete_instance_failed",
+    "cleanup_delete_root_failed",
+    "cleanup_postcheck_failed",
+    "cleanup_preflight_unknown"
+  )
+  $allowedStages = @(
+    "cleanup_layout",
+    "cleanup_environment",
+    "cleanup_git",
+    "cleanup_paths",
+    "cleanup_attributes",
+    "cleanup_exact_state",
+    "cleanup_signature_initial",
+    "cleanup_activity",
+    "cleanup_revalidate_signature",
+    "cleanup_revalidate_state",
+    "cleanup_revalidate_activity",
+    "cleanup_delete_instance",
+    "cleanup_delete_root",
+    "cleanup_postcheck"
+  )
+  $safeReason = $null
+  $current = $Exception
+  $depth = 0
+  while ($null -ne $current -and $depth -lt 5) {
+    $message = $null
+    if ($current -is [System.Exception]) {
+      $message = [string]$current.Message
+    } elseif ($null -ne $current.PSObject.Properties["Message"]) {
+      $message = [string]$current.Message
+    }
+    if ($null -ne $message -and $message -match "^VC_SAFE_REASON::([a-z0-9_]+)$") {
+      if ($allowedReasons -contains $Matches[1]) {
+        $safeReason = $Matches[1]
+      }
+      break
+    }
+    $current = $(if ($current -is [System.Exception]) { $current.InnerException } elseif ($null -ne $current.PSObject.Properties["InnerException"]) { $current.InnerException } else { $null })
+    $depth += 1
+  }
+  $safeStage = $(if ($allowedStages -contains $Stage) { $Stage } else { "cleanup_preflight_unknown" })
+  if ($null -ne $safeReason) {
+    return [pscustomobject]@{
+      Reason = $safeReason
+      ExceptionType = $null
+      SafeSubstage = $safeStage
+    }
+  }
+  $rawType = "UnknownException"
+  if ($null -ne $Exception) {
+    if ($null -ne $Exception.PSObject.Properties["SimulatedTypeName"]) {
+      $rawType = [string]$Exception.SimulatedTypeName
+      if ($rawType -eq "MethodInvocationException" -and
+          $null -ne $Exception.PSObject.Properties["InnerException"] -and
+          $null -ne $Exception.InnerException) {
+        $rawType = $Exception.InnerException.GetType().Name
+      }
+    } else {
+      $rawType = $Exception.GetType().Name
+      if ($rawType -eq "MethodInvocationException" -and $null -ne $Exception.InnerException) {
+        $rawType = $Exception.InnerException.GetType().Name
+      }
+    }
+  }
+  $exceptionType = switch ($rawType) {
+    "UnauthorizedAccessException" { "UnauthorizedAccessException"; break }
+    "IOException" { "IOException"; break }
+    "DirectoryNotFoundException" { "DirectoryNotFoundException"; break }
+    "SecurityException" { "SecurityException"; break }
+    "InvalidOperationException" { "InvalidOperationException"; break }
+    "ArgumentException" { "ArgumentException"; break }
+    "MethodInvocationException" { "MethodInvocationException"; break }
+    default { "UnknownException" }
+  }
+  $reason = switch ($safeStage) {
+    "cleanup_layout" { "cleanup_layout_failed"; break }
+    "cleanup_environment" { "cleanup_environment_invalid"; break }
+    "cleanup_git" { "cleanup_git_invalid"; break }
+    "cleanup_paths" {
+      if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" } else { "cleanup_paths_invalid" }
+      break
+    }
+    "cleanup_attributes" {
+      if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" } else { "cleanup_attributes_invalid" }
+      break
+    }
+    "cleanup_exact_state" {
+      if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" }
+      elseif ($exceptionType -eq "DirectoryNotFoundException") { "cleanup_paths_invalid" }
+      else { "cleanup_enumeration_failed" }
+      break
+    }
+    "cleanup_signature_initial" {
+      if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" }
+      elseif ($exceptionType -eq "DirectoryNotFoundException") { "cleanup_state_changed" }
+      else { "cleanup_signature_failed" }
+      break
+    }
+    "cleanup_activity" { "cleanup_activity_detected"; break }
+    "cleanup_revalidate_signature" {
+      if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" }
+      elseif ($exceptionType -eq "DirectoryNotFoundException") { "cleanup_state_changed" }
+      else { "cleanup_signature_failed" }
+      break
+    }
+    "cleanup_revalidate_state" {
+      if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" } else { "cleanup_state_changed" }
+      break
+    }
+    "cleanup_revalidate_activity" { "cleanup_activity_detected"; break }
+    "cleanup_delete_instance" { "cleanup_delete_instance_failed"; break }
+    "cleanup_delete_root" { "cleanup_delete_root_failed"; break }
+    "cleanup_postcheck" { "cleanup_postcheck_failed"; break }
+    default { "cleanup_preflight_unknown" }
+  }
+  return [pscustomobject]@{
+    Reason = $reason
+    ExceptionType = $exceptionType
+    SafeSubstage = $safeStage
+  }
 }
 
 function Get-RepoRoot {
@@ -1199,9 +1355,9 @@ function Get-CleanupDirectoryEntries {
   try {
     return @([System.IO.Directory]::EnumerateFileSystemEntries($PathValue))
   } catch [System.UnauthorizedAccessException] {
-    Throw-SafeError -Code "cleanup_access_denied"
+    Throw-SafeError -Code "cleanup_enumeration_denied"
   } catch {
-    Throw-SafeError -Code "cleanup_access_denied"
+    Throw-SafeError -Code "cleanup_enumeration_failed"
   }
 }
 
@@ -1213,11 +1369,11 @@ function Assert-CleanupDirectorySafe {
     }
     $item = Get-Item -LiteralPath $PathValue -Force
     if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-      Throw-SafeError -Code "cleanup_reparse_point_detected"
+      Throw-SafeError -Code "cleanup_reparse_detected"
     }
   } catch {
     if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
-    Throw-SafeError -Code "cleanup_access_denied"
+    Throw-SafeError -Code "cleanup_attributes_invalid"
   }
 }
 
@@ -1226,7 +1382,7 @@ function Assert-CleanupEntrySafe {
   try {
     $item = Get-Item -LiteralPath $PathValue -Force
     if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-      Throw-SafeError -Code "cleanup_reparse_point_detected"
+      Throw-SafeError -Code "cleanup_reparse_detected"
     }
     if (($item.Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0 -or
         ($item.Attributes -band [System.IO.FileAttributes]::System) -ne 0) {
@@ -1234,7 +1390,7 @@ function Assert-CleanupEntrySafe {
     }
   } catch {
     if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
-    Throw-SafeError -Code "cleanup_access_denied"
+    Throw-SafeError -Code "cleanup_attributes_invalid"
   }
 }
 
@@ -1267,7 +1423,7 @@ function Assert-CleanupExactPartialState {
   $instanceEntries = Get-CleanupDirectoryEntries -PathValue $Layout.InstanceRoot
   foreach ($entry in $instanceEntries) {
     Assert-CleanupEntrySafe -PathValue $entry
-    Throw-SafeError -Code "cleanup_unexpected_content"
+    Throw-SafeError -Code "cleanup_instance_not_empty"
   }
   $isolatedEntries = Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot
   if ($isolatedEntries.Count -ne 1) {
@@ -1345,38 +1501,59 @@ function Invoke-CleanupPartialCreate {
     -ExpectedCleanupApprovalToken $script:ExpectedCleanupApprovalToken `
     -ConfirmCreate:$ConfirmCreate `
     -ProvidedCreateApprovalToken $CreateApprovalToken
-  $layout = Get-InstanceLayout
   try {
-    Set-Stage -Stage "cleanup_preflight"
-    $repoRoot = Get-RepoRoot
-    [void](Assert-CleanupEnvironment)
-    Assert-CleanupGitReady
-    Assert-CleanupPathFixed -Layout $layout
+    Set-Stage -Stage "cleanup_layout"
+    $layout = Get-InstanceLayout
+
+    Set-Stage -Stage "cleanup_environment"
     $package = Assert-CleanupEnvironment
+
+    Set-Stage -Stage "cleanup_git"
+    $repoRoot = Get-RepoRoot
+    [void]$repoRoot
+    Assert-CleanupGitReady
+
+    Set-Stage -Stage "cleanup_paths"
+    Assert-CleanupPathFixed -Layout $layout
+
+    Set-Stage -Stage "cleanup_attributes"
+    Assert-CleanupDirectorySafe -PathValue $layout.IsolatedRoot
+    Assert-CleanupDirectorySafe -PathValue $layout.InstanceRoot
+
+    Set-Stage -Stage "cleanup_exact_state"
     Assert-CleanupExactPartialState -Layout $layout
+
+    Set-Stage -Stage "cleanup_signature_initial"
     $initialStateSignature = Get-CleanupPartialStateSignature -Layout $layout
+
+    Set-Stage -Stage "cleanup_activity"
     Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
 
-    Set-Stage -Stage "cleanup_revalidate"
+    Set-Stage -Stage "cleanup_revalidate_signature"
     Assert-CleanupPathFixed -Layout $layout
     $revalidatedStateSignature = Get-CleanupPartialStateSignature -Layout $layout
     if (-not [string]::Equals($initialStateSignature, $revalidatedStateSignature, [System.StringComparison]::Ordinal)) {
-      Throw-SafeError -Code "cleanup_state_changed_during_validation"
+      Throw-SafeError -Code "cleanup_state_changed"
     }
+    Set-Stage -Stage "cleanup_revalidate_state"
     Assert-CleanupExactPartialState -Layout $layout
+
+    Set-Stage -Stage "cleanup_revalidate_activity"
     Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
 
     Set-Stage -Stage "cleanup_delete_instance"
     try {
       [System.IO.Directory]::Delete($layout.InstanceRoot, $false)
     } catch {
-      Throw-SafeError -Code "cleanup_instance_delete_failed"
-    }
-    if (Test-Path -LiteralPath $layout.InstanceRoot) {
-      Throw-SafeError -Code "cleanup_instance_still_exists"
+      Throw-SafeError -Code "cleanup_delete_instance_failed"
     }
 
-    Set-Stage -Stage "cleanup_delete_parent"
+    Set-Stage -Stage "cleanup_postcheck"
+    if (Test-Path -LiteralPath $layout.InstanceRoot) {
+      Throw-SafeError -Code "cleanup_postcheck_failed"
+    }
+
+    Set-Stage -Stage "cleanup_delete_root"
     Assert-CleanupDirectorySafe -PathValue $layout.IsolatedRoot
     $parentEntries = Get-CleanupDirectoryEntries -PathValue $layout.IsolatedRoot
     if ($parentEntries.Count -ne 0) {
@@ -1386,10 +1563,11 @@ function Invoke-CleanupPartialCreate {
     try {
       [System.IO.Directory]::Delete($layout.IsolatedRoot, $false)
     } catch {
-      Throw-SafeError -Code "cleanup_partial_success_parent_remains"
+      Throw-SafeError -Code "cleanup_delete_root_failed"
     }
+    Set-Stage -Stage "cleanup_postcheck"
     if (Test-Path -LiteralPath $layout.IsolatedRoot) {
-      Throw-SafeError -Code "cleanup_parent_delete_failed"
+      Throw-SafeError -Code "cleanup_postcheck_failed"
     }
 
     Write-Output "PARTIAL_CREATE_CLEANUP_OK"
@@ -1402,8 +1580,10 @@ function Invoke-CleanupPartialCreate {
     Write-Output "package_directory_modified=false"
     Write-Output "ready_for_create_recheck=true"
   } catch {
-    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
-    Throw-SafeError -Code "cleanup_failed"
+    $failure = Get-CleanupSafeFailure -Stage $script:CurrentStage -Exception $_.Exception
+    Set-Stage -Stage $failure.SafeSubstage
+    $script:CurrentExceptionType = $failure.ExceptionType
+    Throw-SafeError -Code $failure.Reason
   }
 }
 
@@ -2867,6 +3047,14 @@ function Invoke-Plan {
   Write-Output "cleanup_input_token_preserved=true"
   Write-Output "cleanup_positive_authorization_selftest=true"
   Write-Output "create_positive_authorization_selftest=true"
+  Write-Output "cleanup_safe_instrumentation=true"
+  Write-Output "cleanup_substage_model=CLOSED"
+  Write-Output "cleanup_reason_model=CLOSED"
+  Write-Output "cleanup_exception_type_model=ALLOWLIST"
+  Write-Output "cleanup_generic_failure_removed=true"
+  Write-Output "cleanup_delete_stage_guard=true"
+  Write-Output "cleanup_safe_reason_filter=true"
+  Write-Output "cleanup_real_execution_tested=false"
   Write-Output "cleanup_action_present=true"
   Write-Output "cleanup_authorized=false"
   Write-Output "cleanup_execution_blocked=true"
@@ -2938,6 +3126,9 @@ try {
   Write-Output "ISOLATED_BASELINE_TEST_INVALID"
   Write-Output "stage=$script:CurrentStage"
   Write-Output "reason=$reason"
+  if (-not [string]::IsNullOrWhiteSpace($script:CurrentExceptionType)) {
+    Write-Output "exception_type=$script:CurrentExceptionType"
+  }
   Write-Output "production_connection_used=false"
   Write-Output "sql_executed=false"
   exit 1
