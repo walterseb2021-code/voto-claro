@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan","Create","Apply","Verify","Destroy","FullTest")]
+  [ValidateSet("Plan","Create","CleanupPartialCreate","Apply","Verify","Destroy","FullTest")]
   [string]$Action = "Plan",
   [string]$PostgresBin = (Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL\17.10-complete\bin"),
   [int]$Port = 55432,
@@ -9,6 +9,8 @@ param(
   [string]$DataRoot,
   [switch]$ConfirmCreate,
   [string]$CreateApprovalToken,
+  [switch]$ConfirmCleanupPartialCreate,
+  [string]$CleanupApprovalToken,
   [switch]$KeepOnSuccess,
   [switch]$SelfTest
 )
@@ -23,6 +25,7 @@ $script:ClusterPrefix = "vc_staging_baseline_test_"
 $script:DatabasePrefix = "vc_staging_baseline_test_"
 $script:LocalAdminUser = "vc_isolated_admin"
 $script:CreateApprovalToken = "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
+$script:CleanupApprovalToken = "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
 $script:PostgresPackageRelativePath = "VotoClaro\PostgreSQL\17.10-complete"
 $script:IsolatedRootRelativePath = "VotoClaro\PostgreSQL\isolated-baseline-test"
 $script:InstanceName = "pg17-port55432"
@@ -56,6 +59,28 @@ $script:SafeCodes = @(
   "port_reserved",
   "port_in_use",
   "create_not_authorized",
+  "cleanup_not_authorized",
+  "cleanup_repo_not_clean",
+  "cleanup_branch_not_allowed",
+  "cleanup_head_not_synced",
+  "cleanup_environment_invalid",
+  "cleanup_postgres_package_incomplete",
+  "cleanup_path_validation_failed",
+  "cleanup_reparse_point_detected",
+  "cleanup_unexpected_content",
+  "cleanup_access_denied",
+  "cleanup_postgres_process_detected",
+  "cleanup_postgres_process_ambiguous",
+  "cleanup_postgresql_service_running",
+  "cleanup_port_in_use",
+  "cleanup_postmaster_pid_present",
+  "cleanup_state_changed_during_validation",
+  "cleanup_instance_delete_failed",
+  "cleanup_instance_still_exists",
+  "cleanup_parent_not_empty",
+  "cleanup_parent_delete_failed",
+  "cleanup_partial_success_parent_remains",
+  "cleanup_failed",
   "repo_not_clean",
   "branch_not_allowed",
   "git_repository_invalid",
@@ -1027,6 +1052,293 @@ function Assert-CreateInstanceAbsent {
   if (Test-Path -LiteralPath $Layout.StatePath) { Throw-SafeError -Code "instance_root_exists" }
   if (Test-Path -LiteralPath $Layout.CredentialPath) { Throw-SafeError -Code "instance_root_exists" }
   if (Test-Path -LiteralPath $Layout.ServerLog) { Throw-SafeError -Code "instance_root_exists" }
+}
+
+function Assert-CleanupAuthorization {
+  if (-not $ConfirmCleanupPartialCreate) {
+    Throw-SafeError -Code "cleanup_not_authorized"
+  }
+  if ($ConfirmCreate -or -not [string]::IsNullOrWhiteSpace($CreateApprovalToken)) {
+    Throw-SafeError -Code "cleanup_not_authorized"
+  }
+  if ([string]::IsNullOrWhiteSpace($CleanupApprovalToken) -or
+      -not [string]::Equals($CleanupApprovalToken, $script:CleanupApprovalToken, [System.StringComparison]::Ordinal)) {
+    Throw-SafeError -Code "cleanup_not_authorized"
+  }
+}
+
+function Assert-CleanupGitReady {
+  $repoRoot = Get-RepoRoot
+  $branch = Invoke-GitCommand -Arguments @("branch","--show-current") -WorkingDirectory $repoRoot
+  if ($branch.ExitCode -ne 0 -or $branch.Output.Count -ne 1 -or $branch.Output[0] -ne "master") {
+    Throw-SafeError -Code "cleanup_branch_not_allowed"
+  }
+  $status = Invoke-GitCommand -Arguments @("status","--porcelain=v1","--untracked-files=all") -WorkingDirectory $repoRoot
+  if ($status.ExitCode -ne 0) {
+    Throw-SafeError -Code "cleanup_repo_not_clean"
+  }
+  if ($status.Output.Count -ne 0) {
+    Throw-SafeError -Code "cleanup_repo_not_clean"
+  }
+  $origin = Invoke-GitCommand -Arguments @("rev-parse","origin/master") -WorkingDirectory $repoRoot
+  $head = Invoke-GitCommand -Arguments @("rev-parse","HEAD") -WorkingDirectory $repoRoot
+  if ($origin.ExitCode -ne 0 -or $head.ExitCode -ne 0 -or $origin.Output.Count -ne 1 -or $head.Output.Count -ne 1 -or
+      -not [string]::Equals($origin.Output[0], $head.Output[0], [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "cleanup_head_not_synced"
+  }
+  $ancestry = Invoke-GitCommand -Arguments @("merge-base","--is-ancestor","239f291","HEAD") -WorkingDirectory $repoRoot
+  if ($ancestry.ExitCode -ne 0) {
+    Throw-SafeError -Code "cleanup_head_not_synced"
+  }
+}
+
+function Assert-CleanupEnvironment {
+  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA) -or
+      $PSVersionTable.PSEdition -ne "Desktop" -or
+      -not [Environment]::Is64BitOperatingSystem -or
+      -not [Environment]::Is64BitProcess) {
+    Throw-SafeError -Code "cleanup_environment_invalid"
+  }
+  $package = Get-PostgresPackageInfo -BinRoot $PostgresBin
+  if (-not $package.Complete -or
+      -not [string]::Equals($package.Root.TrimEnd('\'), (Get-PostgresRoot).TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "cleanup_postgres_package_incomplete"
+  }
+  return $package
+}
+
+function Assert-CleanupPathFixed {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  try {
+    $local = [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
+    $postgresParent = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL"))
+    $expectedIsolated = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA $script:IsolatedRootRelativePath))
+    $expectedInstance = [System.IO.Path]::GetFullPath((Join-Path $expectedIsolated $script:InstanceName))
+    $packageRoot = Get-PostgresRoot
+    foreach ($path in @($Layout.IsolatedRoot, $Layout.InstanceRoot)) {
+      if ([string]::IsNullOrWhiteSpace($path) -or -not [System.IO.Path]::IsPathRooted($path) -or $path.IndexOfAny([char[]]@('*','?')) -ge 0) {
+        Throw-SafeError -Code "cleanup_path_validation_failed"
+      }
+    }
+    if (-not [string]::Equals($Layout.IsolatedRoot.TrimEnd('\'), $expectedIsolated.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($Layout.InstanceRoot.TrimEnd('\'), $expectedInstance.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-IsInsideDirectory -ChildPath $Layout.IsolatedRoot -ParentPath $postgresParent) -or
+        -not [string]::Equals((Split-Path -Parent $Layout.InstanceRoot).TrimEnd('\'), $Layout.IsolatedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "cleanup_path_validation_failed"
+    }
+    foreach ($protected in @($local, (Join-Path $env:LOCALAPPDATA "VotoClaro"), $postgresParent, $packageRoot)) {
+      $protectedFull = [System.IO.Path]::GetFullPath($protected)
+      if ([string]::Equals($Layout.IsolatedRoot.TrimEnd('\'), $protectedFull.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase) -or
+          [string]::Equals($Layout.InstanceRoot.TrimEnd('\'), $protectedFull.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+        Throw-SafeError -Code "cleanup_path_validation_failed"
+      }
+    }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "cleanup_path_validation_failed"
+  }
+}
+
+function Get-CleanupDirectoryEntries {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  try {
+    return @([System.IO.Directory]::EnumerateFileSystemEntries($PathValue))
+  } catch [System.UnauthorizedAccessException] {
+    Throw-SafeError -Code "cleanup_access_denied"
+  } catch {
+    Throw-SafeError -Code "cleanup_access_denied"
+  }
+}
+
+function Assert-CleanupDirectorySafe {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  try {
+    if (-not (Test-Path -LiteralPath $PathValue -PathType Container)) {
+      Throw-SafeError -Code "cleanup_unexpected_content"
+    }
+    $item = Get-Item -LiteralPath $PathValue -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      Throw-SafeError -Code "cleanup_reparse_point_detected"
+    }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "cleanup_access_denied"
+  }
+}
+
+function Assert-CleanupEntrySafe {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  try {
+    $item = Get-Item -LiteralPath $PathValue -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      Throw-SafeError -Code "cleanup_reparse_point_detected"
+    }
+    if (($item.Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0 -or
+        ($item.Attributes -band [System.IO.FileAttributes]::System) -ne 0) {
+      Throw-SafeError -Code "cleanup_unexpected_content"
+    }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "cleanup_access_denied"
+  }
+}
+
+function Assert-CleanupExactPartialState {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  Assert-CleanupDirectorySafe -PathValue $Layout.IsolatedRoot
+  Assert-CleanupDirectorySafe -PathValue $Layout.InstanceRoot
+  foreach ($path in @(
+      $Layout.DataRoot,
+      $Layout.LogRoot,
+      $Layout.StateRoot,
+      $Layout.SecretRoot,
+      $Layout.MarkerPath,
+      $Layout.StatePath,
+      $Layout.CredentialPath,
+      $Layout.PasswordFilePath,
+      $Layout.ServerLog,
+      (Join-Path $Layout.DataRoot "postmaster.pid"),
+      (Join-Path $Layout.DataRoot "PG_VERSION"),
+      (Join-Path $Layout.DataRoot "postgresql.conf"),
+      (Join-Path $Layout.DataRoot "pg_hba.conf")
+    )) {
+    if (Test-Path -LiteralPath $path) {
+      if ($path.EndsWith("postmaster.pid", [System.StringComparison]::OrdinalIgnoreCase)) {
+        Throw-SafeError -Code "cleanup_postmaster_pid_present"
+      }
+      Throw-SafeError -Code "cleanup_unexpected_content"
+    }
+  }
+  $instanceEntries = Get-CleanupDirectoryEntries -PathValue $Layout.InstanceRoot
+  foreach ($entry in $instanceEntries) {
+    Assert-CleanupEntrySafe -PathValue $entry
+    Throw-SafeError -Code "cleanup_unexpected_content"
+  }
+  $isolatedEntries = Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot
+  if ($isolatedEntries.Count -ne 1) {
+    Throw-SafeError -Code "cleanup_unexpected_content"
+  }
+  Assert-CleanupEntrySafe -PathValue $isolatedEntries[0]
+  $onlyEntry = [System.IO.Path]::GetFullPath($isolatedEntries[0])
+  if (-not [string]::Equals($onlyEntry.TrimEnd('\'), $Layout.InstanceRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "cleanup_unexpected_content"
+  }
+}
+
+function Get-CleanupPartialStateSignature {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $isolatedEntries = @(Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot | Sort-Object)
+  $instanceEntries = @(Get-CleanupDirectoryEntries -PathValue $Layout.InstanceRoot | Sort-Object)
+  $knownPresence = @(
+    (Test-Path -LiteralPath $Layout.DataRoot),
+    (Test-Path -LiteralPath $Layout.LogRoot),
+    (Test-Path -LiteralPath $Layout.StateRoot),
+    (Test-Path -LiteralPath $Layout.SecretRoot),
+    (Test-Path -LiteralPath $Layout.MarkerPath),
+    (Test-Path -LiteralPath $Layout.StatePath),
+    (Test-Path -LiteralPath $Layout.CredentialPath),
+    (Test-Path -LiteralPath $Layout.PasswordFilePath),
+    (Test-Path -LiteralPath $Layout.ServerLog),
+    (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postmaster.pid")),
+    (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "PG_VERSION")),
+    (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postgresql.conf")),
+    (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "pg_hba.conf"))
+  )
+  return (($isolatedEntries -join "|") + "::" + ($instanceEntries -join "|") + "::" + ($knownPresence -join "|"))
+}
+
+function Assert-CleanupNoPostgresActivity {
+  param(
+    [Parameter(Mandatory = $true)][object]$Package,
+    [Parameter(Mandatory = $true)][object]$Layout
+  )
+  $evidence = Get-LocalPostgresProcessEvidence -Package $Package
+  if ($evidence.AmbiguousCount -gt 0) {
+    Throw-SafeError -Code "cleanup_postgres_process_ambiguous"
+  }
+  if ($evidence.AuthorizedCount -gt 0 -or $evidence.OtherCount -gt 0) {
+    Throw-SafeError -Code "cleanup_postgres_process_detected"
+  }
+  try {
+    $runningServices = @(Get-Service -ErrorAction Stop | Where-Object { ($_.Name -match "postgres|postgresql" -or $_.DisplayName -match "postgres|postgresql") -and $_.Status -eq "Running" })
+    if ($runningServices.Count -gt 0) {
+      Throw-SafeError -Code "cleanup_postgresql_service_running"
+    }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "cleanup_postgresql_service_running"
+  }
+  if (-not (Test-PortAvailable -Value $script:CreatePort)) {
+    Throw-SafeError -Code "cleanup_port_in_use"
+  }
+  if (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postmaster.pid") -PathType Leaf) {
+    Throw-SafeError -Code "cleanup_postmaster_pid_present"
+  }
+}
+
+function Invoke-CleanupPartialCreate {
+  Set-Stage -Stage "cleanup_authorization"
+  Assert-CleanupAuthorization
+  $layout = Get-InstanceLayout
+  try {
+    Set-Stage -Stage "cleanup_preflight"
+    $repoRoot = Get-RepoRoot
+    [void](Assert-CleanupEnvironment)
+    Assert-CleanupGitReady
+    Assert-CleanupPathFixed -Layout $layout
+    $package = Assert-CleanupEnvironment
+    Assert-CleanupExactPartialState -Layout $layout
+    $initialStateSignature = Get-CleanupPartialStateSignature -Layout $layout
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Set-Stage -Stage "cleanup_revalidate"
+    Assert-CleanupPathFixed -Layout $layout
+    $revalidatedStateSignature = Get-CleanupPartialStateSignature -Layout $layout
+    if (-not [string]::Equals($initialStateSignature, $revalidatedStateSignature, [System.StringComparison]::Ordinal)) {
+      Throw-SafeError -Code "cleanup_state_changed_during_validation"
+    }
+    Assert-CleanupExactPartialState -Layout $layout
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Set-Stage -Stage "cleanup_delete_instance"
+    try {
+      [System.IO.Directory]::Delete($layout.InstanceRoot, $false)
+    } catch {
+      Throw-SafeError -Code "cleanup_instance_delete_failed"
+    }
+    if (Test-Path -LiteralPath $layout.InstanceRoot) {
+      Throw-SafeError -Code "cleanup_instance_still_exists"
+    }
+
+    Set-Stage -Stage "cleanup_delete_parent"
+    Assert-CleanupDirectorySafe -PathValue $layout.IsolatedRoot
+    $parentEntries = Get-CleanupDirectoryEntries -PathValue $layout.IsolatedRoot
+    if ($parentEntries.Count -ne 0) {
+      Throw-SafeError -Code "cleanup_parent_not_empty"
+    }
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+    try {
+      [System.IO.Directory]::Delete($layout.IsolatedRoot, $false)
+    } catch {
+      Throw-SafeError -Code "cleanup_partial_success_parent_remains"
+    }
+    if (Test-Path -LiteralPath $layout.IsolatedRoot) {
+      Throw-SafeError -Code "cleanup_parent_delete_failed"
+    }
+
+    Write-Output "PARTIAL_CREATE_CLEANUP_OK"
+    Write-Output "isolated_root_removed=true"
+    Write-Output "instance_root_removed=true"
+    Write-Output "postgres_process_detected=false"
+    Write-Output "port_55432_listening=false"
+    Write-Output "sql_executed=false"
+    Write-Output "production_connection_used=false"
+    Write-Output "package_directory_modified=false"
+    Write-Output "ready_for_create_recheck=true"
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "cleanup_failed"
+  }
 }
 
 function Test-CreatePortAvailable {
@@ -2470,6 +2782,14 @@ function Invoke-Plan {
   Write-Output "create_authorized=false"
   Write-Output "create_execution_blocked=true"
   Write-Output "create_execution_requires_exact_approval=true"
+  Write-Output "cleanup_action_present=true"
+  Write-Output "cleanup_authorized=false"
+  Write-Output "cleanup_execution_blocked=true"
+  Write-Output "cleanup_requires_empty_instance=true"
+  Write-Output "cleanup_recursive_delete_allowed=false"
+  Write-Output "cleanup_acl_modification_allowed=false"
+  Write-Output "cleanup_reparse_points_allowed=false"
+  Write-Output "cleanup_package_directory_in_scope=false"
   Write-Output "apply_implementation_present=false"
   Write-Output "verify_implementation_present=false"
   Write-Output "destroy_implementation_present=false"
@@ -2503,6 +2823,7 @@ try {
   switch ($Action) {
     "Plan" { Invoke-Plan }
     "Create" { Invoke-Create }
+    "CleanupPartialCreate" { Invoke-CleanupPartialCreate }
     "Apply" { Invoke-BlockedFutureAction -RequestedAction "Apply" }
     "Verify" { Invoke-BlockedFutureAction -RequestedAction "Verify" }
     "Destroy" {

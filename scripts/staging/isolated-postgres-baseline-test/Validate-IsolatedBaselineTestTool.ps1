@@ -150,10 +150,11 @@ foreach ($command in $commands) {
   }
 }
 
-Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
+Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","CleanupPartialCreate","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
 Assert-Contains -Text $text -Pattern 'switch \(\$Action\)' -Code "switch_dispatch_missing"
 Assert-Contains -Text $text -Pattern '"Plan" \{ Invoke-Plan \}' -Code "plan_branch_missing"
 Assert-Contains -Text $text -Pattern '"Create" \{ Invoke-Create \}' -Code "create_branch_missing"
+Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{ Invoke-CleanupPartialCreate \}' -Code "cleanup_branch_missing"
 Assert-Contains -Text $text -Pattern '"Apply" \{ Invoke-BlockedFutureAction -RequestedAction "Apply" \}' -Code "apply_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}' -Code "verify_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"FullTest" \{ Invoke-BlockedFutureAction -RequestedAction "FullTest" \}' -Code "fulltest_branch_not_blocked"
@@ -162,6 +163,12 @@ Assert-NotContains -Text $text -Pattern '(?s)finally\s*\{.*Remove-Item[^\r\n]*(D
 
 $planFunctionText = Get-FunctionText -Name "Invoke-Plan"
 $createFunctionText = Get-FunctionText -Name "Invoke-Create"
+$cleanupFunctionText = Get-FunctionText -Name "Invoke-CleanupPartialCreate"
+$cleanupAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupAuthorization"
+$cleanupPathFunctionText = Get-FunctionText -Name "Assert-CleanupPathFixed"
+$cleanupStateFunctionText = Get-FunctionText -Name "Assert-CleanupExactPartialState"
+$cleanupSignatureFunctionText = Get-FunctionText -Name "Get-CleanupPartialStateSignature"
+$cleanupProcessFunctionText = Get-FunctionText -Name "Assert-CleanupNoPostgresActivity"
 $runnerFunctionText = Get-FunctionText -Name "Invoke-SafeProcess"
 $gitCommandFunctionText = Get-FunctionText -Name "Invoke-GitCommand"
 $gitFunctionText = Get-FunctionText -Name "Assert-GitReadyForCreate"
@@ -184,6 +191,7 @@ $postStopWaitFunctionText = Get-FunctionText -Name "Wait-ForVerifiedServerStopSt
 $strictJsonFunctionText = Get-FunctionText -Name "Assert-StrictFlatStateJson"
 Assert-NotContains -Text $planFunctionText -Pattern "Invoke-SafeProcess|Invoke-GitCommand|Remove-Item|New-Item|Read-Host|TcpListener|RandomNumberGenerator|ConvertFrom-SecureString|Set-Acl|Start-Process|&\s*" -Code "plan_contains_forbidden_operation"
 Assert-NotContains -Text $planFunctionText -Pattern "Get-LocalPostgresProcessEvidence|GetProcessesByName|Test-LocalServerDetected|Get-Process|Get-Service" -Code "plan_enumerates_processes"
+Assert-NotContains -Text $planFunctionText -Pattern "Invoke-CleanupPartialCreate|Get-CleanupDirectoryEntries|Assert-CleanupExactPartialState|Assert-CleanupNoPostgresActivity|\[System\.IO\.Directory\]::Delete|Get-Acl|Set-Acl|\.GetAccessRules\(" -Code "plan_cleanup_side_effect_detected"
 Assert-NotContains -Text $text -Pattern '\$(process|Process|proc|Proc|postgresProcess|postgresProc)\.Path\b' -Code "process_path_property_detected"
 Assert-NotContains -Text $text -Pattern 'Get-Process[^\r\n|]*\|\s*Select(-Object)?\s+Path\b' -Code "get_process_select_path_detected"
 Assert-NotContains -Text $text -Pattern 'Get-CimInstance|Get-WmiObject|\bWMI\b|CIM' -Code "wmi_cim_detected"
@@ -192,7 +200,22 @@ Assert-Contains -Text $text -Pattern '\$script:AllowedHost\s*=\s*"127\.0\.0\.1"'
 Assert-Contains -Text $text -Pattern '\$script:CreatePort\s*=\s*55432' -Code "fixed_create_port_missing"
 Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCreate' -Code "confirm_create_missing"
 Assert-Contains -Text $text -Pattern '\[string\]\$CreateApprovalToken' -Code "create_approval_token_param_missing"
+Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCleanupPartialCreate' -Code "confirm_cleanup_missing"
+Assert-Contains -Text $text -Pattern '\[string\]\$CleanupApprovalToken' -Code "cleanup_token_param_missing"
 Assert-Contains -Text $text -Pattern 'CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_create_token_missing"
+Assert-Contains -Text $text -Pattern 'CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_cleanup_token_missing"
+Assert-NotContains -Text $cleanupAuthorizationFunctionText -Pattern 'ConfirmCreate\s*\)|CreateApprovalToken\s*,\s*\$script:CreateApprovalToken|CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "cleanup_reuses_create_authorization"
+Assert-Contains -Text $cleanupAuthorizationFunctionText -Pattern 'ConfirmCleanupPartialCreate[\s\S]+CleanupApprovalToken[\s\S]+\$script:CleanupApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "cleanup_double_authorization_missing"
+Assert-Contains -Text $cleanupPathFunctionText -Pattern 'IsolatedRootRelativePath[\s\S]+InstanceName[\s\S]+PostgresPackageRelativePath|Get-PostgresRoot' -Code "cleanup_fixed_paths_missing"
+Assert-Contains -Text $cleanupPathFunctionText -Pattern 'OrdinalIgnoreCase[\s\S]+Test-IsInsideDirectory[\s\S]+cleanup_path_validation_failed' -Code "cleanup_path_validation_missing"
+Assert-Contains -Text $cleanupStateFunctionText -Pattern 'DataRoot[\s\S]+LogRoot[\s\S]+StateRoot[\s\S]+SecretRoot[\s\S]+MarkerPath[\s\S]+StatePath[\s\S]+CredentialPath[\s\S]+PasswordFilePath[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_exact_state_missing"
+Assert-Contains -Text $cleanupStateFunctionText -Pattern 'Get-CleanupDirectoryEntries[\s\S]+InstanceRoot[\s\S]+cleanup_unexpected_content[\s\S]+Get-CleanupDirectoryEntries[\s\S]+IsolatedRoot[\s\S]+Count -ne 1' -Code "cleanup_empty_content_validation_missing"
+Assert-Contains -Text $cleanupStateFunctionText -Pattern 'Assert-CleanupEntrySafe' -Code "cleanup_entry_validation_missing"
+Assert-Contains -Text $cleanupSignatureFunctionText -Pattern 'Get-CleanupDirectoryEntries[\s\S]+Sort-Object[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_signature_missing"
+Assert-Contains -Text $text -Pattern 'FileAttributes\]::ReparsePoint' -Code "cleanup_reparse_validation_missing"
+Assert-Contains -Text $cleanupProcessFunctionText -Pattern 'Get-LocalPostgresProcessEvidence[\s\S]+AmbiguousCount[\s\S]+cleanup_postgres_process_ambiguous[\s\S]+AuthorizedCount[\s\S]+OtherCount[\s\S]+cleanup_postgres_process_detected[\s\S]+Get-Service[\s\S]+cleanup_postgresql_service_running[\s\S]+Test-PortAvailable[\s\S]+cleanup_port_in_use[\s\S]+postmaster\.pid' -Code "cleanup_process_service_port_missing"
+Assert-Contains -Text $cleanupFunctionText -Pattern 'Assert-CleanupExactPartialState[\s\S]+Get-CleanupPartialStateSignature[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+Get-CleanupPartialStateSignature[\s\S]+cleanup_state_changed_during_validation[\s\S]+Assert-CleanupExactPartialState[\s\S]+Directory\]::Delete\(\$layout\.InstanceRoot, \$false\)[\s\S]+Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)' -Code "cleanup_delete_sequence_missing"
+Assert-NotContains -Text $cleanupFunctionText -Pattern 'Remove-Item|Directory\]::Delete\([^\r\n]+,\s*\$true\)|-Recurse|-Force|Stop-Process|taskkill|Set-Acl|takeown|icacls|Invoke-Create|Invoke-BlockedFutureAction -RequestedAction "Destroy"|[?*]' -Code "cleanup_forbidden_operation_detected"
 Assert-Contains -Text $text -Pattern '\[string\]\$PostgresBin\s*=\s*\(Join-Path \$env:LOCALAPPDATA "VotoClaro\\PostgreSQL\\17\.10-complete\\bin"\)' -Code "dynamic_postgresbin_missing"
 Assert-Contains -Text $text -Pattern 'VotoClaro\\PostgreSQL\\isolated-baseline-test' -Code "isolated_root_new_missing"
 Assert-Contains -Text $text -Pattern 'pg17-port55432' -Code "instance_name_missing"
@@ -445,6 +468,28 @@ foreach ($code in @(
     "port_reserved",
     "port_in_use",
     "create_not_authorized",
+    "cleanup_not_authorized",
+    "cleanup_repo_not_clean",
+    "cleanup_branch_not_allowed",
+    "cleanup_head_not_synced",
+    "cleanup_environment_invalid",
+    "cleanup_postgres_package_incomplete",
+    "cleanup_path_validation_failed",
+    "cleanup_reparse_point_detected",
+    "cleanup_unexpected_content",
+    "cleanup_access_denied",
+    "cleanup_postgres_process_detected",
+    "cleanup_postgres_process_ambiguous",
+    "cleanup_postgresql_service_running",
+    "cleanup_port_in_use",
+    "cleanup_postmaster_pid_present",
+    "cleanup_state_changed_during_validation",
+    "cleanup_instance_delete_failed",
+    "cleanup_instance_still_exists",
+    "cleanup_parent_not_empty",
+    "cleanup_parent_delete_failed",
+    "cleanup_partial_success_parent_remains",
+    "cleanup_failed",
     "repo_not_clean",
     "branch_not_allowed",
     "git_repository_invalid",
@@ -551,6 +596,14 @@ foreach ($line in @(
     "credential_strategy=WINDOWS_DPAPI_CURRENT_USER",
     "authentication=scram-sha-256",
     "create_implementation_present=true",
+    "cleanup_action_present=true",
+    "cleanup_authorized=false",
+    "cleanup_execution_blocked=true",
+    "cleanup_requires_empty_instance=true",
+    "cleanup_recursive_delete_allowed=false",
+    "cleanup_acl_modification_allowed=false",
+    "cleanup_reparse_points_allowed=false",
+    "cleanup_package_directory_in_scope=false",
     "git_ancestry_strategy=MERGE_BASE_IS_ANCESTOR",
     "process_output_strategy=ASYNC_DUAL_STREAM_DRAIN",
     "windows_argument_empty_value_safe=true",
@@ -595,6 +648,14 @@ foreach ($line in @(
     "create_authorized=false",
     "create_execution_blocked=true",
     "create_execution_requires_exact_approval=true",
+    "cleanup_action_present=true",
+    "cleanup_authorized=false",
+    "cleanup_execution_blocked=true",
+    "cleanup_requires_empty_instance=true",
+    "cleanup_recursive_delete_allowed=false",
+    "cleanup_acl_modification_allowed=false",
+    "cleanup_reparse_points_allowed=false",
+    "cleanup_package_directory_in_scope=false",
     "apply_implementation_present=false",
     "verify_implementation_present=false",
     "destroy_implementation_present=false",
@@ -913,6 +974,101 @@ if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected =
 if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @() }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_missing_authorized_allow") { Fail -Code "selftest_acl_missing_allow_failed" }
 if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclFileFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType File) -ne "ok") { Fail -Code "selftest_acl_file_flags_failed" }
 
+function Test-SimulatedCleanupAuthorizationForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$Confirm,
+    [AllowNull()][string]$Token,
+    [Parameter(Mandatory = $true)][bool]$CreateConfirm,
+    [AllowNull()][string]$CreateToken
+  )
+  if (-not $Confirm) { return "cleanup_not_authorized" }
+  if ($CreateConfirm -or -not [string]::IsNullOrWhiteSpace($CreateToken)) { return "cleanup_not_authorized" }
+  if (-not [string]::Equals($Token, "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432", [System.StringComparison]::Ordinal)) { return "cleanup_not_authorized" }
+  return "ok"
+}
+
+function Test-SimulatedCleanupStateForSelfTest {
+  param([Parameter(Mandatory = $true)][object]$State)
+  if ($State.LocalAppDataValid -ne $true -or $State.InstanceDirectChild -ne $true -or $State.PathEqualsPackage -eq $true) { return "cleanup_path_validation_failed" }
+  if ($State.IsolatedExists -ne $true -or $State.InstanceExists -ne $true) { return "cleanup_unexpected_content" }
+  if ($State.AccessDenied -eq $true) { return "cleanup_access_denied" }
+  if ($State.ReparsePoint -eq $true) { return "cleanup_reparse_point_detected" }
+  if ($State.DataRootPresent -eq $true -or $State.StateRootPresent -eq $true -or $State.SecretRootPresent -eq $true -or $State.PostmasterPidPresent -eq $true -or $State.PgVersionPresent -eq $true) {
+    if ($State.PostmasterPidPresent -eq $true) { return "cleanup_postmaster_pid_present" }
+    return "cleanup_unexpected_content"
+  }
+  if ($State.PostgresProcessDetected -eq $true) { return "cleanup_postgres_process_detected" }
+  if ($State.PostgresProcessAmbiguous -eq $true) { return "cleanup_postgres_process_ambiguous" }
+  if ($State.PostgresServiceRunning -eq $true) { return "cleanup_postgresql_service_running" }
+  if ($State.PortInUse -eq $true) { return "cleanup_port_in_use" }
+  if ($State.StateChanged -eq $true) { return "cleanup_state_changed_during_validation" }
+  if ($State.InstanceDeleteFails -eq $true) { return "cleanup_instance_delete_failed" }
+  if ($State.ParentDeleteFails -eq $true) { return "cleanup_partial_success_parent_remains" }
+  foreach ($entry in @($State.InstanceEntries)) {
+    if ($entry.ReparsePoint -eq $true) { return "cleanup_reparse_point_detected" }
+    if ($entry.Kind -eq "File" -or $entry.Kind -eq "Directory" -or $entry.Hidden -eq $true -or $entry.System -eq $true) { return "cleanup_unexpected_content" }
+  }
+  foreach ($entry in @($State.IsolatedEntries)) {
+    if ($entry.Name -ne "pg17-port55432" -or $entry.ReparsePoint -eq $true -or $entry.Hidden -eq $true -or $entry.System -eq $true) {
+      if ($entry.ReparsePoint -eq $true) { return "cleanup_reparse_point_detected" }
+      return "cleanup_unexpected_content"
+    }
+  }
+  if (@($State.IsolatedEntries).Count -ne 1) { return "cleanup_unexpected_content" }
+  return "ok"
+}
+
+$cleanupGoodState = [pscustomobject]@{
+  LocalAppDataValid = $true; InstanceDirectChild = $true; PathEqualsPackage = $false; IsolatedExists = $true; InstanceExists = $true;
+  AccessDenied = $false; ReparsePoint = $false; DataRootPresent = $false; StateRootPresent = $false; SecretRootPresent = $false;
+  PostmasterPidPresent = $false; PgVersionPresent = $false; PostgresProcessDetected = $false; PostgresProcessAmbiguous = $false;
+  PostgresServiceRunning = $false; PortInUse = $false; StateChanged = $false; InstanceDeleteFails = $false; ParentDeleteFails = $false;
+  InstanceEntries = @(); IsolatedEntries = @([pscustomobject]@{ Name = "pg17-port55432"; ReparsePoint = $false; Hidden = $false; System = $false })
+}
+if ((Test-SimulatedCleanupAuthorizationForSelfTest -Confirm:$false -Token "x" -CreateConfirm:$false -CreateToken $null) -ne "cleanup_not_authorized") { Fail -Code "selftest_cleanup_missing_confirm_failed" }
+if ((Test-SimulatedCleanupAuthorizationForSelfTest -Confirm:$true -Token "wrong" -CreateConfirm:$false -CreateToken $null) -ne "cleanup_not_authorized") { Fail -Code "selftest_cleanup_bad_token_failed" }
+if ((Test-SimulatedCleanupAuthorizationForSelfTest -Confirm:$true -Token "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432" -CreateConfirm:$false -CreateToken $null) -ne "ok") { Fail -Code "selftest_cleanup_auth_ok_failed" }
+if ((Test-SimulatedCleanupAuthorizationForSelfTest -Confirm:$true -Token "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432" -CreateConfirm:$true -CreateToken $null) -ne "cleanup_not_authorized") { Fail -Code "selftest_cleanup_exclusive_failed" }
+if ((Test-SimulatedCleanupStateForSelfTest -State ([pscustomobject]@{ LocalAppDataValid = $false; InstanceDirectChild = $true; PathEqualsPackage = $false; IsolatedExists = $true; InstanceExists = $true; AccessDenied = $false; ReparsePoint = $false; InstanceEntries = @(); IsolatedEntries = @() })) -ne "cleanup_path_validation_failed") { Fail -Code "selftest_cleanup_localappdata_failed" }
+foreach ($case in @(
+    @{ Name = "direct_child"; State = ($cleanupGoodState | Select-Object *); Property = "InstanceDirectChild"; Value = $false; Expected = "cleanup_path_validation_failed" },
+    @{ Name = "package"; State = ($cleanupGoodState | Select-Object *); Property = "PathEqualsPackage"; Value = $true; Expected = "cleanup_path_validation_failed" },
+    @{ Name = "isolated_absent"; State = ($cleanupGoodState | Select-Object *); Property = "IsolatedExists"; Value = $false; Expected = "cleanup_unexpected_content" },
+    @{ Name = "instance_absent"; State = ($cleanupGoodState | Select-Object *); Property = "InstanceExists"; Value = $false; Expected = "cleanup_unexpected_content" },
+    @{ Name = "data"; State = ($cleanupGoodState | Select-Object *); Property = "DataRootPresent"; Value = $true; Expected = "cleanup_unexpected_content" },
+    @{ Name = "state"; State = ($cleanupGoodState | Select-Object *); Property = "StateRootPresent"; Value = $true; Expected = "cleanup_unexpected_content" },
+    @{ Name = "secrets"; State = ($cleanupGoodState | Select-Object *); Property = "SecretRootPresent"; Value = $true; Expected = "cleanup_unexpected_content" },
+    @{ Name = "pid"; State = ($cleanupGoodState | Select-Object *); Property = "PostmasterPidPresent"; Value = $true; Expected = "cleanup_postmaster_pid_present" },
+    @{ Name = "pgversion"; State = ($cleanupGoodState | Select-Object *); Property = "PgVersionPresent"; Value = $true; Expected = "cleanup_unexpected_content" },
+    @{ Name = "process"; State = ($cleanupGoodState | Select-Object *); Property = "PostgresProcessDetected"; Value = $true; Expected = "cleanup_postgres_process_detected" },
+    @{ Name = "ambiguous"; State = ($cleanupGoodState | Select-Object *); Property = "PostgresProcessAmbiguous"; Value = $true; Expected = "cleanup_postgres_process_ambiguous" },
+    @{ Name = "service"; State = ($cleanupGoodState | Select-Object *); Property = "PostgresServiceRunning"; Value = $true; Expected = "cleanup_postgresql_service_running" },
+    @{ Name = "port"; State = ($cleanupGoodState | Select-Object *); Property = "PortInUse"; Value = $true; Expected = "cleanup_port_in_use" },
+    @{ Name = "access"; State = ($cleanupGoodState | Select-Object *); Property = "AccessDenied"; Value = $true; Expected = "cleanup_access_denied" },
+    @{ Name = "toc"; State = ($cleanupGoodState | Select-Object *); Property = "StateChanged"; Value = $true; Expected = "cleanup_state_changed_during_validation" },
+    @{ Name = "delete"; State = ($cleanupGoodState | Select-Object *); Property = "InstanceDeleteFails"; Value = $true; Expected = "cleanup_instance_delete_failed" },
+    @{ Name = "parent"; State = ($cleanupGoodState | Select-Object *); Property = "ParentDeleteFails"; Value = $true; Expected = "cleanup_partial_success_parent_remains" }
+  )) {
+  $case.State.($case.Property) = $case.Value
+  if ((Test-SimulatedCleanupStateForSelfTest -State $case.State) -ne $case.Expected) { Fail -Code ("selftest_cleanup_" + $case.Name + "_failed") }
+}
+$cleanupFileState = $cleanupGoodState | Select-Object *
+$cleanupFileState.InstanceEntries = @([pscustomobject]@{ Kind = "File"; Hidden = $false; System = $false; ReparsePoint = $false })
+if ((Test-SimulatedCleanupStateForSelfTest -State $cleanupFileState) -ne "cleanup_unexpected_content") { Fail -Code "selftest_cleanup_file_failed" }
+$cleanupDirState = $cleanupGoodState | Select-Object *
+$cleanupDirState.InstanceEntries = @([pscustomobject]@{ Kind = "Directory"; Hidden = $false; System = $false; ReparsePoint = $false })
+if ((Test-SimulatedCleanupStateForSelfTest -State $cleanupDirState) -ne "cleanup_unexpected_content") { Fail -Code "selftest_cleanup_directory_failed" }
+$cleanupHiddenState = $cleanupGoodState | Select-Object *
+$cleanupHiddenState.InstanceEntries = @([pscustomobject]@{ Kind = "File"; Hidden = $true; System = $false; ReparsePoint = $false })
+if ((Test-SimulatedCleanupStateForSelfTest -State $cleanupHiddenState) -ne "cleanup_unexpected_content") { Fail -Code "selftest_cleanup_hidden_failed" }
+$cleanupReparseState = $cleanupGoodState | Select-Object *
+$cleanupReparseState.InstanceEntries = @([pscustomobject]@{ Kind = "File"; Hidden = $false; System = $false; ReparsePoint = $true })
+if ((Test-SimulatedCleanupStateForSelfTest -State $cleanupReparseState) -ne "cleanup_reparse_point_detected") { Fail -Code "selftest_cleanup_reparse_failed" }
+$cleanupOtherRootState = $cleanupGoodState | Select-Object *
+$cleanupOtherRootState.IsolatedEntries = @([pscustomobject]@{ Name = "pg17-port55432"; ReparsePoint = $false; Hidden = $false; System = $false }, [pscustomobject]@{ Name = "other"; ReparsePoint = $false; Hidden = $false; System = $false })
+if ((Test-SimulatedCleanupStateForSelfTest -State $cleanupOtherRootState) -ne "cleanup_unexpected_content") { Fail -Code "selftest_cleanup_other_root_failed" }
+if ((Test-SimulatedCleanupStateForSelfTest -State $cleanupGoodState) -ne "ok") { Fail -Code "selftest_cleanup_success_failed" }
+
 $expectedSelfTestPath = "C:\vc\pg\bin\postgres.exe"
 $otherSelfTestPath = "D:\other\pg\bin\postgres.exe"
 $sameStartTime = [datetime]"2026-01-01T00:00:00Z"
@@ -1036,6 +1192,14 @@ Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nif (`$A
 Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nSet-Acl -LiteralPath x") -ForbiddenPattern 'Set-Acl' -Code "selftest_acl_selftest_set_acl_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($stateFunctionText -replace 'created_utc = \$createdUtc', 'created_utc = $now') -ForbiddenPattern 'created_utc = \$now' -Code "selftest_created_utc_regeneration_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($createFunctionText -replace "Assert-MarkerStateConcordance", "Skip-MarkerStateConcordance") -RequiredPattern "Assert-MarkerStateConcordance" -Code "selftest_marker_state_concordance_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace 'CleanupPartialCreate', 'CleanupMissing') -RequiredPattern 'CleanupPartialCreate' -Code "selftest_cleanup_action_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($cleanupAuthorizationFunctionText -replace 'ConfirmCleanupPartialCreate', 'ConfirmCreate') -RequiredPattern 'ConfirmCleanupPartialCreate' -Code "selftest_cleanup_confirm_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($cleanupAuthorizationFunctionText + "`n`$CreateApprovalToken = `$script:CreateApprovalToken") -ForbiddenPattern 'CreateApprovalToken\s*=\s*\$script:CreateApprovalToken' -Code "selftest_cleanup_create_token_reuse_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($cleanupFunctionText + "`n[System.IO.Directory]::Delete(`$layout.InstanceRoot, `$true)") -ForbiddenPattern 'Directory\]::Delete\([^\r\n]+,\s*\$true\)' -Code "selftest_cleanup_recursive_delete_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($cleanupFunctionText + "`nRemove-Item -LiteralPath `$layout.InstanceRoot") -ForbiddenPattern 'Remove-Item' -Code "selftest_cleanup_remove_item_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($cleanupFunctionText + "`nInvoke-Create") -ForbiddenPattern 'Invoke-Create' -Code "selftest_cleanup_chained_create_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($cleanupStateFunctionText -replace 'ReparsePoint', 'NoReparse') -RequiredPattern 'ReparsePoint' -Code "selftest_cleanup_reparse_check_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($cleanupProcessFunctionText -replace 'Test-PortAvailable', 'Skip-Port') -RequiredPattern 'Test-PortAvailable' -Code "selftest_cleanup_port_check_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($concordanceFunctionText -replace "cluster_id", "cluster_missing") -RequiredPattern "cluster_id" -Code "selftest_concordance_cluster_id_missing_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($dataRootFunctionText + "`nif (`$RequireMarker) { Throw-SafeError -Code `"marker_missing`" }") -ForbiddenPattern 'if \(\$RequireMarker\) \{ Throw-SafeError -Code "marker_missing" \}' -Code "selftest_unconditional_marker_missing_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($gitCommandFunctionText -replace 'Invoke-SafeProcess -FilePath \$git -Arguments \$Arguments -WorkingDirectory \$full', 'Invoke-SafeProcess -FilePath $git -Arguments $Arguments -WorkingDirectory $PWD') -RequiredPattern 'Invoke-SafeProcess -FilePath \$git -Arguments \$Arguments -WorkingDirectory \$full' -Code "selftest_git_working_directory_ignored_not_detected"
@@ -1186,6 +1350,7 @@ if (-not (($planOutput | Where-Object { $_ -like "local_compat_preflight_depende
 }
 
 Assert-ToolFailure -Arguments @("-Action","Create") -ExpectedReason "create_not_authorized" -Code "create_not_authorized_missing"
+Assert-ToolFailure -Arguments @("-Action","CleanupPartialCreate") -ExpectedReason "cleanup_not_authorized" -Code "cleanup_not_authorized_missing"
 Assert-ToolFailure -Arguments @("-Action","Apply") -ExpectedReason "action_not_approved" -Code "apply_not_blocked"
 Assert-ToolFailure -Arguments @("-Action","Verify") -ExpectedReason "action_not_approved" -Code "verify_not_blocked"
 Assert-ToolFailure -Arguments @("-Action","FullTest") -ExpectedReason "action_not_approved" -Code "fulltest_not_blocked"

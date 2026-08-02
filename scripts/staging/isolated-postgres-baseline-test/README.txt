@@ -82,6 +82,14 @@ Plan: solo lectura. Valida herramientas, puerto, nombres, DataRoot futuro, basel
 
 Create: implementada pero protegida por doble autorizacion exacta. En una fase futura aprobada podra crear una instancia PostgreSQL local aislada, inicializarla con initdb, configurar loopback y arrancarla con pg_ctl.
 
+CleanupPartialCreate: implementada pero no ejecutada en esta fase. Su proposito exclusivo es una futura limpieza autorizada del estado minimo y vacio dejado por el fallo create_directories.
+
+CleanupPartialCreate exige doble autorizacion propia, distinta de Create, usa rutas fijas bajo LOCALAPPDATA, no acepta rutas suministradas por usuario y no imprime el token completo.
+
+CleanupPartialCreate solo puede eliminar una InstanceRoot completamente vacia y luego IsolatedRoot si queda vacia. No permite borrado recursivo, comodines, Remove-Item, cambios de ACL, takeown, icacls, procesos, SQL, Supabase ni modificaciones del paquete PostgreSQL.
+
+CleanupPartialCreate no ejecuta Create despues de limpiar. Cualquier reintento de Create requiere una fase posterior de diagnostico, auditoria y autorizacion separadas.
+
 Apply: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta, preflight local aprobado, base vacia y autorizacion humana explicita.
 
 Verify: bloqueada en esta version. En una fase futura debera validar estado restaurado mediante consultas controladas.
