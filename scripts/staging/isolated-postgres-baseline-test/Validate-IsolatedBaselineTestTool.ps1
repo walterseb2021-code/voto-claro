@@ -88,6 +88,51 @@ $compatValidatorText = Get-Content -LiteralPath $compatValidator -Raw
 $commands = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
 $commandNames = @($commands | ForEach-Object { $_.GetCommandName() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 
+function Get-FunctionText {
+  param([Parameter(Mandatory = $true)][string]$Name)
+  $matches = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $Name }, $true))
+  if ($matches.Count -ne 1) { Fail -Code ("function_missing_" + $Name) }
+  return $matches[0].Extent.Text
+}
+
+function ConvertTo-WindowsProcessArgumentForSelfTest {
+  param([AllowNull()][object]$Value)
+  if ($null -eq $Value) { throw "null_rejected" }
+  $Value = [string]$Value
+  if ($Value.Length -eq 0) { return '""' }
+  if ($Value -notmatch '[\s"]') { return $Value }
+  function New-BackslashRunForSelfTest {
+    param([Parameter(Mandatory = $true)][int]$Count)
+    if ($Count -le 0) { return "" }
+    return (([string][char]92) * $Count)
+  }
+  $builder = [System.Text.StringBuilder]::new()
+  [void]$builder.Append('"')
+  $slashCount = 0
+  foreach ($ch in $Value.ToCharArray()) {
+    if ($ch -eq '\') {
+      $slashCount += 1
+      continue
+    }
+    if ($ch -eq '"') {
+      [void]$builder.Append((New-BackslashRunForSelfTest -Count (($slashCount * 2) + 1)))
+      [void]$builder.Append('"')
+      $slashCount = 0
+      continue
+    }
+    if ($slashCount -gt 0) {
+      [void]$builder.Append((New-BackslashRunForSelfTest -Count $slashCount))
+      $slashCount = 0
+    }
+    [void]$builder.Append($ch)
+  }
+  if ($slashCount -gt 0) {
+    [void]$builder.Append((New-BackslashRunForSelfTest -Count ($slashCount * 2)))
+  }
+  [void]$builder.Append('"')
+  return $builder.ToString()
+}
+
 foreach ($blockedCommand in @("Invoke-Expression","iex","cmd","Start-Process","initdb","postgres","pg_ctl","createdb","dropdb","psql","pg_restore","pg_dump","pg_isready","docker","supabase")) {
   if ($commandNames -contains $blockedCommand) {
     Fail -Code ("blocked_command_detected_" + $blockedCommand)
@@ -108,29 +153,73 @@ foreach ($command in $commands) {
 Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
 Assert-Contains -Text $text -Pattern 'switch \(\$Action\)' -Code "switch_dispatch_missing"
 Assert-Contains -Text $text -Pattern '"Plan" \{ Invoke-Plan \}' -Code "plan_branch_missing"
-Assert-Contains -Text $text -Pattern '"Create" \{ Invoke-BlockedFutureAction -RequestedAction "Create" \}' -Code "create_branch_not_blocked"
+Assert-Contains -Text $text -Pattern '"Create" \{ Invoke-Create \}' -Code "create_branch_missing"
 Assert-Contains -Text $text -Pattern '"Apply" \{ Invoke-BlockedFutureAction -RequestedAction "Apply" \}' -Code "apply_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}' -Code "verify_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"FullTest" \{ Invoke-BlockedFutureAction -RequestedAction "FullTest" \}' -Code "fulltest_branch_not_blocked"
 Assert-NotContains -Text $text -Pattern '"FullTest"[^\r\n]+Destroy|Invoke-BlockedFutureAction -RequestedAction "Destroy"[^\r\n]+FullTest' -Code "fulltest_destroy_detected"
-Assert-NotContains -Text $text -Pattern '(?s)finally\s*\{.*DataRoot|finally\s*\{.*Assert-DataRoot' -Code "finally_dataroot_cleanup_detected"
+Assert-NotContains -Text $text -Pattern '(?s)finally\s*\{.*Remove-Item[^\r\n]*(DataRoot|InstanceRoot)|finally\s*\{.*\[System\.IO\.Directory\]::Delete[^\r\n]*(DataRoot|InstanceRoot)' -Code "finally_dataroot_cleanup_detected"
 
-$planFunction = [regex]::Match($text, "(?s)function Invoke-Plan \{.*?\n\}")
-if (-not $planFunction.Success) { Fail -Code "plan_function_missing" }
-Assert-NotContains -Text $planFunction.Value -Pattern "initdb|pg_ctl|createdb|dropdb|psql|pg_restore|pg_dump|pg_isready|postgres\.exe|Remove-Item|New-Item|Read-Host" -Code "plan_contains_forbidden_operation"
+$planFunctionText = Get-FunctionText -Name "Invoke-Plan"
+$createFunctionText = Get-FunctionText -Name "Invoke-Create"
+$runnerFunctionText = Get-FunctionText -Name "Invoke-SafeProcess"
+$gitCommandFunctionText = Get-FunctionText -Name "Invoke-GitCommand"
+$gitFunctionText = Get-FunctionText -Name "Assert-GitReadyForCreate"
+$quoteFunctionText = Get-FunctionText -Name "ConvertTo-WindowsProcessArgument"
+$aclFunctionText = Get-FunctionText -Name "Set-RestrictedAcl"
+$stateFunctionText = Get-FunctionText -Name "Write-ClusterState"
+$concordanceFunctionText = Get-FunctionText -Name "Assert-MarkerStateConcordance"
+$dataRootFunctionText = Get-FunctionText -Name "Assert-DataRoot"
+$pidFunctionText = Get-FunctionText -Name "Get-PostmasterPidInfo"
+$processEvidenceFunctionText = Get-FunctionText -Name "Get-LocalPostgresProcessEvidence"
+$originalProcessStateFunctionText = Get-FunctionText -Name "Get-OriginalPostgresProcessState"
+$processExecutableFunctionText = Get-FunctionText -Name "Get-ProcessExecutablePathCompatible"
+$serverStateFunctionText = Get-FunctionText -Name "Get-VerifiedServerState"
+$pgCtlStopFunctionText = Get-FunctionText -Name "Invoke-VerifiedPgCtlStop"
+$pgCtlFailureFunctionText = Get-FunctionText -Name "Resolve-VerifiedPgCtlStartFailure"
+$postStopWaitFunctionText = Get-FunctionText -Name "Wait-ForVerifiedServerStopState"
+$strictJsonFunctionText = Get-FunctionText -Name "Assert-StrictFlatStateJson"
+Assert-NotContains -Text $planFunctionText -Pattern "Invoke-SafeProcess|Invoke-GitCommand|Remove-Item|New-Item|Read-Host|TcpListener|RandomNumberGenerator|ConvertFrom-SecureString|Set-Acl|Start-Process|&\s*" -Code "plan_contains_forbidden_operation"
+Assert-NotContains -Text $planFunctionText -Pattern "Get-LocalPostgresProcessEvidence|GetProcessesByName|Test-LocalServerDetected|Get-Process|Get-Service" -Code "plan_enumerates_processes"
+Assert-NotContains -Text $text -Pattern '\$(process|Process|proc|Proc|postgresProcess|postgresProc)\.Path\b' -Code "process_path_property_detected"
+Assert-NotContains -Text $text -Pattern 'Get-Process[^\r\n|]*\|\s*Select(-Object)?\s+Path\b' -Code "get_process_select_path_detected"
+Assert-NotContains -Text $text -Pattern 'Get-CimInstance|Get-WmiObject|\bWMI\b|CIM' -Code "wmi_cim_detected"
 
 Assert-Contains -Text $text -Pattern '\$script:AllowedHost\s*=\s*"127\.0\.0\.1"' -Code "fixed_host_missing"
+Assert-Contains -Text $text -Pattern '\$script:CreatePort\s*=\s*55432' -Code "fixed_create_port_missing"
+Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCreate' -Code "confirm_create_missing"
+Assert-Contains -Text $text -Pattern '\[string\]\$CreateApprovalToken' -Code "create_approval_token_param_missing"
+Assert-Contains -Text $text -Pattern 'CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_create_token_missing"
 Assert-Contains -Text $text -Pattern '\[string\]\$PostgresBin\s*=\s*\(Join-Path \$env:LOCALAPPDATA "VotoClaro\\PostgreSQL\\17\.10-complete\\bin"\)' -Code "dynamic_postgresbin_missing"
+Assert-Contains -Text $text -Pattern 'VotoClaro\\PostgreSQL\\isolated-baseline-test' -Code "isolated_root_new_missing"
+Assert-Contains -Text $text -Pattern 'pg17-port55432' -Code "instance_name_missing"
+Assert-Contains -Text $text -Pattern '\$data = Join-Path \$instanceRoot "data"' -Code "dataroot_layout_missing"
+Assert-Contains -Text $text -Pattern '\$logs = Join-Path \$instanceRoot "logs"' -Code "logroot_layout_missing"
+Assert-Contains -Text $text -Pattern '\$state = Join-Path \$instanceRoot "state"' -Code "stateroot_layout_missing"
+Assert-Contains -Text $text -Pattern '\$secrets = Join-Path \$instanceRoot "secrets"' -Code "secretroot_layout_missing"
+Assert-Contains -Text $text -Pattern 'vc_isolated_admin\.dpapi' -Code "credential_path_missing"
+Assert-Contains -Text $text -Pattern 'initdb-password\.tmp' -Code "password_file_path_missing"
 Assert-NotContains -Text $text -Pattern "C:\\Users\\|HP\\AppData" -Code "hardcoded_user_path_detected"
 Assert-NotContains -Text $text -Pattern "localhost" -Code "localhost_operational_host_detected"
 Assert-NotContains -Text $text -Pattern "supabase\.co|pooler\.supabase\.com|amazonaws\.com" -Code "remote_host_literal_detected"
 Assert-NotContains -Text $text -Pattern "NEXT_PUBLIC_SUPABASE_URL|SUPABASE_URL|DATABASE_URL|POSTGRES_URL" -Code "forbidden_env_variable_detected"
 Assert-NotContains -Text $text -Pattern "Get-Content\s+[^\r\n]*\.env|\.env\.local" -Code "env_file_read_detected"
 Assert-Contains -Text $text -Pattern 'if \(\$Value -eq 5432\)' -Code "port_5432_rejection_missing"
+Assert-Contains -Text $text -Pattern '\$Value -ne 55432' -Code "port_exact_55432_missing"
 Assert-Contains -Text $text -Pattern "Test-PortAvailable" -Code "port_availability_missing"
+Assert-Contains -Text $text -Pattern "TcpListener" -Code "tcp_listener_port_check_missing"
 Assert-Contains -Text $text -Pattern "vc_staging_baseline_test_" -Code "prefix_missing"
 Assert-Contains -Text $text -Pattern "vc_isolated_admin" -Code "admin_user_missing"
 Assert-Contains -Text $text -Pattern "scram-sha-256" -Code "scram_missing"
+Assert-Contains -Text $text -Pattern "--encoding=UTF8" -Code "initdb_utf8_missing"
+Assert-Contains -Text $text -Pattern "--locale=C" -Code "initdb_locale_missing"
+Assert-Contains -Text $text -Pattern "--pwfile=" -Code "initdb_pwfile_missing"
+Assert-Contains -Text $text -Pattern "RandomNumberGenerator" -Code "rng_missing"
+Assert-NotContains -Text $text -Pattern "System\.Random|Get-Random|NewGuid\(\)\.ToString\(\).*password|password\s*=\s*['""][^'""]+" -Code "weak_password_generation_detected"
+Assert-Contains -Text $text -Pattern "ConvertFrom-SecureString -SecureString" -Code "dpapi_missing"
+Assert-NotContains -Text $text -Pattern "ConvertFrom-SecureString[^\r\n]+-(Key|SecureKey)" -Code "dpapi_explicit_key_detected"
+Assert-Contains -Text $text -Pattern 'SetAccessRuleProtection\(\$true, \$false\)' -Code "acl_inheritance_disable_missing"
+Assert-NotContains -Text $text -Pattern "Everyone|Authenticated Users|Builtin\\Users|BUILTIN\\Users" -Code "broad_acl_literal_detected"
 Assert-Contains -Text $text -Pattern "password_encryption" -Code "password_encryption_design_missing"
 Assert-Contains -Text $text -Pattern "GetFullPath" -Code "canonical_path_missing"
 Assert-Contains -Text $text -Pattern "Get-RequiredDataRootParent" -Code "required_parent_missing"
@@ -142,6 +231,155 @@ Assert-Contains -Text $text -Pattern "Get-FutureInitDbArgumentTemplate" -Code "i
 Assert-Contains -Text $text -Pattern "Get-FuturePsqlArgumentTemplate" -Code "psql_argument_template_missing"
 Assert-Contains -Text $text -Pattern "return @\(" -Code "array_argument_template_missing"
 Assert-NotContains -Text $text -Pattern 'ArgumentList\s+\([^\)]*-join|ArgumentList\s+"' -Code "unsafe_argument_list_detected"
+Assert-Contains -Text $text -Pattern "Get-GitExecutable" -Code "git_executable_resolver_missing"
+Assert-Contains -Text $gitCommandFunctionText -Pattern 'WorkingDirectory' -Code "git_working_directory_param_missing"
+Assert-Contains -Text $gitCommandFunctionText -Pattern '\$full = \[System\.IO\.Path\]::GetFullPath\(\$WorkingDirectory\)' -Code "git_working_directory_canonical_missing"
+Assert-Contains -Text $gitCommandFunctionText -Pattern 'Invoke-SafeProcess[\s\S]+-WorkingDirectory \$full' -Code "git_working_directory_not_enforced"
+Assert-NotContains -Text $gitCommandFunctionText -Pattern '& \$git @Arguments' -Code "git_working_directory_ignored"
+Assert-Contains -Text $gitFunctionText -Pattern '"rev-parse","--show-toplevel"' -Code "git_toplevel_missing"
+Assert-Contains -Text $gitFunctionText -Pattern '"rev-parse","--verify","fe899a1\^\{commit\}"' -Code "git_base_verify_missing"
+Assert-Contains -Text $gitFunctionText -Pattern '"merge-base","--is-ancestor","fe899a1","HEAD"' -Code "git_merge_base_missing"
+Assert-Contains -Text $gitFunctionText -Pattern '"status","--porcelain=v1","--untracked-files=all"' -Code "git_status_untracked_missing"
+Assert-NotContains -Text $gitFunctionText -Pattern '\[0-9a-f\]\{7,\}' -Code "git_generic_hash_regex_detected"
+Assert-Contains -Text $text -Pattern "System\.Diagnostics\.ProcessStartInfo" -Code "process_runner_missing"
+Assert-Contains -Text $text -Pattern '"--version"' -Code "postgres_version_check_missing"
+Assert-Contains -Text $text -Pattern "postgres_version_invalid" -Code "postgres_version_invalid_code_missing"
+Assert-Contains -Text $text -Pattern 'UseShellExecute = \$false' -Code "process_no_shell_missing"
+Assert-Contains -Text $text -Pattern 'CreateNoWindow = \$true' -Code "process_no_window_missing"
+Assert-Contains -Text $text -Pattern 'RedirectStandardOutput = \$true' -Code "process_stdout_redirect_missing"
+Assert-Contains -Text $text -Pattern 'RedirectStandardError = \$true' -Code "process_stderr_redirect_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern 'StandardOutput\.ReadToEndAsync\(\)' -Code "stdout_async_drain_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern 'StandardError\.ReadToEndAsync\(\)' -Code "stderr_async_drain_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern '\$stdoutTask\.Wait\(5000\)' -Code "stdout_task_timeout_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern '\$stderrTask\.Wait\(5000\)' -Code "stderr_task_timeout_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern '\$stdoutDoneAfterTimeout = \$stdoutTask\.Wait\(5000\)' -Code "stdout_timeout_wait_result_ignored"
+Assert-Contains -Text $runnerFunctionText -Pattern '\$stderrDoneAfterTimeout = \$stderrTask\.Wait\(5000\)' -Code "stderr_timeout_wait_result_ignored"
+Assert-Contains -Text $runnerFunctionText -Pattern 'OutputDrainCompleted' -Code "output_drain_completed_flag_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern 'ProcessKilled' -Code "process_killed_flag_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern 'process_output_drain_failed' -Code "output_drain_failure_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern 'process_timeout_cleanup_failed' -Code "timeout_cleanup_failure_missing"
+Assert-Contains -Text $text -Pattern 'Get-SafeOutputTail' -Code "output_tail_sanitizer_missing"
+Assert-Contains -Text $text -Pattern '4096' -Code "output_tail_limit_missing"
+Assert-NotContains -Text $runnerFunctionText -Pattern 'Standard(Output|Error)\.ReadToEnd\(\)' -Code "sync_readtoend_detected"
+if ($runnerFunctionText.IndexOf("ReadToEndAsync()", [System.StringComparison]::Ordinal) -lt 0 -or
+    $runnerFunctionText.IndexOf("ReadToEndAsync()", [System.StringComparison]::Ordinal) -gt $runnerFunctionText.IndexOf("WaitForExit", [System.StringComparison]::Ordinal)) {
+  Fail -Code "async_drain_not_before_wait"
+}
+Assert-Contains -Text $quoteFunctionText -Pattern "Value\.Length -eq 0" -Code "empty_argument_branch_missing"
+Assert-Contains -Text $quoteFunctionText -Pattern 'return ''""''' -Code "empty_argument_quote_missing"
+Assert-NotContains -Text $text -Pattern "Invoke-Expression|iex|cmd\.exe|Start-Process|sc\.exe|netsh|New-Service|Start-Service|Set-Service|Register-ScheduledTask" -Code "forbidden_process_or_service_detected"
+Assert-Contains -Text $text -Pattern "# BEGIN VOTO_CLARO_ISOLATED_BASELINE_TEST" -Code "postgresql_conf_block_missing"
+Assert-Contains -Text $text -Pattern "listen_addresses = '127\.0\.0\.1'" -Code "postgresql_conf_host_missing"
+Assert-Contains -Text $text -Pattern "port = 55432" -Code "postgresql_conf_port_missing"
+Assert-Contains -Text $text -Pattern "ssl = off" -Code "postgresql_conf_ssl_off_missing"
+Assert-Contains -Text $text -Pattern "timezone = 'UTC'" -Code "postgresql_conf_timezone_missing"
+Assert-NotContains -Text $text -Pattern "fsync\s*=\s*off|full_page_writes\s*=\s*off|synchronous_commit\s*=\s*off|shared_preload_libraries" -Code "unsafe_postgresql_conf_detected"
+Assert-Contains -Text $text -Pattern "127\.0\.0\.1/32\s+scram-sha-256" -Code "pg_hba_loopback_scram_missing"
+Assert-Contains -Text $text -Pattern "0\.0\.0\.0/0\s+reject" -Code "pg_hba_ipv4_reject_missing"
+Assert-Contains -Text $text -Pattern "::/0\s+reject" -Code "pg_hba_ipv6_reject_missing"
+Assert-NotContains -Text $text -Pattern "::0/0" -Code "pg_hba_ipv6_ambiguous_detected"
+Assert-NotContains -Text $text -Pattern "\btrust\b|\bmd5\b|\bident\b|\bpeer\b|\bsspi\b|::1|host\s+all\s+all[^\r\n]+\bpassword\b" -Code "unsafe_pg_hba_method_detected"
+if (@([regex]::Matches($text, "host\s+all\s+all\s+127\.0\.0\.1/32\s+scram-sha-256")).Count -ne 1) { Fail -Code "pg_hba_scram_count_invalid" }
+if (@([regex]::Matches($text, "host\s+all\s+all\s+(0\.0\.0\.0/0|::/0)\s+reject")).Count -ne 2) { Fail -Code "pg_hba_reject_count_invalid" }
+Assert-Contains -Text $aclFunctionText -Pattern '\[ValidateSet\("Directory","File"\)\]' -Code "acl_target_type_missing"
+Assert-Contains -Text $aclFunctionText -Pattern 'TargetType -eq "Directory"[\s\S]+ContainerInherit,ObjectInherit' -Code "directory_acl_inheritance_missing"
+Assert-Contains -Text $aclFunctionText -Pattern 'TargetType -eq "File"[\s\S]+InheritanceFlags\]"None"' -Code "file_acl_none_missing"
+Assert-Contains -Text $text -Pattern 'CredentialPath -TargetType File' -Code "credential_file_acl_missing"
+Assert-Contains -Text $text -Pattern 'PasswordFilePath -TargetType File' -Code "pwfile_file_acl_missing"
+Assert-Contains -Text $text -Pattern 'MarkerPath -TargetType File' -Code "marker_file_acl_missing"
+Assert-Contains -Text $text -Pattern 'StatePath -TargetType File' -Code "state_file_acl_missing"
+Assert-NotContains -Text $text -Pattern 'CredentialPath\)[\s\S]{0,120}TargetType Directory|PasswordFilePath\)[\s\S]{0,120}TargetType Directory|MarkerPath[\s\S]{0,120}TargetType Directory|StatePath[\s\S]{0,120}TargetType Directory' -Code "file_acl_directory_inheritance_detected"
+Assert-Contains -Text $text -Pattern '"start", "-D", \$layout\.DataRoot, "-l", \$layout\.ServerLog, "-w", "-t", "60"' -Code "pg_ctl_start_args_missing"
+Assert-Contains -Text $text -Pattern "Resolve-VerifiedPgCtlStartFailure" -Code "pg_ctl_start_failure_recovery_missing"
+Assert-Contains -Text $text -Pattern "Get-LocalPostgresProcessEvidence" -Code "process_inventory_missing"
+Assert-Contains -Text $text -Pattern "Get-ProcessExecutablePathCompatible" -Code "process_executable_resolver_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern '\[System\.Diagnostics\.Process\]\$Process' -Code "process_resolver_param_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'Refresh\(\)' -Code "process_refresh_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'HasExited' -Code "process_has_exited_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'MainModule\.FileName' -Code "process_mainmodule_filename_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'System\.ComponentModel\.Win32Exception' -Code "process_win32_exception_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'System\.InvalidOperationException' -Code "process_invalid_operation_exception_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'process_access_denied' -Code "process_access_denied_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'process_main_module_unavailable' -Code "process_main_module_unavailable_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'process_already_exited' -Code "process_already_exited_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'process_executable_path_empty' -Code "process_executable_path_empty_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'process_executable_path_invalid' -Code "process_executable_path_invalid_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern 'process_query_failed' -Code "process_query_failed_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern '\[System\.IO\.Path\]::IsPathRooted' -Code "process_relative_path_rejection_missing"
+Assert-Contains -Text $processExecutableFunctionText -Pattern '\[System\.IO\.Path\]::GetFullPath' -Code "process_fullpath_missing"
+Assert-Contains -Text $text -Pattern 'Convert-ToComparableExecutablePath' -Code "process_comparable_path_missing"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern '\[System\.Diagnostics\.Process\]::GetProcessesByName\("postgres"\)' -Code "dotnet_postgres_inventory_missing"
+Assert-NotContains -Text $processEvidenceFunctionText -Pattern "Get-CimInstance|Get-WmiObject|tasklist|wmic|Stop-Process|taskkill|Kill\(\)" -Code "process_inventory_unsafe"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern "Get-ProcessExecutablePathCompatible" -Code "inventory_process_resolver_missing"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern "AUTHORIZED_PACKAGE_PROCESS" -Code "authorized_process_classification_missing"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern "AMBIGUOUS_POSTGRES_PROCESS" -Code "ambiguous_process_classification_missing"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern "OTHER_POSTGRES_PROCESS" -Code "other_process_classification_missing"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern "StartTime\.ToUniversalTime\(\)" -Code "inventory_starttime_utc_missing"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern "process_query_failed" -Code "inventory_ambiguous_error_code_missing"
+Assert-Contains -Text $processEvidenceFunctionText -Pattern "Dispose\(\)" -Code "inventory_process_dispose_missing"
+Assert-NotContains -Text $processEvidenceFunctionText -Pattern "Write-Output|Write-Host|Write-Verbose|Write-Warning" -Code "process_inventory_outputs_detected"
+Assert-Contains -Text $pgCtlFailureFunctionText -Pattern "NO_SERVER_EVIDENCE" -Code "no_server_evidence_state_missing"
+Assert-Contains -Text $pgCtlFailureFunctionText -Pattern "VERIFIED_SERVER_RUNNING" -Code "verified_server_running_state_missing"
+Assert-Contains -Text $serverStateFunctionText -Pattern "SERVER_STATE_UNRESOLVED" -Code "server_state_unresolved_missing"
+Assert-Contains -Text $serverStateFunctionText -Pattern "Get-LocalPostgresProcessEvidence" -Code "no_pidfile_inventory_not_used"
+Assert-Contains -Text $serverStateFunctionText -Pattern "AuthorizedCount -gt 0" -Code "authorized_process_unresolved_missing"
+Assert-Contains -Text $serverStateFunctionText -Pattern "AmbiguousCount -gt 0" -Code "ambiguous_process_unresolved_missing"
+Assert-Contains -Text $serverStateFunctionText -Pattern "VERIFIED_SERVER_RUNNING" -Code "valid_pidfile_running_missing"
+Assert-Contains -Text $pgCtlStopFunctionText -Pattern '"stop", "-D", \$Layout\.DataRoot, "-m", "fast", "-w", "-t", "30"' -Code "pg_ctl_stop_args_missing"
+Assert-Contains -Text $pgCtlStopFunctionText -Pattern "Get-PostmasterPidInfo" -Code "pg_ctl_stop_pre_pid_validation_missing"
+Assert-Contains -Text $pgCtlStopFunctionText -Pattern "Wait-ForVerifiedServerStopState" -Code "pg_ctl_stop_post_recheck_missing"
+Assert-NotContains -Text $pgCtlStopFunctionText -Pattern 'if \(-not \$stopResult\.Success\)' -Code "pg_ctl_stop_immediate_failure_detected"
+Assert-Contains -Text $postStopWaitFunctionText -Pattern '\[System\.Diagnostics\.Stopwatch\]::StartNew\(\)' -Code "post_stop_stopwatch_missing"
+Assert-Contains -Text $postStopWaitFunctionText -Pattern 'Elapsed\.TotalSeconds -lt 15' -Code "post_stop_timeout_15_missing"
+Assert-Contains -Text $postStopWaitFunctionText -Pattern 'Start-Sleep -Milliseconds 300' -Code "post_stop_poll_interval_missing"
+Assert-Contains -Text $postStopWaitFunctionText -Pattern "Test-LoopbackListenerOpen" -Code "post_stop_listener_check_missing"
+Assert-Contains -Text $postStopWaitFunctionText -Pattern "Get-OriginalPostgresProcessState" -Code "post_stop_original_identity_missing"
+Assert-Contains -Text $originalProcessStateFunctionText -Pattern "Get-ProcessExecutablePathCompatible" -Code "original_process_resolver_missing"
+Assert-Contains -Text $originalProcessStateFunctionText -Pattern "StartTime\.ToUniversalTime\(\)" -Code "original_starttime_missing"
+Assert-Contains -Text $originalProcessStateFunctionText -Pattern "ORIGINAL_PROCESS_RUNNING" -Code "original_running_state_missing"
+Assert-Contains -Text $originalProcessStateFunctionText -Pattern "ORIGINAL_PROCESS_EXITED" -Code "original_exited_state_missing"
+Assert-Contains -Text $originalProcessStateFunctionText -Pattern "PROCESS_STATE_UNRESOLVED" -Code "original_unresolved_state_missing"
+Assert-Contains -Text $originalProcessStateFunctionText -Pattern "PID_REUSED" -Code "pid_reuse_detection_missing"
+Assert-Contains -Text $createFunctionText -Pattern "pg_ctl_start_failed_no_server" -Code "pg_ctl_no_server_error_missing"
+Assert-Contains -Text $createFunctionText -Pattern "pg_ctl_start_failed_server_stopped" -Code "pg_ctl_server_stopped_error_missing"
+Assert-Contains -Text $createFunctionText -Pattern "postgres_server_cleanup_failed" -Code "pg_ctl_cleanup_failed_error_missing"
+Assert-Contains -Text $createFunctionText -Pattern "postgres_server_state_unresolved" -Code "pg_ctl_state_unresolved_error_missing"
+Assert-NotContains -Text $createFunctionText -Pattern 'Throw-SafeError -Code "pg_ctl_timeout"' -Code "direct_pg_ctl_timeout_throw_detected"
+Assert-NotContains -Text $text -Pattern "Stop-Process|taskkill|ProcessName[^\r\n]+Kill|Kill\(\)[^\r\n]+postgres" -Code "unsafe_process_kill_detected"
+Assert-NotContains -Text $text -Pattern '"register"|"service"|"\-N"|"\-U"|"\-P"|"\-S"' -Code "pg_ctl_service_arg_detected"
+Assert-Contains -Text $text -Pattern "postmaster\.pid" -Code "postmaster_pid_validation_missing"
+Assert-Contains -Text $pidFunctionText -Pattern '\$lines\[1\]' -Code "postmaster_dataroot_line_missing"
+Assert-Contains -Text $pidFunctionText -Pattern 'postmaster_dataroot_mismatch' -Code "postmaster_dataroot_mismatch_missing"
+Assert-Contains -Text $pidFunctionText -Pattern 'postmaster_port_mismatch' -Code "postmaster_port_mismatch_missing"
+Assert-Contains -Text $text -Pattern "Assert-PostgresProcessForInstance" -Code "postgres_process_validation_missing"
+Assert-Contains -Text $text -Pattern "Assert-LoopbackListener" -Code "listener_validation_missing"
+Assert-Contains -Text $text -Pattern "Write-ClusterState" -Code "cluster_state_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'Get-StableCreatedUtc' -Code "stable_created_utc_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'created_utc = \$createdUtc' -Code "created_utc_not_stable"
+Assert-Contains -Text $stateFunctionText -Pattern 'updated_utc = \$now' -Code "updated_utc_not_updated"
+Assert-NotContains -Text $stateFunctionText -Pattern 'created_utc = \$now' -Code "created_utc_regenerated"
+Assert-Contains -Text $stateFunctionText -Pattern 'server_state = \$ServerState' -Code "server_state_field_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'server_cleanup_attempted = \$ServerCleanupAttempted' -Code "server_cleanup_attempted_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'server_cleanup_completed = \$ServerCleanupCompleted' -Code "server_cleanup_completed_missing"
+Assert-Contains -Text $concordanceFunctionText -Pattern '\$allowedStateKeys = @\(' -Code "state_allowlist_missing"
+Assert-Contains -Text $concordanceFunctionText -Pattern 'state_schema_invalid' -Code "state_schema_invalid_missing"
+Assert-Contains -Text $concordanceFunctionText -Pattern 'server_state' -Code "state_server_state_validation_missing"
+Assert-Contains -Text $text -Pattern "Assert-StrictFlatStateJson" -Code "strict_json_scan_missing"
+Assert-Contains -Text $strictJsonFunctionText -Pattern "Read-StrictJsonString" -Code "json_string_parser_missing"
+Assert-Contains -Text $strictJsonFunctionText -Pattern "state_duplicate_key" -Code "json_duplicate_key_error_missing"
+Assert-Contains -Text $strictJsonFunctionText -Pattern '\$JsonText\[\$indexRef\.Value\] -ne ''\{''' -Code "json_root_object_check_missing"
+Assert-Contains -Text $strictJsonFunctionText -Pattern '\$valueStart -eq ''\{''\s+-or\s+\$valueStart -eq ''\[''' -Code "json_array_rejection_missing"
+Assert-Contains -Text $strictJsonFunctionText -Pattern '\$indexRef\.Value -ne \$JsonText\.Length' -Code "json_trailing_garbage_check_missing"
+if ($text.IndexOf("Assert-StrictFlatStateJson", [System.StringComparison]::Ordinal) -gt $text.IndexOf("ConvertFrom-Json", [System.StringComparison]::Ordinal)) {
+  Fail -Code "json_duplicate_scan_after_parse"
+}
+Assert-Contains -Text $concordanceFunctionText -Pattern 'cluster_id' -Code "concordance_cluster_id_missing"
+Assert-Contains -Text $concordanceFunctionText -Pattern 'instance_name' -Code "concordance_instance_name_missing"
+Assert-Contains -Text $concordanceFunctionText -Pattern 'marker_state_mismatch' -Code "marker_state_error_missing"
+if (@([regex]::Matches($createFunctionText, "Assert-MarkerStateConcordance")).Count -lt 5) { Fail -Code "marker_state_concordance_calls_missing" }
+Assert-Contains -Text $dataRootFunctionText -Pattern 'Assert-Marker[\s\S]+return \$full' -Code "dataroot_marker_success_return_missing"
+Assert-Contains -Text $text -Pattern "VOTO_CLARO_ISOLATED_BASELINE_TEST_V1" -Code "marker_magic_missing"
+Assert-NotContains -Text $text -Pattern "Remove-Item\s+[^\r\n]*-Recurse" -Code "recursive_remove_detected"
 Assert-Contains -Text $text -Pattern "Invoke-LocalCompatPreflightValidator" -Code "compat_preflight_validator_missing"
 Assert-Contains -Text $text -Pattern "Validate-LocalCompatPreflightCandidate\.ps1" -Code "compat_validator_not_referenced"
 Assert-NotContains -Text $text -Pattern "local-compat-preflight\.candidate\.sql[^\r\n]*(psql|--file|Invoke-Expression)" -Code "compat_sql_execution_detected"
@@ -180,6 +418,62 @@ foreach ($code in @(
     "port_invalid",
     "port_reserved",
     "port_in_use",
+    "create_not_authorized",
+    "repo_not_clean",
+    "branch_not_allowed",
+    "git_repository_invalid",
+    "git_base_commit_missing",
+    "git_ancestry_invalid",
+    "git_command_failed",
+    "git_working_directory_invalid",
+    "git_command_timeout",
+    "git_output_drain_failed",
+    "postgres_version_invalid",
+    "isolated_root_invalid",
+    "instance_root_exists",
+    "dataroot_exists",
+    "protected_path",
+    "reparse_point_detected",
+    "port_unavailable",
+    "acl_apply_failed",
+    "acl_validation_failed",
+    "credential_protection_failed",
+    "password_file_create_failed",
+    "password_file_cleanup_failed",
+    "initdb_failed",
+    "initdb_timeout",
+    "initdb_partial",
+    "pg_version_invalid",
+    "postgresql_conf_write_failed",
+    "pg_hba_write_failed",
+    "port_race_detected",
+    "pg_ctl_start_failed",
+    "pg_ctl_timeout",
+    "pg_ctl_start_failed_no_server",
+    "pg_ctl_start_failed_server_stopped",
+    "postgres_server_state_unresolved",
+    "postgres_server_cleanup_failed",
+    "postmaster_pid_missing",
+    "postmaster_pid_invalid",
+    "postmaster_dataroot_mismatch",
+    "postmaster_port_mismatch",
+    "postgres_process_unverified",
+    "listener_verification_failed",
+    "process_output_drain_failed",
+    "process_timeout_cleanup_failed",
+    "process_object_missing",
+    "process_already_exited",
+    "process_main_module_unavailable",
+    "process_executable_path_empty",
+    "process_executable_path_invalid",
+    "process_access_denied",
+    "process_query_failed",
+    "state_write_failed",
+    "state_schema_invalid",
+    "state_duplicate_key",
+    "marker_state_mismatch",
+    "create_failed",
+    "create_completed",
     "cluster_name_invalid",
     "database_name_invalid",
     "data_root_invalid",
@@ -207,7 +501,47 @@ foreach ($code in @(
 
 foreach ($line in @(
     "dependency_names=",
+    "isolated_root=",
+    "instance_name=",
+    "admin_role=",
+    "credential_strategy=WINDOWS_DPAPI_CURRENT_USER",
+    "authentication=scram-sha-256",
+    "create_implementation_present=true",
+    "git_ancestry_strategy=MERGE_BASE_IS_ANCESTOR",
+    "process_output_strategy=ASYNC_DUAL_STREAM_DRAIN",
+    "windows_argument_empty_value_safe=true",
+    "pg_hba_ipv6_reject=::/0",
+    "file_acl_inheritance=NONE",
+    "marker_state_concordance_required=true",
+    "created_utc_stable=true",
+    "git_working_directory_enforced=true",
+    "process_output_drain_verified=true",
+    "process_output_drain_failure_code=process_output_drain_failed",
+    "no_pidfile_process_inventory=DOTNET_LOCAL_PROCESS_ENUMERATION",
+    "no_server_evidence_requires_zero_authorized_or_ambiguous_processes=true",
+    "process_executable_path_strategy=MAINMODULE_FILENAME_PS51",
+    "process_path_property_used=false",
+    "process_access_failure_strategy=AMBIGUOUS_FAIL_CLOSED",
+    "process_identity_strategy=PID_MAINMODULE_STARTTIME",
+    "real_process_enumeration_in_plan=false",
+    "pg_ctl_start_failure_recovery=VERIFIED_PID_DATAROOT_EXECUTABLE_LISTENER",
+    "pg_ctl_stop_strategy=FAST_WAIT_30_VERIFIED",
+    "pg_ctl_stop_recheck_always=true",
+    "pg_ctl_stop_recheck_timeout_seconds=15",
+    "pid_reuse_detection=true",
+    "postmaster_dataroot_validation=true",
+    "raw_json_duplicate_scan_before_parse=true",
+    "server_state_schema_strict=true",
+    "state_schema_flat_strict=true",
+    "server_state_unresolved_fail_closed=true",
     "ready_for_create=",
+    "create_authorized=false",
+    "create_execution_blocked=true",
+    "create_execution_requires_exact_approval=true",
+    "apply_implementation_present=false",
+    "verify_implementation_present=false",
+    "destroy_implementation_present=false",
+    "fulltest_implementation_present=false",
     "ready_for_apply=",
     "ready_for_verify=",
     "ready_for_destroy=",
@@ -216,16 +550,16 @@ foreach ($line in @(
     "human_approval_required_for_create=true",
     "human_approval_required_for_apply=true",
     "human_approval_required_for_destroy=true",
-    "destroy_requires_separate_action=true"
-    "local_compat_preflight_valid="
-    "local_compat_preflight_ready_for_execution="
-    "local_compat_preflight_human_review_required="
-    "local_compat_preflight_extension_strategy="
-    "local_compat_preflight_unresolved_dependency_count="
-    "compatibility_strategy_complete="
-    "complete_postgres_package="
-    "postgres_bki_present="
-    "pgcrypto_control_present="
+    "destroy_requires_separate_action=true",
+    "local_compat_preflight_valid=",
+    "local_compat_preflight_ready_for_execution=",
+    "local_compat_preflight_human_review_required=",
+    "local_compat_preflight_extension_strategy=",
+    "local_compat_preflight_unresolved_dependency_count=",
+    "compatibility_strategy_complete=",
+    "complete_postgres_package=",
+    "postgres_bki_present=",
+    "pgcrypto_control_present=",
     "pgcrypto_library_present="
   )) {
   Assert-Contains -Text $text -Pattern ([regex]::Escape($line)) -Code ("plan_output_missing_" + ($line -replace "[^a-z_]", ""))
@@ -248,10 +582,291 @@ foreach ($needle in @(
     "REVOKE",
     "FullTest no destruye",
     "Destroy siempre es accion separada",
-    "ninguna accion distinta de Plan"
+    "Create esta implementada",
+    "doble autorizacion exacta",
+    "descendencia Git real",
+    "merge-base --is-ancestor",
+    "drenaje concurrente",
+    "argumento vacio",
+    "::/0",
+    "ACL diferenciada",
+    "created_utc estable",
+    "concordancia marker/state",
+    "System.String no puede borrarse",
+    "LOCALAPPDATA\VotoClaro\PostgreSQL\isolated-baseline-test\pg17-port55432",
+    "127.0.0.1:55432",
+    "SCRAM-SHA-256",
+    "DPAPI",
+    "pwfile temporal",
+    "no crea servicio Windows",
+    "no modifica Firewall",
+    "no ejecuta SQL",
+    "no se conecta a Supabase",
+    "Windows PowerShell 5.1",
+    "Process.MainModule.FileName",
+    "Process.Path no se utiliza",
+    "evidencia queda ambigua",
+    "PID, ExecutablePath y StartTimeUtc",
+    "dispone cada objeto Process",
+    "Una instancia parcial no se borra automaticamente",
+    "no copiar, abrir ni compartir archivos de secrets"
   )) {
   Assert-Contains -Text $readmeText -Pattern ([regex]::Escape($needle)) -Code ("readme_missing_" + ($needle -replace "[^a-zA-Z0-9]", "_"))
 }
+
+function Assert-MutationRemovesRequired {
+  param(
+    [Parameter(Mandatory = $true)][string]$MutatedText,
+    [Parameter(Mandatory = $true)][string]$RequiredPattern,
+    [Parameter(Mandatory = $true)][string]$Code
+  )
+  if ($MutatedText -cmatch $RequiredPattern) {
+    Fail -Code $Code
+  }
+}
+
+function Assert-MutationAddsForbidden {
+  param(
+    [Parameter(Mandatory = $true)][string]$MutatedText,
+    [Parameter(Mandatory = $true)][string]$ForbiddenPattern,
+    [Parameter(Mandatory = $true)][string]$Code
+  )
+  if ($MutatedText -cnotmatch $ForbiddenPattern) {
+    Fail -Code $Code
+  }
+}
+
+function Resolve-SimulatedProcessExecutablePathForSelfTest {
+  param([AllowNull()][object]$Process)
+  if ($null -eq $Process) {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_object_missing" }
+  }
+  if ($Process.HasExited -eq $true) {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_already_exited" }
+  }
+  if ($Process.AccessDenied -eq $true) {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_access_denied" }
+  }
+  if ($Process.MainModuleUnavailable -eq $true) {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_main_module_unavailable" }
+  }
+  if ([string]::IsNullOrWhiteSpace($Process.MainModuleFileName)) {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_executable_path_empty" }
+  }
+  if (-not [System.IO.Path]::IsPathRooted([string]$Process.MainModuleFileName)) {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_executable_path_invalid" }
+  }
+  return [pscustomobject]@{ Success = $true; ExecutablePath = [System.IO.Path]::GetFullPath([string]$Process.MainModuleFileName); SafeErrorCode = "none" }
+}
+
+function Get-SimulatedLocalPostgresClassificationForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][object]$Process,
+    [Parameter(Mandatory = $true)][string]$ExpectedExecutable
+  )
+  $resolved = Resolve-SimulatedProcessExecutablePathForSelfTest -Process $Process
+  if (-not $resolved.Success) { return "AMBIGUOUS_POSTGRES_PROCESS" }
+  if ($Process.StartTimeAvailable -ne $true) { return "AMBIGUOUS_POSTGRES_PROCESS" }
+  if ($Process.ProcessName -ne "postgres") { return "AMBIGUOUS_POSTGRES_PROCESS" }
+  $actual = [System.IO.Path]::GetFullPath($resolved.ExecutablePath).TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
+  $expected = [System.IO.Path]::GetFullPath($ExpectedExecutable).TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
+  if ([string]::Equals($actual, $expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return "AUTHORIZED_PACKAGE_PROCESS"
+  }
+  return "OTHER_POSTGRES_PROCESS"
+}
+
+function Get-SimulatedOriginalPostgresStateForSelfTest {
+  param(
+    [AllowNull()][object]$Process,
+    [Parameter(Mandatory = $true)][object]$OriginalIdentity
+  )
+  if ($null -eq $Process) { return "ORIGINAL_PROCESS_EXITED" }
+  $resolved = Resolve-SimulatedProcessExecutablePathForSelfTest -Process $Process
+  if (-not $resolved.Success) {
+    if ($resolved.SafeErrorCode -eq "process_already_exited") { return "ORIGINAL_PROCESS_EXITED" }
+    return "PROCESS_STATE_UNRESOLVED"
+  }
+  if ($Process.StartTimeAvailable -ne $true) { return "PROCESS_STATE_UNRESOLVED" }
+  $actual = [System.IO.Path]::GetFullPath($resolved.ExecutablePath).TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
+  $expected = [System.IO.Path]::GetFullPath($OriginalIdentity.ExecutablePath).TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
+  if ($Process.Pid -eq $OriginalIdentity.Pid -and
+      $Process.ProcessName -eq $OriginalIdentity.ProcessName -and
+      [string]::Equals($actual, $expected, [System.StringComparison]::OrdinalIgnoreCase) -and
+      $Process.StartTimeUtc -eq $OriginalIdentity.StartTimeUtc) {
+    return "ORIGINAL_PROCESS_RUNNING"
+  }
+  return "PID_REUSED"
+}
+
+function Get-SimulatedNoPidServerStateForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$ListenerOpen,
+    [Parameter(Mandatory = $true)][int]$AuthorizedCount,
+    [Parameter(Mandatory = $true)][int]$AmbiguousCount
+  )
+  if ($ListenerOpen -or $AuthorizedCount -gt 0 -or $AmbiguousCount -gt 0) {
+    return "SERVER_STATE_UNRESOLVED"
+  }
+  return "NO_SERVER_EVIDENCE"
+}
+
+$expectedSelfTestPath = "C:\vc\pg\bin\postgres.exe"
+$otherSelfTestPath = "D:\other\pg\bin\postgres.exe"
+$sameStartTime = [datetime]"2026-01-01T00:00:00Z"
+$simulatedAuthorized = [pscustomobject]@{ Pid = 10; ProcessName = "postgres"; MainModuleFileName = $expectedSelfTestPath; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedOther = [pscustomobject]@{ Pid = 11; ProcessName = "postgres"; MainModuleFileName = $otherSelfTestPath; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedNoPath = [pscustomobject]@{ Pid = 12; ProcessName = "postgres"; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; MainModuleFileName = $expectedSelfTestPath; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedMainModuleUnavailable = [pscustomobject]@{ Pid = 13; ProcessName = "postgres"; MainModuleFileName = $expectedSelfTestPath; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $true; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedAccessDenied = [pscustomobject]@{ Pid = 14; ProcessName = "postgres"; MainModuleFileName = $expectedSelfTestPath; HasExited = $false; AccessDenied = $true; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedExited = [pscustomobject]@{ Pid = 15; ProcessName = "postgres"; MainModuleFileName = $expectedSelfTestPath; HasExited = $true; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedEmptyPath = [pscustomobject]@{ Pid = 16; ProcessName = "postgres"; MainModuleFileName = " "; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedRelativePath = [pscustomobject]@{ Pid = 17; ProcessName = "postgres"; MainModuleFileName = "postgres.exe"; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }
+$simulatedNoStartTime = [pscustomobject]@{ Pid = 18; ProcessName = "postgres"; MainModuleFileName = $expectedSelfTestPath; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $false; StartTimeUtc = $sameStartTime }
+$originalIdentity = [pscustomobject]@{ Pid = 10; ProcessName = "postgres"; ExecutablePath = $expectedSelfTestPath; StartTimeUtc = $sameStartTime }
+
+if ((Resolve-SimulatedProcessExecutablePathForSelfTest -Process $null).SafeErrorCode -ne "process_object_missing") { Fail -Code "selftest_simulated_null_process_failed" }
+if ((Resolve-SimulatedProcessExecutablePathForSelfTest -Process $simulatedNoPath).SafeErrorCode -ne "none") { Fail -Code "selftest_simulated_without_path_property_failed" }
+if ((Resolve-SimulatedProcessExecutablePathForSelfTest -Process $simulatedMainModuleUnavailable).SafeErrorCode -ne "process_main_module_unavailable") { Fail -Code "selftest_simulated_mainmodule_unavailable_failed" }
+if ((Resolve-SimulatedProcessExecutablePathForSelfTest -Process $simulatedAccessDenied).SafeErrorCode -ne "process_access_denied") { Fail -Code "selftest_simulated_access_denied_failed" }
+if ((Resolve-SimulatedProcessExecutablePathForSelfTest -Process $simulatedExited).SafeErrorCode -ne "process_already_exited") { Fail -Code "selftest_simulated_exited_failed" }
+if ((Resolve-SimulatedProcessExecutablePathForSelfTest -Process $simulatedEmptyPath).SafeErrorCode -ne "process_executable_path_empty") { Fail -Code "selftest_simulated_empty_path_failed" }
+if ((Resolve-SimulatedProcessExecutablePathForSelfTest -Process $simulatedRelativePath).SafeErrorCode -ne "process_executable_path_invalid") { Fail -Code "selftest_simulated_relative_path_failed" }
+if ((Get-SimulatedLocalPostgresClassificationForSelfTest -Process $simulatedAuthorized -ExpectedExecutable $expectedSelfTestPath) -ne "AUTHORIZED_PACKAGE_PROCESS") { Fail -Code "selftest_simulated_authorized_failed" }
+if ((Get-SimulatedLocalPostgresClassificationForSelfTest -Process $simulatedOther -ExpectedExecutable $expectedSelfTestPath) -ne "OTHER_POSTGRES_PROCESS") { Fail -Code "selftest_simulated_other_failed" }
+if ((Get-SimulatedLocalPostgresClassificationForSelfTest -Process $simulatedNoStartTime -ExpectedExecutable $expectedSelfTestPath) -ne "AMBIGUOUS_POSTGRES_PROCESS") { Fail -Code "selftest_simulated_missing_starttime_failed" }
+if ((Get-SimulatedOriginalPostgresStateForSelfTest -Process $simulatedAuthorized -OriginalIdentity $originalIdentity) -ne "ORIGINAL_PROCESS_RUNNING") { Fail -Code "selftest_simulated_original_same_failed" }
+if ((Get-SimulatedOriginalPostgresStateForSelfTest -Process ([pscustomobject]@{ Pid = 10; ProcessName = "postgres"; MainModuleFileName = $expectedSelfTestPath; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = ([datetime]"2026-01-01T00:00:01Z") }) -OriginalIdentity $originalIdentity) -ne "PID_REUSED") { Fail -Code "selftest_simulated_starttime_reuse_failed" }
+if ((Get-SimulatedOriginalPostgresStateForSelfTest -Process ([pscustomobject]@{ Pid = 10; ProcessName = "postgres"; MainModuleFileName = $otherSelfTestPath; HasExited = $false; AccessDenied = $false; MainModuleUnavailable = $false; StartTimeAvailable = $true; StartTimeUtc = $sameStartTime }) -OriginalIdentity $originalIdentity) -ne "PID_REUSED") { Fail -Code "selftest_simulated_path_reuse_failed" }
+if ((Get-SimulatedOriginalPostgresStateForSelfTest -Process $null -OriginalIdentity $originalIdentity) -ne "ORIGINAL_PROCESS_EXITED") { Fail -Code "selftest_simulated_process_gone_failed" }
+if ((Get-SimulatedOriginalPostgresStateForSelfTest -Process $simulatedAccessDenied -OriginalIdentity $originalIdentity) -ne "PROCESS_STATE_UNRESOLVED") { Fail -Code "selftest_simulated_ambiguous_original_failed" }
+if ((Get-SimulatedNoPidServerStateForSelfTest -ListenerOpen:$false -AuthorizedCount 0 -AmbiguousCount 0) -ne "NO_SERVER_EVIDENCE") { Fail -Code "selftest_simulated_no_server_failed" }
+if ((Get-SimulatedNoPidServerStateForSelfTest -ListenerOpen:$false -AuthorizedCount 1 -AmbiguousCount 0) -ne "SERVER_STATE_UNRESOLVED") { Fail -Code "selftest_simulated_no_server_authorized_failed" }
+if ((Get-SimulatedNoPidServerStateForSelfTest -ListenerOpen:$false -AuthorizedCount 0 -AmbiguousCount 1) -ne "SERVER_STATE_UNRESOLVED") { Fail -Code "selftest_simulated_no_server_ambiguous_failed" }
+
+Assert-MutationRemovesRequired -MutatedText ($text -replace "127\.0\.0\.1", "0.0.0.0") -RequiredPattern "listen_addresses = '127\.0\.0\.1'" -Code "selftest_host_0000_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nlocalhost") -ForbiddenPattern "localhost" -Code "selftest_localhost_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`n::1") -ForbiddenPattern "::1" -Code "selftest_ipv6_loopback_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "55432", "5432") -RequiredPattern "port = 55432" -Code "selftest_port_5432_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "55432", "55433") -RequiredPattern '\$script:CreatePort\s*=\s*55432' -Code "selftest_other_port_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "VotoClaro\\PostgreSQL\\isolated-baseline-test", "VotoClaro\\elsewhere") -RequiredPattern "VotoClaro\\PostgreSQL\\isolated-baseline-test" -Code "selftest_bad_root_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nC:\Program Files\PostgreSQL") -ForbiddenPattern "Program Files" -Code "selftest_program_files_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`n\\server\share") -ForbiddenPattern "\\\\server\\share" -Code "selftest_unc_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace '\[switch\]\$ConfirmCreate', '[switch]$ConfirmMaybe') -RequiredPattern '\[switch\]\$ConfirmCreate' -Code "selftest_confirm_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432", "CREATE_VOTO_CLARO_ISOLATED") -RequiredPattern "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432" -Code "selftest_token_partial_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text -replace "vc_isolated_admin", "postgres") -ForbiddenPattern "admin_user_invalid" -Code "selftest_admin_postgres_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`ntrust") -ForbiddenPattern "\btrust\b" -Code "selftest_trust_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nmd5") -ForbiddenPattern "\bmd5\b" -Code "selftest_md5_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`n--password=secret") -ForbiddenPattern "password=secret" -Code "selftest_password_argument_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`npassword = 'fixed'") -ForbiddenPattern "password\s*=\s*'fixed'" -Code "selftest_fixed_password_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "RandomNumberGenerator", "Random") -RequiredPattern "RandomNumberGenerator" -Code "selftest_rng_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "ConvertFrom-SecureString", "ConvertTo-InsecureString") -RequiredPattern "ConvertFrom-SecureString" -Code "selftest_dpapi_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace 'vc_isolated_admin\.dpapi', 'outside.dpapi') -RequiredPattern 'vc_isolated_admin\.dpapi' -Code "selftest_credential_path_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace 'initdb-password\.tmp', 'outside.tmp') -RequiredPattern 'initdb-password\.tmp' -Code "selftest_pwfile_path_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "finally", "afterwards") -RequiredPattern "finally" -Code "selftest_finally_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "Remove-PasswordFileStrict", "Skip-PasswordFileCleanup") -RequiredPattern "Remove-PasswordFileStrict" -Code "selftest_pwfile_cleanup_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nEveryone") -ForbiddenPattern "Everyone" -Code "selftest_everyone_acl_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nAuthenticated Users") -ForbiddenPattern "Authenticated Users" -Code "selftest_authenticated_users_acl_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nfsync = off") -ForbiddenPattern "fsync\s*=\s*off" -Code "selftest_fsync_off_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nfull_page_writes = off") -ForbiddenPattern "full_page_writes\s*=\s*off" -Code "selftest_full_page_writes_off_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nregister") -ForbiddenPattern "register" -Code "selftest_pg_ctl_register_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nsc.exe") -ForbiddenPattern "sc\.exe" -Code "selftest_sc_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nnetsh") -ForbiddenPattern "netsh" -Code "selftest_netsh_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nInvoke-Expression") -ForbiddenPattern "Invoke-Expression" -Code "selftest_invoke_expression_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`ncmd.exe") -ForbiddenPattern "cmd\.exe" -Code "selftest_cmd_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`npsql") -ForbiddenPattern "\bpsql\b" -Code "selftest_psql_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`ncreatedb") -ForbiddenPattern "\bcreatedb\b" -Code "selftest_createdb_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nSELECT 1") -ForbiddenPattern "SELECT 1" -Code "selftest_sql_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nRemove-Item -Recurse") -ForbiddenPattern "Remove-Item\s+-Recurse" -Code "selftest_recursive_remove_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace '"Apply" \{ Invoke-BlockedFutureAction -RequestedAction "Apply" \}', '"Apply" { Invoke-Apply }') -RequiredPattern '"Apply" \{ Invoke-BlockedFutureAction -RequestedAction "Apply" \}' -Code "selftest_apply_unblocked_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}', '"Verify" { Invoke-Verify }') -RequiredPattern '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}' -Code "selftest_verify_unblocked_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace 'Invoke-BlockedFutureAction -RequestedAction "Destroy"', 'Invoke-Destroy') -RequiredPattern 'Invoke-BlockedFutureAction -RequestedAction "Destroy"' -Code "selftest_destroy_unblocked_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace '"FullTest" \{ Invoke-BlockedFutureAction -RequestedAction "FullTest" \}', '"FullTest" { Invoke-FullTest }') -RequiredPattern '"FullTest" \{ Invoke-BlockedFutureAction -RequestedAction "FullTest" \}' -Code "selftest_fulltest_unblocked_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($planFunctionText + "`nNew-Item x") -ForbiddenPattern "New-Item" -Code "selftest_plan_write_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($planFunctionText + "`nTcpListener") -ForbiddenPattern "TcpListener" -Code "selftest_plan_listener_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($planFunctionText + "`nRandomNumberGenerator") -ForbiddenPattern "RandomNumberGenerator" -Code "selftest_plan_password_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nWrite-Output `$plainTextPassword") -ForbiddenPattern "plainTextPassword" -Code "selftest_password_output_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nstate_password=secret") -ForbiddenPattern "state_password" -Code "selftest_state_secret_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nmarker_password=secret") -ForbiddenPattern "marker_password" -Code "selftest_marker_secret_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "postmaster\.pid", "postmaster.missing") -RequiredPattern "postmaster\.pid" -Code "selftest_postmaster_pid_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "Assert-PostgresProcessForInstance", "Skip-PostgresProcessValidation") -RequiredPattern "Assert-PostgresProcessForInstance" -Code "selftest_postgres_process_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace "port_race_detected", "port_race_skipped") -RequiredPattern "port_race_detected" -Code "selftest_port_revalidation_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($gitFunctionText + "`n[0-9a-f]{7,}") -ForbiddenPattern '\[0-9a-f\]\{7,\}' -Code "selftest_git_hash_regex_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($gitFunctionText -replace '"merge-base","--is-ancestor","fe899a1","HEAD"', '"merge-base","--is-ancestor","HEAD","fe899a1"') -RequiredPattern '"merge-base","--is-ancestor","fe899a1","HEAD"' -Code "selftest_merge_base_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($gitFunctionText -replace '"rev-parse","--verify","fe899a1\^\{commit\}"', '"rev-parse","--verify","HEAD"') -RequiredPattern '"rev-parse","--verify","fe899a1\^\{commit\}"' -Code "selftest_base_commit_verify_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($gitFunctionText -replace '"status","--porcelain=v1","--untracked-files=all"', '"status","--short"') -RequiredPattern '"status","--porcelain=v1","--untracked-files=all"' -Code "selftest_untracked_status_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($runnerFunctionText -replace 'StandardOutput\.ReadToEndAsync\(\)', 'StandardOutput.ReadToEnd()') -RequiredPattern 'StandardOutput\.ReadToEndAsync\(\)' -Code "selftest_stdout_async_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($runnerFunctionText -replace 'StandardError\.ReadToEndAsync\(\)', 'StandardError.ReadToEnd()') -RequiredPattern 'StandardError\.ReadToEndAsync\(\)' -Code "selftest_stderr_async_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($runnerFunctionText + "`nStandardOutput.ReadToEnd()") -ForbiddenPattern 'StandardOutput\.ReadToEnd\(\)' -Code "selftest_sync_read_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($runnerFunctionText -replace '4096', '999999') -RequiredPattern '4096' -Code "selftest_output_tail_limit_missing_not_detected"
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value "") -ne '""') { Fail -Code "selftest_empty_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value "abc") -ne "abc") { Fail -Code "selftest_simple_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value "a b") -ne '"a b"') { Fail -Code "selftest_space_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'C:\Ruta con espacios\archivo.txt') -ne '"C:\Ruta con espacios\archivo.txt"') { Fail -Code "selftest_path_space_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'valor con "comillas"') -ne '"valor con \"comillas\""') { Fail -Code "selftest_quote_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'a\"b') -ne '"a\\\"b"') { Fail -Code "selftest_backslash_quote_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'C:\fin con espacio\') -ne '"C:\fin con espacio\\"') { Fail -Code "selftest_trailing_backslash_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'Peru-ñ') -ne 'Peru-ñ') { Fail -Code "selftest_unicode_argument_failed" }
+$nullRejected = $false
+try { [void](ConvertTo-WindowsProcessArgumentForSelfTest -Value $null) } catch { $nullRejected = $true }
+if (-not $nullRejected) { Fail -Code "selftest_null_argument_not_rejected" }
+Assert-MutationAddsForbidden -MutatedText ($text + "`n::0/0") -ForbiddenPattern "::0/0" -Code "selftest_pg_hba_ambiguous_ipv6_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nhost all all ::1/128 scram-sha-256") -ForbiddenPattern "::1/128" -Code "selftest_pg_hba_ipv6_allow_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nhost all all 127.0.0.1/32 scram-sha-256") -ForbiddenPattern "scram-sha-256" -Code "selftest_pg_hba_second_scram_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($aclFunctionText + "`nFile ContainerInherit,ObjectInherit") -ForbiddenPattern "File ContainerInherit,ObjectInherit" -Code "selftest_file_acl_inheritance_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($stateFunctionText -replace 'created_utc = \$createdUtc', 'created_utc = $now') -ForbiddenPattern 'created_utc = \$now' -Code "selftest_created_utc_regeneration_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($createFunctionText -replace "Assert-MarkerStateConcordance", "Skip-MarkerStateConcordance") -RequiredPattern "Assert-MarkerStateConcordance" -Code "selftest_marker_state_concordance_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($concordanceFunctionText -replace "cluster_id", "cluster_missing") -RequiredPattern "cluster_id" -Code "selftest_concordance_cluster_id_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($dataRootFunctionText + "`nif (`$RequireMarker) { Throw-SafeError -Code `"marker_missing`" }") -ForbiddenPattern 'if \(\$RequireMarker\) \{ Throw-SafeError -Code "marker_missing" \}' -Code "selftest_unconditional_marker_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($gitCommandFunctionText -replace 'Invoke-SafeProcess -FilePath \$git -Arguments \$Arguments -WorkingDirectory \$full', 'Invoke-SafeProcess -FilePath $git -Arguments $Arguments -WorkingDirectory $PWD') -RequiredPattern 'Invoke-SafeProcess -FilePath \$git -Arguments \$Arguments -WorkingDirectory \$full' -Code "selftest_git_working_directory_ignored_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($gitCommandFunctionText -replace '\$full = \[System\.IO\.Path\]::GetFullPath\(\$WorkingDirectory\)', '$full = $WorkingDirectory') -RequiredPattern '\$full = \[System\.IO\.Path\]::GetFullPath\(\$WorkingDirectory\)' -Code "selftest_git_working_directory_not_canonical_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($runnerFunctionText -replace '\$stdoutDoneAfterTimeout = \$stdoutTask\.Wait\(5000\)', '[void]$stdoutTask.Wait(5000)') -RequiredPattern '\$stdoutDoneAfterTimeout = \$stdoutTask\.Wait\(5000\)' -Code "selftest_stdout_timeout_wait_ignored_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($runnerFunctionText -replace '\$stderrDoneAfterTimeout = \$stderrTask\.Wait\(5000\)', '[void]$stderrTask.Wait(5000)') -RequiredPattern '\$stderrDoneAfterTimeout = \$stderrTask\.Wait\(5000\)' -Code "selftest_stderr_timeout_wait_ignored_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($runnerFunctionText + "`n`$x = `$stdoutTask.Result") -ForbiddenPattern '\.Result' -Code "selftest_task_result_unchecked_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($runnerFunctionText -replace 'process_output_drain_failed', 'process_timeout') -RequiredPattern 'process_output_drain_failed' -Code "selftest_output_drain_code_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($createFunctionText + "`nif (`$startResult.TimedOut) { Throw-SafeError -Code `"pg_ctl_timeout`" }") -ForbiddenPattern 'Throw-SafeError -Code "pg_ctl_timeout"' -Code "selftest_direct_pg_ctl_timeout_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace 'Resolve-VerifiedPgCtlStartFailure', 'Skip-PgCtlRecovery') -RequiredPattern 'Resolve-VerifiedPgCtlStartFailure' -Code "selftest_pg_ctl_recovery_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($serverStateFunctionText -replace 'Get-LocalPostgresProcessEvidence', 'Skip-ProcessInventory') -RequiredPattern 'Get-LocalPostgresProcessEvidence' -Code "selftest_no_pidfile_inventory_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($processEvidenceFunctionText -replace '\[System\.Diagnostics\.Process\]::GetProcessesByName\("postgres"\)', '@()') -RequiredPattern '\[System\.Diagnostics\.Process\]::GetProcessesByName\("postgres"\)' -Code "selftest_dotnet_inventory_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`n`$process.Path") -ForbiddenPattern '\$(process|Process|proc|Proc|postgresProcess|postgresProc)\.Path\b' -Code "selftest_process_path_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($text + "`nGet-Process postgres | Select-Object Path") -ForbiddenPattern 'Get-Process[^\r\n|]*\|\s*Select(-Object)?\s+Path\b' -Code "selftest_get_process_select_path_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($processExecutableFunctionText -replace 'MainModule\.FileName', 'Path') -RequiredPattern 'MainModule\.FileName' -Code "selftest_mainmodule_filename_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($processExecutableFunctionText -replace 'System\.ComponentModel\.Win32Exception', 'System.Exception') -RequiredPattern 'System\.ComponentModel\.Win32Exception' -Code "selftest_win32_exception_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($processExecutableFunctionText -replace 'System\.InvalidOperationException', 'System.Exception') -RequiredPattern 'System\.InvalidOperationException' -Code "selftest_invalid_operation_exception_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($processEvidenceFunctionText -replace 'Get-ProcessExecutablePathCompatible', 'Skip-ProcessExecutablePath') -RequiredPattern 'Get-ProcessExecutablePathCompatible' -Code "selftest_inventory_resolver_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($processEvidenceFunctionText -replace 'StartTime\.ToUniversalTime\(\)', 'StartTime') -RequiredPattern 'StartTime\.ToUniversalTime\(\)' -Code "selftest_inventory_starttime_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($processEvidenceFunctionText -replace 'AMBIGUOUS_POSTGRES_PROCESS', 'OTHER_POSTGRES_PROCESS') -RequiredPattern 'AMBIGUOUS_POSTGRES_PROCESS' -Code "selftest_ambiguous_classification_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($processEvidenceFunctionText + "`nStop-Process -Id 1") -ForbiddenPattern "Stop-Process" -Code "selftest_inventory_stop_process_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($processEvidenceFunctionText + "`ntaskkill /PID 1") -ForbiddenPattern "taskkill" -Code "selftest_inventory_taskkill_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($processEvidenceFunctionText + "`nWrite-Output `$process.Id") -ForbiddenPattern "Write-Output" -Code "selftest_inventory_pid_output_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($serverStateFunctionText -replace 'AuthorizedCount -gt 0', 'AuthorizedCount -lt 0') -RequiredPattern 'AuthorizedCount -gt 0' -Code "selftest_authorized_without_pidfile_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($serverStateFunctionText -replace 'AmbiguousCount -gt 0', 'AmbiguousCount -lt 0') -RequiredPattern 'AmbiguousCount -gt 0' -Code "selftest_ambiguous_without_pidfile_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($serverStateFunctionText -replace 'VERIFIED_SERVER_RUNNING', 'SERVER_STATE_UNRESOLVED') -RequiredPattern 'VERIFIED_SERVER_RUNNING' -Code "selftest_valid_pidfile_listener_closed_not_running"
+Assert-MutationAddsForbidden -MutatedText ($pgCtlFailureFunctionText + "`nStop-Process -Id 1") -ForbiddenPattern "Stop-Process" -Code "selftest_stop_process_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($pgCtlFailureFunctionText + "`ntaskkill /PID 1") -ForbiddenPattern "taskkill" -Code "selftest_taskkill_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($pgCtlFailureFunctionText + "`nGet-Process postgres | ForEach-Object { `$_.Kill() }") -ForbiddenPattern 'Get-Process postgres|\.Kill\(\)' -Code "selftest_kill_by_process_name_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pgCtlStopFunctionText -replace '"-m", "fast"', '"-m", "smart"') -RequiredPattern '"-m", "fast"' -Code "selftest_pg_ctl_stop_fast_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pgCtlStopFunctionText -replace '"-w"', '"-W"') -RequiredPattern '"-w"' -Code "selftest_pg_ctl_stop_wait_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pgCtlStopFunctionText -replace '"-t", "30"', '"-t", "5"') -RequiredPattern '"-t", "30"' -Code "selftest_pg_ctl_stop_timeout_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($pgCtlStopFunctionText + "`nif (-not `$stopResult.Success) { return }") -ForbiddenPattern 'if \(-not \$stopResult\.Success\)' -Code "selftest_stop_immediate_return_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pgCtlStopFunctionText -replace 'Wait-ForVerifiedServerStopState', 'Skip-PostStopRecheck') -RequiredPattern 'Wait-ForVerifiedServerStopState' -Code "selftest_stop_timeout_recheck_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($postStopWaitFunctionText -replace '\[System\.Diagnostics\.Stopwatch\]::StartNew\(\)', '$null') -RequiredPattern '\[System\.Diagnostics\.Stopwatch\]::StartNew\(\)' -Code "selftest_post_stop_stopwatch_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($postStopWaitFunctionText -replace 'Elapsed\.TotalSeconds -lt 15', 'Elapsed.TotalSeconds -lt 9999') -RequiredPattern 'Elapsed\.TotalSeconds -lt 15' -Code "selftest_post_stop_timeout_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($originalProcessStateFunctionText -replace 'StartTime\.ToUniversalTime\(\)', 'StartTime') -RequiredPattern 'StartTime\.ToUniversalTime\(\)' -Code "selftest_starttime_utc_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($originalProcessStateFunctionText -replace 'PID_REUSED', 'SAME_PROCESS') -RequiredPattern 'PID_REUSED' -Code "selftest_pid_reuse_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pidFunctionText -replace '\$lines\[1\]', '$missingDataRootLine') -RequiredPattern '\$lines\[1\]' -Code "selftest_postmaster_dataroot_line_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pidFunctionText -replace 'postmaster_dataroot_mismatch', 'postmaster_pid_invalid') -RequiredPattern 'postmaster_dataroot_mismatch' -Code "selftest_postmaster_dataroot_mismatch_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pidFunctionText -replace 'postmaster_port_mismatch', 'postmaster_pid_invalid') -RequiredPattern 'postmaster_port_mismatch' -Code "selftest_postmaster_port_mismatch_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($serverStateFunctionText -replace 'SERVER_STATE_UNRESOLVED', 'NO_SERVER_EVIDENCE') -RequiredPattern 'SERVER_STATE_UNRESOLVED' -Code "selftest_unresolved_server_state_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($pgCtlStopFunctionText -replace 'Test-LoopbackListenerOpen', 'Skip-ListenerCheck') -RequiredPattern 'Test-LoopbackListenerOpen' -Code "selftest_stop_listener_check_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($concordanceFunctionText + "`nunknown_extra_field") -ForbiddenPattern "unknown_extra_field" -Code "selftest_state_extra_field_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($concordanceFunctionText + "`npid = 123") -ForbiddenPattern "\bpid\b" -Code "selftest_state_pid_field_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($concordanceFunctionText + "`nstdout = x`nstderr = y") -ForbiddenPattern "stdout|stderr" -Code "selftest_state_stdout_stderr_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($text -replace 'Assert-StrictFlatStateJson', 'Skip-StrictFlatStateJson') -RequiredPattern 'Assert-StrictFlatStateJson' -Code "selftest_raw_json_scan_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($strictJsonFunctionText -replace 'state_duplicate_key', 'state_schema_invalid') -RequiredPattern 'state_duplicate_key' -Code "selftest_duplicate_key_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($strictJsonFunctionText -replace "Throw-SafeError -Code `"state_duplicate_key`"", "return") -ForbiddenPattern '\breturn\b' -Code "selftest_duplicate_key_acceptance_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($strictJsonFunctionText -replace '\$valueStart -eq ''\{'' -or \$valueStart -eq ''\[''', '$false') -RequiredPattern '\$valueStart -eq ''\{'' -or \$valueStart -eq ''\[''' -Code "selftest_nested_json_acceptance_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($strictJsonFunctionText -replace '\$indexRef\.Value -ne \$JsonText\.Length', '$false') -RequiredPattern '\$indexRef\.Value -ne \$JsonText\.Length' -Code "selftest_trailing_garbage_acceptance_not_detected"
 
 $planOutput = Invoke-Tool -Arguments @("-Action","Plan")
 if ($LASTEXITCODE -ne 0 -or $planOutput -notcontains "ISOLATED_BASELINE_TEST_PLAN_OK") {
@@ -264,6 +879,41 @@ foreach ($expectedLine in @(
     "postgres_major=17",
     "postgres_version=17.10",
     "complete_postgres_package=true",
+    "isolated_root=LOCALAPPDATA\VotoClaro\PostgreSQL\isolated-baseline-test",
+    "instance_name=pg17-port55432",
+    "host=127.0.0.1",
+    "port=55432",
+    "admin_role=vc_isolated_admin",
+    "credential_strategy=WINDOWS_DPAPI_CURRENT_USER",
+    "authentication=scram-sha-256",
+    "create_implementation_present=true",
+    "git_ancestry_strategy=MERGE_BASE_IS_ANCESTOR",
+    "process_output_strategy=ASYNC_DUAL_STREAM_DRAIN",
+    "windows_argument_empty_value_safe=true",
+    "pg_hba_ipv6_reject=::/0",
+    "file_acl_inheritance=NONE",
+    "marker_state_concordance_required=true",
+    "created_utc_stable=true",
+    "git_working_directory_enforced=true",
+    "process_output_drain_verified=true",
+    "process_output_drain_failure_code=process_output_drain_failed",
+    "no_pidfile_process_inventory=DOTNET_LOCAL_PROCESS_ENUMERATION",
+    "no_server_evidence_requires_zero_authorized_or_ambiguous_processes=true",
+    "process_executable_path_strategy=MAINMODULE_FILENAME_PS51",
+    "process_path_property_used=false",
+    "process_access_failure_strategy=AMBIGUOUS_FAIL_CLOSED",
+    "process_identity_strategy=PID_MAINMODULE_STARTTIME",
+    "real_process_enumeration_in_plan=false",
+    "pg_ctl_start_failure_recovery=VERIFIED_PID_DATAROOT_EXECUTABLE_LISTENER",
+    "pg_ctl_stop_strategy=FAST_WAIT_30_VERIFIED",
+    "pg_ctl_stop_recheck_always=true",
+    "pg_ctl_stop_recheck_timeout_seconds=15",
+    "pid_reuse_detection=true",
+    "postmaster_dataroot_validation=true",
+    "raw_json_duplicate_scan_before_parse=true",
+    "server_state_schema_strict=true",
+    "state_schema_flat_strict=true",
+    "server_state_unresolved_fail_closed=true",
     "postgres_bki_present=true",
     "pgcrypto_control_present=true",
     "pgcrypto_library_present=true",
@@ -273,6 +923,13 @@ foreach ($expectedLine in @(
     "local_compat_preflight_ready_for_execution=false",
     "local_compat_preflight_human_review_required=true",
     "compatibility_strategy_complete=true",
+    "create_authorized=false",
+    "create_execution_blocked=true",
+    "create_execution_requires_exact_approval=true",
+    "apply_implementation_present=false",
+    "verify_implementation_present=false",
+    "destroy_implementation_present=false",
+    "fulltest_implementation_present=false",
     "grant_revoke_source_counts_only=true",
     "restored_acl_semantic_verification_required=true",
     "human_approval_required_for_create=true",
@@ -295,7 +952,7 @@ if (-not (($planOutput | Where-Object { $_ -like "local_compat_preflight_depende
   Fail -Code "compat_dependency_names_missing"
 }
 
-Assert-ToolFailure -Arguments @("-Action","Create") -ExpectedReason "action_not_approved" -Code "create_not_blocked"
+Assert-ToolFailure -Arguments @("-Action","Create") -ExpectedReason "create_not_authorized" -Code "create_not_authorized_missing"
 Assert-ToolFailure -Arguments @("-Action","Apply") -ExpectedReason "action_not_approved" -Code "apply_not_blocked"
 Assert-ToolFailure -Arguments @("-Action","Verify") -ExpectedReason "action_not_approved" -Code "verify_not_blocked"
 Assert-ToolFailure -Arguments @("-Action","FullTest") -ExpectedReason "action_not_approved" -Code "fulltest_not_blocked"
@@ -310,8 +967,8 @@ Assert-ToolFailure -Arguments @("-Action","Plan","-DataRoot",(Join-Path $repoRoo
 Assert-ToolFailure -Arguments @("-Action","Plan","-DataRoot",(Join-Path $env:ProgramFiles "vc_staging_baseline_test_local")) -ExpectedReason "data_root_invalid" -Code "program_files_allowed"
 Assert-ToolFailure -Arguments @("-Action","Plan","-DataRoot",(Join-Path $env:WINDIR "vc_staging_baseline_test_local")) -ExpectedReason "data_root_invalid" -Code "windows_path_allowed"
 
-$commonParent = Join-Path $env:LOCALAPPDATA "VotoClaro\isolated-postgres-baseline-test"
-Assert-ToolFailure -Arguments @("-Action","Plan","-DataRoot",$commonParent) -ExpectedReason "data_root_invalid" -Code "common_parent_allowed"
+$commonParent = Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL\isolated-baseline-test"
+Assert-ToolFailure -Arguments @("-Action","Plan","-DataRoot",$commonParent) -ExpectedReason "protected_path" -Code "common_parent_allowed"
 $wrongLeaf = Join-Path $commonParent "vc_staging_baseline_test_other"
 Assert-ToolFailure -Arguments @("-Action","Plan","-DataRoot",$wrongLeaf) -ExpectedReason "data_root_invalid" -Code "wrong_leaf_allowed"
 

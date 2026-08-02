@@ -7,6 +7,8 @@ param(
   [string]$ClusterName = "vc_staging_baseline_test_local",
   [string]$DatabaseName = "vc_staging_baseline_test_db",
   [string]$DataRoot,
+  [switch]$ConfirmCreate,
+  [string]$CreateApprovalToken,
   [switch]$KeepOnSuccess,
   [switch]$SelfTest
 )
@@ -20,6 +22,23 @@ $script:MarkerFileName = "VC_ISOLATED_BASELINE_TEST.marker"
 $script:ClusterPrefix = "vc_staging_baseline_test_"
 $script:DatabasePrefix = "vc_staging_baseline_test_"
 $script:LocalAdminUser = "vc_isolated_admin"
+$script:CreateApprovalToken = "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
+$script:PostgresPackageRelativePath = "VotoClaro\PostgreSQL\17.10-complete"
+$script:IsolatedRootRelativePath = "VotoClaro\PostgreSQL\isolated-baseline-test"
+$script:InstanceName = "pg17-port55432"
+$script:CreatePort = 55432
+$script:CreateStates = @(
+  "absent",
+  "initializing",
+  "initialized",
+  "configuring",
+  "configured",
+  "starting",
+  "running",
+  "failed",
+  "stopped",
+  "destroy_pending"
+)
 $script:RequiredConfirmations = @{
   Create = "CREATE-ISOLATED-LOCAL-POSTGRES"
   Apply = "APPLY-BASELINE-TO-ISOLATED-LOCAL"
@@ -36,6 +55,62 @@ $script:SafeCodes = @(
   "port_invalid",
   "port_reserved",
   "port_in_use",
+  "create_not_authorized",
+  "repo_not_clean",
+  "branch_not_allowed",
+  "git_repository_invalid",
+  "git_base_commit_missing",
+  "git_ancestry_invalid",
+  "git_command_failed",
+  "git_working_directory_invalid",
+  "git_command_timeout",
+  "git_output_drain_failed",
+  "postgres_version_invalid",
+  "isolated_root_invalid",
+  "instance_root_exists",
+  "dataroot_exists",
+  "protected_path",
+  "reparse_point_detected",
+  "port_unavailable",
+  "acl_apply_failed",
+  "acl_validation_failed",
+  "credential_protection_failed",
+  "password_file_create_failed",
+  "password_file_cleanup_failed",
+  "initdb_failed",
+  "initdb_timeout",
+  "initdb_partial",
+  "pg_version_invalid",
+  "postgresql_conf_write_failed",
+  "pg_hba_write_failed",
+  "port_race_detected",
+  "pg_ctl_start_failed",
+  "pg_ctl_timeout",
+  "pg_ctl_start_failed_no_server",
+  "pg_ctl_start_failed_server_stopped",
+  "postgres_server_state_unresolved",
+  "postgres_server_cleanup_failed",
+  "postmaster_pid_missing",
+  "postmaster_pid_invalid",
+  "postmaster_dataroot_mismatch",
+  "postmaster_port_mismatch",
+  "postgres_process_unverified",
+  "listener_verification_failed",
+  "process_output_drain_failed",
+  "process_timeout_cleanup_failed",
+  "process_object_missing",
+  "process_already_exited",
+  "process_main_module_unavailable",
+  "process_executable_path_empty",
+  "process_executable_path_invalid",
+  "process_access_denied",
+  "process_query_failed",
+  "state_write_failed",
+  "state_schema_invalid",
+  "state_duplicate_key",
+  "marker_state_mismatch",
+  "create_failed",
+  "create_completed",
   "cluster_name_invalid",
   "database_name_invalid",
   "data_root_invalid",
@@ -87,6 +162,52 @@ function Get-RepoRoot {
   return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
 }
 
+function Get-PostgresRoot {
+  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    Throw-SafeError -Code "postgres_tools_missing"
+  }
+  return [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA $script:PostgresPackageRelativePath))
+}
+
+function Get-IsolatedRoot {
+  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    Throw-SafeError -Code "isolated_root_invalid"
+  }
+  return [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA $script:IsolatedRootRelativePath))
+}
+
+function Get-InstanceLayout {
+  $isolatedRoot = Get-IsolatedRoot
+  $instanceRoot = Join-Path $isolatedRoot $script:InstanceName
+  $data = Join-Path $instanceRoot "data"
+  $logs = Join-Path $instanceRoot "logs"
+  $state = Join-Path $instanceRoot "state"
+  $secrets = Join-Path $instanceRoot "secrets"
+  return [pscustomobject]@{
+    IsolatedRoot = [System.IO.Path]::GetFullPath($isolatedRoot)
+    InstanceRoot = [System.IO.Path]::GetFullPath($instanceRoot)
+    DataRoot = [System.IO.Path]::GetFullPath($data)
+    LogRoot = [System.IO.Path]::GetFullPath($logs)
+    StateRoot = [System.IO.Path]::GetFullPath($state)
+    SecretRoot = [System.IO.Path]::GetFullPath($secrets)
+    ServerLog = [System.IO.Path]::GetFullPath((Join-Path $logs "postgresql-server.log"))
+    MarkerPath = [System.IO.Path]::GetFullPath((Join-Path $state $script:MarkerFileName))
+    StatePath = [System.IO.Path]::GetFullPath((Join-Path $state "cluster-state.json"))
+    CredentialPath = [System.IO.Path]::GetFullPath((Join-Path $secrets "vc_isolated_admin.dpapi"))
+    PasswordFilePath = [System.IO.Path]::GetFullPath((Join-Path $secrets "initdb-password.tmp"))
+  }
+}
+
+function Convert-ToPublicPath {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  $local = [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
+  $full = [System.IO.Path]::GetFullPath($PathValue)
+  if ($full.StartsWith($local, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return ("LOCALAPPDATA" + $full.Substring($local.Length))
+  }
+  return "<outside-localappdata>"
+}
+
 function Get-FullPathSafe {
   param([Parameter(Mandatory = $true)][string]$PathValue)
   if ([string]::IsNullOrWhiteSpace($PathValue)) {
@@ -136,10 +257,8 @@ function Test-IsInsideDirectory {
 
 function Get-DefaultDataRoot {
   param([Parameter(Mandatory = $true)][string]$Name)
-  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
-    Throw-SafeError -Code "data_root_invalid"
-  }
-  return Join-Path $env:LOCALAPPDATA (Join-Path "VotoClaro\isolated-postgres-baseline-test" $Name)
+  [void]$Name
+  return (Get-InstanceLayout).DataRoot
 }
 
 function Assert-NoForbiddenRemoteText {
@@ -158,11 +277,11 @@ function Assert-NoForbiddenRemoteText {
 
 function Assert-Port {
   param([Parameter(Mandatory = $true)][int]$Value)
-  if ($Value -lt 1024 -or $Value -gt 65535) {
+  if ($Value -ne 55432) {
+    if ($Value -eq 5432) {
+      Throw-SafeError -Code "port_reserved"
+    }
     Throw-SafeError -Code "port_invalid"
-  }
-  if ($Value -eq 5432) {
-    Throw-SafeError -Code "port_reserved"
   }
 }
 
@@ -240,10 +359,7 @@ function Test-HasReparsePointInPath {
 }
 
 function Get-RequiredDataRootParent {
-  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
-    Throw-SafeError -Code "data_root_invalid"
-  }
-  return [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "VotoClaro\isolated-postgres-baseline-test"))
+  return (Get-InstanceLayout).InstanceRoot
 }
 
 function Assert-DataRoot {
@@ -255,19 +371,34 @@ function Assert-DataRoot {
   )
   Assert-NoForbiddenRemoteText -Value $Root
   $full = Get-FullPathSafe -PathValue $Root
+  $layout = Get-InstanceLayout
+  $localAppData = [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
+  $votoClaroRoot = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "VotoClaro"))
+  $postgresParent = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL"))
+  $postgresRoot = Get-PostgresRoot
+  $postgresBinFull = [System.IO.Path]::GetFullPath((Join-Path $postgresRoot "bin"))
   $driveRoot = [System.IO.Path]::GetPathRoot($full)
   if ([string]::Equals($full.TrimEnd('\'), $driveRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
     Throw-SafeError -Code "data_root_invalid"
   }
-  $requiredParent = Get-RequiredDataRootParent
+  foreach ($protected in @($localAppData, $votoClaroRoot, $postgresParent, $postgresRoot, $postgresBinFull, $layout.IsolatedRoot, $layout.InstanceRoot)) {
+    if ([string]::Equals($full.TrimEnd('\'), $protected.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "protected_path"
+    }
+  }
+  if (-not [string]::Equals($full.TrimEnd('\'), $layout.DataRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "data_root_invalid"
+  }
+  $requiredParent = $layout.IsolatedRoot
   $actualParent = [System.IO.Path]::GetFullPath((Split-Path -Parent $full))
   $actualLeaf = Split-Path -Leaf $full
-  if (-not [string]::Equals($actualParent.TrimEnd('\'), $requiredParent.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+  if (-not [string]::Equals($actualParent.TrimEnd('\'), $layout.InstanceRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
     Throw-SafeError -Code "data_root_invalid"
   }
-  if (-not [string]::Equals($actualLeaf, $ExpectedClusterName, [System.StringComparison]::Ordinal)) {
+  if (-not [string]::Equals($actualLeaf, "data", [System.StringComparison]::Ordinal)) {
     Throw-SafeError -Code "data_root_invalid"
   }
+  [void]$ExpectedClusterName
   $profileRoot = [System.IO.Path]::GetFullPath($env:USERPROFILE)
   if ([string]::Equals($full.TrimEnd('\'), $profileRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
     Throw-SafeError -Code "data_root_invalid"
@@ -289,6 +420,7 @@ function Assert-DataRoot {
     }
     if ($RequireMarker) {
       Assert-Marker -MarkerPath $marker -ExpectedClusterName $ExpectedClusterName -ExpectedDatabaseName $DatabaseName -ExpectedPort $Port
+      return $full
     }
     if (-not $RequireMarker -and -not (Test-Path -LiteralPath $marker -PathType Leaf)) {
       $items = @(Get-ChildItem -LiteralPath $full -Force -ErrorAction SilentlyContinue)
@@ -297,23 +429,16 @@ function Assert-DataRoot {
       }
     }
   }
-  if ($RequireMarker) {
-    Throw-SafeError -Code "marker_missing"
-  }
+  if ($RequireMarker) { Throw-SafeError -Code "marker_missing" }
   return $full
 }
 
-function Assert-Marker {
-  param(
-    [Parameter(Mandatory = $true)][string]$MarkerPath,
-    [Parameter(Mandatory = $true)][string]$ExpectedClusterName,
-    [Parameter(Mandatory = $true)][string]$ExpectedDatabaseName,
-    [Parameter(Mandatory = $true)][int]$ExpectedPort
-  )
+function Read-MarkerMap {
+  param([Parameter(Mandatory = $true)][string]$MarkerPath)
   if (-not (Test-Path -LiteralPath $MarkerPath -PathType Leaf)) {
     Throw-SafeError -Code "marker_missing"
   }
-  $allowedKeys = @("artifact","cluster_name","database_name","host","port","created_utc","production_safe","isolated_local_only")
+  $allowedKeys = @("magic","cluster_id","instance_name","host","port")
   $map = @{}
   foreach ($line in Get-Content -LiteralPath $MarkerPath) {
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -329,13 +454,24 @@ function Assert-Marker {
   foreach ($key in $allowedKeys) {
     if (-not $map.ContainsKey($key)) { Throw-SafeError -Code "marker_invalid" }
   }
-  if ($map["artifact"] -ne "vc_isolated_baseline_test" -or
-      $map["cluster_name"] -ne $ExpectedClusterName -or
-      $map["database_name"] -ne $ExpectedDatabaseName -or
+  return $map
+}
+
+function Assert-Marker {
+  param(
+    [Parameter(Mandatory = $true)][string]$MarkerPath,
+    [Parameter(Mandatory = $true)][string]$ExpectedClusterName,
+    [Parameter(Mandatory = $true)][string]$ExpectedDatabaseName,
+    [Parameter(Mandatory = $true)][int]$ExpectedPort
+  )
+  $map = Read-MarkerMap -MarkerPath $MarkerPath
+  [void]$ExpectedClusterName
+  [void]$ExpectedDatabaseName
+  if ($map["magic"] -ne "VOTO_CLARO_ISOLATED_BASELINE_TEST_V1" -or
+      $map["instance_name"] -ne $script:InstanceName -or
       $map["host"] -ne $script:AllowedHost -or
       $map["port"] -ne ([string]$ExpectedPort) -or
-      $map["production_safe"] -ne "false" -or
-      $map["isolated_local_only"] -ne "true") {
+      $map["cluster_id"] -notmatch "^[0-9a-fA-F-]{36}$") {
     Throw-SafeError -Code "marker_invalid"
   }
 }
@@ -346,6 +482,52 @@ function Get-ToolPath {
     [Parameter(Mandatory = $true)][string]$ToolName
   )
   return Join-Path $BinRoot ($ToolName + ".exe")
+}
+
+function Get-GitExecutable {
+  try {
+    $command = Get-Command git.exe -CommandType Application -ErrorAction Stop
+    $path = [System.IO.Path]::GetFullPath($command.Source)
+    if (-not [System.IO.Path]::IsPathRooted($path) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      Throw-SafeError -Code "git_command_failed"
+    }
+    return $path
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "git_command_failed"
+  }
+}
+
+function Invoke-GitCommand {
+  param(
+    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [Parameter(Mandatory = $true)][string]$WorkingDirectory
+  )
+  $git = Get-GitExecutable
+  try {
+    $full = [System.IO.Path]::GetFullPath($WorkingDirectory)
+    $repoRoot = Get-RepoRoot
+    if (-not (Test-Path -LiteralPath $full -PathType Container) -or
+        -not [string]::Equals($full.TrimEnd('\'), $repoRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase) -or
+        (Test-HasReparsePointInPath -PathValue $full -StopParent $full)) {
+      Throw-SafeError -Code "git_working_directory_invalid"
+    }
+    $result = Invoke-SafeProcess -FilePath $git -Arguments $Arguments -WorkingDirectory $full -TimeoutSeconds 15 -ToolName "git"
+    if ($result.SafeErrorCode -eq "process_output_drain_failed") {
+      return [pscustomobject]@{ ExitCode = 998; Output = @(); SafeErrorCode = "git_output_drain_failed" }
+    }
+    if ($result.TimedOut) {
+      return [pscustomobject]@{ ExitCode = 997; Output = @(); SafeErrorCode = "git_command_timeout" }
+    }
+    $output = @()
+    if (-not [string]::IsNullOrWhiteSpace($result.StdOut)) {
+      $output = @($result.StdOut -split "\r?\n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    return [pscustomobject]@{ ExitCode = $result.ExitCode; Output = $output; SafeErrorCode = $result.SafeErrorCode }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    return [pscustomobject]@{ ExitCode = 999; Output = @() }
+  }
 }
 
 function Get-PostgresPackageInfo {
@@ -575,19 +757,15 @@ function Assert-Confirmation {
 
 function New-MarkerText {
   param(
-    [Parameter(Mandatory = $true)][string]$Name,
-    [Parameter(Mandatory = $true)][string]$DbName,
+    [Parameter(Mandatory = $true)][string]$ClusterId,
     [Parameter(Mandatory = $true)][int]$LocalPort
   )
   return @(
-    "artifact=vc_isolated_baseline_test"
-    "cluster_name=$Name"
-    "database_name=$DbName"
+    "magic=VOTO_CLARO_ISOLATED_BASELINE_TEST_V1"
+    "cluster_id=$ClusterId"
+    "instance_name=$script:InstanceName"
     "host=$script:AllowedHost"
     "port=$LocalPort"
-    "created_utc=<future-iso-8601>"
-    "production_safe=false"
-    "isolated_local_only=true"
   )
 }
 
@@ -598,11 +776,13 @@ function Get-FutureInitDbArgumentTemplate {
   )
   Assert-LocalAdminUser -Value $script:LocalAdminUser
   return @(
-    "--pgdata", $ExactDataRoot,
-    "--username", $script:LocalAdminUser,
+    "--pgdata=$ExactDataRoot",
+    "--username=$script:LocalAdminUser",
+    "--encoding=UTF8",
+    "--locale=C",
     "--auth-host=scram-sha-256",
     "--auth-local=scram-sha-256",
-    "--pwfile", $PasswordFile
+    "--pwfile=$PasswordFile"
   )
 }
 
@@ -629,21 +809,28 @@ function Get-FuturePostgresqlConfTemplate {
   param([Parameter(Mandatory = $true)][int]$ExactPort)
   Assert-Port -Value $ExactPort
   return @(
-    "listen_addresses='127.0.0.1'",
-    "port=$ExactPort",
-    "ssl=off",
-    "max_connections=20",
-    "logging_collector=off",
-    "password_encryption='scram-sha-256'"
+    "# BEGIN VOTO_CLARO_ISOLATED_BASELINE_TEST",
+    "listen_addresses = '127.0.0.1'",
+    "port = $ExactPort",
+    "ssl = off",
+    "password_encryption = 'scram-sha-256'",
+    "timezone = 'UTC'",
+    "log_timezone = 'UTC'",
+    "logging_collector = off",
+    "max_connections = 10",
+    "# END VOTO_CLARO_ISOLATED_BASELINE_TEST"
   )
 }
 
 function Get-FuturePgHbaTemplate {
   return @(
-    "local all all scram-sha-256",
-    "host all all 127.0.0.1/32 scram-sha-256",
-    "host all all 0.0.0.0/0 reject",
-    "host all all ::/0 reject"
+    "# VOTO CLARO ISOLATED BASELINE TEST",
+    "# IPv4 loopback only. SCRAM authentication required.",
+    "host    all    all    127.0.0.1/32    scram-sha-256",
+    "",
+    "# Explicitly reject all other IPv4 and IPv6 hosts.",
+    "host    all    all    0.0.0.0/0       reject",
+    "host    all    all    ::/0            reject"
   )
 }
 
@@ -660,22 +847,1392 @@ function Test-ReadyForDestroy {
   }
 }
 
+function Assert-CreateAuthorization {
+  if (-not $ConfirmCreate) {
+    Throw-SafeError -Code "create_not_authorized"
+  }
+  if ([string]::IsNullOrWhiteSpace($CreateApprovalToken) -or
+      -not [string]::Equals($CreateApprovalToken, $script:CreateApprovalToken, [System.StringComparison]::Ordinal)) {
+    Throw-SafeError -Code "create_not_authorized"
+  }
+}
+
+function Assert-GitReadyForCreate {
+  $repoRoot = Get-RepoRoot
+  $topLevel = Invoke-GitCommand -Arguments @("rev-parse","--show-toplevel") -WorkingDirectory $repoRoot
+  if ($topLevel.ExitCode -eq 997) { Throw-SafeError -Code "git_command_timeout" }
+  if ($topLevel.ExitCode -eq 998) { Throw-SafeError -Code "git_output_drain_failed" }
+  if ($topLevel.ExitCode -ne 0 -or $topLevel.Output.Count -ne 1) {
+    Throw-SafeError -Code "git_repository_invalid"
+  }
+  $actualRoot = [System.IO.Path]::GetFullPath([string]$topLevel.Output[0])
+  if (-not [string]::Equals($actualRoot.TrimEnd('\'), $repoRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "git_repository_invalid"
+  }
+  $base = Invoke-GitCommand -Arguments @("rev-parse","--verify","fe899a1^{commit}") -WorkingDirectory $repoRoot
+  if ($base.ExitCode -eq 997) { Throw-SafeError -Code "git_command_timeout" }
+  if ($base.ExitCode -eq 998) { Throw-SafeError -Code "git_output_drain_failed" }
+  if ($base.ExitCode -ne 0) {
+    Throw-SafeError -Code "git_base_commit_missing"
+  }
+  $ancestry = Invoke-GitCommand -Arguments @("merge-base","--is-ancestor","fe899a1","HEAD") -WorkingDirectory $repoRoot
+  if ($ancestry.ExitCode -eq 997) { Throw-SafeError -Code "git_command_timeout" }
+  if ($ancestry.ExitCode -eq 998) { Throw-SafeError -Code "git_output_drain_failed" }
+  if ($ancestry.ExitCode -eq 1) {
+    Throw-SafeError -Code "git_ancestry_invalid"
+  }
+  if ($ancestry.ExitCode -ne 0) {
+    Throw-SafeError -Code "git_command_failed"
+  }
+  $branch = Invoke-GitCommand -Arguments @("branch","--show-current") -WorkingDirectory $repoRoot
+  if ($branch.ExitCode -eq 997) { Throw-SafeError -Code "git_command_timeout" }
+  if ($branch.ExitCode -eq 998) { Throw-SafeError -Code "git_output_drain_failed" }
+  if ($branch.ExitCode -ne 0 -or $branch.Output.Count -ne 1 -or $branch.Output[0] -ne "master") {
+    Throw-SafeError -Code "branch_not_allowed"
+  }
+  $status = Invoke-GitCommand -Arguments @("status","--porcelain=v1","--untracked-files=all") -WorkingDirectory $repoRoot
+  if ($status.ExitCode -eq 997) { Throw-SafeError -Code "git_command_timeout" }
+  if ($status.ExitCode -eq 998) { Throw-SafeError -Code "git_output_drain_failed" }
+  if ($status.ExitCode -ne 0) {
+    Throw-SafeError -Code "git_command_failed"
+  }
+  if ($status.Output.Count -ne 0) {
+    Throw-SafeError -Code "repo_not_clean"
+  }
+}
+
+function Assert-CreateConstants {
+  if ($script:AllowedHost -ne "127.0.0.1" -or $script:CreatePort -ne 55432 -or $Port -ne 55432) {
+    Throw-SafeError -Code "port_invalid"
+  }
+  Assert-LocalAdminUser -Value $script:LocalAdminUser
+}
+
+function Assert-PostgresPackageForCreate {
+  param([Parameter(Mandatory = $true)][string]$BinRoot)
+  $package = Assert-PostgresTools -BinRoot $BinRoot
+  $localRoot = [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
+  if (-not (Test-IsInsideDirectory -ChildPath $package.Root -ParentPath $localRoot)) {
+    Throw-SafeError -Code "postgres_version_invalid"
+  }
+  if (-not [string]::Equals($package.Root.TrimEnd('\'), (Get-PostgresRoot).TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "postgres_version_invalid"
+  }
+  foreach ($tool in @("initdb","postgres","pg_ctl","psql","createdb","dropdb","pg_isready")) {
+    $path = Get-ToolPath -BinRoot $package.Bin -ToolName $tool
+    if (-not [System.IO.Path]::IsPathRooted($path) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      Throw-SafeError -Code "postgres_tools_missing"
+    }
+  }
+  $extensionSql = @(Get-ChildItem -LiteralPath (Join-Path $package.Root "share\extension") -Filter "pgcrypto--*.sql" -File -ErrorAction SilentlyContinue)
+  if ($extensionSql.Count -lt 1) {
+    Throw-SafeError -Code "pgcrypto_control_missing"
+  }
+  foreach ($versionTool in @("postgres","initdb","psql")) {
+    $result = Invoke-SafeProcess -FilePath (Get-ToolPath -BinRoot $package.Bin -ToolName $versionTool) -Arguments @("--version") -WorkingDirectory $package.Root -TimeoutSeconds 10 -ToolName "version"
+    if (-not $result.Success -or $result.StdOut -notmatch "PostgreSQL\)\s+17\.10|PostgreSQL\s+17\.10") {
+      Throw-SafeError -Code "postgres_version_invalid"
+    }
+  }
+  return $package
+}
+
+function Assert-CreatePath {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$AllowedRoot,
+    [Parameter(Mandatory = $true)][string]$RepoRoot
+  )
+  if ([string]::IsNullOrWhiteSpace($PathValue) -or -not [System.IO.Path]::IsPathRooted($PathValue)) {
+    Throw-SafeError -Code "isolated_root_invalid"
+  }
+  if ($PathValue.StartsWith("\\", [System.StringComparison]::Ordinal) -or $PathValue -match "(^|[\\/])\.\.([\\/]|$)") {
+    Throw-SafeError -Code "isolated_root_invalid"
+  }
+  $full = [System.IO.Path]::GetFullPath($PathValue)
+  $root = [System.IO.Path]::GetPathRoot($full)
+  if ([string]::Equals($full.TrimEnd('\'), $root.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "protected_path"
+  }
+  foreach ($protected in @(
+      [System.IO.Path]::GetFullPath($env:LOCALAPPDATA),
+      [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "VotoClaro")),
+      [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL")),
+      (Get-PostgresRoot),
+      [System.IO.Path]::GetFullPath((Join-Path (Get-PostgresRoot) "bin")),
+      [System.IO.Path]::GetFullPath($env:ProgramFiles),
+      [System.IO.Path]::GetFullPath($env:WINDIR),
+      [System.IO.Path]::GetFullPath($RepoRoot)
+    )) {
+    if ([string]::Equals($full.TrimEnd('\'), $protected.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "protected_path"
+    }
+  }
+  if (-not (Test-IsInsideDirectory -ChildPath $full -ParentPath $AllowedRoot) -and
+      -not [string]::Equals($full.TrimEnd('\'), $AllowedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "isolated_root_invalid"
+  }
+  if (Test-IsInsideDirectory -ChildPath $full -ParentPath $RepoRoot) {
+    Throw-SafeError -Code "protected_path"
+  }
+  if (Test-HasReparsePointInPath -PathValue $full -StopParent $AllowedRoot) {
+    Throw-SafeError -Code "reparse_point_detected"
+  }
+}
+
+function Assert-CreateLayout {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$RepoRoot
+  )
+  $expectedRoot = Get-IsolatedRoot
+  if (-not [string]::Equals($Layout.IsolatedRoot.TrimEnd('\'), $expectedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "isolated_root_invalid"
+  }
+  foreach ($path in @($Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.StateRoot, $Layout.SecretRoot, $Layout.ServerLog, $Layout.MarkerPath, $Layout.StatePath, $Layout.CredentialPath, $Layout.PasswordFilePath)) {
+    Assert-CreatePath -PathValue $path -AllowedRoot $Layout.IsolatedRoot -RepoRoot $RepoRoot
+  }
+  if ((Split-Path -Leaf $Layout.InstanceRoot) -ne $script:InstanceName -or
+      (Split-Path -Leaf $Layout.DataRoot) -ne "data" -or
+      (Split-Path -Leaf $Layout.LogRoot) -ne "logs" -or
+      (Split-Path -Leaf $Layout.StateRoot) -ne "state" -or
+      (Split-Path -Leaf $Layout.SecretRoot) -ne "secrets") {
+    Throw-SafeError -Code "isolated_root_invalid"
+  }
+}
+
+function Assert-CreateInstanceAbsent {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  if (Test-Path -LiteralPath $Layout.InstanceRoot) { Throw-SafeError -Code "instance_root_exists" }
+  if (Test-Path -LiteralPath $Layout.DataRoot) { Throw-SafeError -Code "dataroot_exists" }
+  if (Test-Path -LiteralPath $Layout.MarkerPath) { Throw-SafeError -Code "instance_root_exists" }
+  if (Test-Path -LiteralPath $Layout.StatePath) { Throw-SafeError -Code "instance_root_exists" }
+  if (Test-Path -LiteralPath $Layout.CredentialPath) { Throw-SafeError -Code "instance_root_exists" }
+  if (Test-Path -LiteralPath $Layout.ServerLog) { Throw-SafeError -Code "instance_root_exists" }
+}
+
+function Test-CreatePortAvailable {
+  $listener = $null
+  try {
+    $address = [System.Net.IPAddress]::Parse("127.0.0.1")
+    $listener = [System.Net.Sockets.TcpListener]::new($address, 55432)
+    $listener.Start()
+    return $true
+  } catch {
+    return $false
+  } finally {
+    if ($null -ne $listener) {
+      $listener.Stop()
+    }
+  }
+}
+
+function Set-RestrictedAcl {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][ValidateSet("Directory","File")][string]$TargetType
+  )
+  try {
+    if ($TargetType -eq "Directory") {
+      if (-not (Test-Path -LiteralPath $PathValue -PathType Container)) { Throw-SafeError -Code "acl_validation_failed" }
+    } else {
+      if (-not (Test-Path -LiteralPath $PathValue -PathType Leaf)) { Throw-SafeError -Code "acl_validation_failed" }
+    }
+    $item = Get-Item -LiteralPath $PathValue -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      Throw-SafeError -Code "reparse_point_detected"
+    }
+    $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    $acl = Get-Acl -LiteralPath $PathValue
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($rule in @($acl.Access)) {
+      [void]$acl.RemoveAccessRule($rule)
+    }
+    $inherit = if ($TargetType -eq "Directory") {
+      [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
+    } else {
+      [System.Security.AccessControl.InheritanceFlags]"None"
+    }
+    $propagation = [System.Security.AccessControl.PropagationFlags]"None"
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, "FullControl", $inherit, $propagation, "Allow")
+    $acl.AddAccessRule($rule)
+    Set-Acl -LiteralPath $PathValue -AclObject $acl
+    $verify = Get-Acl -LiteralPath $PathValue
+    if ($verify.AreAccessRulesProtected -ne $true) {
+      Throw-SafeError -Code "acl_validation_failed"
+    }
+    foreach ($access in $verify.Access) {
+      if (-not [string]::Equals($access.IdentityReference.Value, $sid.Value, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Throw-SafeError -Code "acl_validation_failed"
+      }
+      if ($TargetType -eq "File" -and $access.InheritanceFlags -ne [System.Security.AccessControl.InheritanceFlags]"None") {
+        Throw-SafeError -Code "acl_validation_failed"
+      }
+    }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "acl_apply_failed"
+  }
+}
+
+function Write-Utf8NoBomFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$Text
+  )
+  [System.IO.File]::WriteAllText($PathValue, ($Text.TrimEnd("`r","`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+}
+
+function Read-StrictJsonString {
+  param(
+    [Parameter(Mandatory = $true)][string]$Text,
+    [Parameter(Mandatory = $true)][ref]$Index
+  )
+  if ($Index.Value -ge $Text.Length -or $Text[$Index.Value] -ne '"') {
+    Throw-SafeError -Code "state_schema_invalid"
+  }
+  $Index.Value += 1
+  $builder = [System.Text.StringBuilder]::new()
+  while ($Index.Value -lt $Text.Length) {
+    $ch = $Text[$Index.Value]
+    $Index.Value += 1
+    if ($ch -eq '"') {
+      return $builder.ToString()
+    }
+    if ([int][char]$ch -lt 32) {
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+    if ($ch -eq '\') {
+      if ($Index.Value -ge $Text.Length) { Throw-SafeError -Code "state_schema_invalid" }
+      $escaped = $Text[$Index.Value]
+      $Index.Value += 1
+      if ('"\/bfnrt'.IndexOf($escaped) -ge 0) {
+        [void]$builder.Append($escaped)
+        continue
+      }
+      if ($escaped -eq 'u') {
+        if (($Index.Value + 4) -gt $Text.Length) { Throw-SafeError -Code "state_schema_invalid" }
+        $hex = $Text.Substring($Index.Value, 4)
+        if ($hex -notmatch '^[0-9a-fA-F]{4}$') { Throw-SafeError -Code "state_schema_invalid" }
+        [void]$builder.Append([char]([Convert]::ToInt32($hex, 16)))
+        $Index.Value += 4
+        continue
+      }
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+    [void]$builder.Append($ch)
+  }
+  Throw-SafeError -Code "state_schema_invalid"
+}
+
+function Skip-StrictJsonWhitespace {
+  param(
+    [Parameter(Mandatory = $true)][string]$Text,
+    [Parameter(Mandatory = $true)][ref]$Index
+  )
+  while ($Index.Value -lt $Text.Length -and [char]::IsWhiteSpace($Text[$Index.Value])) {
+    $Index.Value += 1
+  }
+}
+
+function Assert-StrictFlatStateJson {
+  param([Parameter(Mandatory = $true)][string]$JsonText)
+  $index = 0
+  $indexRef = [ref]$index
+  $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+  Skip-StrictJsonWhitespace -Text $JsonText -Index $indexRef
+  if ($indexRef.Value -ge $JsonText.Length -or $JsonText[$indexRef.Value] -ne '{') {
+    Throw-SafeError -Code "state_schema_invalid"
+  }
+  $indexRef.Value += 1
+  Skip-StrictJsonWhitespace -Text $JsonText -Index $indexRef
+  if ($indexRef.Value -lt $JsonText.Length -and $JsonText[$indexRef.Value] -eq '}') {
+    $indexRef.Value += 1
+  } else {
+    while ($true) {
+      Skip-StrictJsonWhitespace -Text $JsonText -Index $indexRef
+      $key = Read-StrictJsonString -Text $JsonText -Index $indexRef
+      if (-not $seen.Add($key)) {
+        Throw-SafeError -Code "state_duplicate_key"
+      }
+      Skip-StrictJsonWhitespace -Text $JsonText -Index $indexRef
+      if ($indexRef.Value -ge $JsonText.Length -or $JsonText[$indexRef.Value] -ne ':') {
+        Throw-SafeError -Code "state_schema_invalid"
+      }
+      $indexRef.Value += 1
+      Skip-StrictJsonWhitespace -Text $JsonText -Index $indexRef
+      if ($indexRef.Value -ge $JsonText.Length) { Throw-SafeError -Code "state_schema_invalid" }
+      $valueStart = $JsonText[$indexRef.Value]
+      if ($valueStart -eq '{' -or $valueStart -eq '[') {
+        Throw-SafeError -Code "state_schema_invalid"
+      }
+      if ($valueStart -eq '"') {
+        [void](Read-StrictJsonString -Text $JsonText -Index $indexRef)
+      } else {
+        $primitiveStart = $indexRef.Value
+        while ($indexRef.Value -lt $JsonText.Length -and $JsonText[$indexRef.Value] -ne ',' -and $JsonText[$indexRef.Value] -ne '}') {
+          if ($JsonText[$indexRef.Value] -eq '/' -or $JsonText[$indexRef.Value] -eq '#') {
+            Throw-SafeError -Code "state_schema_invalid"
+          }
+          $indexRef.Value += 1
+        }
+        $primitive = $JsonText.Substring($primitiveStart, $indexRef.Value - $primitiveStart).Trim()
+        if ([string]::IsNullOrWhiteSpace($primitive) -or $primitive -notmatch '^(true|false|null|-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?)$') {
+          Throw-SafeError -Code "state_schema_invalid"
+        }
+      }
+      Skip-StrictJsonWhitespace -Text $JsonText -Index $indexRef
+      if ($indexRef.Value -ge $JsonText.Length) { Throw-SafeError -Code "state_schema_invalid" }
+      if ($JsonText[$indexRef.Value] -eq ',') {
+        $indexRef.Value += 1
+        continue
+      }
+      if ($JsonText[$indexRef.Value] -eq '}') {
+        $indexRef.Value += 1
+        break
+      }
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+  }
+  Skip-StrictJsonWhitespace -Text $JsonText -Index $indexRef
+  if ($indexRef.Value -ne $JsonText.Length) {
+    Throw-SafeError -Code "state_schema_invalid"
+  }
+  return @($seen)
+}
+
+function Get-StableCreatedUtc {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$ClusterId
+  )
+  $now = [DateTimeOffset]::UtcNow.ToString("o")
+  if (-not (Test-Path -LiteralPath $Layout.StatePath -PathType Leaf)) {
+    return $now
+  }
+  try {
+    $existingText = [System.IO.File]::ReadAllText($Layout.StatePath)
+    [void](Assert-StrictFlatStateJson -JsonText $existingText)
+    $existing = $existingText | ConvertFrom-Json
+    if ($existing.artifact_type -ne "voto_claro_isolated_baseline_cluster_state" -or
+        [int]$existing.schema_version -ne 1 -or
+        $existing.cluster_id -ne $ClusterId -or
+        $existing.instance_name -ne $script:InstanceName -or
+        $existing.host -ne "127.0.0.1" -or
+        [int]$existing.port -ne 55432 -or
+        [string]::IsNullOrWhiteSpace([string]$existing.created_utc)) {
+      Throw-SafeError -Code "state_write_failed"
+    }
+    return [string]$existing.created_utc
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "state_write_failed"
+  }
+}
+
+function Write-ClusterState {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$ClusterId,
+    [Parameter(Mandatory = $true)][string]$State,
+    [Parameter(Mandatory = $true)][string]$Stage,
+    [string]$ErrorCode,
+    [bool]$InitdbCompleted = $false,
+    [bool]$ConfigurationCompleted = $false,
+    [bool]$ServerStarted = $false,
+    [bool]$CredentialProtected = $false,
+    [ValidateSet("not_started","running","stopped","unresolved")][string]$ServerState = "not_started",
+    [bool]$ServerCleanupAttempted = $false,
+    [bool]$ServerCleanupCompleted = $false
+  )
+  if ($script:CreateStates -notcontains $State) {
+    Throw-SafeError -Code "state_write_failed"
+  }
+  try {
+    $now = [DateTimeOffset]::UtcNow.ToString("o")
+    $createdUtc = Get-StableCreatedUtc -Layout $Layout -ClusterId $ClusterId
+    if ([DateTimeOffset]::Parse($now) -lt [DateTimeOffset]::Parse($createdUtc)) {
+      Throw-SafeError -Code "state_write_failed"
+    }
+    $payload = [ordered]@{
+      artifact_type = "voto_claro_isolated_baseline_cluster_state"
+      schema_version = 1
+      cluster_id = $ClusterId
+      state = $State
+      stage = $Stage
+      created_utc = $createdUtc
+      updated_utc = $now
+      postgres_major = "17"
+      postgres_version = "17.10"
+      host = "127.0.0.1"
+      port = 55432
+      admin_role = $script:LocalAdminUser
+      instance_name = $script:InstanceName
+      data_directory_name = "data"
+      server_log_name = "postgresql-server.log"
+      last_error_code = $(if ([string]::IsNullOrWhiteSpace($ErrorCode)) { $null } else { $ErrorCode })
+      initdb_completed = $InitdbCompleted
+      configuration_completed = $ConfigurationCompleted
+      server_started = $ServerStarted
+      credential_protected = $CredentialProtected
+      plaintext_password_file_present = (Test-Path -LiteralPath $Layout.PasswordFilePath -PathType Leaf)
+      server_state = $ServerState
+      server_cleanup_attempted = $ServerCleanupAttempted
+      server_cleanup_completed = $ServerCleanupCompleted
+    }
+    $json = $payload | ConvertTo-Json -Depth 4
+    $tmp = Join-Path $Layout.StateRoot ("cluster-state." + [Guid]::NewGuid().ToString("N") + ".tmp")
+    Write-Utf8NoBomFile -PathValue $tmp -Text $json
+    if (Test-Path -LiteralPath $Layout.StatePath) {
+      [System.IO.File]::Replace($tmp, $Layout.StatePath, $null)
+    } else {
+      [System.IO.File]::Move($tmp, $Layout.StatePath)
+    }
+    Set-RestrictedAcl -PathValue $Layout.StatePath -TargetType File
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "state_write_failed"
+  }
+}
+
+function Write-AtomicState {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$ClusterId,
+    [Parameter(Mandatory = $true)][string]$State,
+    [Parameter(Mandatory = $true)][string]$Stage,
+    [string]$ErrorCode,
+    [bool]$InitdbCompleted = $false,
+    [bool]$ConfigurationCompleted = $false,
+    [bool]$ServerStarted = $false,
+    [bool]$CredentialProtected = $false,
+    [ValidateSet("not_started","running","stopped","unresolved")][string]$ServerState = "not_started",
+    [bool]$ServerCleanupAttempted = $false,
+    [bool]$ServerCleanupCompleted = $false
+  )
+  Write-ClusterState -Layout $Layout -ClusterId $ClusterId -State $State -Stage $Stage -ErrorCode $ErrorCode -InitdbCompleted:$InitdbCompleted -ConfigurationCompleted:$ConfigurationCompleted -ServerStarted:$ServerStarted -CredentialProtected:$CredentialProtected -ServerState $ServerState -ServerCleanupAttempted:$ServerCleanupAttempted -ServerCleanupCompleted:$ServerCleanupCompleted
+}
+
+function Assert-MarkerStateConcordance {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$ClusterId
+  )
+  try {
+    $stateRoot = [System.IO.Path]::GetFullPath($Layout.StateRoot)
+    foreach ($path in @($Layout.MarkerPath, $Layout.StatePath)) {
+      $full = [System.IO.Path]::GetFullPath($path)
+      $parent = [System.IO.Path]::GetFullPath((Split-Path -Parent $full))
+      if (-not [string]::Equals($parent.TrimEnd('\'), $stateRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+        Throw-SafeError -Code "marker_state_mismatch"
+      }
+      if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+        Throw-SafeError -Code "marker_state_mismatch"
+      }
+      $item = Get-Item -LiteralPath $full -Force
+      if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Throw-SafeError -Code "marker_state_mismatch"
+      }
+    }
+    $marker = Read-MarkerMap -MarkerPath $Layout.MarkerPath
+    $stateText = [System.IO.File]::ReadAllText($Layout.StatePath)
+    $combined = ([System.IO.File]::ReadAllText($Layout.MarkerPath) + "`n" + $stateText)
+    foreach ($forbidden in @($script:CreateApprovalToken, "initdb-password.tmp", "vc_isolated_admin.dpapi", "plainTextPassword", "state_password", "marker_password", "stdout", "stderr")) {
+      if ($combined.IndexOf($forbidden, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        Throw-SafeError -Code "marker_state_mismatch"
+      }
+    }
+    foreach ($personalRoot in @($env:USERPROFILE, $env:LOCALAPPDATA)) {
+      if (-not [string]::IsNullOrWhiteSpace($personalRoot) -and
+          $combined.IndexOf($personalRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        Throw-SafeError -Code "marker_state_mismatch"
+      }
+    }
+    $rawStateKeys = @(Assert-StrictFlatStateJson -JsonText $stateText)
+    $state = $stateText | ConvertFrom-Json
+    $allowedStateKeys = @(
+      "artifact_type",
+      "schema_version",
+      "cluster_id",
+      "state",
+      "stage",
+      "created_utc",
+      "updated_utc",
+      "postgres_major",
+      "postgres_version",
+      "host",
+      "port",
+      "admin_role",
+      "instance_name",
+      "data_directory_name",
+      "server_log_name",
+      "last_error_code",
+      "initdb_completed",
+      "configuration_completed",
+      "server_started",
+      "credential_protected",
+      "plaintext_password_file_present",
+      "server_state",
+      "server_cleanup_attempted",
+      "server_cleanup_completed"
+    )
+    $stateProperties = @($state.PSObject.Properties | ForEach-Object { $_.Name })
+    if (@($rawStateKeys | Sort-Object).Count -ne $stateProperties.Count) {
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+    foreach ($key in $allowedStateKeys) {
+      if ($stateProperties -notcontains $key) { Throw-SafeError -Code "state_schema_invalid" }
+    }
+    foreach ($key in $stateProperties) {
+      if ($allowedStateKeys -notcontains $key) { Throw-SafeError -Code "state_schema_invalid" }
+      $value = $state.$key
+      if ($value -is [System.Array] -or $value -is [System.Management.Automation.PSCustomObject]) {
+        Throw-SafeError -Code "state_schema_invalid"
+      }
+    }
+    if (@($stateProperties | Sort-Object -Unique).Count -ne $stateProperties.Count) {
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+    if ($marker["magic"] -ne "VOTO_CLARO_ISOLATED_BASELINE_TEST_V1" -or
+        $marker["cluster_id"] -ne $ClusterId -or
+        $marker["instance_name"] -ne $script:InstanceName -or
+        $marker["host"] -ne "127.0.0.1" -or
+        $marker["port"] -ne "55432" -or
+        $state.artifact_type -ne "voto_claro_isolated_baseline_cluster_state" -or
+        [int]$state.schema_version -ne 1 -or
+        $state.cluster_id -ne $ClusterId -or
+        $state.instance_name -ne $script:InstanceName -or
+        $state.host -ne "127.0.0.1" -or
+        [int]$state.port -ne 55432 -or
+        $state.admin_role -ne "vc_isolated_admin" -or
+        $state.postgres_major -ne "17" -or
+        $state.postgres_version -ne "17.10" -or
+        $script:CreateStates -notcontains $state.state -or
+        @("not_started","running","stopped","unresolved") -notcontains $state.server_state -or
+        [string]::IsNullOrWhiteSpace([string]$state.created_utc) -or
+        [string]::IsNullOrWhiteSpace([string]$state.updated_utc)) {
+      Throw-SafeError -Code "marker_state_mismatch"
+    }
+    foreach ($stringKey in @("artifact_type","cluster_id","state","stage","created_utc","updated_utc","postgres_major","postgres_version","host","admin_role","instance_name","data_directory_name","server_log_name","server_state")) {
+      if ($state.$stringKey -isnot [string] -or [string]::IsNullOrWhiteSpace($state.$stringKey)) {
+        Throw-SafeError -Code "state_schema_invalid"
+      }
+    }
+    if ($state.schema_version -isnot [int] -and $state.schema_version -isnot [long]) {
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+    if ($state.port -isnot [int] -and $state.port -isnot [long]) {
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+    if ($null -ne $state.last_error_code -and $state.last_error_code -isnot [string]) {
+      Throw-SafeError -Code "state_schema_invalid"
+    }
+    foreach ($boolKey in @("initdb_completed","configuration_completed","server_started","credential_protected","plaintext_password_file_present","server_cleanup_attempted","server_cleanup_completed")) {
+      if ($state.$boolKey -isnot [bool]) { Throw-SafeError -Code "state_schema_invalid" }
+    }
+    if ([DateTimeOffset]::Parse([string]$state.updated_utc) -lt [DateTimeOffset]::Parse([string]$state.created_utc)) {
+      Throw-SafeError -Code "marker_state_mismatch"
+    }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "marker_state_mismatch"
+  }
+}
+
+function New-AdminPasswordText {
+  $bytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+    return [Convert]::ToBase64String($bytes)
+  } finally {
+    $rng.Dispose()
+    [Array]::Clear($bytes, 0, $bytes.Length)
+  }
+}
+
+function Protect-AdminCredential {
+  param(
+    [Parameter(Mandatory = $true)][string]$PlainTextPassword,
+    [Parameter(Mandatory = $true)][object]$Layout
+  )
+  try {
+    $secure = ConvertTo-SecureString -String $PlainTextPassword -AsPlainText -Force
+    $protected = ConvertFrom-SecureString -SecureString $secure
+    Write-Utf8NoBomFile -PathValue $Layout.CredentialPath -Text $protected
+    Set-RestrictedAcl -PathValue $Layout.CredentialPath -TargetType File
+    return $true
+  } catch {
+    Throw-SafeError -Code "credential_protection_failed"
+  }
+}
+
+function New-PasswordFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$PlainTextPassword,
+    [Parameter(Mandatory = $true)][object]$Layout
+  )
+  try {
+    Write-Utf8NoBomFile -PathValue $Layout.PasswordFilePath -Text $PlainTextPassword
+    Set-RestrictedAcl -PathValue $Layout.PasswordFilePath -TargetType File
+  } catch {
+    Throw-SafeError -Code "password_file_create_failed"
+  }
+}
+
+function Remove-PasswordFileStrict {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  if (Test-Path -LiteralPath $Layout.PasswordFilePath -PathType Leaf) {
+    [System.IO.File]::Delete($Layout.PasswordFilePath)
+  }
+  if (Test-Path -LiteralPath $Layout.PasswordFilePath -PathType Leaf) {
+    Throw-SafeError -Code "password_file_cleanup_failed"
+  }
+}
+
+function ConvertTo-WindowsProcessArgument {
+  param([Parameter(Mandatory = $true)][AllowNull()][object]$Value)
+  if ($null -eq $Value) { Throw-SafeError -Code "unexpected_failure" }
+  $Value = [string]$Value
+  if ($Value.Length -eq 0) { return '""' }
+  if ($Value -notmatch '[\s"]') { return $Value }
+  function New-BackslashRun {
+    param([Parameter(Mandatory = $true)][int]$Count)
+    if ($Count -le 0) { return "" }
+    return (([string][char]92) * $Count)
+  }
+  $builder = [System.Text.StringBuilder]::new()
+  [void]$builder.Append('"')
+  $slashCount = 0
+  foreach ($ch in $Value.ToCharArray()) {
+    if ($ch -eq '\') {
+      $slashCount += 1
+      continue
+    }
+    if ($ch -eq '"') {
+      [void]$builder.Append((New-BackslashRun -Count (($slashCount * 2) + 1)))
+      [void]$builder.Append('"')
+      $slashCount = 0
+      continue
+    }
+    if ($slashCount -gt 0) {
+      [void]$builder.Append((New-BackslashRun -Count $slashCount))
+      $slashCount = 0
+    }
+    [void]$builder.Append($ch)
+  }
+  if ($slashCount -gt 0) {
+    [void]$builder.Append((New-BackslashRun -Count ($slashCount * 2)))
+  }
+  [void]$builder.Append('"')
+  return $builder.ToString()
+}
+
+function Get-SafeOutputTail {
+  param([AllowNull()][string]$Text)
+  if ($null -eq $Text) { return "" }
+  $safe = $Text
+  foreach ($path in @($env:USERPROFILE, $env:LOCALAPPDATA)) {
+    if (-not [string]::IsNullOrWhiteSpace($path)) {
+      $safe = $safe.Replace($path, "<local_path>")
+    }
+  }
+  $safe = $safe -replace '(?i)[A-Z]:\\[^\r\n]*initdb-password\.tmp', '<pwfile>'
+  $safe = $safe -replace '(?i)[A-Z]:\\[^\r\n]*vc_isolated_admin\.dpapi', '<credential>'
+  if ($safe.Length -gt 4096) {
+    return $safe.Substring($safe.Length - 4096)
+  }
+  return $safe
+}
+
+function Invoke-SafeProcess {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+    [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+    [Parameter(Mandatory = $true)][string]$ToolName
+  )
+  if (-not [System.IO.Path]::IsPathRooted($FilePath) -or -not (Test-Path -LiteralPath $FilePath -PathType Leaf)) {
+    Throw-SafeError -Code "postgres_tools_missing"
+  }
+  if (-not (Test-Path -LiteralPath $WorkingDirectory -PathType Container)) {
+    Throw-SafeError -Code "postgres_tools_missing"
+  }
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $FilePath
+  $psi.Arguments = (($Arguments | ForEach-Object { ConvertTo-WindowsProcessArgument -Value $_ }) -join " ")
+  $psi.WorkingDirectory = $WorkingDirectory
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  $stdoutTask = $null
+  $stderrTask = $null
+  try {
+    [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $completed = $process.WaitForExit($TimeoutSeconds * 1000)
+    if (-not $completed) {
+      try {
+        $process.Kill()
+      } catch {
+        return [pscustomobject]@{ Tool = $ToolName; ExitCode = $null; TimedOut = $true; ProcessKilled = $false; OutputDrainCompleted = $false; Success = $false; SafeErrorCode = "process_timeout_cleanup_failed"; StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = "" }
+      }
+      if (-not $process.WaitForExit(5000)) {
+        return [pscustomobject]@{ Tool = $ToolName; ExitCode = $null; TimedOut = $true; ProcessKilled = $true; OutputDrainCompleted = $false; Success = $false; SafeErrorCode = "process_timeout_cleanup_failed"; StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = "" }
+      }
+      $stdoutDoneAfterTimeout = $stdoutTask.Wait(5000)
+      $stderrDoneAfterTimeout = $stderrTask.Wait(5000)
+      if (-not $stdoutDoneAfterTimeout -or -not $stderrDoneAfterTimeout) {
+        return [pscustomobject]@{ Tool = $ToolName; ExitCode = $null; TimedOut = $true; ProcessKilled = $true; OutputDrainCompleted = $false; Success = $false; SafeErrorCode = "process_output_drain_failed"; StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = "" }
+      }
+      $stdoutTailAfterTimeout = Get-SafeOutputTail -Text $stdoutTask.Result
+      $stderrTailAfterTimeout = Get-SafeOutputTail -Text $stderrTask.Result
+      return [pscustomobject]@{ Tool = $ToolName; ExitCode = $null; TimedOut = $true; ProcessKilled = $true; OutputDrainCompleted = $true; Success = $false; SafeErrorCode = ($ToolName + "_timeout"); StdOut = $stdoutTailAfterTimeout; StdErr = $stderrTailAfterTimeout; StdOutTailSanitized = $stdoutTailAfterTimeout; StdErrTailSanitized = $stderrTailAfterTimeout }
+    }
+    $process.WaitForExit()
+    if (-not $stdoutTask.Wait(5000) -or -not $stderrTask.Wait(5000)) {
+      return [pscustomobject]@{ Tool = $ToolName; ExitCode = $process.ExitCode; TimedOut = $false; ProcessKilled = $false; OutputDrainCompleted = $false; Success = $false; SafeErrorCode = "process_output_drain_failed"; StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = "" }
+    }
+    $stdoutTail = Get-SafeOutputTail -Text $stdoutTask.Result
+    $stderrTail = Get-SafeOutputTail -Text $stderrTask.Result
+    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $process.ExitCode; TimedOut = $false; ProcessKilled = $false; OutputDrainCompleted = $true; Success = ($process.ExitCode -eq 0); SafeErrorCode = $(if ($process.ExitCode -eq 0) { "none" } else { $ToolName + "_failed" }); StdOut = $stdoutTail; StdErr = $stderrTail; StdOutTailSanitized = $stdoutTail; StdErrTailSanitized = $stderrTail }
+  } finally {
+    if ($null -ne $stdoutTask) { $stdoutTask.Dispose() }
+    if ($null -ne $stderrTask) { $stderrTask.Dispose() }
+    $process.Dispose()
+  }
+}
+
+function Assert-InitializedDataRoot {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $pgVersionPath = Join-Path $Layout.DataRoot "PG_VERSION"
+  foreach ($required in @($pgVersionPath, (Join-Path $Layout.DataRoot "postgresql.conf"), (Join-Path $Layout.DataRoot "pg_hba.conf"))) {
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+      Throw-SafeError -Code "initdb_partial"
+    }
+  }
+  $version = (Get-Content -LiteralPath $pgVersionPath -TotalCount 1)
+  if ($version -ne "17") {
+    Throw-SafeError -Code "pg_version_invalid"
+  }
+}
+
+function Add-ManagedPostgresqlConf {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  try {
+    $path = Join-Path $Layout.DataRoot "postgresql.conf"
+    $existing = [System.IO.File]::ReadAllText($path)
+    if ($existing -match "# BEGIN VOTO_CLARO_ISOLATED_BASELINE_TEST") {
+      Throw-SafeError -Code "postgresql_conf_write_failed"
+    }
+    $block = (Get-FuturePostgresqlConfTemplate -ExactPort 55432) -join "`n"
+    [System.IO.File]::AppendAllText($path, "`n" + $block + "`n", [System.Text.UTF8Encoding]::new($false))
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "postgresql_conf_write_failed"
+  }
+}
+
+function Set-ManagedPgHba {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  try {
+    $path = Join-Path $Layout.DataRoot "pg_hba.conf"
+    $content = (Get-FuturePgHbaTemplate) -join "`n"
+    $ipv6Loopback = ":" + ":1"
+    if ($content -match "\btrust\b|\bmd5\b|\bpassword\b|\bident\b|\bpeer\b|\bsspi\b|include" -or
+        $content.Contains($ipv6Loopback)) {
+      Throw-SafeError -Code "pg_hba_write_failed"
+    }
+    Write-Utf8NoBomFile -PathValue $path -Text $content
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "pg_hba_write_failed"
+  }
+}
+
+function Get-PostmasterPidInfo {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $path = Join-Path $Layout.DataRoot "postmaster.pid"
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    Throw-SafeError -Code "postmaster_pid_missing"
+  }
+  $fullPidPath = [System.IO.Path]::GetFullPath($path)
+  $dataRootFull = [System.IO.Path]::GetFullPath($Layout.DataRoot)
+  $pidParent = [System.IO.Path]::GetFullPath((Split-Path -Parent $fullPidPath))
+  if (-not [string]::Equals($pidParent.TrimEnd('\'), $dataRootFull.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "postmaster_pid_invalid"
+  }
+  $pidItem = Get-Item -LiteralPath $fullPidPath -Force
+  if (($pidItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    Throw-SafeError -Code "postmaster_pid_invalid"
+  }
+  $lines = @(Get-Content -LiteralPath $path -ErrorAction Stop)
+  if ($lines.Count -lt 4 -or
+      [string]::IsNullOrWhiteSpace($lines[0]) -or
+      [string]::IsNullOrWhiteSpace($lines[1]) -or
+      [string]::IsNullOrWhiteSpace($lines[2]) -or
+      [string]::IsNullOrWhiteSpace($lines[3]) -or
+      $lines[0] -notmatch "^[1-9][0-9]*$" -or
+      $lines[2] -notmatch "^[0-9]+$" -or
+      $lines[3] -notmatch "^[0-9]+$") {
+    Throw-SafeError -Code "postmaster_pid_invalid"
+  }
+  if (-not [System.IO.Path]::IsPathRooted($lines[1])) {
+    Throw-SafeError -Code "postmaster_dataroot_mismatch"
+  }
+  $pidDataRoot = [System.IO.Path]::GetFullPath($lines[1])
+  if (-not [string]::Equals($pidDataRoot.TrimEnd('\'), $dataRootFull.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "postmaster_dataroot_mismatch"
+  }
+  if ([int]$lines[3] -ne 55432) {
+    Throw-SafeError -Code "postmaster_port_mismatch"
+  }
+  return [pscustomobject]@{ Pid = [int]$lines[0]; DataRoot = $pidDataRoot; Port = [int]$lines[3]; StartedAt = [int64]$lines[2] }
+}
+
+function Assert-PostgresProcessForInstance {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  $pidInfo = Get-PostmasterPidInfo -Layout $Layout
+  [void](Get-VerifiedPostgresProcessInfo -PidInfo $pidInfo -Package $Package)
+}
+
+function Convert-ToComparableExecutablePath {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  if ([string]::IsNullOrWhiteSpace($PathValue) -or -not [System.IO.Path]::IsPathRooted($PathValue)) {
+    return $null
+  }
+  try {
+    $full = [System.IO.Path]::GetFullPath($PathValue)
+    if ([string]::IsNullOrWhiteSpace($full) -or -not [System.IO.Path]::IsPathRooted($full)) {
+      return $null
+    }
+    return $full.TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
+  } catch {
+    return $null
+  }
+}
+
+function Get-ProcessExecutablePathCompatible {
+  param([Parameter(Mandatory = $true)][AllowNull()][System.Diagnostics.Process]$Process)
+  if ($null -eq $Process) {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_object_missing" }
+  }
+  try {
+    try {
+      $Process.Refresh()
+    } catch [System.InvalidOperationException] {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_already_exited" }
+    } catch {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_query_failed" }
+    }
+    try {
+      if ($Process.HasExited) {
+        return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_already_exited" }
+      }
+    } catch [System.InvalidOperationException] {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_already_exited" }
+    } catch {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_query_failed" }
+    }
+    try {
+      $moduleFileName = $Process.MainModule.FileName
+    } catch [System.ComponentModel.Win32Exception] {
+      if ($_.Exception.NativeErrorCode -eq 5) {
+        return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_access_denied" }
+      }
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_main_module_unavailable" }
+    } catch [System.InvalidOperationException] {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_already_exited" }
+    } catch {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_query_failed" }
+    }
+    if ([string]::IsNullOrWhiteSpace($moduleFileName)) {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_executable_path_empty" }
+    }
+    if (-not [System.IO.Path]::IsPathRooted($moduleFileName)) {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_executable_path_invalid" }
+    }
+    try {
+      $fullPath = [System.IO.Path]::GetFullPath($moduleFileName)
+    } catch [System.ArgumentException] {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_executable_path_invalid" }
+    } catch [System.NotSupportedException] {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_executable_path_invalid" }
+    } catch {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_query_failed" }
+    }
+    if ([string]::IsNullOrWhiteSpace($fullPath) -or -not [System.IO.Path]::IsPathRooted($fullPath)) {
+      return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_executable_path_invalid" }
+    }
+    return [pscustomobject]@{ Success = $true; ExecutablePath = $fullPath; SafeErrorCode = "none" }
+  } catch {
+    return [pscustomobject]@{ Success = $false; ExecutablePath = $null; SafeErrorCode = "process_query_failed" }
+  }
+}
+
+function Get-VerifiedPostgresProcessInfo {
+  param(
+    [Parameter(Mandatory = $true)][object]$PidInfo,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  $process = $null
+  try {
+    if ($null -eq $PidInfo.Pid -or [int]$PidInfo.Pid -le 0) {
+      Throw-SafeError -Code "postgres_process_unverified"
+    }
+    $process = [System.Diagnostics.Process]::GetProcessById([int]$PidInfo.Pid)
+    $expected = Get-ToolPath -BinRoot $Package.Bin -ToolName "postgres"
+    $expectedPath = Convert-ToComparableExecutablePath -PathValue $expected
+    $pathResult = Get-ProcessExecutablePathCompatible -Process $process
+    if (-not $pathResult.Success) {
+      Throw-SafeError -Code "postgres_process_unverified"
+    }
+    $actualPath = Convert-ToComparableExecutablePath -PathValue $pathResult.ExecutablePath
+    try {
+      $startTimeUtc = $process.StartTime.ToUniversalTime()
+    } catch {
+      Throw-SafeError -Code "postgres_process_unverified"
+    }
+    if ($process.ProcessName -ne "postgres" -or
+        [string]::IsNullOrWhiteSpace($actualPath) -or
+        [string]::IsNullOrWhiteSpace($expectedPath) -or
+        -not [string]::Equals($actualPath, $expectedPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "postgres_process_unverified"
+    }
+    return [pscustomobject]@{ Pid = [int]$pidInfo.Pid; ProcessName = $process.ProcessName; ExecutablePath = $pathResult.ExecutablePath; StartTimeUtc = $startTimeUtc; DataRoot = $pidInfo.DataRoot; Port = $pidInfo.Port }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "postgres_process_unverified"
+  } finally {
+    if ($null -ne $process) { $process.Dispose() }
+  }
+}
+
+function Get-LocalPostgresProcessEvidence {
+  param([Parameter(Mandatory = $true)][object]$Package)
+  $expected = Convert-ToComparableExecutablePath -PathValue (Get-ToolPath -BinRoot $Package.Bin -ToolName "postgres")
+  $records = New-Object System.Collections.Generic.List[object]
+  $authorized = 0
+  $other = 0
+  $ambiguous = 0
+  try {
+    $processes = [System.Diagnostics.Process]::GetProcessesByName("postgres")
+  } catch {
+    return [pscustomobject]@{ AuthorizedCount = 0; OtherCount = 0; AmbiguousCount = 1; Records = @() }
+  }
+  foreach ($process in @($processes)) {
+    try {
+      $pathResult = Get-ProcessExecutablePathCompatible -Process $process
+      if (-not $pathResult.Success) {
+        $ambiguous += 1
+        [void]$records.Add([pscustomobject]@{ Classification = "AMBIGUOUS_POSTGRES_PROCESS"; Pid = $process.Id; ProcessName = "postgres"; ExecutablePath = $null; StartTimeUtc = $null; SafeErrorCode = $pathResult.SafeErrorCode })
+        continue
+      }
+      try {
+        $startTimeUtc = $process.StartTime.ToUniversalTime()
+      } catch {
+        $ambiguous += 1
+        [void]$records.Add([pscustomobject]@{ Classification = "AMBIGUOUS_POSTGRES_PROCESS"; Pid = $process.Id; ProcessName = "postgres"; ExecutablePath = $null; StartTimeUtc = $null; SafeErrorCode = "process_query_failed" })
+        continue
+      }
+      $path = Convert-ToComparableExecutablePath -PathValue $pathResult.ExecutablePath
+      if ($process.ProcessName -ne "postgres") {
+        $classification = "AMBIGUOUS_POSTGRES_PROCESS"
+        $ambiguous += 1
+      } elseif ([string]::IsNullOrWhiteSpace($path) -or [string]::IsNullOrWhiteSpace($expected)) {
+        $classification = "AMBIGUOUS_POSTGRES_PROCESS"
+        $ambiguous += 1
+      } elseif ([string]::Equals($path, $expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $classification = "AUTHORIZED_PACKAGE_PROCESS"
+        $authorized += 1
+      } else {
+        $classification = "OTHER_POSTGRES_PROCESS"
+        $other += 1
+      }
+      [void]$records.Add([pscustomobject]@{ Classification = $classification; Pid = $process.Id; ProcessName = $process.ProcessName; ExecutablePath = $pathResult.ExecutablePath; StartTimeUtc = $startTimeUtc; SafeErrorCode = "none" })
+    } catch {
+      $ambiguous += 1
+      [void]$records.Add([pscustomobject]@{ Classification = "AMBIGUOUS_POSTGRES_PROCESS"; Pid = $process.Id; ProcessName = "postgres"; ExecutablePath = $null; StartTimeUtc = $null; SafeErrorCode = "process_query_failed" })
+    } finally {
+      $process.Dispose()
+    }
+  }
+  return [pscustomobject]@{ AuthorizedCount = $authorized; OtherCount = $other; AmbiguousCount = $ambiguous; Records = @($records.ToArray()) }
+}
+
+function Get-OriginalPostgresProcessState {
+  param([Parameter(Mandatory = $true)][object]$OriginalIdentity)
+  $process = $null
+  try {
+    $process = [System.Diagnostics.Process]::GetProcessById([int]$OriginalIdentity.Pid)
+  } catch [System.ArgumentException] {
+    return "ORIGINAL_PROCESS_EXITED"
+  } catch {
+    return "PROCESS_STATE_UNRESOLVED"
+  }
+  try {
+    $pathResult = Get-ProcessExecutablePathCompatible -Process $process
+    if (-not $pathResult.Success) {
+      if ($pathResult.SafeErrorCode -eq "process_already_exited") {
+        try {
+          [void][System.Diagnostics.Process]::GetProcessById([int]$OriginalIdentity.Pid)
+          return "PROCESS_STATE_UNRESOLVED"
+        } catch [System.ArgumentException] {
+          return "ORIGINAL_PROCESS_EXITED"
+        } catch {
+          return "PROCESS_STATE_UNRESOLVED"
+        }
+      }
+      return "PROCESS_STATE_UNRESOLVED"
+    }
+    try {
+      $startTimeUtc = $process.StartTime.ToUniversalTime()
+    } catch {
+      return "PROCESS_STATE_UNRESOLVED"
+    }
+    $path = Convert-ToComparableExecutablePath -PathValue $pathResult.ExecutablePath
+    $originalPath = Convert-ToComparableExecutablePath -PathValue $OriginalIdentity.ExecutablePath
+    if ($process.ProcessName -eq $OriginalIdentity.ProcessName -and
+        -not [string]::IsNullOrWhiteSpace($path) -and
+        -not [string]::IsNullOrWhiteSpace($originalPath) -and
+        [string]::Equals($path, $originalPath, [System.StringComparison]::OrdinalIgnoreCase) -and
+        $startTimeUtc -eq $OriginalIdentity.StartTimeUtc) {
+      return "ORIGINAL_PROCESS_RUNNING"
+    }
+    return "PID_REUSED"
+  } catch {
+    return "PROCESS_STATE_UNRESOLVED"
+  } finally {
+    if ($null -ne $process) { $process.Dispose() }
+  }
+}
+
+function Test-LoopbackListenerOpen {
+  $client = $null
+  try {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $async = $client.BeginConnect("127.0.0.1", 55432, $null, $null)
+    if (-not $async.AsyncWaitHandle.WaitOne(1000)) { return $false }
+    $client.EndConnect($async)
+    return $true
+  } catch {
+    return $false
+  } finally {
+    if ($null -ne $client) { $client.Dispose() }
+  }
+}
+
+function Get-VerifiedServerState {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  $pidPath = Join-Path $Layout.DataRoot "postmaster.pid"
+  $pidExists = Test-Path -LiteralPath $pidPath -PathType Leaf
+  $listenerOpen = Test-LoopbackListenerOpen
+  if (-not $pidExists) {
+    if ($listenerOpen) {
+      return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $null }
+    }
+    $processEvidence = Get-LocalPostgresProcessEvidence -Package $Package
+    if ($processEvidence.AuthorizedCount -gt 0 -or $processEvidence.AmbiguousCount -gt 0) {
+      return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $null }
+    }
+    return [pscustomobject]@{ State = "NO_SERVER_EVIDENCE"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $null }
+  }
+  try {
+    $pidInfo = Get-PostmasterPidInfo -Layout $Layout
+    $identity = Get-VerifiedPostgresProcessInfo -PidInfo $pidInfo -Package $Package
+    return [pscustomobject]@{ State = "VERIFIED_SERVER_RUNNING"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $pidInfo.Pid; Identity = $identity }
+  } catch {
+    return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $null }
+  }
+}
+
+function Wait-ForVerifiedServerStopState {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package,
+    [Parameter(Mandatory = $true)][object]$OriginalIdentity
+  )
+  $watch = [System.Diagnostics.Stopwatch]::StartNew()
+  $lastProcessState = "PROCESS_STATE_UNRESOLVED"
+  $lastListenerOpen = $false
+  $lastPidExists = $false
+  while ($watch.Elapsed.TotalSeconds -lt 15) {
+    $pidPath = Join-Path $Layout.DataRoot "postmaster.pid"
+    $lastPidExists = Test-Path -LiteralPath $pidPath -PathType Leaf
+    $lastListenerOpen = Test-LoopbackListenerOpen
+    $lastProcessState = Get-OriginalPostgresProcessState -OriginalIdentity $OriginalIdentity
+    if ($lastPidExists) {
+      try {
+        $pidInfo = Get-PostmasterPidInfo -Layout $Layout
+        $currentIdentity = Get-VerifiedPostgresProcessInfo -PidInfo $pidInfo -Package $Package
+        if ($currentIdentity.Pid -eq $OriginalIdentity.Pid -and
+            [string]::Equals($currentIdentity.ExecutablePath, $OriginalIdentity.ExecutablePath, [System.StringComparison]::OrdinalIgnoreCase) -and
+            $currentIdentity.StartTimeUtc -eq $OriginalIdentity.StartTimeUtc) {
+          Start-Sleep -Milliseconds 300
+          continue
+        }
+        return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+      } catch {
+        return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+      }
+    }
+    if ($lastProcessState -eq "PROCESS_STATE_UNRESOLVED") {
+      return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+    }
+    if ($lastProcessState -eq "ORIGINAL_PROCESS_EXITED" -or $lastProcessState -eq "PID_REUSED") {
+      if (-not $lastListenerOpen) {
+        $processEvidence = Get-LocalPostgresProcessEvidence -Package $Package
+        if ($processEvidence.AuthorizedCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0) {
+          return [pscustomobject]@{ State = "VERIFIED_SERVER_STOPPED"; CleanupAttempted = $true; CleanupCompleted = $true; Pid = $OriginalIdentity.Pid }
+        }
+        return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+      }
+      if ($lastProcessState -eq "PID_REUSED") {
+        return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+      }
+    }
+    Start-Sleep -Milliseconds 300
+  }
+  if ($lastProcessState -eq "ORIGINAL_PROCESS_RUNNING") {
+    return [pscustomobject]@{ State = "VERIFIED_SERVER_STOP_FAILED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+  }
+  if ($lastListenerOpen) {
+    return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+  }
+  if ($lastPidExists) {
+    return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+  }
+  return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $OriginalIdentity.Pid }
+}
+
+function Invoke-VerifiedPgCtlStop {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  $before = Get-VerifiedServerState -Layout $Layout -Package $Package
+  if ($before.State -ne "VERIFIED_SERVER_RUNNING" -or $null -eq $before.Pid) {
+    return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $null }
+  }
+  try {
+    $originalIdentity = $before.Identity
+    [void](Get-PostmasterPidInfo -Layout $Layout)
+    $pgCtl = Get-ToolPath -BinRoot $Package.Bin -ToolName "pg_ctl"
+    $stopArgs = @("stop", "-D", $Layout.DataRoot, "-m", "fast", "-w", "-t", "30")
+    $stopResult = Invoke-SafeProcess -FilePath $pgCtl -Arguments $stopArgs -WorkingDirectory $Layout.InstanceRoot -TimeoutSeconds 45 -ToolName "pg_ctl_stop"
+    [void]$stopResult
+    return (Wait-ForVerifiedServerStopState -Layout $Layout -Package $Package -OriginalIdentity $originalIdentity)
+  } catch {
+    return [pscustomobject]@{ State = "VERIFIED_SERVER_STOP_FAILED"; CleanupAttempted = $true; CleanupCompleted = $false; Pid = $before.Pid }
+  }
+}
+
+function Resolve-VerifiedPgCtlStartFailure {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  $state = Get-VerifiedServerState -Layout $Layout -Package $Package
+  if ($state.State -eq "NO_SERVER_EVIDENCE") { return $state }
+  if ($state.State -eq "VERIFIED_SERVER_RUNNING") {
+    return (Invoke-VerifiedPgCtlStop -Layout $Layout -Package $Package)
+  }
+  return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $null }
+}
+
+function Assert-LoopbackListener {
+  $client = $null
+  try {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $async = $client.BeginConnect("127.0.0.1", 55432, $null, $null)
+    if (-not $async.AsyncWaitHandle.WaitOne(3000)) {
+      Throw-SafeError -Code "listener_verification_failed"
+    }
+    $client.EndConnect($async)
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "listener_verification_failed"
+  } finally {
+    if ($null -ne $client) { $client.Dispose() }
+  }
+}
+
+function Invoke-Create {
+  Set-Stage -Stage "create_authorization"
+  Assert-CreateAuthorization
+  $plainTextPassword = $null
+  $layout = Get-InstanceLayout
+  $clusterId = [Guid]::NewGuid().ToString()
+  $initdbCompleted = $false
+  $credentialProtected = $false
+  $serverState = "not_started"
+  $serverCleanupAttempted = $false
+  $serverCleanupCompleted = $false
+  try {
+    Set-Stage -Stage "create_preflight"
+    Assert-GitReadyForCreate
+    Assert-CreateConstants
+    $repoRoot = Get-RepoRoot
+    $package = Assert-PostgresPackageForCreate -BinRoot $PostgresBin
+    [void](Invoke-BaselineValidator -RepoRoot $repoRoot)
+    $localCompat = Invoke-LocalCompatPreflightValidator -RepoRoot $repoRoot
+    if (-not $localCompat.Valid -or $localCompat.ReadyForExecution -ne "false") {
+      Throw-SafeError -Code "baseline_validation_failed"
+    }
+    Assert-CreateLayout -Layout $layout -RepoRoot $repoRoot
+    Assert-CreateInstanceAbsent -Layout $layout
+    if (-not (Test-CreatePortAvailable)) {
+      Throw-SafeError -Code "port_unavailable"
+    }
+
+    Set-Stage -Stage "create_directories"
+    foreach ($dir in @($layout.InstanceRoot, $layout.DataRoot, $layout.LogRoot, $layout.StateRoot, $layout.SecretRoot)) {
+      New-Item -ItemType Directory -Path $dir -ErrorAction Stop | Out-Null
+      Set-RestrictedAcl -PathValue $dir -TargetType Directory
+    }
+    Assert-CreateLayout -Layout $layout -RepoRoot $repoRoot
+    $markerText = New-MarkerText -ClusterId $clusterId -LocalPort 55432
+    Write-Utf8NoBomFile -PathValue $layout.MarkerPath -Text ($markerText -join "`n")
+    Set-RestrictedAcl -PathValue $layout.MarkerPath -TargetType File
+    Write-ClusterState -Layout $layout -ClusterId $clusterId -State "initializing" -Stage "initdb"
+    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+
+    Set-Stage -Stage "credential"
+    $plainTextPassword = New-AdminPasswordText
+    $credentialProtected = Protect-AdminCredential -PlainTextPassword $plainTextPassword -Layout $layout
+    New-PasswordFile -PlainTextPassword $plainTextPassword -Layout $layout
+
+    Set-Stage -Stage "initdb"
+    $initdb = Get-ToolPath -BinRoot $package.Bin -ToolName "initdb"
+    $initResult = Invoke-SafeProcess -FilePath $initdb -Arguments (Get-FutureInitDbArgumentTemplate -ExactDataRoot $layout.DataRoot -PasswordFile $layout.PasswordFilePath) -WorkingDirectory $layout.InstanceRoot -TimeoutSeconds 120 -ToolName "initdb"
+    Remove-PasswordFileStrict -Layout $layout
+    if ($initResult.TimedOut) { Throw-SafeError -Code "initdb_timeout" }
+    if (-not $initResult.Success) { Throw-SafeError -Code "initdb_failed" }
+    $initdbCompleted = $true
+    Assert-InitializedDataRoot -Layout $layout
+    Write-ClusterState -Layout $layout -ClusterId $clusterId -State "initialized" -Stage "initialized" -InitdbCompleted:$true -CredentialProtected:$credentialProtected
+    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+
+    Set-Stage -Stage "postgresql_conf"
+    Write-ClusterState -Layout $layout -ClusterId $clusterId -State "configuring" -Stage "postgresql_conf" -InitdbCompleted:$true -CredentialProtected:$credentialProtected
+    Add-ManagedPostgresqlConf -Layout $layout
+    Set-Stage -Stage "pg_hba"
+    Set-ManagedPgHba -Layout $layout
+    Write-ClusterState -Layout $layout -ClusterId $clusterId -State "configured" -Stage "configured" -InitdbCompleted:$true -ConfigurationCompleted:$true -CredentialProtected:$credentialProtected
+    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+
+    Set-Stage -Stage "pg_ctl_start"
+    if (-not (Test-CreatePortAvailable)) {
+      Throw-SafeError -Code "port_race_detected"
+    }
+    Write-ClusterState -Layout $layout -ClusterId $clusterId -State "starting" -Stage "pg_ctl_start" -InitdbCompleted:$true -ConfigurationCompleted:$true -CredentialProtected:$credentialProtected -ServerState $serverState -ServerCleanupAttempted:$serverCleanupAttempted -ServerCleanupCompleted:$serverCleanupCompleted
+    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+    $pgCtl = Get-ToolPath -BinRoot $package.Bin -ToolName "pg_ctl"
+    $startArgs = @("start", "-D", $layout.DataRoot, "-l", $layout.ServerLog, "-w", "-t", "60")
+    $startResult = Invoke-SafeProcess -FilePath $pgCtl -Arguments $startArgs -WorkingDirectory $layout.InstanceRoot -TimeoutSeconds 75 -ToolName "pg_ctl"
+    if ($startResult.TimedOut -or -not $startResult.Success) {
+      $recovery = Resolve-VerifiedPgCtlStartFailure -Layout $layout -Package $package
+      $serverCleanupAttempted = $recovery.CleanupAttempted
+      $serverCleanupCompleted = $recovery.CleanupCompleted
+      if ($recovery.State -eq "NO_SERVER_EVIDENCE") {
+        $serverState = "not_started"
+        Throw-SafeError -Code "pg_ctl_start_failed_no_server"
+      }
+      if ($recovery.State -eq "VERIFIED_SERVER_STOPPED") {
+        $serverState = "stopped"
+        Throw-SafeError -Code "pg_ctl_start_failed_server_stopped"
+      }
+      if ($recovery.State -eq "VERIFIED_SERVER_STOP_FAILED") {
+        $serverState = "unresolved"
+        Throw-SafeError -Code "postgres_server_cleanup_failed"
+      }
+      $serverState = "unresolved"
+      Throw-SafeError -Code "postgres_server_state_unresolved"
+    }
+    try {
+      Assert-PostgresProcessForInstance -Layout $layout -Package $package
+      Assert-LoopbackListener
+    } catch {
+      $recovery = Resolve-VerifiedPgCtlStartFailure -Layout $layout -Package $package
+      $serverCleanupAttempted = $recovery.CleanupAttempted
+      $serverCleanupCompleted = $recovery.CleanupCompleted
+      if ($recovery.State -eq "NO_SERVER_EVIDENCE") {
+        $serverState = "not_started"
+        Throw-SafeError -Code "pg_ctl_start_failed_no_server"
+      }
+      if ($recovery.State -eq "VERIFIED_SERVER_STOPPED") {
+        $serverState = "stopped"
+        Throw-SafeError -Code "pg_ctl_start_failed_server_stopped"
+      }
+      if ($recovery.State -eq "VERIFIED_SERVER_STOP_FAILED") {
+        $serverState = "unresolved"
+        Throw-SafeError -Code "postgres_server_cleanup_failed"
+      }
+      $serverState = "unresolved"
+      Throw-SafeError -Code "postgres_server_state_unresolved"
+    }
+    $serverState = "running"
+    Write-ClusterState -Layout $layout -ClusterId $clusterId -State "running" -Stage "running" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$true -CredentialProtected:$credentialProtected -ServerState $serverState -ServerCleanupAttempted:$serverCleanupAttempted -ServerCleanupCompleted:$serverCleanupCompleted
+    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+
+    Write-Output "CREATE_LOCAL_ISOLATED_CLUSTER_OK"
+    Write-Output "state=running"
+    Write-Output "host=127.0.0.1"
+    Write-Output "port=55432"
+    Write-Output "postgres_major=17"
+    Write-Output "postgres_version=17.10"
+    Write-Output "admin_role=$script:LocalAdminUser"
+    Write-Output "credential_protected=true"
+    Write-Output "plaintext_password_file_present=false"
+    Write-Output "preflight_executed=false"
+    Write-Output "baseline_executed=false"
+    Write-Output "sql_executed=false"
+    Write-Output "apply_ready=false"
+    Write-Output "production_connection_used=false"
+  } catch {
+    $reason = Get-SafeReason -ErrorRecord $_
+    try { Remove-PasswordFileStrict -Layout $layout } catch { $reason = "password_file_cleanup_failed" }
+    if ($initdbCompleted -ne $true -and (Test-Path -LiteralPath $layout.CredentialPath -PathType Leaf)) {
+      try { [System.IO.File]::Delete($layout.CredentialPath) } catch { }
+    }
+    if (Test-Path -LiteralPath $layout.StateRoot -PathType Container) {
+      try { Write-ClusterState -Layout $layout -ClusterId $clusterId -State "failed" -Stage $script:CurrentStage -ErrorCode $reason -InitdbCompleted:$initdbCompleted -CredentialProtected:$credentialProtected -ServerState $serverState -ServerCleanupAttempted:$serverCleanupAttempted -ServerCleanupCompleted:$serverCleanupCompleted } catch { }
+    }
+    Throw-SafeError -Code $reason
+  } finally {
+    if ($null -ne $plainTextPassword) {
+      $plainTextPassword = $null
+    }
+  }
+}
+
 function Invoke-Plan {
   Set-Stage -Stage "plan"
   $repoRoot = Get-RepoRoot
   $postgresPackage = Assert-PostgresTools -BinRoot $PostgresBin
+  $layout = Get-InstanceLayout
   Assert-LocalAdminUser -Value $script:LocalAdminUser
   Assert-Port -Value $Port
   Assert-ClusterName -Value $ClusterName
   Assert-DatabaseName -Value $DatabaseName
-  $resolvedDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) { Get-DefaultDataRoot -Name $ClusterName } else { $DataRoot }
+  $resolvedDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) { $layout.DataRoot } else { $DataRoot }
   [void](Assert-DataRoot -Root $resolvedDataRoot -RepoRoot $repoRoot -ExpectedClusterName $ClusterName -RequireMarker:$false)
   $baselineValid = Invoke-BaselineValidator -RepoRoot $repoRoot
   $portAvailable = Test-PortAvailable -Value $Port
-  $localServerDetected = Test-LocalServerDetected
   $dependencies = Get-DependencyScan -RepoRoot $repoRoot
   $localCompat = Invoke-LocalCompatPreflightValidator -RepoRoot $repoRoot
-  $readyForCreate = $baselineValid -and $portAvailable -and (-not $localServerDetected)
+  $readyForCreate = $baselineValid -and $portAvailable -and $localCompat.Valid
   $readyForApply = $false
   $readyForVerify = $false
   $readyForDestroy = Test-ReadyForDestroy -ResolvedDataRoot $resolvedDataRoot -RepoRoot $repoRoot
@@ -687,14 +2244,47 @@ function Invoke-Plan {
   Write-Output "postgres_bki_present=$(([string]$postgresPackage.PostgresBkiPresent).ToLowerInvariant())"
   Write-Output "pgcrypto_control_present=$(([string]$postgresPackage.PgcryptoControlPresent).ToLowerInvariant())"
   Write-Output "pgcrypto_library_present=$(([string]$postgresPackage.PgcryptoLibraryPresent).ToLowerInvariant())"
+  Write-Output "isolated_root=$(Convert-ToPublicPath -PathValue $layout.IsolatedRoot)"
+  Write-Output "instance_name=$script:InstanceName"
   Write-Output "host=$script:AllowedHost"
-  Write-Output "port=$Port"
+  Write-Output "port=55432"
+  Write-Output "admin_role=$script:LocalAdminUser"
+  Write-Output "credential_strategy=WINDOWS_DPAPI_CURRENT_USER"
+  Write-Output "authentication=scram-sha-256"
+  Write-Output "create_implementation_present=true"
+  Write-Output "git_ancestry_strategy=MERGE_BASE_IS_ANCESTOR"
+  Write-Output "process_output_strategy=ASYNC_DUAL_STREAM_DRAIN"
+  Write-Output "windows_argument_empty_value_safe=true"
+  Write-Output "pg_hba_ipv6_reject=::/0"
+  Write-Output "file_acl_inheritance=NONE"
+  Write-Output "marker_state_concordance_required=true"
+  Write-Output "created_utc_stable=true"
+  Write-Output "git_working_directory_enforced=true"
+  Write-Output "process_output_drain_verified=true"
+  Write-Output "process_output_drain_failure_code=process_output_drain_failed"
+  Write-Output "no_pidfile_process_inventory=DOTNET_LOCAL_PROCESS_ENUMERATION"
+  Write-Output "no_server_evidence_requires_zero_authorized_or_ambiguous_processes=true"
+  Write-Output "process_executable_path_strategy=MAINMODULE_FILENAME_PS51"
+  Write-Output "process_path_property_used=false"
+  Write-Output "process_access_failure_strategy=AMBIGUOUS_FAIL_CLOSED"
+  Write-Output "process_identity_strategy=PID_MAINMODULE_STARTTIME"
+  Write-Output "real_process_enumeration_in_plan=false"
+  Write-Output "pg_ctl_start_failure_recovery=VERIFIED_PID_DATAROOT_EXECUTABLE_LISTENER"
+  Write-Output "pg_ctl_stop_strategy=FAST_WAIT_30_VERIFIED"
+  Write-Output "pg_ctl_stop_recheck_always=true"
+  Write-Output "pg_ctl_stop_recheck_timeout_seconds=15"
+  Write-Output "pid_reuse_detection=true"
+  Write-Output "postmaster_dataroot_validation=true"
+  Write-Output "raw_json_duplicate_scan_before_parse=true"
+  Write-Output "server_state_schema_strict=true"
+  Write-Output "state_schema_flat_strict=true"
+  Write-Output "server_state_unresolved_fail_closed=true"
   Write-Output "cluster_name_valid=true"
   Write-Output "database_name_valid=true"
   Write-Output "data_root_outside_repository=true"
   Write-Output "baseline_candidate_valid=true"
   Write-Output "port_available=$(([string]$portAvailable).ToLowerInvariant())"
-  Write-Output "local_server_detected=$(([string]$localServerDetected).ToLowerInvariant())"
+  Write-Output "local_server_detected=not_checked_by_plan"
   Write-Output "required_dependencies_count=$($dependencies.RequiredDependenciesCount)"
   Write-Output "dependency_names=$($dependencies.DependencyNames)"
   Write-Output "missing_dependency_categories=$($dependencies.MissingDependencyCategories)"
@@ -708,6 +2298,13 @@ function Invoke-Plan {
   Write-Output "local_compat_preflight_human_review_required=$($localCompat.HumanReviewRequired)"
   Write-Output "compatibility_strategy_complete=$($localCompat.CompatibilityStrategyComplete)"
   Write-Output "ready_for_create=$(([string]$readyForCreate).ToLowerInvariant())"
+  Write-Output "create_authorized=false"
+  Write-Output "create_execution_blocked=true"
+  Write-Output "create_execution_requires_exact_approval=true"
+  Write-Output "apply_implementation_present=false"
+  Write-Output "verify_implementation_present=false"
+  Write-Output "destroy_implementation_present=false"
+  Write-Output "fulltest_implementation_present=false"
   Write-Output "ready_for_apply=$(([string]$readyForApply).ToLowerInvariant())"
   Write-Output "ready_for_verify=$(([string]$readyForVerify).ToLowerInvariant())"
   Write-Output "ready_for_destroy=$(([string]$readyForDestroy).ToLowerInvariant())"
@@ -736,7 +2333,7 @@ try {
 
   switch ($Action) {
     "Plan" { Invoke-Plan }
-    "Create" { Invoke-BlockedFutureAction -RequestedAction "Create" }
+    "Create" { Invoke-Create }
     "Apply" { Invoke-BlockedFutureAction -RequestedAction "Apply" }
     "Verify" { Invoke-BlockedFutureAction -RequestedAction "Verify" }
     "Destroy" {

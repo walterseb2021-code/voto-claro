@@ -6,17 +6,65 @@ Este directorio contiene una herramienta revisable para planificar una restaurac
 
 Alcance aprobado ahora
 
-Solo la accion Plan esta preparada para ejecutarse en esta fase. Ninguna accion distinta de Plan esta aprobada todavia.
+La accion Create esta implementada en el codigo para una futura ejecucion local aislada, pero no esta aprobada para ejecutarse en esta fase.
+
+Create requiere doble autorizacion exacta: un switch explicito y un token literal revisado en el codigo. No se documenta aqui un comando ejecutable de Create para evitar ejecucion accidental.
 
 ready_for_create no equivale a autorizacion humana. Solo indica que las herramientas, el puerto, la ruta, los nombres, la baseline, el paquete PostgreSQL completo y el preflight local pasan controles locales de preparacion.
 
 Apply permanece bloqueado aunque la estrategia local de compatibilidad este completa.
 
+Controles reforzados de Create
+
+La futura ejecucion de Create valida descendencia Git real con merge-base --is-ancestor contra el commit base revisado. No acepta hashes genericos por regex.
+
+El runner de procesos drena stdout y stderr de forma concurrente antes de esperar la salida final, limita los tails conservados y evita deadlocks por buffers llenos. Esta estrategia se documenta como drenaje concurrente de ambos streams.
+
+El quoting de Windows conserva espacios, comillas, backslashes finales, Unicode y representa el argumento vacio como "".
+
+pg_hba.conf permite unicamente IPv4 loopback con SCRAM-SHA-256 y rechaza IPv4 general e IPv6 general con CIDR canonico ::/0.
+
+La ACL diferenciada usa herencia solo para directorios. Los archivos sensibles y de estado usan herencia NONE.
+
+cluster-state.json conserva created_utc estable durante todas las transiciones y actualiza updated_utc en cada cambio.
+
+Create exige concordancia marker/state: cluster_id, instancia, host, puerto y metadatos no sensibles deben coincidir antes de continuar y antes de reportar exito.
+
+La contrasena en texto existe como System.String durante el intervalo minimo necesario; System.String no puede borrarse de memoria de forma garantizada en PowerShell 5.1. El flujo no la imprime, no la incluye en excepciones, state, marker ni logs, y reduce la referencia con $null en finally.
+
+Invoke-GitCommand aplica realmente el WorkingDirectory canonico del repositorio mediante el runner seguro; no cambia el directorio global y no ignora la ruta recibida.
+
+El runner distingue explicitamente fallos de drenaje de salida con process_output_drain_failed. Si stdout o stderr no completan dentro del limite, ese codigo prevalece sobre un timeout generico.
+
+Si pg_ctl start falla o entra en timeout, Create debe clasificar el estado del servidor antes de fallar: valida postmaster.pid, DataRoot, PID, puerto, ejecutable postgres.exe del paquete completo y listener local cuando corresponda.
+
+La detencion de recuperacion solo puede usar pg_ctl stop verificado con modo fast, espera activa y timeout controlado. Nunca usa Stop-Process, taskkill ni kill por nombre de proceso.
+
+Despues de un pg_ctl stop de recuperacion se comprueba que postmaster.pid desaparecio, que el PID original ya no existe y que el listener 127.0.0.1:55432 esta cerrado.
+
+Si la evidencia del servidor queda ambigua, el flujo falla cerrado como postgres_server_state_unresolved. Si el stop verificado falla, usa postgres_server_cleanup_failed.
+
+NO_SERVER_EVIDENCE solo puede declararse cuando no existen postmaster.pid, listener local, procesos postgres del paquete autorizado ni procesos postgres ambiguos. El inventario usa enumeracion local .NET solo para clasificacion interna y no imprime PID, rutas ni command line.
+
+La resolucion del ejecutable de procesos es compatible con Windows PowerShell 5.1 y usa Process.MainModule.FileName. Process.Path no se utiliza.
+
+Si MainModule.FileName no esta disponible, si hay acceso denegado, si el proceso termino durante la lectura o si la ruta no puede verificarse, la evidencia queda ambigua y falla cerrado.
+
+Ningun proceso se detiene sin un postmaster.pid valido que vincule de forma inequivoca DataRoot, PID, puerto y ejecutable. La identidad temporal del servidor verificado usa PID, ExecutablePath y StartTimeUtc solo en memoria durante la misma recuperacion.
+
+El inventario local de procesos dispone cada objeto Process despues de clasificarlo.
+
+Despues de cualquier resultado de pg_ctl stop, incluido timeout o exit code distinto de cero, la herramienta revalida durante una espera acotada de 15 segundos el pidfile, la identidad del proceso original y el listener local. Un PID reutilizado no se trata como el mismo proceso.
+
+El JSON de state se inspecciona como texto crudo antes de ConvertFrom-Json. Se rechazan claves duplicadas, arrays, objetos anidados, campos extra, tipos incorrectos y contenido adicional fuera del objeto plano aprobado.
+
+cluster-state.json usa schema estricto con allowlist exacta. Solo admite campos no sensibles, incluido server_state y flags de cleanup; no admite PID, stdout, stderr, argumentos, token, credencial ni rutas personales.
+
 Acciones
 
 Plan: solo lectura. Valida herramientas, puerto, nombres, DataRoot futuro, baseline candidata y dependencias tecnicas.
 
-Create: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta y crear un cluster local temporal.
+Create: implementada pero protegida por doble autorizacion exacta. En una fase futura aprobada podra crear una instancia PostgreSQL local aislada, inicializarla con initdb, configurar loopback y arrancarla con pg_ctl.
 
 Apply: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta, preflight local aprobado, base vacia y autorizacion humana explicita.
 
@@ -28,13 +76,21 @@ FullTest: bloqueada en esta version. FullTest no destruye; en una fase futura de
 
 Ruta y puerto
 
-El DataRoot futuro debe resolverse fuera del repositorio, bajo:
+La instancia futura debe resolverse fuera del repositorio, bajo:
 
-LOCALAPPDATA\VotoClaro\isolated-postgres-baseline-test\<ClusterName>
+LOCALAPPDATA\VotoClaro\PostgreSQL\isolated-baseline-test\pg17-port55432
 
-El padre canonico debe ser exactamente esa carpeta y la hoja debe ser exactamente ClusterName.
+Subrutas fijas:
 
-Puerto predeterminado: 55432.
+data: directorio del cluster.
+
+logs: log local del servidor PostgreSQL.
+
+state: marker y estado JSON no sensible.
+
+secrets: credencial DPAPI y pwfile temporal durante initdb.
+
+Puerto fijo: 55432.
 
 Host operativo unico: 127.0.0.1.
 
@@ -47,6 +103,26 @@ DatabaseName debe comenzar con vc_staging_baseline_test_.
 El usuario administrador local futuro queda definido como vc_isolated_admin.
 
 No se deben usar postgres, service_role, anon, authenticated ni el usuario de Windows como administrador de la prueba.
+
+Create y seguridad local
+
+Create usa exclusivamente LOCALAPPDATA y no permite rutas relativas, UNC, Program Files, Windows, el repositorio ni raices protegidas.
+
+Create usa 127.0.0.1:55432 y SCRAM-SHA-256. No usa localhost, 0.0.0.0, IPv6, puerto 5432 ni otros puertos.
+
+La contrasena administrativa se genera aleatoriamente con RandomNumberGenerator durante una ejecucion futura autorizada. No existe contrasena fija.
+
+La credencial administrativa se protege con DPAPI del usuario actual mediante ConvertFrom-SecureString sin clave explicita y se guarda bajo secrets. No copiar, abrir ni compartir archivos de secrets.
+
+El pwfile temporal para initdb vive bajo secrets, recibe ACL restrictiva y debe eliminarse en finally. No debe persistir despues de initdb.
+
+Create no crea servicio Windows, no modifica Firewall, no usa sc.exe, no usa netsh, no usa Docker y no se conecta a Supabase.
+
+Create no ejecuta SQL, no ejecuta el preflight, no ejecuta la baseline, no usa psql, no usa createdb y no usa dropdb.
+
+Una instancia parcial no se borra automaticamente. Cualquier limpieza de cluster debe quedar para Destroy futuro autorizado.
+
+La ejecucion real de Create requiere revision y autorizacion de ChatGPT.
 
 Paquete PostgreSQL local
 
