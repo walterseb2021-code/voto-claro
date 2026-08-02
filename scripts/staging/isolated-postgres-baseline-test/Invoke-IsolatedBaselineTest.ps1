@@ -74,6 +74,24 @@ $script:SafeCodes = @(
   "port_unavailable",
   "acl_apply_failed",
   "acl_validation_failed",
+  "acl_identity_missing",
+  "acl_identity_translation_failed",
+  "acl_identity_not_sid",
+  "acl_identity_sid_empty",
+  "acl_identity_query_failed",
+  "acl_rules_missing",
+  "acl_rules_read_failed",
+  "acl_rules_collection_invalid",
+  "acl_rules_enumeration_failed",
+  "acl_unexpected_identity",
+  "acl_unexpected_deny_rule",
+  "acl_inherited_rule_present",
+  "acl_missing_authorized_allow",
+  "acl_rights_insufficient",
+  "acl_inheritance_flags_mismatch",
+  "acl_propagation_flags_mismatch",
+  "acl_not_protected",
+  "acl_readback_failed",
   "credential_protection_failed",
   "password_file_create_failed",
   "password_file_cleanup_failed",
@@ -1027,6 +1045,145 @@ function Test-CreatePortAvailable {
   }
 }
 
+function Convert-IdentityReferenceToSidValue {
+  param([Parameter(Mandatory = $true)][AllowNull()][System.Security.Principal.IdentityReference]$IdentityReference)
+  if ($null -eq $IdentityReference) {
+    return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_missing" }
+  }
+  try {
+    $sid = $null
+    if ($IdentityReference -is [System.Security.Principal.SecurityIdentifier]) {
+      $sid = $IdentityReference
+    } else {
+      $sid = $IdentityReference.Translate([System.Security.Principal.SecurityIdentifier])
+    }
+    if ($null -eq $sid -or -not ($sid -is [System.Security.Principal.SecurityIdentifier])) {
+      return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_not_sid" }
+    }
+    if ([string]::IsNullOrWhiteSpace($sid.Value)) {
+      return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_sid_empty" }
+    }
+    return [pscustomobject]@{ Success = $true; SidValue = $sid.Value; SafeErrorCode = "none" }
+  } catch [System.Security.Principal.IdentityNotMappedException] {
+    return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_translation_failed" }
+  } catch [System.ArgumentException] {
+    return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_translation_failed" }
+  } catch [System.InvalidOperationException] {
+    return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_query_failed" }
+  } catch [System.SystemException] {
+    return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_query_failed" }
+  } catch {
+    return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_query_failed" }
+  }
+}
+
+function Get-RestrictedAclRulesForValidation {
+  param([Parameter(Mandatory = $true)][AllowNull()][System.Security.AccessControl.FileSystemSecurity]$Acl)
+  if ($null -eq $Acl) {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_missing" }
+  }
+  try {
+    $accessRules = $Acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+    if ($null -eq $accessRules) {
+      return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_collection_invalid" }
+    }
+  } catch [System.ArgumentNullException] {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_read_failed" }
+  } catch [System.ArgumentException] {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_read_failed" }
+  } catch [System.InvalidOperationException] {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_read_failed" }
+  } catch [System.UnauthorizedAccessException] {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_read_failed" }
+  } catch [System.SystemException] {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_read_failed" }
+  } catch {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_read_failed" }
+  }
+
+  try {
+    $materializedRules = @()
+    foreach ($rule in $accessRules) {
+      $materializedRules += $rule
+    }
+    return [pscustomobject]@{ Success = $true; Rules = $materializedRules; SafeErrorCode = "none" }
+  } catch [System.InvalidOperationException] {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_enumeration_failed" }
+  } catch [System.SystemException] {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_enumeration_failed" }
+  } catch {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_enumeration_failed" }
+  }
+}
+
+function Assert-RestrictedAclSemantics {
+  param(
+    [Parameter(Mandatory = $true)][object]$Acl,
+    [Parameter(Mandatory = $true)][System.Security.Principal.SecurityIdentifier]$ExpectedSid,
+    [Parameter(Mandatory = $true)][ValidateSet("Directory","File")][string]$TargetType
+  )
+  if ($null -eq $Acl -or $Acl.AreAccessRulesProtected -ne $true) {
+    Throw-SafeError -Code "acl_not_protected"
+  }
+  $expectedSidValue = $ExpectedSid.Value
+  if ([string]::IsNullOrWhiteSpace($expectedSidValue)) {
+    Throw-SafeError -Code "acl_identity_sid_empty"
+  }
+  $expectedInheritance = if ($TargetType -eq "Directory") {
+    [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
+  } else {
+    [System.Security.AccessControl.InheritanceFlags]"None"
+  }
+  $expectedPropagation = [System.Security.AccessControl.PropagationFlags]"None"
+  $requiredRights = [int64][System.Security.AccessControl.FileSystemRights]::FullControl
+  $combinedAllowRights = [int64]0
+  $authorizedAllowFound = $false
+
+  $rulesResult = Get-RestrictedAclRulesForValidation -Acl $Acl
+  if (-not $rulesResult.Success) {
+    Throw-SafeError -Code $rulesResult.SafeErrorCode
+  }
+
+  foreach ($access in @($rulesResult.Rules)) {
+    if ($null -eq $access) {
+      Throw-SafeError -Code "acl_rules_collection_invalid"
+    }
+    if ($access.IsInherited) {
+      Throw-SafeError -Code "acl_inherited_rule_present"
+    }
+    if ($access.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Deny) {
+      Throw-SafeError -Code "acl_unexpected_deny_rule"
+    }
+    if ($access.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
+      Throw-SafeError -Code "acl_rules_collection_invalid"
+    }
+    $identity = Convert-IdentityReferenceToSidValue -IdentityReference $access.IdentityReference
+    if (-not $identity.Success) {
+      Throw-SafeError -Code $identity.SafeErrorCode
+    }
+    if (-not [string]::Equals($identity.SidValue, $expectedSidValue, [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "acl_unexpected_identity"
+    }
+    if ([int]$access.InheritanceFlags -ne [int]$expectedInheritance) {
+      Throw-SafeError -Code "acl_inheritance_flags_mismatch"
+    }
+    if ([int]$access.PropagationFlags -ne [int]$expectedPropagation) {
+      Throw-SafeError -Code "acl_propagation_flags_mismatch"
+    }
+    if ($access.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow) {
+      $authorizedAllowFound = $true
+      $combinedAllowRights = $combinedAllowRights -bor [int64]$access.FileSystemRights
+    }
+  }
+
+  if (-not $authorizedAllowFound) {
+    Throw-SafeError -Code "acl_missing_authorized_allow"
+  }
+  if (($combinedAllowRights -band $requiredRights) -ne $requiredRights) {
+    Throw-SafeError -Code "acl_rights_insufficient"
+  }
+}
+
 function Set-RestrictedAcl {
   param(
     [Parameter(Mandatory = $true)][string]$PathValue,
@@ -1045,7 +1202,11 @@ function Set-RestrictedAcl {
     $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
     $acl = Get-Acl -LiteralPath $PathValue
     $acl.SetAccessRuleProtection($true, $false)
-    foreach ($rule in @($acl.Access)) {
+    $existingRules = Get-RestrictedAclRulesForValidation -Acl $acl
+    if (-not $existingRules.Success) {
+      Throw-SafeError -Code $existingRules.SafeErrorCode
+    }
+    foreach ($rule in @($existingRules.Rules)) {
       [void]$acl.RemoveAccessRule($rule)
     }
     $inherit = if ($TargetType -eq "Directory") {
@@ -1057,18 +1218,12 @@ function Set-RestrictedAcl {
     $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, "FullControl", $inherit, $propagation, "Allow")
     $acl.AddAccessRule($rule)
     Set-Acl -LiteralPath $PathValue -AclObject $acl
-    $verify = Get-Acl -LiteralPath $PathValue
-    if ($verify.AreAccessRulesProtected -ne $true) {
-      Throw-SafeError -Code "acl_validation_failed"
+    try {
+      $verify = Get-Acl -LiteralPath $PathValue
+    } catch {
+      Throw-SafeError -Code "acl_readback_failed"
     }
-    foreach ($access in $verify.Access) {
-      if (-not [string]::Equals($access.IdentityReference.Value, $sid.Value, [System.StringComparison]::OrdinalIgnoreCase)) {
-        Throw-SafeError -Code "acl_validation_failed"
-      }
-      if ($TargetType -eq "File" -and $access.InheritanceFlags -ne [System.Security.AccessControl.InheritanceFlags]"None") {
-        Throw-SafeError -Code "acl_validation_failed"
-      }
-    }
+    Assert-RestrictedAclSemantics -Acl $verify -ExpectedSid $sid -TargetType $TargetType
   } catch {
     if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
     Throw-SafeError -Code "acl_apply_failed"
@@ -2232,7 +2387,8 @@ function Invoke-Plan {
   $portAvailable = Test-PortAvailable -Value $Port
   $dependencies = Get-DependencyScan -RepoRoot $repoRoot
   $localCompat = Invoke-LocalCompatPreflightValidator -RepoRoot $repoRoot
-  $readyForCreate = $baselineValid -and $portAvailable -and $localCompat.Valid
+  $partialInstanceCleanupRequired = Test-Path -LiteralPath $layout.InstanceRoot -PathType Container
+  $readyForCreate = $baselineValid -and $portAvailable -and $localCompat.Valid -and (-not $partialInstanceCleanupRequired)
   $readyForApply = $false
   $readyForVerify = $false
   $readyForDestroy = Test-ReadyForDestroy -ResolvedDataRoot $resolvedDataRoot -RepoRoot $repoRoot
@@ -2257,6 +2413,19 @@ function Invoke-Plan {
   Write-Output "windows_argument_empty_value_safe=true"
   Write-Output "pg_hba_ipv6_reject=::/0"
   Write-Output "file_acl_inheritance=NONE"
+  Write-Output "acl_rules_api=GETACCESSRULES"
+  Write-Output "acl_include_explicit=true"
+  Write-Output "acl_include_inherited=true"
+  Write-Output "acl_identity_target=SECURITYIDENTIFIER"
+  Write-Output "acl_access_property_used=false"
+  Write-Output "acl_rules_fallback_allowed=false"
+  Write-Output "acl_identity_normalization=SECURITYIDENTIFIER_TRANSLATE"
+  Write-Output "acl_identity_name_comparison=false"
+  Write-Output "acl_validation_semantic_set=true"
+  Write-Output "acl_rule_order_dependency=false"
+  Write-Output "acl_fullcontrol_bitmask_validation=true"
+  Write-Output "partial_instance_cleanup_required=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
+  Write-Output "create_retry_blocked_until_cleanup=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
   Write-Output "marker_state_concordance_required=true"
   Write-Output "created_utc_stable=true"
   Write-Output "git_working_directory_enforced=true"

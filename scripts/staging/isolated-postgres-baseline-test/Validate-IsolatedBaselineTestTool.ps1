@@ -167,6 +167,9 @@ $gitCommandFunctionText = Get-FunctionText -Name "Invoke-GitCommand"
 $gitFunctionText = Get-FunctionText -Name "Assert-GitReadyForCreate"
 $quoteFunctionText = Get-FunctionText -Name "ConvertTo-WindowsProcessArgument"
 $aclFunctionText = Get-FunctionText -Name "Set-RestrictedAcl"
+$aclIdentityFunctionText = Get-FunctionText -Name "Convert-IdentityReferenceToSidValue"
+$aclRulesFunctionText = Get-FunctionText -Name "Get-RestrictedAclRulesForValidation"
+$aclSemanticFunctionText = Get-FunctionText -Name "Assert-RestrictedAclSemantics"
 $stateFunctionText = Get-FunctionText -Name "Write-ClusterState"
 $concordanceFunctionText = Get-FunctionText -Name "Assert-MarkerStateConcordance"
 $dataRootFunctionText = Get-FunctionText -Name "Assert-DataRoot"
@@ -283,7 +286,30 @@ if (@([regex]::Matches($text, "host\s+all\s+all\s+127\.0\.0\.1/32\s+scram-sha-25
 if (@([regex]::Matches($text, "host\s+all\s+all\s+(0\.0\.0\.0/0|::/0)\s+reject")).Count -ne 2) { Fail -Code "pg_hba_reject_count_invalid" }
 Assert-Contains -Text $aclFunctionText -Pattern '\[ValidateSet\("Directory","File"\)\]' -Code "acl_target_type_missing"
 Assert-Contains -Text $aclFunctionText -Pattern 'TargetType -eq "Directory"[\s\S]+ContainerInherit,ObjectInherit' -Code "directory_acl_inheritance_missing"
-Assert-Contains -Text $aclFunctionText -Pattern 'TargetType -eq "File"[\s\S]+InheritanceFlags\]"None"' -Code "file_acl_none_missing"
+Assert-Contains -Text $aclFunctionText -Pattern 'else \{[\s\S]+InheritanceFlags\]"None"' -Code "file_acl_none_missing"
+Assert-NotContains -Text $aclFunctionText -Pattern 'IdentityReference\.Value\s*,\s*\$sid\.Value|IdentityReference\.Value\s+-[ceiqn]*eq\s+\$sid\.Value|\.Access\b' -Code "acl_raw_identity_or_access_property_detected"
+Assert-Contains -Text $text -Pattern "Convert-IdentityReferenceToSidValue" -Code "acl_identity_normalizer_missing"
+Assert-Contains -Text $aclIdentityFunctionText -Pattern '\[System\.Security\.Principal\.IdentityReference\]\$IdentityReference' -Code "acl_identity_reference_param_missing"
+Assert-Contains -Text $aclIdentityFunctionText -Pattern '\[System\.Security\.Principal\.SecurityIdentifier\]' -Code "acl_security_identifier_missing"
+Assert-Contains -Text $aclIdentityFunctionText -Pattern 'Translate\(\[System\.Security\.Principal\.SecurityIdentifier\]\)' -Code "acl_translate_sid_missing"
+Assert-Contains -Text $aclIdentityFunctionText -Pattern 'IdentityNotMappedException' -Code "acl_identity_not_mapped_missing"
+Assert-Contains -Text $aclIdentityFunctionText -Pattern 'acl_identity_translation_failed' -Code "acl_identity_translation_code_missing"
+Assert-Contains -Text $aclRulesFunctionText -Pattern '\[System\.Security\.AccessControl\.FileSystemSecurity\]\$Acl' -Code "acl_rules_filesystemsecurity_param_missing"
+Assert-Contains -Text $aclRulesFunctionText -Pattern 'GetAccessRules\(\s*\$true\s*,\s*\$true\s*,\s*\[System\.Security\.Principal\.SecurityIdentifier\]\s*\)' -Code "acl_rules_getaccessrules_signature_missing"
+Assert-NotContains -Text $aclRulesFunctionText -Pattern 'GetAccessRules\(\s*\$true\s*,\s*\$false|GetAccessRules\(\s*\$false\s*,|NTAccount|\[string\]|\.Access\b|Where-Object|catch\s*\{[^\}]*Success\s*=\s*\$true' -Code "acl_rules_retrieval_unsafe"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'AreAccessRulesProtected' -Code "acl_protected_validation_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'Get-RestrictedAclRulesForValidation' -Code "acl_semantic_rules_function_missing"
+Assert-NotContains -Text $aclSemanticFunctionText -Pattern '\.Access\b|Where-Object|continue\b' -Code "acl_semantic_filter_or_access_detected"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'foreach \(\$access in @\(\$rulesResult\.Rules\)\)[\s\S]+if \(\$null -eq \$access\)[\s\S]+if \(\$access\.IsInherited\)[\s\S]+AccessControlType\]::Deny[\s\S]+Convert-IdentityReferenceToSidValue[\s\S]+acl_unexpected_identity[\s\S]+InheritanceFlags[\s\S]+PropagationFlags[\s\S]+FileSystemRights' -Code "acl_semantic_validation_order_invalid"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'AccessControlType\]::Deny' -Code "acl_deny_rejection_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'IsInherited' -Code "acl_inherited_rejection_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'acl_unexpected_identity' -Code "acl_additional_identity_rejection_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'FullControl' -Code "acl_fullcontrol_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern '\-band\s+\$requiredRights' -Code "acl_fullcontrol_bitmask_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern '\-bor\s+\[int64\]\$access\.FileSystemRights' -Code "acl_split_allow_or_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'InheritanceFlags' -Code "acl_inheritance_flags_validation_missing"
+Assert-Contains -Text $aclSemanticFunctionText -Pattern 'PropagationFlags' -Code "acl_propagation_flags_validation_missing"
+Assert-NotContains -Text $aclSemanticFunctionText -Pattern '\.Count\s+-eq|AccessRuleCount|access_rule_count|Sort-Object|Select-Object\s+-First' -Code "acl_order_or_count_dependency_detected"
 Assert-Contains -Text $text -Pattern 'CredentialPath -TargetType File' -Code "credential_file_acl_missing"
 Assert-Contains -Text $text -Pattern 'PasswordFilePath -TargetType File' -Code "pwfile_file_acl_missing"
 Assert-Contains -Text $text -Pattern 'MarkerPath -TargetType File' -Code "marker_file_acl_missing"
@@ -437,6 +463,24 @@ foreach ($code in @(
     "port_unavailable",
     "acl_apply_failed",
     "acl_validation_failed",
+    "acl_identity_missing",
+    "acl_identity_translation_failed",
+    "acl_identity_not_sid",
+    "acl_identity_sid_empty",
+    "acl_identity_query_failed",
+    "acl_rules_missing",
+    "acl_rules_read_failed",
+    "acl_rules_collection_invalid",
+    "acl_rules_enumeration_failed",
+    "acl_unexpected_identity",
+    "acl_unexpected_deny_rule",
+    "acl_inherited_rule_present",
+    "acl_missing_authorized_allow",
+    "acl_rights_insufficient",
+    "acl_inheritance_flags_mismatch",
+    "acl_propagation_flags_mismatch",
+    "acl_not_protected",
+    "acl_readback_failed",
     "credential_protection_failed",
     "password_file_create_failed",
     "password_file_cleanup_failed",
@@ -512,6 +556,19 @@ foreach ($line in @(
     "windows_argument_empty_value_safe=true",
     "pg_hba_ipv6_reject=::/0",
     "file_acl_inheritance=NONE",
+    "acl_rules_api=GETACCESSRULES",
+    "acl_include_explicit=true",
+    "acl_include_inherited=true",
+    "acl_identity_target=SECURITYIDENTIFIER",
+    "acl_access_property_used=false",
+    "acl_rules_fallback_allowed=false",
+    "acl_identity_normalization=SECURITYIDENTIFIER_TRANSLATE",
+    "acl_identity_name_comparison=false",
+    "acl_validation_semantic_set=true",
+    "acl_rule_order_dependency=false",
+    "acl_fullcontrol_bitmask_validation=true",
+    "partial_instance_cleanup_required=",
+    "create_retry_blocked_until_cleanup=",
     "marker_state_concordance_required=true",
     "created_utc_stable=true",
     "git_working_directory_enforced=true",
@@ -608,6 +665,17 @@ foreach ($needle in @(
     "evidencia queda ambigua",
     "PID, ExecutablePath y StartTimeUtc",
     "dispone cada objeto Process",
+    "Incidente acl_validation_failed",
+    "comparacion fragil entre SID y NTAccount",
+    "Translate(SecurityIdentifier)",
+    "no compara nombres de cuenta",
+    "validacion de ACL es semantica",
+    "sin depender del orden",
+    "reglas Allow equivalentes fusionadas o divididas",
+    "Owner no forma parte de esta correccion minima",
+    "estado parcial requiere limpieza controlada",
+    "No volver a ejecutar Create todavia",
+    "no usar Destroy",
     "Una instancia parcial no se borra automaticamente",
     "no copiar, abrir ni compartir archivos de secrets"
   )) {
@@ -710,6 +778,140 @@ function Get-SimulatedNoPidServerStateForSelfTest {
   }
   return "NO_SERVER_EVIDENCE"
 }
+
+function Convert-SimulatedAclIdentityToSidForSelfTest {
+  param([AllowNull()][object]$Identity)
+  if ($null -eq $Identity) { return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_missing" } }
+  if ($Identity.Kind -eq "SecurityIdentifier") {
+    if ([string]::IsNullOrWhiteSpace($Identity.SidValue)) { return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_sid_empty" } }
+    return [pscustomobject]@{ Success = $true; SidValue = $Identity.SidValue; SafeErrorCode = "none" }
+  }
+  if ($Identity.Kind -eq "NTAccount") {
+    if ($Identity.TranslateFails -eq $true) { return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_translation_failed" } }
+    if ([string]::IsNullOrWhiteSpace($Identity.SidValue)) { return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_sid_empty" } }
+    return [pscustomobject]@{ Success = $true; SidValue = $Identity.SidValue; SafeErrorCode = "none" }
+  }
+  return [pscustomobject]@{ Success = $false; SidValue = $null; SafeErrorCode = "acl_identity_not_sid" }
+}
+
+function Get-SimulatedPropertyForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][object]$ObjectValue,
+    [Parameter(Mandatory = $true)][string]$Name,
+    [AllowNull()][object]$DefaultValue
+  )
+  $property = $ObjectValue.PSObject.Properties[$Name]
+  if ($null -eq $property) { return $DefaultValue }
+  return $property.Value
+}
+
+function Get-SimulatedRestrictedAclRulesForSelfTest {
+  param([AllowNull()][object]$Acl)
+  if ($null -eq $Acl) { return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_missing" } }
+  if ((Get-SimulatedPropertyForSelfTest -ObjectValue $Acl -Name "ReadFails" -DefaultValue $false) -eq $true) { return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_read_failed" } }
+  if ((Get-SimulatedPropertyForSelfTest -ObjectValue $Acl -Name "ReturnsNull" -DefaultValue $false) -eq $true) { return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_collection_invalid" } }
+  $api = Get-SimulatedPropertyForSelfTest -ObjectValue $Acl -Name "RulesApi" -DefaultValue "GetAccessRules"
+  $includeExplicit = Get-SimulatedPropertyForSelfTest -ObjectValue $Acl -Name "IncludeExplicit" -DefaultValue $true
+  $includeInherited = Get-SimulatedPropertyForSelfTest -ObjectValue $Acl -Name "IncludeInherited" -DefaultValue $true
+  $targetType = Get-SimulatedPropertyForSelfTest -ObjectValue $Acl -Name "TargetType" -DefaultValue "SecurityIdentifier"
+  if ($api -ne "GetAccessRules" -or $includeExplicit -ne $true -or $includeInherited -ne $true -or $targetType -ne "SecurityIdentifier") {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_collection_invalid" }
+  }
+  try {
+    $rules = @()
+    foreach ($rule in @($Acl.Rules)) {
+      $rules += $rule
+    }
+    return [pscustomobject]@{ Success = $true; Rules = $rules; SafeErrorCode = "none" }
+  } catch {
+    return [pscustomobject]@{ Success = $false; Rules = @(); SafeErrorCode = "acl_rules_enumeration_failed" }
+  }
+}
+
+function Test-SimulatedRestrictedAclForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][object]$Acl,
+    [Parameter(Mandatory = $true)][string]$ExpectedSid,
+    [Parameter(Mandatory = $true)][ValidateSet("Directory","File")][string]$TargetType
+  )
+  if ($Acl.Protected -ne $true) { return "acl_not_protected" }
+  $expectedInheritance = if ($TargetType -eq "Directory") {
+    [int]([System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit")
+  } else {
+    [int][System.Security.AccessControl.InheritanceFlags]::None
+  }
+  $expectedPropagation = [int][System.Security.AccessControl.PropagationFlags]::None
+  $requiredRights = [int64][System.Security.AccessControl.FileSystemRights]::FullControl
+  $combined = [int64]0
+  $allowFound = $false
+  $rulesResult = Get-SimulatedRestrictedAclRulesForSelfTest -Acl $Acl
+  if (-not $rulesResult.Success) { return $rulesResult.SafeErrorCode }
+  foreach ($rule in @($rulesResult.Rules)) {
+    if ($null -eq $rule) { return "acl_rules_collection_invalid" }
+    if ($rule.Inherited -eq $true) { return "acl_inherited_rule_present" }
+    if ($rule.Type -eq "Deny") { return "acl_unexpected_deny_rule" }
+    $identity = Convert-SimulatedAclIdentityToSidForSelfTest -Identity $rule.Identity
+    if (-not $identity.Success) { return $identity.SafeErrorCode }
+    if (-not [string]::Equals($identity.SidValue, $ExpectedSid, [System.StringComparison]::OrdinalIgnoreCase)) { return "acl_unexpected_identity" }
+    if ([int]$rule.InheritanceValue -ne $expectedInheritance) { return "acl_inheritance_flags_mismatch" }
+    if ([int]$rule.PropagationValue -ne $expectedPropagation) { return "acl_propagation_flags_mismatch" }
+    if ($rule.Type -eq "Allow") {
+      $allowFound = $true
+      $combined = $combined -bor [int64]$rule.RightsValue
+    }
+  }
+  if (-not $allowFound) { return "acl_missing_authorized_allow" }
+  if (($combined -band $requiredRights) -ne $requiredRights) { return "acl_rights_insufficient" }
+  return "ok"
+}
+
+$aclExpectedSid = "SID_EXPECTED"
+$aclOtherSid = "SID_OTHER"
+$aclSidIdentity = [pscustomobject]@{ Kind = "SecurityIdentifier"; SidValue = $aclExpectedSid; TranslateFails = $false }
+$aclNtIdentity = [pscustomobject]@{ Kind = "NTAccount"; SidValue = $aclExpectedSid; TranslateFails = $false }
+$aclUnmappedIdentity = [pscustomobject]@{ Kind = "NTAccount"; SidValue = $null; TranslateFails = $true }
+$aclOtherIdentity = [pscustomobject]@{ Kind = "SecurityIdentifier"; SidValue = $aclOtherSid; TranslateFails = $false }
+$aclDirectoryFlags = [int]([System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit")
+$aclFileFlags = [int][System.Security.AccessControl.InheritanceFlags]::None
+$aclPropagationNone = [int][System.Security.AccessControl.PropagationFlags]::None
+$aclPropagationInheritOnly = [int][System.Security.AccessControl.PropagationFlags]::InheritOnly
+$aclFull = [int64][System.Security.AccessControl.FileSystemRights]::FullControl
+$aclSynchronize = [int64][System.Security.AccessControl.FileSystemRights]::Synchronize
+$aclRead = [int64][System.Security.AccessControl.FileSystemRights]::ReadAndExecute
+$aclWrite = [int64][System.Security.AccessControl.FileSystemRights]::Write
+$aclRuleAllowFull = [pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }
+$aclRuleAllowFullNt = [pscustomobject]@{ Identity = $aclNtIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }
+
+if ((Get-SimulatedRestrictedAclRulesForSelfTest -Acl $null).SafeErrorCode -ne "acl_rules_missing") { Fail -Code "selftest_acl_rules_null_failed" }
+if ((Get-SimulatedRestrictedAclRulesForSelfTest -Acl ([pscustomobject]@{ Protected = $true; ReadFails = $true; Rules = @() })).SafeErrorCode -ne "acl_rules_read_failed") { Fail -Code "selftest_acl_rules_read_failed" }
+if ((Get-SimulatedRestrictedAclRulesForSelfTest -Acl ([pscustomobject]@{ Protected = $true; ReturnsNull = $true; Rules = @() })).SafeErrorCode -ne "acl_rules_collection_invalid") { Fail -Code "selftest_acl_rules_null_collection_failed" }
+if ((Get-SimulatedRestrictedAclRulesForSelfTest -Acl ([pscustomobject]@{ Protected = $true; RulesApi = "Access"; IncludeExplicit = $true; IncludeInherited = $true; TargetType = "SecurityIdentifier"; Rules = @($aclRuleAllowFull) })).SafeErrorCode -ne "acl_rules_collection_invalid") { Fail -Code "selftest_acl_rules_access_api_failed" }
+if ((Get-SimulatedRestrictedAclRulesForSelfTest -Acl ([pscustomobject]@{ Protected = $true; RulesApi = "GetAccessRules"; IncludeExplicit = $false; IncludeInherited = $true; TargetType = "SecurityIdentifier"; Rules = @($aclRuleAllowFull) })).SafeErrorCode -ne "acl_rules_collection_invalid") { Fail -Code "selftest_acl_rules_include_explicit_failed" }
+if ((Get-SimulatedRestrictedAclRulesForSelfTest -Acl ([pscustomobject]@{ Protected = $true; RulesApi = "GetAccessRules"; IncludeExplicit = $true; IncludeInherited = $false; TargetType = "SecurityIdentifier"; Rules = @($aclRuleAllowFull) })).SafeErrorCode -ne "acl_rules_collection_invalid") { Fail -Code "selftest_acl_rules_include_inherited_failed" }
+if ((Get-SimulatedRestrictedAclRulesForSelfTest -Acl ([pscustomobject]@{ Protected = $true; RulesApi = "GetAccessRules"; IncludeExplicit = $true; IncludeInherited = $true; TargetType = "NTAccount"; Rules = @($aclRuleAllowFull) })).SafeErrorCode -ne "acl_rules_collection_invalid") { Fail -Code "selftest_acl_rules_target_type_failed" }
+if ((Convert-SimulatedAclIdentityToSidForSelfTest -Identity $aclSidIdentity).SidValue -ne $aclExpectedSid) { Fail -Code "selftest_acl_sid_identity_failed" }
+if ((Convert-SimulatedAclIdentityToSidForSelfTest -Identity $aclNtIdentity).SidValue -ne $aclExpectedSid) { Fail -Code "selftest_acl_ntaccount_translation_failed" }
+if ((Convert-SimulatedAclIdentityToSidForSelfTest -Identity $aclUnmappedIdentity).SafeErrorCode -ne "acl_identity_translation_failed") { Fail -Code "selftest_acl_identity_not_mapped_failed" }
+if ((Convert-SimulatedAclIdentityToSidForSelfTest -Identity $null).SafeErrorCode -ne "acl_identity_missing") { Fail -Code "selftest_acl_null_identity_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @($aclRuleAllowFull) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "ok") { Fail -Code "selftest_acl_expected_sid_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclOtherIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_unexpected_identity") { Fail -Code "selftest_acl_other_sid_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @($aclRuleAllowFull, [pscustomobject]@{ Identity = $aclOtherIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_unexpected_identity") { Fail -Code "selftest_acl_additional_identity_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Deny"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_unexpected_deny_rule") { Fail -Code "selftest_acl_deny_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $true; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_inherited_rule_present") { Fail -Code "selftest_acl_inherited_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Deny"; Inherited = $true; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_inherited_rule_present") { Fail -Code "selftest_acl_inherited_deny_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $false; Rules = @($aclRuleAllowFull) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_not_protected") { Fail -Code "selftest_acl_not_protected_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "ok") { Fail -Code "selftest_acl_fullcontrol_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = ($aclFull -bor $aclSynchronize); InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "ok") { Fail -Code "selftest_acl_fullcontrol_synchronize_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclRead; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_rights_insufficient") { Fail -Code "selftest_acl_lower_rights_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclRead; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }, [pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = ($aclFull -band (-bnot $aclRead)); InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "ok") { Fail -Code "selftest_acl_split_allow_full_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclRead; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }, [pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclWrite; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_rights_insufficient") { Fail -Code "selftest_acl_split_allow_insufficient_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "ok") { Fail -Code "selftest_acl_directory_flags_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclFileFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_inheritance_flags_mismatch") { Fail -Code "selftest_acl_incomplete_flags_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationInheritOnly }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_propagation_flags_mismatch") { Fail -Code "selftest_acl_propagation_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = ($aclFull -band (-bnot $aclRead)); InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }, [pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclRead; InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "ok") { Fail -Code "selftest_acl_order_independent_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = ($aclFull -band (-bnot $aclRead)); InheritanceValue = $aclDirectoryFlags; PropagationValue = $aclPropagationNone }, [pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclRead; InheritanceValue = $aclFileFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_inheritance_flags_mismatch") { Fail -Code "selftest_acl_split_flags_mismatch_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @() }) -ExpectedSid $aclExpectedSid -TargetType Directory) -ne "acl_missing_authorized_allow") { Fail -Code "selftest_acl_missing_allow_failed" }
+if ((Test-SimulatedRestrictedAclForSelfTest -Acl ([pscustomobject]@{ Protected = $true; Rules = @([pscustomobject]@{ Identity = $aclSidIdentity; Type = "Allow"; Inherited = $false; RightsValue = $aclFull; InheritanceValue = $aclFileFlags; PropagationValue = $aclPropagationNone }) }) -ExpectedSid $aclExpectedSid -TargetType File) -ne "ok") { Fail -Code "selftest_acl_file_flags_failed" }
 
 $expectedSelfTestPath = "C:\vc\pg\bin\postgres.exe"
 $otherSelfTestPath = "D:\other\pg\bin\postgres.exe"
@@ -814,6 +1016,24 @@ Assert-MutationAddsForbidden -MutatedText ($text + "`n::0/0") -ForbiddenPattern 
 Assert-MutationAddsForbidden -MutatedText ($text + "`nhost all all ::1/128 scram-sha-256") -ForbiddenPattern "::1/128" -Code "selftest_pg_hba_ipv6_allow_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($text + "`nhost all all 127.0.0.1/32 scram-sha-256") -ForbiddenPattern "scram-sha-256" -Code "selftest_pg_hba_second_scram_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($aclFunctionText + "`nFile ContainerInherit,ObjectInherit") -ForbiddenPattern "File ContainerInherit,ObjectInherit" -Code "selftest_file_acl_inheritance_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($aclFunctionText + "`nif (`$access.IdentityReference.Value -eq `$sid.Value) { }") -ForbiddenPattern 'IdentityReference\.Value\s+-[ceiqn]*eq\s+\$sid\.Value' -Code "selftest_acl_raw_identity_comparison_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclIdentityFunctionText -replace 'Translate\(\[System\.Security\.Principal\.SecurityIdentifier\]\)', 'ToString()') -RequiredPattern 'Translate\(\[System\.Security\.Principal\.SecurityIdentifier\]\)' -Code "selftest_acl_translate_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclIdentityFunctionText -replace 'IdentityNotMappedException', 'SystemException') -RequiredPattern 'IdentityNotMappedException' -Code "selftest_acl_identity_not_mapped_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclRulesFunctionText -replace 'GetAccessRules\(\$true, \$true, \[System\.Security\.Principal\.SecurityIdentifier\]\)', 'GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier])') -RequiredPattern 'GetAccessRules\(\s*\$true\s*,\s*\$true\s*,\s*\[System\.Security\.Principal\.SecurityIdentifier\]\s*\)' -Code "selftest_acl_include_inherited_false_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclRulesFunctionText -replace 'GetAccessRules\(\$true, \$true, \[System\.Security\.Principal\.SecurityIdentifier\]\)', 'GetAccessRules($false, $true, [System.Security.Principal.SecurityIdentifier])') -RequiredPattern 'GetAccessRules\(\s*\$true\s*,\s*\$true\s*,\s*\[System\.Security\.Principal\.SecurityIdentifier\]\s*\)' -Code "selftest_acl_include_explicit_false_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclRulesFunctionText -replace '\[System\.Security\.Principal\.SecurityIdentifier\]', '[System.Security.Principal.NTAccount]') -RequiredPattern 'GetAccessRules\(\s*\$true\s*,\s*\$true\s*,\s*\[System\.Security\.Principal\.SecurityIdentifier\]\s*\)' -Code "selftest_acl_target_type_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($aclRulesFunctionText + "`n`$fallback = `$Acl.Access") -ForbiddenPattern '\.Access\b' -Code "selftest_acl_access_fallback_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`n`$rulesResult.Rules = `$rulesResult.Rules | Where-Object { `$_.IdentityReference }") -ForbiddenPattern 'Where-Object' -Code "selftest_acl_sid_prefilter_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`n`$rulesResult.Rules = `$rulesResult.Rules | Where-Object { -not `$_.IsInherited }") -ForbiddenPattern 'Where-Object' -Code "selftest_acl_inherited_prefilter_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace 'AccessControlType\]::Deny', 'AccessControlType]::Allow') -RequiredPattern 'AccessControlType\]::Deny' -Code "selftest_acl_deny_rejection_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace 'IsInherited', 'IsExplicit') -RequiredPattern 'IsInherited' -Code "selftest_acl_inherited_rejection_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace 'acl_unexpected_identity', 'acl_validation_failed') -RequiredPattern 'acl_unexpected_identity' -Code "selftest_acl_additional_identity_rejection_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace '\-band\s+\$requiredRights', '-eq $requiredRights') -RequiredPattern '\-band\s+\$requiredRights' -Code "selftest_acl_bitmask_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace '\-bor\s+\[int64\]\$access\.FileSystemRights', '= [int64]$access.FileSystemRights') -RequiredPattern '\-bor\s+\[int64\]\$access\.FileSystemRights' -Code "selftest_acl_split_allow_or_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace 'InheritanceFlags', 'InheritFlagsRemoved') -RequiredPattern 'InheritanceFlags' -Code "selftest_acl_inheritance_validation_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace 'PropagationFlags', 'PropFlagsRemoved') -RequiredPattern 'PropagationFlags' -Code "selftest_acl_propagation_validation_missing_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nif (`$Acl.Access.Count -eq 1) { return }") -ForbiddenPattern '\.Count\s+-eq' -Code "selftest_acl_rule_count_dependency_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nSet-Acl -LiteralPath x") -ForbiddenPattern 'Set-Acl' -Code "selftest_acl_selftest_set_acl_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($stateFunctionText -replace 'created_utc = \$createdUtc', 'created_utc = $now') -ForbiddenPattern 'created_utc = \$now' -Code "selftest_created_utc_regeneration_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($createFunctionText -replace "Assert-MarkerStateConcordance", "Skip-MarkerStateConcordance") -RequiredPattern "Assert-MarkerStateConcordance" -Code "selftest_marker_state_concordance_missing_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($concordanceFunctionText -replace "cluster_id", "cluster_missing") -RequiredPattern "cluster_id" -Code "selftest_concordance_cluster_id_missing_not_detected"
@@ -892,6 +1112,19 @@ foreach ($expectedLine in @(
     "windows_argument_empty_value_safe=true",
     "pg_hba_ipv6_reject=::/0",
     "file_acl_inheritance=NONE",
+    "acl_rules_api=GETACCESSRULES",
+    "acl_include_explicit=true",
+    "acl_include_inherited=true",
+    "acl_identity_target=SECURITYIDENTIFIER",
+    "acl_access_property_used=false",
+    "acl_rules_fallback_allowed=false",
+    "acl_identity_normalization=SECURITYIDENTIFIER_TRANSLATE",
+    "acl_identity_name_comparison=false",
+    "acl_validation_semantic_set=true",
+    "acl_rule_order_dependency=false",
+    "acl_fullcontrol_bitmask_validation=true",
+    "partial_instance_cleanup_required=true",
+    "create_retry_blocked_until_cleanup=true",
     "marker_state_concordance_required=true",
     "created_utc_stable=true",
     "git_working_directory_enforced=true",

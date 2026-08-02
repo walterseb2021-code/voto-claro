@@ -54,6 +54,22 @@ Ningun proceso se detiene sin un postmaster.pid valido que vincule de forma ineq
 
 El inventario local de procesos dispone cada objeto Process despues de clasificarlo.
 
+Incidente acl_validation_failed
+
+La primera ejecucion real de Create alcanzo create_directories y fallo con acl_validation_failed antes de crear data, logs, state, secrets, marker, credencial, pwfile, initdb o PostgreSQL.
+
+La causa diagnosticada fue una comparacion fragil entre SID y NTAccount al releer la ACL. La validacion corregida normaliza cada IdentityReference mediante Translate(SecurityIdentifier), no compara nombres de cuenta y falla cerrado si una identidad no puede traducirse.
+
+La validacion de ACL es semantica: revisa el conjunto de ACE sin depender del orden, rechaza identidades adicionales, reglas Deny y reglas heredadas, valida FullControl con mascara bitwise, acepta reglas Allow equivalentes fusionadas o divididas del mismo SID, y exige InheritanceFlags y PropagationFlags esperados.
+
+La recuperacion de reglas para validacion usa explicitamente GetAccessRules con includeExplicit=true, includeInherited=true y targetType SecurityIdentifier. La propiedad Access de la ACL no se usa como fuente operativa ni como fallback.
+
+Las reglas heredadas quedan visibles para la validacion aunque la ACL este protegida. Ninguna regla se filtra antes de detectar herencia, Deny o identidades adicionales, y cualquier fallo al recuperar o enumerar reglas falla cerrado sin asumir una coleccion vacia.
+
+Owner no forma parte de esta correccion minima; el acceso queda gobernado por la DACL restringida. Cualquier validacion futura de Owner requiere una fase separada.
+
+El estado parcial requiere limpieza controlada antes de reintentar Create. No volver a ejecutar Create todavia, no usar Destroy, no cambiar ACL manualmente, no abrir secrets y no borrar carpetas fuera de una fase autorizada.
+
 Despues de cualquier resultado de pg_ctl stop, incluido timeout o exit code distinto de cero, la herramienta revalida durante una espera acotada de 15 segundos el pidfile, la identidad del proceso original y el listener local. Un PID reutilizado no se trata como el mismo proceso.
 
 El JSON de state se inspecciona como texto crudo antes de ConvertFrom-Json. Se rechazan claves duplicadas, arrays, objetos anidados, campos extra, tipos incorrectos y contenido adicional fuera del objeto plano aprobado.
