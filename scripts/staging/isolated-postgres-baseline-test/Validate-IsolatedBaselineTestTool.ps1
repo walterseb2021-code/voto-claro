@@ -153,8 +153,8 @@ foreach ($command in $commands) {
 Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","CleanupPartialCreate","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
 Assert-Contains -Text $text -Pattern 'switch \(\$Action\)' -Code "switch_dispatch_missing"
 Assert-Contains -Text $text -Pattern '"Plan" \{ Invoke-Plan \}' -Code "plan_branch_missing"
-Assert-Contains -Text $text -Pattern '"Create" \{ Invoke-Create \}' -Code "create_branch_missing"
-Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{ Invoke-CleanupPartialCreate \}' -Code "cleanup_branch_missing"
+Assert-Contains -Text $text -Pattern '"Create" \{[\s\S]+Invoke-Create[\s\S]+-ConfirmCreate:\$ConfirmCreate[\s\S]+-CreateApprovalToken \$CreateApprovalToken' -Code "create_branch_missing"
+Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{[\s\S]+Invoke-CleanupPartialCreate[\s\S]+-ConfirmCleanupPartialCreate:\$ConfirmCleanupPartialCreate[\s\S]+-CleanupApprovalToken \$CleanupApprovalToken' -Code "cleanup_branch_missing"
 Assert-Contains -Text $text -Pattern '"Apply" \{ Invoke-BlockedFutureAction -RequestedAction "Apply" \}' -Code "apply_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}' -Code "verify_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"FullTest" \{ Invoke-BlockedFutureAction -RequestedAction "FullTest" \}' -Code "fulltest_branch_not_blocked"
@@ -163,7 +163,10 @@ Assert-NotContains -Text $text -Pattern '(?s)finally\s*\{.*Remove-Item[^\r\n]*(D
 
 $planFunctionText = Get-FunctionText -Name "Invoke-Plan"
 $createFunctionText = Get-FunctionText -Name "Invoke-Create"
+$createAuthorizationFunctionText = Get-FunctionText -Name "Assert-CreateAuthorization"
+$createAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CreateAuthorization"
 $cleanupFunctionText = Get-FunctionText -Name "Invoke-CleanupPartialCreate"
+$cleanupAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CleanupAuthorization"
 $cleanupAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupAuthorization"
 $cleanupPathFunctionText = Get-FunctionText -Name "Assert-CleanupPathFixed"
 $cleanupStateFunctionText = Get-FunctionText -Name "Assert-CleanupExactPartialState"
@@ -204,8 +207,20 @@ Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCleanupPartialCreate' -
 Assert-Contains -Text $text -Pattern '\[string\]\$CleanupApprovalToken' -Code "cleanup_token_param_missing"
 Assert-Contains -Text $text -Pattern 'CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_create_token_missing"
 Assert-Contains -Text $text -Pattern 'CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_cleanup_token_missing"
-Assert-NotContains -Text $cleanupAuthorizationFunctionText -Pattern 'ConfirmCreate\s*\)|CreateApprovalToken\s*,\s*\$script:CreateApprovalToken|CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "cleanup_reuses_create_authorization"
-Assert-Contains -Text $cleanupAuthorizationFunctionText -Pattern 'ConfirmCleanupPartialCreate[\s\S]+CleanupApprovalToken[\s\S]+\$script:CleanupApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "cleanup_double_authorization_missing"
+Assert-Contains -Text $text -Pattern '\$script:ExpectedCreateApprovalToken\s*=' -Code "expected_create_token_missing"
+Assert-Contains -Text $text -Pattern '\$script:ExpectedCleanupApprovalToken\s*=' -Code "expected_cleanup_token_missing"
+Assert-NotContains -Text $text -Pattern '\$script:CreateApprovalToken\s*=' -Code "homonymous_create_token_constant_detected"
+Assert-NotContains -Text $text -Pattern '\$script:CleanupApprovalToken\s*=' -Code "homonymous_cleanup_token_constant_detected"
+Assert-NotContains -Text $text -Pattern '(?m)^\s*\$(CreateApprovalToken|CleanupApprovalToken|ConfirmCreate|ConfirmCleanupPartialCreate)\s*=' -Code "authorization_input_parameter_reassignment_detected"
+Assert-NotContains -Text ($createAuthorizationFunctionText + $cleanupAuthorizationFunctionText + $createAuthorizationTestFunctionText + $cleanupAuthorizationTestFunctionText) -Pattern '\$PSBoundParameters|ContainsKey\(' -Code "authorization_scope_or_containskey_detected"
+Assert-Contains -Text $createAuthorizationTestFunctionText -Pattern 'ProvidedCreateApprovalToken[\s\S]+ExpectedCreateApprovalToken[\s\S]+ConfirmCleanupPartialCreate[\s\S]+ProvidedCleanupApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "pure_create_authorization_missing"
+Assert-Contains -Text $cleanupAuthorizationTestFunctionText -Pattern 'ProvidedCleanupApprovalToken[\s\S]+ExpectedCleanupApprovalToken[\s\S]+ConfirmCreate[\s\S]+ProvidedCreateApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "pure_cleanup_authorization_missing"
+Assert-Contains -Text $createAuthorizationFunctionText -Pattern 'Test-CreateAuthorization[\s\S]+ExpectedCreateApprovalToken' -Code "assert_create_forwarding_missing"
+Assert-Contains -Text $cleanupAuthorizationFunctionText -Pattern 'Test-CleanupAuthorization[\s\S]+ExpectedCleanupApprovalToken' -Code "assert_cleanup_forwarding_missing"
+Assert-Contains -Text $createFunctionText -Pattern 'param\([\s\S]+ConfirmCreate[\s\S]+CreateApprovalToken[\s\S]+ConfirmCleanupPartialCreate[\s\S]+CleanupApprovalToken[\s\S]+Assert-CreateAuthorization' -Code "invoke_create_explicit_authorization_missing"
+Assert-Contains -Text $cleanupFunctionText -Pattern 'param\([\s\S]+ConfirmCleanupPartialCreate[\s\S]+CleanupApprovalToken[\s\S]+ConfirmCreate[\s\S]+CreateApprovalToken[\s\S]+Assert-CleanupAuthorization' -Code "invoke_cleanup_explicit_authorization_missing"
+Assert-Contains -Text $text -Pattern '"Create" \{[\s\S]+Invoke-Create[\s\S]+-ConfirmCreate:\$ConfirmCreate[\s\S]+-CreateApprovalToken \$CreateApprovalToken[\s\S]+-ConfirmCleanupPartialCreate:\$ConfirmCleanupPartialCreate[\s\S]+-CleanupApprovalToken \$CleanupApprovalToken' -Code "dispatcher_create_forwarding_missing"
+Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{[\s\S]+Invoke-CleanupPartialCreate[\s\S]+-ConfirmCleanupPartialCreate:\$ConfirmCleanupPartialCreate[\s\S]+-CleanupApprovalToken \$CleanupApprovalToken[\s\S]+-ConfirmCreate:\$ConfirmCreate[\s\S]+-CreateApprovalToken \$CreateApprovalToken' -Code "dispatcher_cleanup_forwarding_missing"
 Assert-Contains -Text $cleanupPathFunctionText -Pattern 'IsolatedRootRelativePath[\s\S]+InstanceName[\s\S]+PostgresPackageRelativePath|Get-PostgresRoot' -Code "cleanup_fixed_paths_missing"
 Assert-Contains -Text $cleanupPathFunctionText -Pattern 'OrdinalIgnoreCase[\s\S]+Test-IsInsideDirectory[\s\S]+cleanup_path_validation_failed' -Code "cleanup_path_validation_missing"
 Assert-Contains -Text $cleanupStateFunctionText -Pattern 'DataRoot[\s\S]+LogRoot[\s\S]+StateRoot[\s\S]+SecretRoot[\s\S]+MarkerPath[\s\S]+StatePath[\s\S]+CredentialPath[\s\S]+PasswordFilePath[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_exact_state_missing"
@@ -1252,6 +1267,55 @@ Assert-MutationAddsForbidden -MutatedText ($strictJsonFunctionText -replace "Thr
 Assert-MutationRemovesRequired -MutatedText ($strictJsonFunctionText -replace '\$valueStart -eq ''\{'' -or \$valueStart -eq ''\[''', '$false') -RequiredPattern '\$valueStart -eq ''\{'' -or \$valueStart -eq ''\[''' -Code "selftest_nested_json_acceptance_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($strictJsonFunctionText -replace '\$indexRef\.Value -ne \$JsonText\.Length', '$false') -RequiredPattern '\$indexRef\.Value -ne \$JsonText\.Length' -Code "selftest_trailing_garbage_acceptance_not_detected"
 
+. ([scriptblock]::Create($createAuthorizationTestFunctionText))
+. ([scriptblock]::Create($cleanupAuthorizationTestFunctionText))
+$expectedCreateTokenForSelfTest = [regex]::Match($text, '\$script:ExpectedCreateApprovalToken\s*=\s*"([^"]+)"').Groups[1].Value
+$expectedCleanupTokenForSelfTest = [regex]::Match($text, '\$script:ExpectedCleanupApprovalToken\s*=\s*"([^"]+)"').Groups[1].Value
+if ([string]::IsNullOrWhiteSpace($expectedCreateTokenForSelfTest) -or [string]::IsNullOrWhiteSpace($expectedCleanupTokenForSelfTest)) {
+  Fail -Code "authorization_expected_token_parse_failed"
+}
+if ([string]::Equals($expectedCreateTokenForSelfTest, $expectedCleanupTokenForSelfTest, [System.StringComparison]::Ordinal)) {
+  Fail -Code "authorization_expected_tokens_equal"
+}
+function Assert-AuthorizationResult {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [Parameter(Mandatory = $true)][object]$Result,
+    [Parameter(Mandatory = $true)][bool]$ExpectedAuthorized,
+    [Parameter(Mandatory = $true)][string]$ExpectedCode
+  )
+  if ([bool]$Result.Authorized -ne $ExpectedAuthorized) { Fail -Code ("authorization_case_failed_" + $Name) }
+  if ($ExpectedAuthorized) {
+    if ($null -ne $Result.SafeErrorCode) { Fail -Code ("authorization_case_code_unexpected_" + $Name) }
+  } elseif ($Result.SafeErrorCode -ne $ExpectedCode) {
+    Fail -Code ("authorization_case_code_failed_" + $Name)
+  }
+}
+$createInputSnapshot = "provided-create-input"
+$cleanupInputSnapshot = "provided-cleanup-input"
+Assert-AuthorizationResult -Name "create_switch_false_token_correct" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$false -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "create_switch_true_token_empty" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken "" -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "create_switch_true_token_wrong" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken "wrong-create-token" -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "create_switch_true_token_exact" -ExpectedAuthorized $true -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "create_valid_cleanup_switch_present" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "create_valid_cleanup_token_present" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest)
+Assert-AuthorizationResult -Name "cleanup_switch_false_token_correct" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_switch_true_token_empty" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken "" -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_switch_true_token_wrong" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken "wrong-cleanup-token" -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_switch_true_token_exact" -ExpectedAuthorized $true -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_valid_create_switch_present" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$true -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_valid_create_token_present" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest)
+Assert-AuthorizationResult -Name "create_token_does_not_authorize_cleanup" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCreateTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_token_does_not_authorize_create" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "create_both_tokens_block" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest)
+Assert-AuthorizationResult -Name "cleanup_both_tokens_block" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest)
+Assert-AuthorizationResult -Name "create_both_switches_block" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_both_switches_block" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$true -ProvidedCreateApprovalToken $null)
+[void](Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $createInputSnapshot -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $cleanupInputSnapshot)
+if ($createInputSnapshot -ne "provided-create-input" -or $cleanupInputSnapshot -ne "provided-cleanup-input") {
+  Fail -Code "authorization_input_parameter_mutated"
+}
+
 $planOutput = Invoke-Tool -Arguments @("-Action","Plan")
 if ($LASTEXITCODE -ne 0 -or $planOutput -notcontains "ISOLATED_BASELINE_TEST_PLAN_OK") {
   Fail -Code "plan_action_failed"
@@ -1323,6 +1387,14 @@ foreach ($expectedLine in @(
     "create_authorized=false",
     "create_execution_blocked=true",
     "create_execution_requires_exact_approval=true",
+    "authorization_parameter_scope=EXPLICIT",
+    "authorization_token_name_collision=false",
+    "create_expected_token_variable=EXPECTED_CREATE_APPROVAL_TOKEN",
+    "cleanup_expected_token_variable=EXPECTED_CLEANUP_APPROVAL_TOKEN",
+    "create_input_token_preserved=true",
+    "cleanup_input_token_preserved=true",
+    "cleanup_positive_authorization_selftest=true",
+    "create_positive_authorization_selftest=true",
     "apply_implementation_present=false",
     "verify_implementation_present=false",
     "destroy_implementation_present=false",

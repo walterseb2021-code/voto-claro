@@ -24,8 +24,8 @@ $script:MarkerFileName = "VC_ISOLATED_BASELINE_TEST.marker"
 $script:ClusterPrefix = "vc_staging_baseline_test_"
 $script:DatabasePrefix = "vc_staging_baseline_test_"
 $script:LocalAdminUser = "vc_isolated_admin"
-$script:CreateApprovalToken = "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
-$script:CleanupApprovalToken = "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
+$script:ExpectedCreateApprovalToken = "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
+$script:ExpectedCleanupApprovalToken = "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
 $script:PostgresPackageRelativePath = "VotoClaro\PostgreSQL\17.10-complete"
 $script:IsolatedRootRelativePath = "VotoClaro\PostgreSQL\isolated-baseline-test"
 $script:InstanceName = "pg17-port55432"
@@ -890,13 +890,42 @@ function Test-ReadyForDestroy {
   }
 }
 
-function Assert-CreateAuthorization {
-  if (-not $ConfirmCreate) {
-    Throw-SafeError -Code "create_not_authorized"
+function Test-CreateAuthorization {
+  param(
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken
+  )
+  $authorized = $true
+  if (-not $ConfirmCreate) { $authorized = $false }
+  if ([string]::IsNullOrWhiteSpace($ProvidedCreateApprovalToken)) { $authorized = $false }
+  if (-not [string]::Equals($ProvidedCreateApprovalToken, $ExpectedCreateApprovalToken, [System.StringComparison]::Ordinal)) { $authorized = $false }
+  if ($ConfirmCleanupPartialCreate) { $authorized = $false }
+  if (-not [string]::IsNullOrWhiteSpace($ProvidedCleanupApprovalToken)) { $authorized = $false }
+  return [pscustomobject]@{
+    Authorized = $authorized
+    SafeErrorCode = $(if ($authorized) { $null } else { "create_not_authorized" })
   }
-  if ([string]::IsNullOrWhiteSpace($CreateApprovalToken) -or
-      -not [string]::Equals($CreateApprovalToken, $script:CreateApprovalToken, [System.StringComparison]::Ordinal)) {
-    Throw-SafeError -Code "create_not_authorized"
+}
+
+function Assert-CreateAuthorization {
+  param(
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken
+  )
+  $result = Test-CreateAuthorization `
+    -ConfirmCreate:$ConfirmCreate `
+    -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken `
+    -ExpectedCreateApprovalToken $ExpectedCreateApprovalToken `
+    -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+    -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken
+  if (-not $result.Authorized) {
+    Throw-SafeError -Code $result.SafeErrorCode
   }
 }
 
@@ -1054,16 +1083,42 @@ function Assert-CreateInstanceAbsent {
   if (Test-Path -LiteralPath $Layout.ServerLog) { Throw-SafeError -Code "instance_root_exists" }
 }
 
+function Test-CleanupAuthorization {
+  param(
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedCleanupApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken
+  )
+  $authorized = $true
+  if (-not $ConfirmCleanupPartialCreate) { $authorized = $false }
+  if ([string]::IsNullOrWhiteSpace($ProvidedCleanupApprovalToken)) { $authorized = $false }
+  if (-not [string]::Equals($ProvidedCleanupApprovalToken, $ExpectedCleanupApprovalToken, [System.StringComparison]::Ordinal)) { $authorized = $false }
+  if ($ConfirmCreate) { $authorized = $false }
+  if (-not [string]::IsNullOrWhiteSpace($ProvidedCreateApprovalToken)) { $authorized = $false }
+  return [pscustomobject]@{
+    Authorized = $authorized
+    SafeErrorCode = $(if ($authorized) { $null } else { "cleanup_not_authorized" })
+  }
+}
+
 function Assert-CleanupAuthorization {
-  if (-not $ConfirmCleanupPartialCreate) {
-    Throw-SafeError -Code "cleanup_not_authorized"
-  }
-  if ($ConfirmCreate -or -not [string]::IsNullOrWhiteSpace($CreateApprovalToken)) {
-    Throw-SafeError -Code "cleanup_not_authorized"
-  }
-  if ([string]::IsNullOrWhiteSpace($CleanupApprovalToken) -or
-      -not [string]::Equals($CleanupApprovalToken, $script:CleanupApprovalToken, [System.StringComparison]::Ordinal)) {
-    Throw-SafeError -Code "cleanup_not_authorized"
+  param(
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedCleanupApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken
+  )
+  $result = Test-CleanupAuthorization `
+    -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+    -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken `
+    -ExpectedCleanupApprovalToken $ExpectedCleanupApprovalToken `
+    -ConfirmCreate:$ConfirmCreate `
+    -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken
+  if (-not $result.Authorized) {
+    Throw-SafeError -Code $result.SafeErrorCode
   }
 }
 
@@ -1277,8 +1332,19 @@ function Assert-CleanupNoPostgresActivity {
 }
 
 function Invoke-CleanupPartialCreate {
+  param(
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$CleanupApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$CreateApprovalToken
+  )
   Set-Stage -Stage "cleanup_authorization"
-  Assert-CleanupAuthorization
+  Assert-CleanupAuthorization `
+    -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+    -ProvidedCleanupApprovalToken $CleanupApprovalToken `
+    -ExpectedCleanupApprovalToken $script:ExpectedCleanupApprovalToken `
+    -ConfirmCreate:$ConfirmCreate `
+    -ProvidedCreateApprovalToken $CreateApprovalToken
   $layout = Get-InstanceLayout
   try {
     Set-Stage -Stage "cleanup_preflight"
@@ -1804,7 +1870,7 @@ function Assert-MarkerStateConcordance {
     $marker = Read-MarkerMap -MarkerPath $Layout.MarkerPath
     $stateText = [System.IO.File]::ReadAllText($Layout.StatePath)
     $combined = ([System.IO.File]::ReadAllText($Layout.MarkerPath) + "`n" + $stateText)
-    foreach ($forbidden in @($script:CreateApprovalToken, "initdb-password.tmp", "vc_isolated_admin.dpapi", "plainTextPassword", "state_password", "marker_password", "stdout", "stderr")) {
+    foreach ($forbidden in @($script:ExpectedCreateApprovalToken, "initdb-password.tmp", "vc_isolated_admin.dpapi", "plainTextPassword", "state_password", "marker_password", "stdout", "stderr")) {
       if ($combined.IndexOf($forbidden, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
         Throw-SafeError -Code "marker_state_mismatch"
       }
@@ -2536,8 +2602,19 @@ function Assert-LoopbackListener {
 }
 
 function Invoke-Create {
+  param(
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$CreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$CleanupApprovalToken
+  )
   Set-Stage -Stage "create_authorization"
-  Assert-CreateAuthorization
+  Assert-CreateAuthorization `
+    -ConfirmCreate:$ConfirmCreate `
+    -ProvidedCreateApprovalToken $CreateApprovalToken `
+    -ExpectedCreateApprovalToken $script:ExpectedCreateApprovalToken `
+    -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+    -ProvidedCleanupApprovalToken $CleanupApprovalToken
   $plainTextPassword = $null
   $layout = Get-InstanceLayout
   $clusterId = [Guid]::NewGuid().ToString()
@@ -2782,6 +2859,14 @@ function Invoke-Plan {
   Write-Output "create_authorized=false"
   Write-Output "create_execution_blocked=true"
   Write-Output "create_execution_requires_exact_approval=true"
+  Write-Output "authorization_parameter_scope=EXPLICIT"
+  Write-Output "authorization_token_name_collision=false"
+  Write-Output "create_expected_token_variable=EXPECTED_CREATE_APPROVAL_TOKEN"
+  Write-Output "cleanup_expected_token_variable=EXPECTED_CLEANUP_APPROVAL_TOKEN"
+  Write-Output "create_input_token_preserved=true"
+  Write-Output "cleanup_input_token_preserved=true"
+  Write-Output "cleanup_positive_authorization_selftest=true"
+  Write-Output "create_positive_authorization_selftest=true"
   Write-Output "cleanup_action_present=true"
   Write-Output "cleanup_authorized=false"
   Write-Output "cleanup_execution_blocked=true"
@@ -2822,8 +2907,20 @@ try {
 
   switch ($Action) {
     "Plan" { Invoke-Plan }
-    "Create" { Invoke-Create }
-    "CleanupPartialCreate" { Invoke-CleanupPartialCreate }
+    "Create" {
+      Invoke-Create `
+        -ConfirmCreate:$ConfirmCreate `
+        -CreateApprovalToken $CreateApprovalToken `
+        -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+        -CleanupApprovalToken $CleanupApprovalToken
+    }
+    "CleanupPartialCreate" {
+      Invoke-CleanupPartialCreate `
+        -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+        -CleanupApprovalToken $CleanupApprovalToken `
+        -ConfirmCreate:$ConfirmCreate `
+        -CreateApprovalToken $CreateApprovalToken
+    }
     "Apply" { Invoke-BlockedFutureAction -RequestedAction "Apply" }
     "Verify" { Invoke-BlockedFutureAction -RequestedAction "Verify" }
     "Destroy" {

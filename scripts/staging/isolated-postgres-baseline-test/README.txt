@@ -90,6 +90,18 @@ CleanupPartialCreate solo puede eliminar una InstanceRoot completamente vacia y 
 
 CleanupPartialCreate no ejecuta Create despues de limpiar. Cualquier reintento de Create requiere una fase posterior de diagnostico, auditoria y autorizacion separadas.
 
+Incidente cleanup_not_authorized
+
+Dos intentos autorizados de CleanupPartialCreate fallaron antes de cualquier efecto con cleanup_not_authorized.
+
+La causa fue una colision entre parametros de entrada y constantes internas de autorizacion. Los parametros CreateApprovalToken y CleanupApprovalToken vivian en scope script y las constantes internas homonimas los sobrescribian despues del param().
+
+Las constantes internas fueron renombradas a ExpectedCreateApprovalToken y ExpectedCleanupApprovalToken. Los parametros de entrada se preservan y la autorizacion usa funciones puras con parametros explicitos.
+
+Create y CleanupPartialCreate comparan tokens con StringComparison.Ordinal. El token Create y el token Cleanup permanecen separados: Create rechaza cualquier switch o token de Cleanup, y Cleanup rechaza cualquier switch o token de Create.
+
+No volver a ejecutar CleanupPartialCreate hasta auditar y versionar esta correccion. El estado parcial queda intacto. No se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
+
 Apply: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta, preflight local aprobado, base vacia y autorizacion humana explicita.
 
 Verify: bloqueada en esta version. En una fase futura debera validar estado restaurado mediante consultas controladas.
