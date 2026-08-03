@@ -315,3 +315,20 @@ Write-ClusterState ahora usa stages cerrados de escritura de estado y conserva l
 Invoke-Create conserva el error primario. Si el registro posterior de state=failed tambien falla, la razon secundaria queda separada como diagnostico seguro y no reemplaza silenciosamente la causa original. Create sigue bloqueado antes de credential e initdb si el estado inicial no queda escrito, protegido y validado.
 
 La correccion no debilita ACL, no ejecuta SQL, no accede a Supabase y no cambia el estado parcial real durante las validaciones locales.
+B-SEC-23G CleanupFailedCreate
+
+CleanupFailedCreate es una accion separada de CleanupPartialCreate. CleanupPartialCreate conserva su contrato anterior: solo acepta una InstanceRoot completamente vacia y no se flexibiliza para estados fallidos con contenido conocido.
+
+CleanupFailedCreate existe solo para el estado parcial exacto producido por Create cuando falla en create_directories. Requiere autorizacion doble independiente mediante ConfirmCleanupFailedCreate y CleanupFailedCreateApprovalToken. El token esperado interno usa ExpectedCleanupFailedCreateApprovalToken y es distinto de los tokens Create y CleanupPartialCreate. La comparacion es Ordinal, con parametros explicitos y sin sobrescribir entradas.
+
+El estado aceptado es exclusivamente IsolatedRoot con InstanceRoot pg17-port55432; dentro de InstanceRoot deben existir solo data, logs, secrets y state. data, logs y secrets deben estar vacios. state debe contener solo cluster-state.json y VC_ISOLATED_BASELINE_TEST.marker. No se aceptan temporales cluster-state.*.tmp, PG_VERSION, postmaster.pid, configuraciones PostgreSQL, credencial DPAPI, pwfile, server log, contenido de base de datos ni entradas adicionales.
+
+Antes de borrar se valida marker y JSON: artifact_type y schema_version esperados, state=failed, stage=create_directories, host 127.0.0.1, port 55432, instance_name pg17-port55432, cluster_id valido y coincidente, fechas validas, server_state=not_started y banderas initdb_completed, configuration_completed, server_started, credential_protected, plaintext_password_file_present, server_cleanup_attempted y server_cleanup_completed en false.
+
+Tambien se valida ACL de solo lectura: reglas protegidas, SID actual, FullControl semantico, sin Deny, sin heredadas y sin identidades inesperadas. Si la validacion no puede leer o traducir una regla, falla cerrado.
+
+El orden de borrado es explicito y no recursivo: File.Delete de cluster-state.json, File.Delete del marker, Directory.Delete(state,false), Directory.Delete(data,false), Directory.Delete(logs,false), Directory.Delete(secrets,false), Directory.Delete(InstanceRoot,false) y Directory.Delete(IsolatedRoot,false). No usa Remove-Item, comodines, takeown, icacls ni Directory.Delete(path,true).
+
+La accion revalida actividad PostgreSQL antes de cualquier borrado, antes de borrar InstanceRoot, antes de borrar IsolatedRoot y al final. Exige cero procesos postgres autorizados o ambiguos, cero servicios PostgreSQL en ejecucion, puerto 127.0.0.1:55432 cerrado y ausencia de postmaster.pid. Usa firma TOCTOU antes de entrar a los grupos destructivos.
+
+CleanupFailedCreate no encadena Create, no ejecuta SQL, no usa Supabase, no toca produccion y no modifica el paquete PostgreSQL. Debe permanecer sin ejecutar hasta una aprobacion humana separada.

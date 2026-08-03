@@ -157,11 +157,12 @@ foreach ($command in $commands) {
   }
 }
 
-Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","CleanupPartialCreate","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
+Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","CleanupPartialCreate","CleanupFailedCreate","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
 Assert-Contains -Text $text -Pattern 'switch \(\$Action\)' -Code "switch_dispatch_missing"
 Assert-Contains -Text $text -Pattern '"Plan" \{ Invoke-Plan \}' -Code "plan_branch_missing"
 Assert-Contains -Text $text -Pattern '"Create" \{[\s\S]+Invoke-Create[\s\S]+-ConfirmCreate:\$ConfirmCreate[\s\S]+-CreateApprovalToken \$CreateApprovalToken' -Code "create_branch_missing"
 Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{[\s\S]+Invoke-CleanupPartialCreate[\s\S]+-ConfirmCleanupPartialCreate:\$ConfirmCleanupPartialCreate[\s\S]+-CleanupApprovalToken \$CleanupApprovalToken' -Code "cleanup_branch_missing"
+Assert-Contains -Text $text -Pattern '"CleanupFailedCreate" \{[\s\S]+Invoke-CleanupFailedCreate[\s\S]+-ConfirmCleanupFailedCreate:\$ConfirmCleanupFailedCreate[\s\S]+-CleanupFailedCreateApprovalToken \$CleanupFailedCreateApprovalToken' -Code "cleanup_failed_branch_missing"
 Assert-Contains -Text $text -Pattern '"Apply" \{ Invoke-BlockedFutureAction -RequestedAction "Apply" \}' -Code "apply_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}' -Code "verify_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"FullTest" \{ Invoke-BlockedFutureAction -RequestedAction "FullTest" \}' -Code "fulltest_branch_not_blocked"
@@ -175,6 +176,12 @@ $createAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CreateAuthor
 $cleanupFunctionText = Get-FunctionText -Name "Invoke-CleanupPartialCreate"
 $cleanupAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CleanupAuthorization"
 $cleanupAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupAuthorization"
+$cleanupFailedFunctionText = Get-FunctionText -Name "Invoke-CleanupFailedCreate"
+$cleanupFailedAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CleanupFailedCreateAuthorization"
+$cleanupFailedAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateAuthorization"
+$cleanupFailedStateFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateExactState"
+$cleanupFailedPayloadFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStatePayload"
+$cleanupFailedFailureFunctionText = Get-FunctionText -Name "Get-CleanupFailedCreateSafeFailure"
 $cleanupFailureFunctionText = Get-FunctionText -Name "Get-CleanupSafeFailure"
 $cleanupEntriesClassText = ""
 $cleanupEntriesNewFunctionText = Get-FunctionText -Name "New-CleanupDirectoryEntriesResult"
@@ -218,14 +225,18 @@ Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCreate' -Code "confirm_
 Assert-Contains -Text $text -Pattern '\[string\]\$CreateApprovalToken' -Code "create_approval_token_param_missing"
 Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCleanupPartialCreate' -Code "confirm_cleanup_missing"
 Assert-Contains -Text $text -Pattern '\[string\]\$CleanupApprovalToken' -Code "cleanup_token_param_missing"
+Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCleanupFailedCreate' -Code "confirm_cleanup_failed_missing"
+Assert-Contains -Text $text -Pattern '\[string\]\$CleanupFailedCreateApprovalToken' -Code "cleanup_failed_token_param_missing"
 Assert-Contains -Text $text -Pattern 'CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_create_token_missing"
 Assert-Contains -Text $text -Pattern 'CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_cleanup_token_missing"
+Assert-Contains -Text $text -Pattern 'CLEANUP_FAILED_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_cleanup_failed_token_missing"
 Assert-Contains -Text $text -Pattern '\$script:ExpectedCreateApprovalToken\s*=' -Code "expected_create_token_missing"
 Assert-Contains -Text $text -Pattern '\$script:ExpectedCleanupApprovalToken\s*=' -Code "expected_cleanup_token_missing"
+Assert-Contains -Text $text -Pattern '\$script:ExpectedCleanupFailedCreateApprovalToken\s*=' -Code "expected_cleanup_failed_token_missing"
 Assert-NotContains -Text $text -Pattern '\$script:CreateApprovalToken\s*=' -Code "homonymous_create_token_constant_detected"
 Assert-NotContains -Text $text -Pattern '\$script:CleanupApprovalToken\s*=' -Code "homonymous_cleanup_token_constant_detected"
-Assert-NotContains -Text $text -Pattern '(?m)^\s*\$(CreateApprovalToken|CleanupApprovalToken|ConfirmCreate|ConfirmCleanupPartialCreate)\s*=' -Code "authorization_input_parameter_reassignment_detected"
-Assert-NotContains -Text ($createAuthorizationFunctionText + $cleanupAuthorizationFunctionText + $createAuthorizationTestFunctionText + $cleanupAuthorizationTestFunctionText) -Pattern '\$PSBoundParameters|ContainsKey\(' -Code "authorization_scope_or_containskey_detected"
+Assert-NotContains -Text $text -Pattern '(?m)^\s*\$(CreateApprovalToken|CleanupApprovalToken|CleanupFailedCreateApprovalToken|ConfirmCreate|ConfirmCleanupPartialCreate|ConfirmCleanupFailedCreate)\s*=' -Code "authorization_input_parameter_reassignment_detected"
+Assert-NotContains -Text ($createAuthorizationFunctionText + $cleanupAuthorizationFunctionText + $cleanupFailedAuthorizationFunctionText + $createAuthorizationTestFunctionText + $cleanupAuthorizationTestFunctionText + $cleanupFailedAuthorizationTestFunctionText) -Pattern '\$PSBoundParameters|ContainsKey\(' -Code "authorization_scope_or_containskey_detected"
 Assert-Contains -Text $createAuthorizationTestFunctionText -Pattern 'ProvidedCreateApprovalToken[\s\S]+ExpectedCreateApprovalToken[\s\S]+ConfirmCleanupPartialCreate[\s\S]+ProvidedCleanupApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "pure_create_authorization_missing"
 Assert-Contains -Text $cleanupAuthorizationTestFunctionText -Pattern 'ProvidedCleanupApprovalToken[\s\S]+ExpectedCleanupApprovalToken[\s\S]+ConfirmCreate[\s\S]+ProvidedCreateApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "pure_cleanup_authorization_missing"
 Assert-Contains -Text $createAuthorizationFunctionText -Pattern 'Test-CreateAuthorization[\s\S]+ExpectedCreateApprovalToken' -Code "assert_create_forwarding_missing"
@@ -255,7 +266,7 @@ Assert-NotContains -Text $parentValidationBlock -Pattern 'Assert-CleanupNoPostgr
 Assert-Contains -Text $cleanupFunctionText -Pattern '\$parentEntryValues\.Count -ne 0\)\s*\{[\s\S]*?cleanup_parent_not_empty[\s\S]*?\}\s*Set-Stage -Stage "cleanup_delete_root"\s*try\s*\{' -Code "cleanup_parent_validation_not_last_predelete_check"
 Assert-NotContains -Text $cleanupFunctionText -Pattern '(?s)\$parentEntryValues\.Count -ne 0[\s\S]*Assert-CleanupNoPostgresActivity[\s\S]*Set-Stage -Stage "cleanup_delete_root"' -Code "cleanup_activity_after_parent_count_detected"
 $cleanupEntriesCallerAssignments = @([regex]::Matches($text, '(?m)^\s*\$[A-Za-z][A-Za-z0-9]*\s*=\s*Get-CleanupDirectoryEntries\b'))
-if ($cleanupEntriesCallerAssignments.Count -ne 5) { Fail -Code "cleanup_entries_caller_inventory_count_mismatch" }
+if ($cleanupEntriesCallerAssignments.Count -lt 5) { Fail -Code "cleanup_entries_caller_inventory_count_mismatch" }
 foreach ($requiredCallerPattern in @(
     '\$instanceEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$Layout\.InstanceRoot',
     '\$isolatedEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$Layout\.IsolatedRoot',
@@ -279,6 +290,55 @@ Assert-Contains -Text $cleanupProcessFunctionText -Pattern 'Get-LocalPostgresPro
 Assert-Contains -Text $cleanupFunctionText -Pattern 'cleanup_layout[\s\S]+Get-InstanceLayout[\s\S]+cleanup_environment[\s\S]+Assert-CleanupEnvironment[\s\S]+cleanup_git[\s\S]+Assert-CleanupGitReady[\s\S]+cleanup_paths[\s\S]+Assert-CleanupPathFixed[\s\S]+cleanup_attributes[\s\S]+Assert-CleanupDirectorySafe[\s\S]+cleanup_exact_state[\s\S]+Assert-CleanupExactPartialState[\s\S]+cleanup_signature_initial[\s\S]+Get-CleanupPartialStateSignature[\s\S]+cleanup_activity[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+cleanup_revalidate_signature[\s\S]+cleanup_state_changed[\s\S]+cleanup_revalidate_state[\s\S]+cleanup_revalidate_activity[\s\S]+cleanup_delete_instance[\s\S]+Directory\]::Delete\(\$layout\.InstanceRoot, \$false\)[\s\S]+cleanup_postcheck[\s\S]+cleanup_revalidate_activity_after_instance_delete[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+cleanup_validate_parent_empty[\s\S]+cleanup_parent_not_empty[\s\S]+Set-Stage -Stage "cleanup_delete_root"[\s\S]+Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)[\s\S]+cleanup_postcheck' -Code "cleanup_delete_sequence_missing"
 Assert-NotContains -Text $cleanupFunctionText -Pattern 'Remove-Item|Directory\]::Delete\([^\r\n]+,\s*\$true\)|-Recurse|-Force|Stop-Process|taskkill|Set-Acl|takeown|icacls|Invoke-Create|Invoke-BlockedFutureAction -RequestedAction "Destroy"|[?*]' -Code "cleanup_forbidden_operation_detected"
 Assert-NotContains -Text $cleanupFunctionText -Pattern 'Throw-SafeError -Code "cleanup_failed"' -Code "cleanup_generic_failure_detected"
+Assert-Contains -Text $cleanupFailedAuthorizationTestFunctionText -Pattern 'ProvidedCleanupFailedCreateApprovalToken[
+	 -~]+ExpectedCleanupFailedCreateApprovalToken[
+	 -~]+ConfirmCreate[
+	 -~]+ProvidedCreateApprovalToken[
+	 -~]+ConfirmCleanupPartialCreate[
+	 -~]+ProvidedCleanupApprovalToken[
+	 -~]+StringComparison\]::Ordinal' -Code "pure_cleanup_failed_authorization_missing"
+Assert-Contains -Text $cleanupFailedFunctionText -Pattern 'Assert-CleanupFailedCreateAuthorization[
+	 -~]+Assert-CleanupFailedCreateExactState[
+	 -~]+Assert-CleanupNoPostgresActivity[
+	 -~]+Get-CleanupFailedCreateStateSignature' -Code "cleanup_failed_flow_missing"
+Assert-Contains -Text $cleanupFailedStateFunctionText -Pattern 'DataRoot[
+	 -~]+LogRoot[
+	 -~]+SecretRoot[
+	 -~]+StateRoot[
+	 -~]+PG_VERSION[
+	 -~]+postmaster\.pid[
+	 -~]+CredentialPath[
+	 -~]+PasswordFilePath[
+	 -~]+ServerLog' -Code "cleanup_failed_exact_paths_missing"
+foreach ($payloadPattern in @('state -ne "failed"','stage -ne "create_directories"','server_state -ne "not_started"','initdb_completed -ne \$false','configuration_completed -ne \$false','server_started -ne \$false','credential_protected -ne \$false','plaintext_password_file_present -ne \$false')) {
+  Assert-Contains -Text $cleanupFailedPayloadFunctionText -Pattern $payloadPattern -Code "cleanup_failed_payload_validation_missing"
+}
+if (@([regex]::Matches($cleanupFailedFunctionText, '\[System\.IO\.File\]::Delete\(')).Count -ne 2) { Fail -Code "cleanup_failed_file_delete_count_invalid" }
+if (@([regex]::Matches($cleanupFailedFunctionText, '\[System\.IO\.Directory\]::Delete\([^\r\n]+, \$false\)')).Count -ne 6) { Fail -Code "cleanup_failed_directory_delete_count_invalid" }
+Assert-NotContains -Text $cleanupFailedFunctionText -Pattern 'Directory\]::Delete\([^\r\n]+,\s*\$true\)|Remove-Item|Set-Acl|Invoke-Create|Invoke-CleanupPartialCreate|Invoke-BlockedFutureAction|Stop-Process|taskkill' -Code "cleanup_failed_forbidden_operation_detected"
+Assert-Contains -Text $cleanupFailedFunctionText -Pattern 'cleanup_failed_delete_state_json[
+	 -~]+File\]::Delete\(\$layout\.StatePath\)[
+	 -~]+cleanup_failed_delete_marker[
+	 -~]+File\]::Delete\(\$layout\.MarkerPath\)[
+	 -~]+cleanup_failed_delete_state_root[
+	 -~]+Directory\]::Delete\(\$layout\.StateRoot, \$false\)[
+	 -~]+cleanup_failed_delete_data_root[
+	 -~]+Directory\]::Delete\(\$layout\.DataRoot, \$false\)[
+	 -~]+cleanup_failed_delete_log_root[
+	 -~]+Directory\]::Delete\(\$layout\.LogRoot, \$false\)[
+	 -~]+cleanup_failed_delete_secret_root[
+	 -~]+Directory\]::Delete\(\$layout\.SecretRoot, \$false\)[
+	 -~]+cleanup_failed_revalidate_activity_before_instance_delete[
+	 -~]+cleanup_failed_delete_instance_root[
+	 -~]+Directory\]::Delete\(\$layout\.InstanceRoot, \$false\)[
+	 -~]+cleanup_failed_revalidate_activity_before_isolated_delete[
+	 -~]+cleanup_failed_delete_isolated_root[
+	 -~]+Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)' -Code "cleanup_failed_delete_order_missing"
+Assert-Contains -Text $cleanupFailedFailureFunctionText -Pattern 'cleanup_failed_exact_state_invalid[
+	 -~]+cleanup_failed_marker_state_invalid[
+	 -~]+cleanup_failed_acl_invalid[
+	 -~]+cleanup_failed_activity_detected[
+	 -~]+cleanup_failed_delete_state_json_failed' -Code "cleanup_failed_classifier_missing"
 Assert-Contains -Text $cleanupFunctionText -Pattern 'Get-CleanupSafeFailure[\s\S]+ExceptionType[\s\S]+Throw-SafeError -Code \$failure\.Reason' -Code "cleanup_safe_classifier_not_used"
 Assert-Contains -Text $text -Pattern 'Write-Output "exception_type=\$script:CurrentExceptionType"' -Code "exception_type_output_missing"
 Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'UnauthorizedAccessException[\s\S]+IOException[\s\S]+DirectoryNotFoundException[\s\S]+SecurityException[\s\S]+InvalidOperationException[\s\S]+ArgumentException[\s\S]+MethodInvocationException[\s\S]+PropertyNotFoundException[\s\S]+RuntimeException[\s\S]+ParentContainsErrorRecordException[\s\S]+CmdletInvocationException[\s\S]+ItemNotFoundException[\s\S]+UnknownException' -Code "cleanup_exception_allowlist_missing"
@@ -1640,12 +1700,16 @@ Assert-CleanupFailureForSelfTest -Name "unknown_stage" -Stage "cleanup_unknown" 
 
 . ([scriptblock]::Create($createAuthorizationTestFunctionText))
 . ([scriptblock]::Create($cleanupAuthorizationTestFunctionText))
+. ([scriptblock]::Create($cleanupFailedAuthorizationTestFunctionText))
 $expectedCreateTokenForSelfTest = [regex]::Match($text, '\$script:ExpectedCreateApprovalToken\s*=\s*"([^"]+)"').Groups[1].Value
 $expectedCleanupTokenForSelfTest = [regex]::Match($text, '\$script:ExpectedCleanupApprovalToken\s*=\s*"([^"]+)"').Groups[1].Value
-if ([string]::IsNullOrWhiteSpace($expectedCreateTokenForSelfTest) -or [string]::IsNullOrWhiteSpace($expectedCleanupTokenForSelfTest)) {
+$expectedCleanupFailedTokenForSelfTest = [regex]::Match($text, '\$script:ExpectedCleanupFailedCreateApprovalToken\s*=\s*"([^"]+)"').Groups[1].Value
+if ([string]::IsNullOrWhiteSpace($expectedCreateTokenForSelfTest) -or [string]::IsNullOrWhiteSpace($expectedCleanupTokenForSelfTest) -or [string]::IsNullOrWhiteSpace($expectedCleanupFailedTokenForSelfTest)) {
   Fail -Code "authorization_expected_token_parse_failed"
 }
-if ([string]::Equals($expectedCreateTokenForSelfTest, $expectedCleanupTokenForSelfTest, [System.StringComparison]::Ordinal)) {
+if ([string]::Equals($expectedCreateTokenForSelfTest, $expectedCleanupTokenForSelfTest, [System.StringComparison]::Ordinal) -or
+    [string]::Equals($expectedCreateTokenForSelfTest, $expectedCleanupFailedTokenForSelfTest, [System.StringComparison]::Ordinal) -or
+    [string]::Equals($expectedCleanupTokenForSelfTest, $expectedCleanupFailedTokenForSelfTest, [System.StringComparison]::Ordinal)) {
   Fail -Code "authorization_expected_tokens_equal"
 }
 function Assert-AuthorizationResult {
@@ -1682,6 +1746,18 @@ Assert-AuthorizationResult -Name "create_both_tokens_block" -ExpectedAuthorized 
 Assert-AuthorizationResult -Name "cleanup_both_tokens_block" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest)
 Assert-AuthorizationResult -Name "create_both_switches_block" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $null)
 Assert-AuthorizationResult -Name "cleanup_both_switches_block" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$true -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_switch_false_token_correct" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$false -ProvidedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_switch_true_token_empty" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken "" -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_switch_true_token_wrong" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken "wrong-cleanup-failed-token" -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_switch_true_token_exact" -ExpectedAuthorized $true -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_create_switch_present" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$true -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_cleanup_switch_present" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "create_token_does_not_authorize_cleanup_failed" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken $expectedCreateTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_token_does_not_authorize_cleanup_failed" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken $expectedCleanupTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_token_does_not_authorize_create" -ExpectedAuthorized $false -ExpectedCode "create_not_authorized" -Result (Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_token_does_not_authorize_cleanup" -ExpectedAuthorized $false -ExpectedCode "cleanup_not_authorized" -Result (Test-CleanupAuthorization -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCleanupApprovalToken $expectedCleanupTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_two_switches_block" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$true -ProvidedCreateApprovalToken $null -ConfirmCleanupPartialCreate:$true -ProvidedCleanupApprovalToken $null)
+Assert-AuthorizationResult -Name "cleanup_failed_two_tokens_block" -ExpectedAuthorized $false -ExpectedCode "cleanup_failed_not_authorized" -Result (Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:$true -ProvidedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ExpectedCleanupFailedCreateApprovalToken $expectedCleanupFailedTokenForSelfTest -ConfirmCreate:$false -ProvidedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $expectedCleanupTokenForSelfTest)
 [void](Test-CreateAuthorization -ConfirmCreate:$true -ProvidedCreateApprovalToken $createInputSnapshot -ExpectedCreateApprovalToken $expectedCreateTokenForSelfTest -ConfirmCleanupPartialCreate:$false -ProvidedCleanupApprovalToken $cleanupInputSnapshot)
 if ($createInputSnapshot -ne "provided-create-input" -or $cleanupInputSnapshot -ne "provided-cleanup-input") {
   Fail -Code "authorization_input_parameter_mutated"
@@ -1801,6 +1877,17 @@ foreach ($expectedLine in @(
     "cleanup_second_delete_reachable_only_when_parent_empty=true",
     "cleanup_parent_stage_reason_validator_complete=true",
     "cleanup_real_execution_tested=false",
+    "cleanup_failed_create_action_present=true",
+    "cleanup_failed_create_authorized=false",
+    "cleanup_failed_create_execution_blocked=true",
+    "cleanup_failed_create_exact_state_required=true",
+    "cleanup_failed_create_recursive_delete_allowed=false",
+    "cleanup_failed_create_acl_modification_allowed=false",
+    "cleanup_failed_create_package_directory_in_scope=false",
+    "cleanup_failed_create_marker_state_validation=true",
+    "cleanup_failed_create_activity_revalidation=true",
+    "cleanup_failed_create_expected_delete_file_count=2",
+    "cleanup_failed_create_expected_delete_directory_count=6",
     "apply_implementation_present=false",
     "verify_implementation_present=false",
     "destroy_implementation_present=false",

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan","Create","CleanupPartialCreate","Apply","Verify","Destroy","FullTest")]
+  [ValidateSet("Plan","Create","CleanupPartialCreate","CleanupFailedCreate","Apply","Verify","Destroy","FullTest")]
   [string]$Action = "Plan",
   [string]$PostgresBin = (Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL\17.10-complete\bin"),
   [int]$Port = 55432,
@@ -11,6 +11,8 @@ param(
   [string]$CreateApprovalToken,
   [switch]$ConfirmCleanupPartialCreate,
   [string]$CleanupApprovalToken,
+  [switch]$ConfirmCleanupFailedCreate,
+  [string]$CleanupFailedCreateApprovalToken,
   [switch]$KeepOnSuccess,
   [switch]$SelfTest
 )
@@ -28,6 +30,7 @@ $script:DatabasePrefix = "vc_staging_baseline_test_"
 $script:LocalAdminUser = "vc_isolated_admin"
 $script:ExpectedCreateApprovalToken = "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
 $script:ExpectedCleanupApprovalToken = "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
+$script:ExpectedCleanupFailedCreateApprovalToken = "CLEANUP_FAILED_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
 $script:PostgresPackageRelativePath = "VotoClaro\PostgreSQL\17.10-complete"
 $script:IsolatedRootRelativePath = "VotoClaro\PostgreSQL\isolated-baseline-test"
 $script:InstanceName = "pg17-port55432"
@@ -62,6 +65,28 @@ $script:SafeCodes = @(
   "port_in_use",
   "create_not_authorized",
   "cleanup_not_authorized",
+  "cleanup_failed_not_authorized",
+  "cleanup_failed_layout_failed",
+  "cleanup_failed_environment_invalid",
+  "cleanup_failed_git_invalid",
+  "cleanup_failed_paths_invalid",
+  "cleanup_failed_attributes_invalid",
+  "cleanup_failed_exact_state_invalid",
+  "cleanup_failed_marker_state_invalid",
+  "cleanup_failed_acl_invalid",
+  "cleanup_failed_activity_detected",
+  "cleanup_failed_state_changed",
+  "cleanup_failed_delete_state_json_failed",
+  "cleanup_failed_delete_marker_failed",
+  "cleanup_failed_delete_state_root_failed",
+  "cleanup_failed_delete_data_root_failed",
+  "cleanup_failed_delete_log_root_failed",
+  "cleanup_failed_delete_secret_root_failed",
+  "cleanup_failed_delete_instance_root_failed",
+  "cleanup_failed_delete_isolated_root_failed",
+  "cleanup_failed_postcheck_failed",
+  "cleanup_failed_package_modified",
+  "cleanup_failed_preflight_unknown",
   "cleanup_repo_not_clean",
   "cleanup_branch_not_allowed",
   "cleanup_head_not_synced",
@@ -1115,7 +1140,9 @@ function Test-CreateAuthorization {
     [AllowNull()][string]$ProvidedCreateApprovalToken,
     [Parameter(Mandatory = $true)][string]$ExpectedCreateApprovalToken,
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
-    [AllowNull()][string]$ProvidedCleanupApprovalToken
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken
   )
   $authorized = $true
   if (-not $ConfirmCreate) { $authorized = $false }
@@ -1123,6 +1150,8 @@ function Test-CreateAuthorization {
   if (-not [string]::Equals($ProvidedCreateApprovalToken, $ExpectedCreateApprovalToken, [System.StringComparison]::Ordinal)) { $authorized = $false }
   if ($ConfirmCleanupPartialCreate) { $authorized = $false }
   if (-not [string]::IsNullOrWhiteSpace($ProvidedCleanupApprovalToken)) { $authorized = $false }
+  if ($ConfirmCleanupFailedCreate) { $authorized = $false }
+  if (-not [string]::IsNullOrWhiteSpace($ProvidedCleanupFailedCreateApprovalToken)) { $authorized = $false }
   return [pscustomobject]@{
     Authorized = $authorized
     SafeErrorCode = $(if ($authorized) { $null } else { "create_not_authorized" })
@@ -1135,14 +1164,18 @@ function Assert-CreateAuthorization {
     [AllowNull()][string]$ProvidedCreateApprovalToken,
     [Parameter(Mandatory = $true)][string]$ExpectedCreateApprovalToken,
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
-    [AllowNull()][string]$ProvidedCleanupApprovalToken
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken
   )
   $result = Test-CreateAuthorization `
     -ConfirmCreate:$ConfirmCreate `
     -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken `
     -ExpectedCreateApprovalToken $ExpectedCreateApprovalToken `
     -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
-    -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken
+    -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken `
+    -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+    -ProvidedCleanupFailedCreateApprovalToken $ProvidedCleanupFailedCreateApprovalToken
   if (-not $result.Authorized) {
     Throw-SafeError -Code $result.SafeErrorCode
   }
@@ -1308,7 +1341,9 @@ function Test-CleanupAuthorization {
     [AllowNull()][string]$ProvidedCleanupApprovalToken,
     [Parameter(Mandatory = $true)][string]$ExpectedCleanupApprovalToken,
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
-    [AllowNull()][string]$ProvidedCreateApprovalToken
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken
   )
   $authorized = $true
   if (-not $ConfirmCleanupPartialCreate) { $authorized = $false }
@@ -1316,6 +1351,8 @@ function Test-CleanupAuthorization {
   if (-not [string]::Equals($ProvidedCleanupApprovalToken, $ExpectedCleanupApprovalToken, [System.StringComparison]::Ordinal)) { $authorized = $false }
   if ($ConfirmCreate) { $authorized = $false }
   if (-not [string]::IsNullOrWhiteSpace($ProvidedCreateApprovalToken)) { $authorized = $false }
+  if ($ConfirmCleanupFailedCreate) { $authorized = $false }
+  if (-not [string]::IsNullOrWhiteSpace($ProvidedCleanupFailedCreateApprovalToken)) { $authorized = $false }
   return [pscustomobject]@{
     Authorized = $authorized
     SafeErrorCode = $(if ($authorized) { $null } else { "cleanup_not_authorized" })
@@ -1328,14 +1365,63 @@ function Assert-CleanupAuthorization {
     [AllowNull()][string]$ProvidedCleanupApprovalToken,
     [Parameter(Mandatory = $true)][string]$ExpectedCleanupApprovalToken,
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
-    [AllowNull()][string]$ProvidedCreateApprovalToken
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken
   )
   $result = Test-CleanupAuthorization `
     -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
     -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken `
     -ExpectedCleanupApprovalToken $ExpectedCleanupApprovalToken `
     -ConfirmCreate:$ConfirmCreate `
-    -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken
+    -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken `
+    -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+    -ProvidedCleanupFailedCreateApprovalToken $ProvidedCleanupFailedCreateApprovalToken
+  if (-not $result.Authorized) {
+    Throw-SafeError -Code $result.SafeErrorCode
+  }
+}
+function Test-CleanupFailedCreateAuthorization {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedCleanupFailedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken
+  )
+  $authorized = $true
+  if (-not $ConfirmCleanupFailedCreate) { $authorized = $false }
+  if ([string]::IsNullOrWhiteSpace($ProvidedCleanupFailedCreateApprovalToken)) { $authorized = $false }
+  if (-not [string]::Equals($ProvidedCleanupFailedCreateApprovalToken, $ExpectedCleanupFailedCreateApprovalToken, [System.StringComparison]::Ordinal)) { $authorized = $false }
+  if ($ConfirmCreate) { $authorized = $false }
+  if (-not [string]::IsNullOrWhiteSpace($ProvidedCreateApprovalToken)) { $authorized = $false }
+  if ($ConfirmCleanupPartialCreate) { $authorized = $false }
+  if (-not [string]::IsNullOrWhiteSpace($ProvidedCleanupApprovalToken)) { $authorized = $false }
+  return [pscustomobject]@{
+    Authorized = $authorized
+    SafeErrorCode = $(if ($authorized) { $null } else { "cleanup_failed_not_authorized" })
+  }
+}
+function Assert-CleanupFailedCreateAuthorization {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedCleanupFailedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken
+  )
+  $result = Test-CleanupFailedCreateAuthorization `
+    -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+    -ProvidedCleanupFailedCreateApprovalToken $ProvidedCleanupFailedCreateApprovalToken `
+    -ExpectedCleanupFailedCreateApprovalToken $ExpectedCleanupFailedCreateApprovalToken `
+    -ConfirmCreate:$ConfirmCreate `
+    -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken `
+    -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+    -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken
   if (-not $result.Authorized) {
     Throw-SafeError -Code $result.SafeErrorCode
   }
@@ -1565,7 +1651,9 @@ function Invoke-CleanupPartialCreate {
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
     [AllowNull()][string]$CleanupApprovalToken,
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
-    [AllowNull()][string]$CreateApprovalToken
+    [AllowNull()][string]$CreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$CleanupFailedCreateApprovalToken
   )
   Set-Stage -Stage "cleanup_authorization"
   Assert-CleanupAuthorization `
@@ -1573,7 +1661,9 @@ function Invoke-CleanupPartialCreate {
     -ProvidedCleanupApprovalToken $CleanupApprovalToken `
     -ExpectedCleanupApprovalToken $script:ExpectedCleanupApprovalToken `
     -ConfirmCreate:$ConfirmCreate `
-    -ProvidedCreateApprovalToken $CreateApprovalToken
+    -ProvidedCreateApprovalToken $CreateApprovalToken `
+    -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+    -ProvidedCleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken
   try {
     Set-Stage -Stage "cleanup_layout"
     $layout = Get-InstanceLayout
@@ -1664,6 +1754,517 @@ function Invoke-CleanupPartialCreate {
   }
 }
 
+function Get-CleanupFailedCreateSafeFailure {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Stage,
+    [AllowNull()][object]$Exception
+  )
+  $allowedStages = @(
+    "cleanup_failed_layout",
+    "cleanup_failed_environment",
+    "cleanup_failed_git",
+    "cleanup_failed_paths",
+    "cleanup_failed_attributes",
+    "cleanup_failed_exact_state",
+    "cleanup_failed_signature_initial",
+    "cleanup_failed_activity",
+    "cleanup_failed_revalidate_signature",
+    "cleanup_failed_revalidate_state",
+    "cleanup_failed_revalidate_activity",
+    "cleanup_failed_delete_state_json",
+    "cleanup_failed_delete_marker",
+    "cleanup_failed_validate_state_empty",
+    "cleanup_failed_delete_state_root",
+    "cleanup_failed_validate_data_empty",
+    "cleanup_failed_delete_data_root",
+    "cleanup_failed_validate_log_empty",
+    "cleanup_failed_delete_log_root",
+    "cleanup_failed_validate_secret_empty",
+    "cleanup_failed_delete_secret_root",
+    "cleanup_failed_revalidate_activity_before_instance_delete",
+    "cleanup_failed_validate_instance_empty",
+    "cleanup_failed_delete_instance_root",
+    "cleanup_failed_revalidate_activity_before_isolated_delete",
+    "cleanup_failed_validate_isolated_empty",
+    "cleanup_failed_delete_isolated_root",
+    "cleanup_failed_package_postcheck",
+    "cleanup_failed_final_activity",
+    "cleanup_failed_postcheck",
+    "cleanup_failed_preflight_unknown"
+  )
+  $allowedReasons = @(
+    "cleanup_failed_layout_failed",
+    "cleanup_failed_environment_invalid",
+    "cleanup_failed_git_invalid",
+    "cleanup_failed_paths_invalid",
+    "cleanup_failed_attributes_invalid",
+    "cleanup_failed_exact_state_invalid",
+    "cleanup_failed_marker_state_invalid",
+    "cleanup_failed_acl_invalid",
+    "cleanup_failed_activity_detected",
+    "cleanup_failed_state_changed",
+    "cleanup_failed_delete_state_json_failed",
+    "cleanup_failed_delete_marker_failed",
+    "cleanup_failed_delete_state_root_failed",
+    "cleanup_failed_delete_data_root_failed",
+    "cleanup_failed_delete_log_root_failed",
+    "cleanup_failed_delete_secret_root_failed",
+    "cleanup_failed_delete_instance_root_failed",
+    "cleanup_failed_delete_isolated_root_failed",
+    "cleanup_failed_postcheck_failed",
+    "cleanup_failed_package_modified",
+    "cleanup_failed_preflight_unknown"
+  )
+  $allowedExceptionTypes = @(
+    "UnauthorizedAccessException",
+    "IOException",
+    "DirectoryNotFoundException",
+    "SecurityException",
+    "InvalidOperationException",
+    "ArgumentException",
+    "MethodInvocationException",
+    "PropertyNotFoundException",
+    "RuntimeException",
+    "ParentContainsErrorRecordException",
+    "CmdletInvocationException",
+    "ItemNotFoundException",
+    "UnknownException"
+  )
+  $wrapperExceptionTypes = @("RuntimeException","ParentContainsErrorRecordException","CmdletInvocationException","MethodInvocationException")
+  $safeStage = $(if ($allowedStages -contains $Stage) { $Stage } else { "cleanup_failed_preflight_unknown" })
+  $safeReason = $null
+  $current = $Exception
+  $depth = 0
+  $seenReasons = @{}
+  while ($null -ne $current -and $depth -lt 8) {
+    $objectId = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($current)
+    if ($seenReasons.ContainsKey($objectId)) { break }
+    $seenReasons[$objectId] = $true
+    $message = $null
+    if ($current -is [System.Exception]) {
+      $message = [string]$current.Message
+    } elseif ($null -ne $current.PSObject.Properties["Message"]) {
+      $message = [string]$current.Message
+    }
+    if ($null -ne $message -and $message -match "^VC_SAFE_REASON::([a-z0-9_]+)$") {
+      $rawReason = $Matches[1]
+      if ($allowedReasons -contains $rawReason) {
+        $safeReason = $rawReason
+      } else {
+        $safeReason = switch ($rawReason) {
+          "cleanup_layout_failed" { "cleanup_failed_layout_failed"; break }
+          "cleanup_environment_invalid" { "cleanup_failed_environment_invalid"; break }
+          "cleanup_git_invalid" { "cleanup_failed_git_invalid"; break }
+          "cleanup_paths_invalid" { "cleanup_failed_paths_invalid"; break }
+          "cleanup_path_validation_failed" { "cleanup_failed_paths_invalid"; break }
+          "cleanup_attributes_invalid" { "cleanup_failed_attributes_invalid"; break }
+          "cleanup_reparse_detected" { "cleanup_failed_attributes_invalid"; break }
+          "cleanup_reparse_point_detected" { "cleanup_failed_attributes_invalid"; break }
+          "cleanup_unexpected_content" { "cleanup_failed_exact_state_invalid"; break }
+          "cleanup_instance_not_empty" { "cleanup_failed_exact_state_invalid"; break }
+          "cleanup_enumeration_denied" { "cleanup_failed_exact_state_invalid"; break }
+          "cleanup_enumeration_failed" { "cleanup_failed_exact_state_invalid"; break }
+          "cleanup_signature_failed" { "cleanup_failed_state_changed"; break }
+          "cleanup_state_changed" { "cleanup_failed_state_changed"; break }
+          "cleanup_activity_detected" { "cleanup_failed_activity_detected"; break }
+          "cleanup_postgres_process_detected" { "cleanup_failed_activity_detected"; break }
+          "cleanup_postgres_process_ambiguous" { "cleanup_failed_activity_detected"; break }
+          "cleanup_postgresql_service_running" { "cleanup_failed_activity_detected"; break }
+          "cleanup_port_in_use" { "cleanup_failed_activity_detected"; break }
+          "cleanup_postmaster_pid_present" { "cleanup_failed_activity_detected"; break }
+          "state_schema_invalid" { "cleanup_failed_marker_state_invalid"; break }
+          "state_duplicate_key" { "cleanup_failed_marker_state_invalid"; break }
+          "marker_state_mismatch" { "cleanup_failed_marker_state_invalid"; break }
+          "marker_missing" { "cleanup_failed_marker_state_invalid"; break }
+          "marker_invalid" { "cleanup_failed_marker_state_invalid"; break }
+          "acl_not_protected" { "cleanup_failed_acl_invalid"; break }
+          "acl_rules_missing" { "cleanup_failed_acl_invalid"; break }
+          "acl_rules_read_failed" { "cleanup_failed_acl_invalid"; break }
+          "acl_rules_collection_invalid" { "cleanup_failed_acl_invalid"; break }
+          "acl_rules_enumeration_failed" { "cleanup_failed_acl_invalid"; break }
+          "acl_unexpected_identity" { "cleanup_failed_acl_invalid"; break }
+          "acl_unexpected_deny_rule" { "cleanup_failed_acl_invalid"; break }
+          "acl_inherited_rule_present" { "cleanup_failed_acl_invalid"; break }
+          "acl_missing_authorized_allow" { "cleanup_failed_acl_invalid"; break }
+          "acl_rights_insufficient" { "cleanup_failed_acl_invalid"; break }
+          "acl_inheritance_flags_mismatch" { "cleanup_failed_acl_invalid"; break }
+          "acl_propagation_flags_mismatch" { "cleanup_failed_acl_invalid"; break }
+          default { $null }
+        }
+      }
+      break
+    }
+    $current = $(if ($current -is [System.Exception]) { $current.InnerException } elseif ($null -ne $current.PSObject.Properties["InnerException"]) { $current.InnerException } else { $null })
+    $depth += 1
+  }
+  if ($null -ne $safeReason) {
+    return [pscustomobject]@{ Reason = $safeReason; ExceptionType = $null; SafeSubstage = $safeStage }
+  }
+  $selectedType = $null
+  $selectedWrapper = $null
+  $current = $Exception
+  $depth = 0
+  $seenTypes = @{}
+  while ($null -ne $current -and $depth -lt 8) {
+    $objectId = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($current)
+    if ($seenTypes.ContainsKey($objectId)) { break }
+    $seenTypes[$objectId] = $true
+    $rawType = "UnknownException"
+    if ($null -ne $current.PSObject.Properties["SimulatedTypeName"]) {
+      $rawType = [string]$current.SimulatedTypeName
+    } else {
+      $rawType = $current.GetType().Name
+    }
+    $safeType = $(if ($allowedExceptionTypes -contains $rawType) { $rawType } else { "UnknownException" })
+    if ($wrapperExceptionTypes -contains $safeType) {
+      if ($null -eq $selectedWrapper) { $selectedWrapper = $safeType }
+    } elseif ($safeType -ne "UnknownException") {
+      $selectedType = $safeType
+    }
+    $current = $(if ($current -is [System.Exception]) { $current.InnerException } elseif ($null -ne $current.PSObject.Properties["InnerException"]) { $current.InnerException } else { $null })
+    $depth += 1
+  }
+  $exceptionType = $(if ($null -ne $selectedType) { $selectedType } elseif ($null -ne $selectedWrapper) { $selectedWrapper } else { "UnknownException" })
+  $reason = switch ($safeStage) {
+    "cleanup_failed_layout" { "cleanup_failed_layout_failed"; break }
+    "cleanup_failed_environment" { "cleanup_failed_environment_invalid"; break }
+    "cleanup_failed_git" { "cleanup_failed_git_invalid"; break }
+    "cleanup_failed_paths" { "cleanup_failed_paths_invalid"; break }
+    "cleanup_failed_attributes" { "cleanup_failed_attributes_invalid"; break }
+    "cleanup_failed_exact_state" { "cleanup_failed_exact_state_invalid"; break }
+    "cleanup_failed_signature_initial" { "cleanup_failed_state_changed"; break }
+    "cleanup_failed_activity" { "cleanup_failed_activity_detected"; break }
+    "cleanup_failed_revalidate_signature" { "cleanup_failed_state_changed"; break }
+    "cleanup_failed_revalidate_state" { "cleanup_failed_state_changed"; break }
+    "cleanup_failed_revalidate_activity" { "cleanup_failed_activity_detected"; break }
+    "cleanup_failed_delete_state_json" { "cleanup_failed_delete_state_json_failed"; break }
+    "cleanup_failed_delete_marker" { "cleanup_failed_delete_marker_failed"; break }
+    "cleanup_failed_delete_state_root" { "cleanup_failed_delete_state_root_failed"; break }
+    "cleanup_failed_delete_data_root" { "cleanup_failed_delete_data_root_failed"; break }
+    "cleanup_failed_delete_log_root" { "cleanup_failed_delete_log_root_failed"; break }
+    "cleanup_failed_delete_secret_root" { "cleanup_failed_delete_secret_root_failed"; break }
+    "cleanup_failed_revalidate_activity_before_instance_delete" { "cleanup_failed_activity_detected"; break }
+    "cleanup_failed_delete_instance_root" { "cleanup_failed_delete_instance_root_failed"; break }
+    "cleanup_failed_revalidate_activity_before_isolated_delete" { "cleanup_failed_activity_detected"; break }
+    "cleanup_failed_delete_isolated_root" { "cleanup_failed_delete_isolated_root_failed"; break }
+    "cleanup_failed_package_postcheck" { "cleanup_failed_package_modified"; break }
+    "cleanup_failed_final_activity" { "cleanup_failed_activity_detected"; break }
+    "cleanup_failed_postcheck" { "cleanup_failed_postcheck_failed"; break }
+    default { "cleanup_failed_preflight_unknown" }
+  }
+  return [pscustomobject]@{ Reason = $reason; ExceptionType = $exceptionType; SafeSubstage = $safeStage }
+}
+
+function Assert-CleanupFailedCreateFileSafe {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  try {
+    if (-not (Test-Path -LiteralPath $PathValue -PathType Leaf)) {
+      Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+    }
+    $item = Get-Item -LiteralPath $PathValue -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        ($item.Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0 -or
+        ($item.Attributes -band [System.IO.FileAttributes]::System) -ne 0) {
+      Throw-SafeError -Code "cleanup_failed_attributes_invalid"
+    }
+    $acl = Get-Acl -LiteralPath $PathValue
+    Assert-RestrictedAclSemantics -Acl $acl -ExpectedSid ([System.Security.Principal.WindowsIdentity]::GetCurrent().User) -TargetType File
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::(cleanup_failed_|cleanup_|acl_)") { throw }
+    Throw-SafeError -Code "cleanup_failed_acl_invalid"
+  }
+}
+
+function Assert-CleanupFailedCreateDirectorySafe {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  try {
+    Assert-CleanupDirectorySafe -PathValue $PathValue
+    $acl = Get-Acl -LiteralPath $PathValue
+    Assert-RestrictedAclSemantics -Acl $acl -ExpectedSid ([System.Security.Principal.WindowsIdentity]::GetCurrent().User) -TargetType Directory
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::(cleanup_failed_|cleanup_|acl_)") { throw }
+    Throw-SafeError -Code "cleanup_failed_acl_invalid"
+  }
+}
+
+function Assert-CleanupFailedCreateExactEntries {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [AllowEmptyCollection()][string[]]$ExpectedEntries
+  )
+  $entriesResult = Get-CleanupDirectoryEntries -PathValue $PathValue
+  Assert-CleanupDirectoryEntriesResult -Result $entriesResult
+  [string[]]$entries = @($entriesResult.Entries)
+  [string[]]$expected = @($ExpectedEntries)
+  if ($entries.Count -ne $expected.Count) {
+    Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+  }
+  $trimSeparators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  [string[]]$actualComparable = @($entries | ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd($trimSeparators) } | Sort-Object)
+  [string[]]$expectedComparable = @($expected | ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd($trimSeparators) } | Sort-Object)
+  for ($i = 0; $i -lt $expectedComparable.Count; $i += 1) {
+    if (-not [string]::Equals($actualComparable[$i], $expectedComparable[$i], [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+    }
+  }
+}
+
+function Assert-CleanupFailedCreateEmptyDirectory {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  $entriesResult = Get-CleanupDirectoryEntries -PathValue $PathValue
+  Assert-CleanupDirectoryEntriesResult -Result $entriesResult
+  [string[]]$entries = @($entriesResult.Entries)
+  if ($entries.Count -ne 0) {
+    Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+  }
+}
+
+function Assert-CleanupFailedCreateStatePayload {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $marker = Read-MarkerMap -MarkerPath $Layout.MarkerPath
+  $clusterId = [string]$marker["cluster_id"]
+  $parsedGuid = [Guid]::Empty
+  if (-not [Guid]::TryParse($clusterId, [ref]$parsedGuid)) {
+    Throw-SafeError -Code "cleanup_failed_marker_state_invalid"
+  }
+  Assert-MarkerStateConcordance -Layout $Layout -ClusterId $clusterId
+  $stateText = [System.IO.File]::ReadAllText($Layout.StatePath)
+  [void](Assert-StrictFlatStateJson -JsonText $stateText)
+  $state = $stateText | ConvertFrom-Json
+  $allowedFailureCodes = @(
+    "state_write_failed",
+    "state_validate_input_failed",
+    "state_get_created_utc_failed",
+    "state_build_payload_failed",
+    "state_serialize_json_failed",
+    "state_write_temp_failed",
+    "state_move_initial_failed",
+    "state_replace_existing_failed",
+    "state_apply_acl_failed",
+    "state_acl_readback_failed",
+    "state_schema_readback_failed",
+    "state_marker_concordance_failed",
+    "state_temp_file_residual",
+    "acl_apply_failed",
+    "acl_validation_failed"
+  )
+  if ($state.state -ne "failed" -or
+      $state.stage -ne "create_directories" -or
+      $state.host -ne "127.0.0.1" -or
+      [int]$state.port -ne 55432 -or
+      $state.instance_name -ne $script:InstanceName -or
+      $state.server_state -ne "not_started" -or
+      $state.initdb_completed -ne $false -or
+      $state.configuration_completed -ne $false -or
+      $state.server_started -ne $false -or
+      $state.credential_protected -ne $false -or
+      $state.plaintext_password_file_present -ne $false -or
+      $state.server_cleanup_attempted -ne $false -or
+      $state.server_cleanup_completed -ne $false) {
+    Throw-SafeError -Code "cleanup_failed_marker_state_invalid"
+  }
+  if ($null -eq $state.last_error_code -or $allowedFailureCodes -notcontains [string]$state.last_error_code) {
+    Throw-SafeError -Code "cleanup_failed_marker_state_invalid"
+  }
+}
+
+function Assert-CleanupFailedCreateExactState {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  foreach ($dir in @($Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)) {
+    Assert-CleanupFailedCreateDirectorySafe -PathValue $dir
+  }
+  foreach ($file in @($Layout.StatePath, $Layout.MarkerPath)) {
+    Assert-CleanupFailedCreateFileSafe -PathValue $file
+  }
+  if ((Get-Item -LiteralPath $Layout.StatePath -Force).Length -ne 975 -or
+      (Get-Item -LiteralPath $Layout.MarkerPath -Force).Length -ne 146) {
+    Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+  }
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.IsolatedRoot -ExpectedEntries @($Layout.InstanceRoot)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.InstanceRoot -ExpectedEntries @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)
+  Assert-CleanupFailedCreateEmptyDirectory -PathValue $Layout.DataRoot
+  Assert-CleanupFailedCreateEmptyDirectory -PathValue $Layout.LogRoot
+  Assert-CleanupFailedCreateEmptyDirectory -PathValue $Layout.SecretRoot
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.StateRoot -ExpectedEntries @($Layout.StatePath, $Layout.MarkerPath)
+  $stateTempEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.StateRoot
+  Assert-CleanupDirectoryEntriesResult -Result $stateTempEntriesResult
+  [string[]]$stateTempEntries = @($stateTempEntriesResult.Entries)
+  foreach ($entry in $stateTempEntries) {
+    if ([System.IO.Path]::GetFileName($entry) -like "cluster-state.*.tmp") {
+      Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+    }
+  }
+  foreach ($forbidden in @(
+      (Join-Path $Layout.DataRoot "PG_VERSION"),
+      (Join-Path $Layout.DataRoot "postmaster.pid"),
+      (Join-Path $Layout.DataRoot "postgresql.conf"),
+      (Join-Path $Layout.DataRoot "pg_hba.conf"),
+      $Layout.CredentialPath,
+      $Layout.PasswordFilePath,
+      $Layout.ServerLog
+    )) {
+    if (Test-Path -LiteralPath $forbidden) {
+      Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+    }
+  }
+  Assert-CleanupFailedCreateStatePayload -Layout $Layout
+}
+
+function Get-CleanupFailedCreateStateSignature {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $parts = @()
+  foreach ($dir in @($Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)) {
+    $entriesResult = Get-CleanupDirectoryEntries -PathValue $dir
+    Assert-CleanupDirectoryEntriesResult -Result $entriesResult
+    [string[]]$entries = @($entriesResult.Entries | Sort-Object)
+    $parts += ($dir + "=" + ($entries -join "|"))
+  }
+  foreach ($file in @($Layout.StatePath, $Layout.MarkerPath)) {
+    $item = Get-Item -LiteralPath $file -Force
+    $parts += ($file + ":" + [string]$item.Length + ":" + $item.LastWriteTimeUtc.ToString("O"))
+  }
+  return ($parts -join "::")
+}
+
+function Invoke-CleanupFailedCreate {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$CleanupFailedCreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$CreateApprovalToken,
+    [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$CleanupApprovalToken
+  )
+  Set-Stage -Stage "cleanup_failed_authorization"
+  Assert-CleanupFailedCreateAuthorization `
+    -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+    -ProvidedCleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
+    -ExpectedCleanupFailedCreateApprovalToken $script:ExpectedCleanupFailedCreateApprovalToken `
+    -ConfirmCreate:$ConfirmCreate `
+    -ProvidedCreateApprovalToken $CreateApprovalToken `
+    -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+    -ProvidedCleanupApprovalToken $CleanupApprovalToken
+  try {
+    Set-Stage -Stage "cleanup_failed_layout"
+    $layout = Get-InstanceLayout
+
+    Set-Stage -Stage "cleanup_failed_environment"
+    $package = Assert-CleanupEnvironment
+
+    Set-Stage -Stage "cleanup_failed_git"
+    Assert-CleanupGitReady
+
+    Set-Stage -Stage "cleanup_failed_paths"
+    Assert-CleanupPathFixed -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_attributes"
+    foreach ($dir in @($layout.IsolatedRoot, $layout.InstanceRoot, $layout.DataRoot, $layout.LogRoot, $layout.SecretRoot, $layout.StateRoot)) {
+      Assert-CleanupFailedCreateDirectorySafe -PathValue $dir
+    }
+
+    Set-Stage -Stage "cleanup_failed_exact_state"
+    Assert-CleanupFailedCreateExactState -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_signature_initial"
+    $initialStateSignature = Get-CleanupFailedCreateStateSignature -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_activity"
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_revalidate_signature"
+    $revalidatedStateSignature = Get-CleanupFailedCreateStateSignature -Layout $layout
+    if (-not [string]::Equals($initialStateSignature, $revalidatedStateSignature, [System.StringComparison]::Ordinal)) {
+      Throw-SafeError -Code "cleanup_failed_state_changed"
+    }
+
+    Set-Stage -Stage "cleanup_failed_revalidate_state"
+    Assert-CleanupFailedCreateExactState -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_revalidate_activity"
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_delete_state_json"
+    try { [System.IO.File]::Delete($layout.StatePath) } catch { Throw-SafeError -Code "cleanup_failed_delete_state_json_failed" }
+    if (Test-Path -LiteralPath $layout.StatePath) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_delete_marker"
+    try { [System.IO.File]::Delete($layout.MarkerPath) } catch { Throw-SafeError -Code "cleanup_failed_delete_marker_failed" }
+    if (Test-Path -LiteralPath $layout.MarkerPath) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_validate_state_empty"
+    Assert-CleanupFailedCreateEmptyDirectory -PathValue $layout.StateRoot
+
+    Set-Stage -Stage "cleanup_failed_delete_state_root"
+    try { [System.IO.Directory]::Delete($layout.StateRoot, $false) } catch { Throw-SafeError -Code "cleanup_failed_delete_state_root_failed" }
+    if (Test-Path -LiteralPath $layout.StateRoot) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_validate_data_empty"
+    Assert-CleanupFailedCreateEmptyDirectory -PathValue $layout.DataRoot
+    Set-Stage -Stage "cleanup_failed_delete_data_root"
+    try { [System.IO.Directory]::Delete($layout.DataRoot, $false) } catch { Throw-SafeError -Code "cleanup_failed_delete_data_root_failed" }
+    if (Test-Path -LiteralPath $layout.DataRoot) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_validate_log_empty"
+    Assert-CleanupFailedCreateEmptyDirectory -PathValue $layout.LogRoot
+    Set-Stage -Stage "cleanup_failed_delete_log_root"
+    try { [System.IO.Directory]::Delete($layout.LogRoot, $false) } catch { Throw-SafeError -Code "cleanup_failed_delete_log_root_failed" }
+    if (Test-Path -LiteralPath $layout.LogRoot) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_validate_secret_empty"
+    Assert-CleanupFailedCreateEmptyDirectory -PathValue $layout.SecretRoot
+    Set-Stage -Stage "cleanup_failed_delete_secret_root"
+    try { [System.IO.Directory]::Delete($layout.SecretRoot, $false) } catch { Throw-SafeError -Code "cleanup_failed_delete_secret_root_failed" }
+    if (Test-Path -LiteralPath $layout.SecretRoot) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_revalidate_activity_before_instance_delete"
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_validate_instance_empty"
+    Assert-CleanupFailedCreateEmptyDirectory -PathValue $layout.InstanceRoot
+
+    Set-Stage -Stage "cleanup_failed_delete_instance_root"
+    try { [System.IO.Directory]::Delete($layout.InstanceRoot, $false) } catch { Throw-SafeError -Code "cleanup_failed_delete_instance_root_failed" }
+    if (Test-Path -LiteralPath $layout.InstanceRoot) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_revalidate_activity_before_isolated_delete"
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_validate_isolated_empty"
+    Assert-CleanupFailedCreateEmptyDirectory -PathValue $layout.IsolatedRoot
+
+    Set-Stage -Stage "cleanup_failed_delete_isolated_root"
+    try { [System.IO.Directory]::Delete($layout.IsolatedRoot, $false) } catch { Throw-SafeError -Code "cleanup_failed_delete_isolated_root_failed" }
+    if (Test-Path -LiteralPath $layout.IsolatedRoot) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+
+    Set-Stage -Stage "cleanup_failed_package_postcheck"
+    [void](Assert-PostgresTools -BinRoot $PostgresBin)
+
+    Set-Stage -Stage "cleanup_failed_final_activity"
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Write-Output "FAILED_CREATE_CLEANUP_OK"
+    Write-Output "isolated_root_removed=true"
+    Write-Output "instance_root_removed=true"
+    Write-Output "state_json_removed=true"
+    Write-Output "marker_removed=true"
+    Write-Output "state_root_removed=true"
+    Write-Output "data_root_removed=true"
+    Write-Output "log_root_removed=true"
+    Write-Output "secret_root_removed=true"
+    Write-Output "postgres_process_detected=false"
+    Write-Output "postgres_service_detected=false"
+    Write-Output "port_55432_listening=false"
+    Write-Output "sql_executed=false"
+    Write-Output "production_connection_used=false"
+    Write-Output "package_directory_modified=false"
+    Write-Output "ready_for_create_recheck=true"
+  } catch {
+    $failure = Get-CleanupFailedCreateSafeFailure -Stage $script:CurrentStage -Exception $_.Exception
+    Set-Stage -Stage $failure.SafeSubstage
+    $script:CurrentExceptionType = $failure.ExceptionType
+    Throw-SafeError -Code $failure.Reason
+  }
+}
 function Test-CreatePortAvailable {
   $listener = $null
   try {
@@ -2975,7 +3576,9 @@ function Invoke-Create {
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
     [AllowNull()][string]$CreateApprovalToken,
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
-    [AllowNull()][string]$CleanupApprovalToken
+    [AllowNull()][string]$CleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$CleanupFailedCreateApprovalToken
   )
   Set-Stage -Stage "create_authorization"
   Assert-CreateAuthorization `
@@ -2983,7 +3586,9 @@ function Invoke-Create {
     -ProvidedCreateApprovalToken $CreateApprovalToken `
     -ExpectedCreateApprovalToken $script:ExpectedCreateApprovalToken `
     -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
-    -ProvidedCleanupApprovalToken $CleanupApprovalToken
+    -ProvidedCleanupApprovalToken $CleanupApprovalToken `
+    -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+    -ProvidedCleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken
   $plainTextPassword = $null
   $layout = Get-InstanceLayout
   $clusterId = [Guid]::NewGuid().ToString()
@@ -3288,6 +3893,17 @@ function Invoke-Plan {
   Write-Output "cleanup_action_present=true"
   Write-Output "cleanup_authorized=false"
   Write-Output "cleanup_execution_blocked=true"
+  Write-Output "cleanup_failed_create_action_present=true"
+  Write-Output "cleanup_failed_create_authorized=false"
+  Write-Output "cleanup_failed_create_execution_blocked=true"
+  Write-Output "cleanup_failed_create_exact_state_required=true"
+  Write-Output "cleanup_failed_create_recursive_delete_allowed=false"
+  Write-Output "cleanup_failed_create_acl_modification_allowed=false"
+  Write-Output "cleanup_failed_create_package_directory_in_scope=false"
+  Write-Output "cleanup_failed_create_marker_state_validation=true"
+  Write-Output "cleanup_failed_create_activity_revalidation=true"
+  Write-Output "cleanup_failed_create_expected_delete_file_count=2"
+  Write-Output "cleanup_failed_create_expected_delete_directory_count=6"
   Write-Output "cleanup_requires_empty_instance=true"
   Write-Output "cleanup_recursive_delete_allowed=false"
   Write-Output "cleanup_acl_modification_allowed=false"
@@ -3330,14 +3946,27 @@ try {
         -ConfirmCreate:$ConfirmCreate `
         -CreateApprovalToken $CreateApprovalToken `
         -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
-        -CleanupApprovalToken $CleanupApprovalToken
+        -CleanupApprovalToken $CleanupApprovalToken `
+        -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken
     }
     "CleanupPartialCreate" {
       Invoke-CleanupPartialCreate `
         -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
         -CleanupApprovalToken $CleanupApprovalToken `
         -ConfirmCreate:$ConfirmCreate `
-        -CreateApprovalToken $CreateApprovalToken
+        -CreateApprovalToken $CreateApprovalToken `
+        -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken
+    }
+    "CleanupFailedCreate" {
+      Invoke-CleanupFailedCreate `
+        -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
+        -ConfirmCreate:$ConfirmCreate `
+        -CreateApprovalToken $CreateApprovalToken `
+        -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+        -CleanupApprovalToken $CleanupApprovalToken
     }
     "Apply" { Invoke-BlockedFutureAction -RequestedAction "Apply" }
     "Verify" { Invoke-BlockedFutureAction -RequestedAction "Verify" }
