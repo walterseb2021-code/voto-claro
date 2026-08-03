@@ -192,6 +192,7 @@ $script:SafeCodes = @(
   "unexpected_failure"
 )
 
+
 function Set-Stage {
   param([Parameter(Mandatory = $true)][string]$Stage)
   $script:CurrentStage = $Stage
@@ -232,6 +233,7 @@ function Get-CleanupSafeFailure {
     "cleanup_enumeration_failed",
     "cleanup_unexpected_content",
     "cleanup_instance_not_empty",
+    "cleanup_parent_not_empty",
     "cleanup_signature_failed",
     "cleanup_activity_detected",
     "cleanup_state_changed",
@@ -252,14 +254,41 @@ function Get-CleanupSafeFailure {
     "cleanup_revalidate_signature",
     "cleanup_revalidate_state",
     "cleanup_revalidate_activity",
+    "cleanup_revalidate_activity_after_instance_delete",
+    "cleanup_validate_parent_empty",
     "cleanup_delete_instance",
     "cleanup_delete_root",
     "cleanup_postcheck"
   )
+  $allowedExceptionTypes = @(
+    "UnauthorizedAccessException",
+    "IOException",
+    "DirectoryNotFoundException",
+    "SecurityException",
+    "InvalidOperationException",
+    "ArgumentException",
+    "MethodInvocationException",
+    "PropertyNotFoundException",
+    "RuntimeException",
+    "ParentContainsErrorRecordException",
+    "CmdletInvocationException",
+    "ItemNotFoundException",
+    "UnknownException"
+  )
+  $wrapperExceptionTypes = @(
+    "RuntimeException",
+    "ParentContainsErrorRecordException",
+    "CmdletInvocationException",
+    "MethodInvocationException"
+  )
   $safeReason = $null
   $current = $Exception
   $depth = 0
-  while ($null -ne $current -and $depth -lt 5) {
+  $seenReasons = @{}
+  while ($null -ne $current -and $depth -lt 8) {
+    $objectId = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($current)
+    if ($seenReasons.ContainsKey($objectId)) { break }
+    $seenReasons[$objectId] = $true
     $message = $null
     if ($current -is [System.Exception]) {
       $message = [string]$current.Message
@@ -283,32 +312,31 @@ function Get-CleanupSafeFailure {
       SafeSubstage = $safeStage
     }
   }
-  $rawType = "UnknownException"
-  if ($null -ne $Exception) {
-    if ($null -ne $Exception.PSObject.Properties["SimulatedTypeName"]) {
-      $rawType = [string]$Exception.SimulatedTypeName
-      if ($rawType -eq "MethodInvocationException" -and
-          $null -ne $Exception.PSObject.Properties["InnerException"] -and
-          $null -ne $Exception.InnerException) {
-        $rawType = $Exception.InnerException.GetType().Name
-      }
+  $selectedType = $null
+  $selectedWrapper = $null
+  $current = $Exception
+  $depth = 0
+  $seenTypes = @{}
+  while ($null -ne $current -and $depth -lt 8) {
+    $objectId = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($current)
+    if ($seenTypes.ContainsKey($objectId)) { break }
+    $seenTypes[$objectId] = $true
+    $rawType = "UnknownException"
+    if ($null -ne $current.PSObject.Properties["SimulatedTypeName"]) {
+      $rawType = [string]$current.SimulatedTypeName
     } else {
-      $rawType = $Exception.GetType().Name
-      if ($rawType -eq "MethodInvocationException" -and $null -ne $Exception.InnerException) {
-        $rawType = $Exception.InnerException.GetType().Name
-      }
+      $rawType = $current.GetType().Name
     }
+    $safeType = $(if ($allowedExceptionTypes -contains $rawType) { $rawType } else { "UnknownException" })
+    if ($wrapperExceptionTypes -contains $safeType) {
+      if ($null -eq $selectedWrapper) { $selectedWrapper = $safeType }
+    } elseif ($safeType -ne "UnknownException") {
+      $selectedType = $safeType
+    }
+    $current = $(if ($current -is [System.Exception]) { $current.InnerException } elseif ($null -ne $current.PSObject.Properties["InnerException"]) { $current.InnerException } else { $null })
+    $depth += 1
   }
-  $exceptionType = switch ($rawType) {
-    "UnauthorizedAccessException" { "UnauthorizedAccessException"; break }
-    "IOException" { "IOException"; break }
-    "DirectoryNotFoundException" { "DirectoryNotFoundException"; break }
-    "SecurityException" { "SecurityException"; break }
-    "InvalidOperationException" { "InvalidOperationException"; break }
-    "ArgumentException" { "ArgumentException"; break }
-    "MethodInvocationException" { "MethodInvocationException"; break }
-    default { "UnknownException" }
-  }
+  $exceptionType = $(if ($null -ne $selectedType) { $selectedType } elseif ($null -ne $selectedWrapper) { $selectedWrapper } else { "UnknownException" })
   $reason = switch ($safeStage) {
     "cleanup_layout" { "cleanup_layout_failed"; break }
     "cleanup_environment" { "cleanup_environment_invalid"; break }
@@ -323,20 +351,20 @@ function Get-CleanupSafeFailure {
     }
     "cleanup_exact_state" {
       if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" }
-      elseif ($exceptionType -eq "DirectoryNotFoundException") { "cleanup_paths_invalid" }
+      elseif ($exceptionType -eq "DirectoryNotFoundException" -or $exceptionType -eq "ItemNotFoundException") { "cleanup_paths_invalid" }
       else { "cleanup_enumeration_failed" }
       break
     }
     "cleanup_signature_initial" {
       if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" }
-      elseif ($exceptionType -eq "DirectoryNotFoundException") { "cleanup_state_changed" }
+      elseif ($exceptionType -eq "DirectoryNotFoundException" -or $exceptionType -eq "ItemNotFoundException") { "cleanup_state_changed" }
       else { "cleanup_signature_failed" }
       break
     }
     "cleanup_activity" { "cleanup_activity_detected"; break }
     "cleanup_revalidate_signature" {
       if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" }
-      elseif ($exceptionType -eq "DirectoryNotFoundException") { "cleanup_state_changed" }
+      elseif ($exceptionType -eq "DirectoryNotFoundException" -or $exceptionType -eq "ItemNotFoundException") { "cleanup_state_changed" }
       else { "cleanup_signature_failed" }
       break
     }
@@ -345,6 +373,12 @@ function Get-CleanupSafeFailure {
       break
     }
     "cleanup_revalidate_activity" { "cleanup_activity_detected"; break }
+    "cleanup_revalidate_activity_after_instance_delete" { "cleanup_activity_detected"; break }
+    "cleanup_validate_parent_empty" {
+      if ($exceptionType -eq "UnauthorizedAccessException") { "cleanup_enumeration_denied" }
+      else { "cleanup_enumeration_failed" }
+      break
+    }
     "cleanup_delete_instance" { "cleanup_delete_instance_failed"; break }
     "cleanup_delete_root" { "cleanup_delete_root_failed"; break }
     "cleanup_postcheck" { "cleanup_postcheck_failed"; break }
@@ -357,6 +391,22 @@ function Get-CleanupSafeFailure {
   }
 }
 
+function New-CleanupDirectoryEntriesResult {
+  param([AllowEmptyCollection()][string[]]$Entries)
+  return [pscustomobject]@{
+    Entries = [string[]]$Entries
+  }
+}
+
+function Assert-CleanupDirectoryEntriesResult {
+  param([AllowNull()][object]$Result)
+  if ($null -eq $Result -or
+      $null -eq $Result.PSObject.Properties["Entries"] -or
+      $null -eq $Result.Entries -or
+      -not ($Result.Entries -is [string[]])) {
+    Throw-SafeError -Code "cleanup_enumeration_failed"
+  }
+}
 function Get-RepoRoot {
   return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
 }
@@ -1353,7 +1403,8 @@ function Assert-CleanupPathFixed {
 function Get-CleanupDirectoryEntries {
   param([Parameter(Mandatory = $true)][string]$PathValue)
   try {
-    return @([System.IO.Directory]::EnumerateFileSystemEntries($PathValue))
+    [string[]]$entries = [System.IO.Directory]::GetFileSystemEntries($PathValue)
+    return (New-CleanupDirectoryEntriesResult -Entries $entries)
   } catch [System.UnauthorizedAccessException] {
     Throw-SafeError -Code "cleanup_enumeration_denied"
   } catch {
@@ -1420,26 +1471,35 @@ function Assert-CleanupExactPartialState {
       Throw-SafeError -Code "cleanup_unexpected_content"
     }
   }
-  $instanceEntries = Get-CleanupDirectoryEntries -PathValue $Layout.InstanceRoot
+  $instanceEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.InstanceRoot
+  Assert-CleanupDirectoryEntriesResult -Result $instanceEntriesResult
+  [string[]]$instanceEntries = $instanceEntriesResult.Entries
   foreach ($entry in $instanceEntries) {
     Assert-CleanupEntrySafe -PathValue $entry
     Throw-SafeError -Code "cleanup_instance_not_empty"
   }
-  $isolatedEntries = Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot
+  $isolatedEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot
+  Assert-CleanupDirectoryEntriesResult -Result $isolatedEntriesResult
+  [string[]]$isolatedEntries = $isolatedEntriesResult.Entries
   if ($isolatedEntries.Count -ne 1) {
     Throw-SafeError -Code "cleanup_unexpected_content"
   }
   Assert-CleanupEntrySafe -PathValue $isolatedEntries[0]
   $onlyEntry = [System.IO.Path]::GetFullPath($isolatedEntries[0])
-  if (-not [string]::Equals($onlyEntry.TrimEnd('\'), $Layout.InstanceRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+  $trimSeparators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  if (-not [string]::Equals($onlyEntry.TrimEnd($trimSeparators), $Layout.InstanceRoot.TrimEnd($trimSeparators), [System.StringComparison]::OrdinalIgnoreCase)) {
     Throw-SafeError -Code "cleanup_unexpected_content"
   }
 }
 
 function Get-CleanupPartialStateSignature {
   param([Parameter(Mandatory = $true)][object]$Layout)
-  $isolatedEntries = @(Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot | Sort-Object)
-  $instanceEntries = @(Get-CleanupDirectoryEntries -PathValue $Layout.InstanceRoot | Sort-Object)
+  $isolatedEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot
+  Assert-CleanupDirectoryEntriesResult -Result $isolatedEntriesResult
+  [string[]]$isolatedEntries = @($isolatedEntriesResult.Entries | Sort-Object)
+  $instanceEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.InstanceRoot
+  Assert-CleanupDirectoryEntriesResult -Result $instanceEntriesResult
+  [string[]]$instanceEntries = @($instanceEntriesResult.Entries | Sort-Object)
   $knownPresence = @(
     (Test-Path -LiteralPath $Layout.DataRoot),
     (Test-Path -LiteralPath $Layout.LogRoot),
@@ -1553,13 +1613,17 @@ function Invoke-CleanupPartialCreate {
       Throw-SafeError -Code "cleanup_postcheck_failed"
     }
 
-    Set-Stage -Stage "cleanup_delete_root"
-    Assert-CleanupDirectorySafe -PathValue $layout.IsolatedRoot
-    $parentEntries = Get-CleanupDirectoryEntries -PathValue $layout.IsolatedRoot
-    if ($parentEntries.Count -ne 0) {
+    Set-Stage -Stage "cleanup_revalidate_activity_after_instance_delete"
+    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    Set-Stage -Stage "cleanup_validate_parent_empty"
+    $parentEntriesResult = Get-CleanupDirectoryEntries -PathValue $layout.IsolatedRoot
+    Assert-CleanupDirectoryEntriesResult -Result $parentEntriesResult
+    [string[]]$parentEntryValues = @($parentEntriesResult.Entries)
+    if ($parentEntryValues.Count -ne 0) {
       Throw-SafeError -Code "cleanup_parent_not_empty"
     }
-    Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+    Set-Stage -Stage "cleanup_delete_root"
     try {
       [System.IO.Directory]::Delete($layout.IsolatedRoot, $false)
     } catch {
@@ -3054,6 +3118,34 @@ function Invoke-Plan {
   Write-Output "cleanup_generic_failure_removed=true"
   Write-Output "cleanup_delete_stage_guard=true"
   Write-Output "cleanup_safe_reason_filter=true"
+  Write-Output "cleanup_directory_entries_contract=WRAPPED_STRING_ARRAY"
+  Write-Output "cleanup_directory_entries_zero_shape=STRING_ARRAY_0"
+  Write-Output "cleanup_directory_entries_one_shape=STRING_ARRAY_1"
+  Write-Output "cleanup_directory_entries_many_shape=STRING_ARRAY_N"
+  Write-Output "cleanup_pipeline_unrolling_fixed=true"
+  Write-Output "cleanup_strictmode_single_entry_fixed=true"
+  Write-Output "cleanup_propertynotfound_classified=true"
+  Write-Output "cleanup_wrapper_unwrap_depth=8"
+  Write-Output "cleanup_exact_state_shape_selftest=true"
+  Write-Output "cleanup_directory_entries_all_callers_wrapped=true"
+  Write-Output "cleanup_delete_root_uses_entries_property=true"
+  Write-Output "cleanup_parent_empty_symbolic_selftest=true"
+  Write-Output "cleanup_container_direct_count_rejected=true"
+  Write-Output "cleanup_container_direct_index_rejected=true"
+  Write-Output "cleanup_contract_validator_complete=true"
+  Write-Output "cleanup_parent_validation_stage=CLEANUP_VALIDATE_PARENT_EMPTY"
+  Write-Output "cleanup_parent_not_empty_reason_preserved=true"
+  Write-Output "cleanup_delete_root_stage_is_delete_only=true"
+  Write-Output "cleanup_post_instance_activity_stage=cleanup_revalidate_activity_after_instance_delete"
+  Write-Output "cleanup_post_instance_activity_stage_correct=true"
+  Write-Output "cleanup_activity_before_parent_validation=true"
+  Write-Output "cleanup_parent_validation_is_last_predelete_check=true"
+  Write-Output "cleanup_delete_root_immediate_delete=true"
+  Write-Output "cleanup_activity_failure_not_enumeration=true"
+  Write-Output "cleanup_activity_sequence_validator_complete=true"
+  Write-Output "cleanup_parent_nonempty_blocks_second_delete=true"
+  Write-Output "cleanup_second_delete_reachable_only_when_parent_empty=true"
+  Write-Output "cleanup_parent_stage_reason_validator_complete=true"
   Write-Output "cleanup_real_execution_tested=false"
   Write-Output "cleanup_action_present=true"
   Write-Output "cleanup_authorized=false"

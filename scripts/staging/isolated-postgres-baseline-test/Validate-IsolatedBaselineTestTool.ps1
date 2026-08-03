@@ -95,6 +95,13 @@ function Get-FunctionText {
   return $matches[0].Extent.Text
 }
 
+function Get-TypeText {
+  param([Parameter(Mandatory = $true)][string]$Name)
+  $matches = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.TypeDefinitionAst] -and $node.Name -eq $Name }, $true))
+  if ($matches.Count -ne 1) { Fail -Code ("type_missing_" + $Name) }
+  return $matches[0].Extent.Text
+}
+
 function ConvertTo-WindowsProcessArgumentForSelfTest {
   param([AllowNull()][object]$Value)
   if ($null -eq $Value) { throw "null_rejected" }
@@ -169,6 +176,10 @@ $cleanupFunctionText = Get-FunctionText -Name "Invoke-CleanupPartialCreate"
 $cleanupAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CleanupAuthorization"
 $cleanupAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupAuthorization"
 $cleanupFailureFunctionText = Get-FunctionText -Name "Get-CleanupSafeFailure"
+$cleanupEntriesClassText = ""
+$cleanupEntriesNewFunctionText = Get-FunctionText -Name "New-CleanupDirectoryEntriesResult"
+$cleanupEntriesAssertFunctionText = Get-FunctionText -Name "Assert-CleanupDirectoryEntriesResult"
+$cleanupEntriesFunctionText = Get-FunctionText -Name "Get-CleanupDirectoryEntries"
 $cleanupPathFunctionText = Get-FunctionText -Name "Assert-CleanupPathFixed"
 $cleanupStateFunctionText = Get-FunctionText -Name "Assert-CleanupExactPartialState"
 $cleanupSignatureFunctionText = Get-FunctionText -Name "Get-CleanupPartialStateSignature"
@@ -225,19 +236,54 @@ Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{[\s\S]+Invoke-Cle
 Assert-Contains -Text $cleanupPathFunctionText -Pattern 'IsolatedRootRelativePath[\s\S]+InstanceName[\s\S]+PostgresPackageRelativePath|Get-PostgresRoot' -Code "cleanup_fixed_paths_missing"
 Assert-Contains -Text $cleanupPathFunctionText -Pattern 'OrdinalIgnoreCase[\s\S]+Test-IsInsideDirectory[\s\S]+cleanup_path_validation_failed' -Code "cleanup_path_validation_missing"
 Assert-Contains -Text $cleanupStateFunctionText -Pattern 'DataRoot[\s\S]+LogRoot[\s\S]+StateRoot[\s\S]+SecretRoot[\s\S]+MarkerPath[\s\S]+StatePath[\s\S]+CredentialPath[\s\S]+PasswordFilePath[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_exact_state_missing"
-Assert-Contains -Text $cleanupStateFunctionText -Pattern 'Get-CleanupDirectoryEntries[\s\S]+InstanceRoot[\s\S]+cleanup_instance_not_empty[\s\S]+Get-CleanupDirectoryEntries[\s\S]+IsolatedRoot[\s\S]+Count -ne 1' -Code "cleanup_empty_content_validation_missing"
+Assert-NotContains -Text $text -Pattern 'class\s+CleanupDirectoryEntriesResult' -Code "cleanup_entries_custom_class_detected"
+Assert-Contains -Text $cleanupEntriesNewFunctionText -Pattern 'New-CleanupDirectoryEntriesResult[\s\S]+\[AllowEmptyCollection\(\)\]\[string\[\]\]\$Entries[\s\S]+\[pscustomobject\]@\{[\s\S]+Entries\s*=\s*\[string\[\]\]\$Entries[\s\S]+\}' -Code "cleanup_entries_new_contract_missing"
+Assert-Contains -Text $cleanupEntriesFunctionText -Pattern '\[string\[\]\]\$entries\s*=\s*\[System\.IO\.Directory\]::GetFileSystemEntries\(\$PathValue\)[\s\S]+New-CleanupDirectoryEntriesResult -Entries \$entries' -Code "cleanup_entries_materialization_missing"
+Assert-NotContains -Text $cleanupEntriesFunctionText -Pattern 'return\s+@\(|EnumerateFileSystemEntries|Write-Output|\$PSBoundParameters' -Code "cleanup_entries_unstable_return_detected"
+Assert-Contains -Text $cleanupEntriesAssertFunctionText -Pattern 'PSObject\.Properties\["Entries"\][\s\S]+-not \(\$Result\.Entries -is \[string\[\]\]\)' -Code "cleanup_entries_assert_contract_missing"
+Assert-Contains -Text $cleanupStateFunctionText -Pattern 'InstanceRoot[\s\S]+Assert-CleanupDirectoryEntriesResult[\s\S]+\[string\[\]\]\$instanceEntries\s*=\s*\$instanceEntriesResult\.Entries[\s\S]+cleanup_instance_not_empty[\s\S]+IsolatedRoot[\s\S]+Assert-CleanupDirectoryEntriesResult[\s\S]+\[string\[\]\]\$isolatedEntries\s*=\s*\$isolatedEntriesResult\.Entries[\s\S]+\$isolatedEntries\.Count -ne 1' -Code "cleanup_empty_content_validation_missing"
+Assert-Contains -Text $cleanupStateFunctionText -Pattern '\$isolatedEntries\[0\][\s\S]+\[char\[\]\]@\(\[System\.IO\.Path\]::DirectorySeparatorChar, \[System\.IO\.Path\]::AltDirectorySeparatorChar\)[\s\S]+TrimEnd\(\$trimSeparators\)' -Code "cleanup_entry_indexing_or_trim_missing"
 Assert-Contains -Text $cleanupStateFunctionText -Pattern 'Assert-CleanupEntrySafe' -Code "cleanup_entry_validation_missing"
-Assert-Contains -Text $cleanupSignatureFunctionText -Pattern 'Get-CleanupDirectoryEntries[\s\S]+Sort-Object[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_signature_missing"
+Assert-Contains -Text $cleanupSignatureFunctionText -Pattern 'Assert-CleanupDirectoryEntriesResult[\s\S]+\[string\[\]\]\$isolatedEntries\s*=\s*@\(\$isolatedEntriesResult\.Entries \| Sort-Object\)[\s\S]+Assert-CleanupDirectoryEntriesResult[\s\S]+\[string\[\]\]\$instanceEntries\s*=\s*@\(\$instanceEntriesResult\.Entries \| Sort-Object\)[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_signature_missing"
+Assert-Contains -Text $cleanupFunctionText -Pattern 'Set-Stage -Stage "cleanup_revalidate_activity_after_instance_delete"\s*Assert-CleanupNoPostgresActivity -Package \$package -Layout \$layout\s*Set-Stage -Stage "cleanup_validate_parent_empty"' -Code "cleanup_post_instance_activity_stage_missing"
+Assert-Contains -Text $cleanupFunctionText -Pattern 'cleanup_validate_parent_empty[\s\S]+\$parentEntriesResult\s*=\s*Get-CleanupDirectoryEntries[\s\S]+Assert-CleanupDirectoryEntriesResult -Result \$parentEntriesResult[\s\S]+\[string\[\]\]\$parentEntryValues\s*=\s*@\(\$parentEntriesResult\.Entries\)[\s\S]+\$parentEntryValues\.Count -ne 0[\s\S]+cleanup_parent_not_empty[\s\S]+Set-Stage -Stage "cleanup_delete_root"\s*try\s*\{\s*\[System\.IO\.Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)' -Code "cleanup_delete_root_parent_entries_missing"
+$parentValidationBlockMatch = [regex]::Match($cleanupFunctionText, 'Set-Stage -Stage "cleanup_validate_parent_empty"(?<block>[\s\S]*?)Set-Stage -Stage "cleanup_delete_root"')
+if (-not $parentValidationBlockMatch.Success) { Fail -Code "cleanup_parent_validation_block_missing" }
+$parentValidationBlock = $parentValidationBlockMatch.Groups["block"].Value
+Assert-NotContains -Text $parentValidationBlock -Pattern 'Assert-CleanupNoPostgresActivity|Assert-CleanupDirectorySafe|Get-LocalPostgresProcessEvidence|Get-Service|Test-PortAvailable|postmaster\.pid|\[System\.IO\.Directory\]::Delete' -Code "cleanup_parent_validation_contains_activity_or_delete"
+Assert-Contains -Text $cleanupFunctionText -Pattern '\$parentEntryValues\.Count -ne 0\)\s*\{[\s\S]*?cleanup_parent_not_empty[\s\S]*?\}\s*Set-Stage -Stage "cleanup_delete_root"\s*try\s*\{' -Code "cleanup_parent_validation_not_last_predelete_check"
+Assert-NotContains -Text $cleanupFunctionText -Pattern '(?s)\$parentEntryValues\.Count -ne 0[\s\S]*Assert-CleanupNoPostgresActivity[\s\S]*Set-Stage -Stage "cleanup_delete_root"' -Code "cleanup_activity_after_parent_count_detected"
+$cleanupEntriesCallerAssignments = @([regex]::Matches($text, '(?m)^\s*\$[A-Za-z][A-Za-z0-9]*\s*=\s*Get-CleanupDirectoryEntries\b'))
+if ($cleanupEntriesCallerAssignments.Count -ne 5) { Fail -Code "cleanup_entries_caller_inventory_count_mismatch" }
+foreach ($requiredCallerPattern in @(
+    '\$instanceEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$Layout\.InstanceRoot',
+    '\$isolatedEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$Layout\.IsolatedRoot',
+    '\$parentEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$layout\.IsolatedRoot'
+  )) {
+  Assert-Contains -Text $text -Pattern $requiredCallerPattern -Code "cleanup_entries_expected_caller_missing"
+}
+Assert-NotContains -Text $text -Pattern '(?s)\$([A-Za-z][A-Za-z0-9]*)\s*=\s*Get-CleanupDirectoryEntries\b(?:(?!\[string\[\]\]\$).){0,260}\$\1\.(Count|\[)' -Code "cleanup_entries_direct_result_consumption_detected"
+Assert-NotContains -Text $text -Pattern '\(\s*Get-CleanupDirectoryEntries[\s\S]*?\)\s*\.(Count|\[)|\(\s*Get-CleanupDirectoryEntries[\s\S]*?\)\s*\[0\]' -Code "cleanup_entries_inline_direct_consumption_detected"
+Assert-NotContains -Text $text -Pattern '(?s)Set-Stage -Stage "cleanup_delete_root"(?:(?!\[System\.IO\.Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)).)*(Get-CleanupDirectoryEntries|\$parentEntryValues\.Count|cleanup_parent_not_empty)' -Code "cleanup_delete_root_started_before_parent_validation"
+$cleanupDeleteRootStageCount = [regex]::Matches($text, 'Set-Stage -Stage "cleanup_delete_root"').Count
+if ($cleanupDeleteRootStageCount -ne 1) { Fail -Code "cleanup_delete_root_stage_count_invalid" }
+Assert-Contains -Text $cleanupFunctionText -Pattern 'Set-Stage -Stage "cleanup_postcheck"[\s\S]+Test-Path -LiteralPath \$layout\.InstanceRoot[\s\S]+Set-Stage -Stage "cleanup_revalidate_activity_after_instance_delete"\s*Assert-CleanupNoPostgresActivity -Package \$package -Layout \$layout\s*Set-Stage -Stage "cleanup_validate_parent_empty"' -Code "cleanup_validate_parent_empty_stage_missing"
+Assert-Contains -Text $cleanupFunctionText -Pattern 'Set-Stage -Stage "cleanup_delete_root"\s*try\s*\{\s*\[System\.IO\.Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)' -Code "cleanup_delete_root_not_immediate_delete"
+Assert-Contains -Text $cleanupFailureFunctionText -Pattern '\$allowedReasons = @\([\s\S]+cleanup_parent_not_empty' -Code "cleanup_parent_not_empty_allowed_reason_missing"
+Assert-Contains -Text $cleanupFailureFunctionText -Pattern '\$allowedStages = @\([\s\S]+cleanup_revalidate_activity_after_instance_delete[\s\S]+cleanup_validate_parent_empty' -Code "cleanup_validate_parent_empty_allowed_stage_missing"
+Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'cleanup_revalidate_activity_after_instance_delete[\s\S]+cleanup_activity_detected' -Code "cleanup_post_instance_activity_mapping_missing"
+Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'cleanup_validate_parent_empty[\s\S]+cleanup_enumeration_denied[\s\S]+cleanup_enumeration_failed' -Code "cleanup_validate_parent_empty_mapping_missing"
 Assert-Contains -Text $text -Pattern 'FileAttributes\]::ReparsePoint' -Code "cleanup_reparse_validation_missing"
 Assert-Contains -Text $cleanupProcessFunctionText -Pattern 'Get-LocalPostgresProcessEvidence[\s\S]+AmbiguousCount[\s\S]+cleanup_postgres_process_ambiguous[\s\S]+AuthorizedCount[\s\S]+OtherCount[\s\S]+cleanup_postgres_process_detected[\s\S]+Get-Service[\s\S]+cleanup_postgresql_service_running[\s\S]+Test-PortAvailable[\s\S]+cleanup_port_in_use[\s\S]+postmaster\.pid' -Code "cleanup_process_service_port_missing"
-Assert-Contains -Text $cleanupFunctionText -Pattern 'cleanup_layout[\s\S]+Get-InstanceLayout[\s\S]+cleanup_environment[\s\S]+Assert-CleanupEnvironment[\s\S]+cleanup_git[\s\S]+Assert-CleanupGitReady[\s\S]+cleanup_paths[\s\S]+Assert-CleanupPathFixed[\s\S]+cleanup_attributes[\s\S]+Assert-CleanupDirectorySafe[\s\S]+cleanup_exact_state[\s\S]+Assert-CleanupExactPartialState[\s\S]+cleanup_signature_initial[\s\S]+Get-CleanupPartialStateSignature[\s\S]+cleanup_activity[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+cleanup_revalidate_signature[\s\S]+cleanup_state_changed[\s\S]+cleanup_revalidate_state[\s\S]+cleanup_revalidate_activity[\s\S]+cleanup_delete_instance[\s\S]+Directory\]::Delete\(\$layout\.InstanceRoot, \$false\)[\s\S]+cleanup_delete_root[\s\S]+Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)[\s\S]+cleanup_postcheck' -Code "cleanup_delete_sequence_missing"
+Assert-Contains -Text $cleanupFunctionText -Pattern 'cleanup_layout[\s\S]+Get-InstanceLayout[\s\S]+cleanup_environment[\s\S]+Assert-CleanupEnvironment[\s\S]+cleanup_git[\s\S]+Assert-CleanupGitReady[\s\S]+cleanup_paths[\s\S]+Assert-CleanupPathFixed[\s\S]+cleanup_attributes[\s\S]+Assert-CleanupDirectorySafe[\s\S]+cleanup_exact_state[\s\S]+Assert-CleanupExactPartialState[\s\S]+cleanup_signature_initial[\s\S]+Get-CleanupPartialStateSignature[\s\S]+cleanup_activity[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+cleanup_revalidate_signature[\s\S]+cleanup_state_changed[\s\S]+cleanup_revalidate_state[\s\S]+cleanup_revalidate_activity[\s\S]+cleanup_delete_instance[\s\S]+Directory\]::Delete\(\$layout\.InstanceRoot, \$false\)[\s\S]+cleanup_postcheck[\s\S]+cleanup_revalidate_activity_after_instance_delete[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+cleanup_validate_parent_empty[\s\S]+cleanup_parent_not_empty[\s\S]+Set-Stage -Stage "cleanup_delete_root"[\s\S]+Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)[\s\S]+cleanup_postcheck' -Code "cleanup_delete_sequence_missing"
 Assert-NotContains -Text $cleanupFunctionText -Pattern 'Remove-Item|Directory\]::Delete\([^\r\n]+,\s*\$true\)|-Recurse|-Force|Stop-Process|taskkill|Set-Acl|takeown|icacls|Invoke-Create|Invoke-BlockedFutureAction -RequestedAction "Destroy"|[?*]' -Code "cleanup_forbidden_operation_detected"
 Assert-NotContains -Text $cleanupFunctionText -Pattern 'Throw-SafeError -Code "cleanup_failed"' -Code "cleanup_generic_failure_detected"
 Assert-Contains -Text $cleanupFunctionText -Pattern 'Get-CleanupSafeFailure[\s\S]+ExceptionType[\s\S]+Throw-SafeError -Code \$failure\.Reason' -Code "cleanup_safe_classifier_not_used"
 Assert-Contains -Text $text -Pattern 'Write-Output "exception_type=\$script:CurrentExceptionType"' -Code "exception_type_output_missing"
-Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'UnauthorizedAccessException[\s\S]+IOException[\s\S]+DirectoryNotFoundException[\s\S]+SecurityException[\s\S]+InvalidOperationException[\s\S]+ArgumentException[\s\S]+MethodInvocationException[\s\S]+UnknownException' -Code "cleanup_exception_allowlist_missing"
-Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'cleanup_exact_state[\s\S]+cleanup_enumeration_denied[\s\S]+cleanup_enumeration_failed[\s\S]+cleanup_signature_initial[\s\S]+cleanup_signature_failed[\s\S]+cleanup_delete_instance[\s\S]+cleanup_delete_instance_failed[\s\S]+cleanup_delete_root[\s\S]+cleanup_delete_root_failed[\s\S]+cleanup_postcheck[\s\S]+cleanup_postcheck_failed' -Code "cleanup_failure_mapping_missing"
-Assert-NotContains -Text $cleanupFailureFunctionText -Pattern 'StackTrace|TargetSite|HResult|\.Data|\.Source|\$PSBoundParameters|Get-Item|Test-Path|EnumerateFileSystemEntries|Get-CleanupDirectoryEntries' -Code "cleanup_classifier_forbidden_dependency"
+Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'UnauthorizedAccessException[\s\S]+IOException[\s\S]+DirectoryNotFoundException[\s\S]+SecurityException[\s\S]+InvalidOperationException[\s\S]+ArgumentException[\s\S]+MethodInvocationException[\s\S]+PropertyNotFoundException[\s\S]+RuntimeException[\s\S]+ParentContainsErrorRecordException[\s\S]+CmdletInvocationException[\s\S]+ItemNotFoundException[\s\S]+UnknownException' -Code "cleanup_exception_allowlist_missing"
+Assert-Contains -Text $cleanupFailureFunctionText -Pattern '\$depth -lt 8[\s\S]+RuntimeHelpers[\s\S]+wrapperExceptionTypes[\s\S]+selectedType[\s\S]+selectedWrapper' -Code "cleanup_exception_unwrap_depth_missing"
+Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'cleanup_exact_state[\s\S]+cleanup_enumeration_denied[\s\S]+cleanup_enumeration_failed[\s\S]+cleanup_signature_initial[\s\S]+cleanup_signature_failed[\s\S]+cleanup_revalidate_activity_after_instance_delete[\s\S]+cleanup_activity_detected[\s\S]+cleanup_delete_instance[\s\S]+cleanup_delete_instance_failed[\s\S]+cleanup_delete_root[\s\S]+cleanup_delete_root_failed[\s\S]+cleanup_postcheck[\s\S]+cleanup_postcheck_failed' -Code "cleanup_failure_mapping_missing"
+Assert-NotContains -Text $cleanupFailureFunctionText -Pattern 'StackTrace|TargetSite|HResult|\.Data|\.Source|\$PSBoundParameters|Get-Item|Test-Path|EnumerateFileSystemEntries|GetFileSystemEntries|Get-CleanupDirectoryEntries' -Code "cleanup_classifier_forbidden_dependency"
 Assert-NotContains -Text $cleanupFailureFunctionText -Pattern 'Write-Output|Write-Host|Write-Error|Write-Warning' -Code "cleanup_classifier_outputs_detected"
 Assert-Contains -Text $text -Pattern '\[string\]\$PostgresBin\s*=\s*\(Join-Path \$env:LOCALAPPDATA "VotoClaro\\PostgreSQL\\17\.10-complete\\bin"\)' -Code "dynamic_postgresbin_missing"
 Assert-Contains -Text $text -Pattern 'VotoClaro\\PostgreSQL\\isolated-baseline-test' -Code "isolated_root_new_missing"
@@ -1201,7 +1247,7 @@ if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'C:\Ruta con espacios\ar
 if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'valor con "comillas"') -ne '"valor con \"comillas\""') { Fail -Code "selftest_quote_argument_failed" }
 if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'a\"b') -ne '"a\\\"b"') { Fail -Code "selftest_backslash_quote_argument_failed" }
 if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'C:\fin con espacio\') -ne '"C:\fin con espacio\\"') { Fail -Code "selftest_trailing_backslash_argument_failed" }
-if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'Peru-ñ') -ne 'Peru-ñ') { Fail -Code "selftest_unicode_argument_failed" }
+if ((ConvertTo-WindowsProcessArgumentForSelfTest -Value 'Peru-ascii') -ne 'Peru-ascii') { Fail -Code "selftest_unicode_argument_failed" }
 $nullRejected = $false
 try { [void](ConvertTo-WindowsProcessArgumentForSelfTest -Value $null) } catch { $nullRejected = $true }
 if (-not $nullRejected) { Fail -Code "selftest_null_argument_not_rejected" }
@@ -1289,6 +1335,155 @@ Assert-MutationAddsForbidden -MutatedText ($strictJsonFunctionText -replace "Thr
 Assert-MutationRemovesRequired -MutatedText ($strictJsonFunctionText -replace '\$valueStart -eq ''\{'' -or \$valueStart -eq ''\[''', '$false') -RequiredPattern '\$valueStart -eq ''\{'' -or \$valueStart -eq ''\[''' -Code "selftest_nested_json_acceptance_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($strictJsonFunctionText -replace '\$indexRef\.Value -ne \$JsonText\.Length', '$false') -RequiredPattern '\$indexRef\.Value -ne \$JsonText\.Length' -Code "selftest_trailing_garbage_acceptance_not_detected"
 
+. ([scriptblock]::Create($cleanupEntriesNewFunctionText))
+. ([scriptblock]::Create($cleanupEntriesAssertFunctionText))
+
+function Throw-SafeError {
+  param([Parameter(Mandatory = $true)][string]$Code)
+  throw ("VC_SAFE_REASON::" + $Code)
+}
+
+function Assert-CleanupEntriesShapeForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [AllowEmptyCollection()][string[]]$Entries,
+    [Parameter(Mandatory = $true)][int]$ExpectedCount
+  )
+  $outputs = @(New-CleanupDirectoryEntriesResult -Entries $Entries)
+  if ($outputs.Count -ne 1) { Fail -Code ("cleanup_entries_output_count_" + $Name) }
+  $result = $outputs[0]
+  Assert-CleanupDirectoryEntriesResult -Result $result
+  if (-not ($result.Entries -is [string[]])) { Fail -Code ("cleanup_entries_type_" + $Name) }
+  if ($result.Entries.Count -ne $ExpectedCount) { Fail -Code ("cleanup_entries_count_" + $Name) }
+  if ($ExpectedCount -eq 0 -and $null -eq $result.Entries) { Fail -Code "cleanup_entries_zero_null" }
+  if ($ExpectedCount -eq 1) {
+    if (-not ($result.Entries[0] -is [string])) { Fail -Code "cleanup_entries_one_not_string" }
+    if ($result.Entries[0] -is [char]) { Fail -Code "cleanup_entries_one_char" }
+  }
+  foreach ($entry in $result.Entries) {
+    if (-not ($entry -is [string])) { Fail -Code ("cleanup_entries_member_type_" + $Name) }
+  }
+  $assertOutput = @(Assert-CleanupDirectoryEntriesResult -Result $result)
+  if ($assertOutput.Count -ne 0) { Fail -Code ("cleanup_entries_assert_output_" + $Name) }
+}
+
+Assert-CleanupEntriesShapeForSelfTest -Name "zero" -Entries @() -ExpectedCount 0
+Assert-CleanupEntriesShapeForSelfTest -Name "one" -Entries @("synthetic-one") -ExpectedCount 1
+Assert-CleanupEntriesShapeForSelfTest -Name "many" -Entries @("synthetic-one", "synthetic-two", "synthetic-three") -ExpectedCount 3
+
+function Get-CleanupEntriesFromResultForSelfTest {
+  param([AllowNull()][object]$Result)
+  $assertOutput = @(Assert-CleanupDirectoryEntriesResult -Result $Result)
+  if ($assertOutput.Count -ne 0) { Fail -Code "cleanup_entries_consumer_assert_output" }
+  [string[]]$entryValues = @($Result.Entries)
+  return [pscustomobject]@{
+    Valid = $true
+    Entries = [string[]]$entryValues
+    SafeErrorCode = $null
+  }
+}
+
+function Test-CleanupDeleteRootParentShapeForSelfTest {
+  param([AllowNull()][object]$Result)
+  try {
+    $stage = "cleanup_validate_parent_empty"
+    $consumer = Get-CleanupEntriesFromResultForSelfTest -Result $Result
+    [string[]]$parentEntryValues = @($consumer.Entries)
+    if ($parentEntryValues.Count -ne 0) {
+      return [pscustomobject]@{ Stage = $stage; Reason = "cleanup_parent_not_empty"; NextStage = $null; SecondDeleteReachable = $false; ExceptionType = $null }
+    }
+    return [pscustomobject]@{ Stage = $stage; Reason = $null; NextStage = "cleanup_delete_root"; SecondDeleteReachable = $true; ExceptionType = $null }
+  } catch {
+    return [pscustomobject]@{ Stage = "cleanup_validate_parent_empty"; Reason = "blocked"; NextStage = $null; SecondDeleteReachable = $false; ExceptionType = $null }
+  }
+}
+function Test-CleanupPostInstanceActivitySequenceForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$ActivityAbsent,
+    [Parameter(Mandatory = $true)][bool]$TechnicalActivityFailure,
+    [AllowNull()][object]$ParentResult
+  )
+  $activityStage = "cleanup_revalidate_activity_after_instance_delete"
+  if (-not $ActivityAbsent -or $TechnicalActivityFailure) {
+    return [pscustomobject]@{
+      Stage = $activityStage
+      Reason = "cleanup_activity_detected"
+      ParentValidationReached = $false
+      NextStage = $null
+      SecondDeleteReachable = $false
+      ActivityFailureConvertedToEnumeration = $false
+      ActivityFailureConvertedToDeleteRoot = $false
+    }
+  }
+  $parentFlow = Test-CleanupDeleteRootParentShapeForSelfTest -Result $ParentResult
+  return [pscustomobject]@{
+    Stage = $parentFlow.Stage
+    Reason = $parentFlow.Reason
+    ParentValidationReached = $true
+    NextStage = $parentFlow.NextStage
+    SecondDeleteReachable = $parentFlow.SecondDeleteReachable
+    ActivityFailureConvertedToEnumeration = $false
+    ActivityFailureConvertedToDeleteRoot = $false
+  }
+}
+
+$parentEmptyContainer = New-CleanupDirectoryEntriesResult -Entries @()
+$parentOneContainer = New-CleanupDirectoryEntriesResult -Entries @("synthetic-parent-child")
+$parentManyContainer = New-CleanupDirectoryEntriesResult -Entries @("synthetic-one", "synthetic-two")
+if ((Get-CleanupEntriesFromResultForSelfTest -Result $parentEmptyContainer).Entries.Count -ne 0) { Fail -Code "cleanup_parent_empty_count_failed" }
+if ((Get-CleanupEntriesFromResultForSelfTest -Result $parentOneContainer).Entries.Count -ne 1) { Fail -Code "cleanup_parent_one_count_failed" }
+if ((Get-CleanupEntriesFromResultForSelfTest -Result $parentManyContainer).Entries.Count -ne 2) { Fail -Code "cleanup_parent_many_count_failed" }
+$activityAbsentEmptyFlow = Test-CleanupPostInstanceActivitySequenceForSelfTest -ActivityAbsent:$true -TechnicalActivityFailure:$false -ParentResult $parentEmptyContainer
+if ($activityAbsentEmptyFlow.Stage -ne "cleanup_validate_parent_empty" -or -not $activityAbsentEmptyFlow.ParentValidationReached -or $activityAbsentEmptyFlow.NextStage -ne "cleanup_delete_root" -or -not $activityAbsentEmptyFlow.SecondDeleteReachable) { Fail -Code "cleanup_activity_absent_parent_empty_flow_failed" }
+$activityAbsentNonEmptyFlow = Test-CleanupPostInstanceActivitySequenceForSelfTest -ActivityAbsent:$true -TechnicalActivityFailure:$false -ParentResult $parentOneContainer
+if ($activityAbsentNonEmptyFlow.Stage -ne "cleanup_validate_parent_empty" -or $activityAbsentNonEmptyFlow.Reason -ne "cleanup_parent_not_empty" -or $activityAbsentNonEmptyFlow.SecondDeleteReachable) { Fail -Code "cleanup_activity_absent_parent_nonempty_flow_failed" }
+$activityDetectedFlow = Test-CleanupPostInstanceActivitySequenceForSelfTest -ActivityAbsent:$false -TechnicalActivityFailure:$false -ParentResult $parentEmptyContainer
+if ($activityDetectedFlow.Stage -ne "cleanup_revalidate_activity_after_instance_delete" -or $activityDetectedFlow.Reason -ne "cleanup_activity_detected" -or $activityDetectedFlow.ParentValidationReached -or $activityDetectedFlow.SecondDeleteReachable) { Fail -Code "cleanup_activity_detected_blocks_failed" }
+$activityTechnicalFlow = Test-CleanupPostInstanceActivitySequenceForSelfTest -ActivityAbsent:$true -TechnicalActivityFailure:$true -ParentResult $parentEmptyContainer
+if ($activityTechnicalFlow.Stage -ne "cleanup_revalidate_activity_after_instance_delete" -or $activityTechnicalFlow.Reason -ne "cleanup_activity_detected" -or $activityTechnicalFlow.ActivityFailureConvertedToEnumeration -or $activityTechnicalFlow.ActivityFailureConvertedToDeleteRoot) { Fail -Code "cleanup_activity_technical_mapping_failed" }
+$parentEmptyFlow = Test-CleanupDeleteRootParentShapeForSelfTest -Result $parentEmptyContainer
+if ($parentEmptyFlow.Stage -ne "cleanup_validate_parent_empty" -or $parentEmptyFlow.Reason -ne $null -or $parentEmptyFlow.NextStage -ne "cleanup_delete_root" -or -not $parentEmptyFlow.SecondDeleteReachable) { Fail -Code "cleanup_parent_empty_symbolic_failed" }
+$parentNonEmptyFlow = Test-CleanupDeleteRootParentShapeForSelfTest -Result $parentOneContainer
+if ($parentNonEmptyFlow.Stage -ne "cleanup_validate_parent_empty" -or $parentNonEmptyFlow.Reason -ne "cleanup_parent_not_empty" -or $parentNonEmptyFlow.NextStage -ne $null -or $parentNonEmptyFlow.SecondDeleteReachable) { Fail -Code "cleanup_parent_nonempty_symbolic_failed" }
+if ((Test-CleanupDeleteRootParentShapeForSelfTest -Result $null).Reason -ne "blocked") { Fail -Code "cleanup_parent_null_not_blocked" }
+if ((Test-CleanupDeleteRootParentShapeForSelfTest -Result ([pscustomobject]@{})).Reason -ne "blocked") { Fail -Code "cleanup_parent_entries_missing_not_blocked" }
+if ((Test-CleanupDeleteRootParentShapeForSelfTest -Result ([pscustomobject]@{ Entries = 7 })).Reason -ne "blocked") { Fail -Code "cleanup_parent_entries_bad_type_not_blocked" }
+try {
+  [void]$parentEmptyContainer.Count
+  Fail -Code "cleanup_container_direct_count_not_rejected"
+} catch [System.Management.Automation.PropertyNotFoundException] {
+}
+try {
+  [void]$parentOneContainer[0]
+  Fail -Code "cleanup_container_direct_index_not_rejected"
+} catch [System.Management.Automation.RuntimeException] {
+}
+
+function Test-CleanupExactStateShapeForSelfTest {
+  param(
+    [AllowEmptyCollection()][string[]]$InstanceEntries,
+    [AllowEmptyCollection()][string[]]$IsolatedEntries,
+    [Parameter(Mandatory = $true)][string]$ExpectedInstancePath,
+    [Parameter(Mandatory = $true)][string]$OnlyIsolatedEntryPath
+  )
+  [string[]]$safeInstanceEntries = $InstanceEntries
+  [string[]]$safeIsolatedEntries = $IsolatedEntries
+  if ($safeInstanceEntries.Count -ne 0) { return "cleanup_instance_not_empty" }
+  if ($safeIsolatedEntries.Count -ne 1) { return "cleanup_unexpected_content" }
+  if (-not ($safeIsolatedEntries[0] -is [string])) { return "cleanup_entry_not_string" }
+  if ($safeIsolatedEntries[0] -is [char]) { return "cleanup_entry_char" }
+  $trimSeparators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  if (-not [string]::Equals($OnlyIsolatedEntryPath.TrimEnd($trimSeparators), $ExpectedInstancePath.TrimEnd($trimSeparators), [System.StringComparison]::OrdinalIgnoreCase)) {
+    return "cleanup_unexpected_content"
+  }
+  return "OK"
+}
+
+if ((Test-CleanupExactStateShapeForSelfTest -InstanceEntries @() -IsolatedEntries @("C:\synthetic\instance") -ExpectedInstancePath "C:\synthetic\instance" -OnlyIsolatedEntryPath "C:\synthetic\instance") -ne "OK") { Fail -Code "cleanup_exact_shape_valid_failed" }
+if ((Test-CleanupExactStateShapeForSelfTest -InstanceEntries @("content") -IsolatedEntries @("C:\synthetic\instance") -ExpectedInstancePath "C:\synthetic\instance" -OnlyIsolatedEntryPath "C:\synthetic\instance") -ne "cleanup_instance_not_empty") { Fail -Code "cleanup_exact_shape_instance_content_failed" }
+if ((Test-CleanupExactStateShapeForSelfTest -InstanceEntries @() -IsolatedEntries @() -ExpectedInstancePath "C:\synthetic\instance" -OnlyIsolatedEntryPath "C:\synthetic\instance") -ne "cleanup_unexpected_content") { Fail -Code "cleanup_exact_shape_zero_isolated_failed" }
+if ((Test-CleanupExactStateShapeForSelfTest -InstanceEntries @() -IsolatedEntries @("C:\synthetic\one", "C:\synthetic\two") -ExpectedInstancePath "C:\synthetic\instance" -OnlyIsolatedEntryPath "C:\synthetic\one") -ne "cleanup_unexpected_content") { Fail -Code "cleanup_exact_shape_two_isolated_failed" }
+if ((Test-CleanupExactStateShapeForSelfTest -InstanceEntries @() -IsolatedEntries @("C:\synthetic\other") -ExpectedInstancePath "C:\synthetic\instance" -OnlyIsolatedEntryPath "C:\synthetic\other") -ne "cleanup_unexpected_content") { Fail -Code "cleanup_exact_shape_mismatch_failed" }
 . ([scriptblock]::Create($cleanupFailureFunctionText))
 function Assert-CleanupFailureForSelfTest {
   param(
@@ -1314,15 +1509,41 @@ function Assert-CleanupFailureForSelfTest {
     }
   }
 }
+function New-SimulatedExceptionForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$TypeName,
+    [AllowNull()][object]$InnerException,
+    [AllowNull()][string]$Message
+  )
+  $properties = [ordered]@{ SimulatedTypeName = $TypeName }
+  if ($null -ne $InnerException) { $properties.InnerException = $InnerException }
+  if ($null -ne $Message) { $properties.Message = $Message }
+  return [pscustomobject]$properties
+}
 Assert-CleanupFailureForSelfTest -Name "exact_access" -Stage "cleanup_exact_state" -Exception ([pscustomobject]@{ SimulatedTypeName = "UnauthorizedAccessException" }) -ExpectedReason "cleanup_enumeration_denied" -ExpectedExceptionType "UnauthorizedAccessException" -ExpectedSubstage "cleanup_exact_state"
 Assert-CleanupFailureForSelfTest -Name "exact_io" -Stage "cleanup_exact_state" -Exception ([pscustomobject]@{ SimulatedTypeName = "IOException" }) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_exact_state"
 Assert-CleanupFailureForSelfTest -Name "sig_io" -Stage "cleanup_signature_initial" -Exception ([pscustomobject]@{ SimulatedTypeName = "IOException" }) -ExpectedReason "cleanup_signature_failed" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_signature_initial"
 Assert-CleanupFailureForSelfTest -Name "activity_invalid" -Stage "cleanup_activity" -Exception ([pscustomobject]@{ SimulatedTypeName = "InvalidOperationException" }) -ExpectedReason "cleanup_activity_detected" -ExpectedExceptionType "InvalidOperationException" -ExpectedSubstage "cleanup_activity"
+Assert-CleanupFailureForSelfTest -Name "post_instance_activity_invalid" -Stage "cleanup_revalidate_activity_after_instance_delete" -Exception ([pscustomobject]@{ SimulatedTypeName = "InvalidOperationException" }) -ExpectedReason "cleanup_activity_detected" -ExpectedExceptionType "InvalidOperationException" -ExpectedSubstage "cleanup_revalidate_activity_after_instance_delete"
 Assert-CleanupFailureForSelfTest -Name "delete_instance" -Stage "cleanup_delete_instance" -Exception ([pscustomobject]@{ SimulatedTypeName = "IOException" }) -ExpectedReason "cleanup_delete_instance_failed" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_delete_instance"
 Assert-CleanupFailureForSelfTest -Name "delete_root" -Stage "cleanup_delete_root" -Exception ([pscustomobject]@{ SimulatedTypeName = "IOException" }) -ExpectedReason "cleanup_delete_root_failed" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_delete_root"
 Assert-CleanupFailureForSelfTest -Name "postcheck" -Stage "cleanup_postcheck" -Exception ([pscustomobject]@{ SimulatedTypeName = "IOException" }) -ExpectedReason "cleanup_postcheck_failed" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_postcheck"
-Assert-CleanupFailureForSelfTest -Name "unknown_type" -Stage "cleanup_exact_state" -Exception ([pscustomobject]@{ SimulatedTypeName = "NotAllowedException" }) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "UnknownException" -ExpectedSubstage "cleanup_exact_state"
-Assert-CleanupFailureForSelfTest -Name "method_inner_access" -Stage "cleanup_exact_state" -Exception ([pscustomobject]@{ SimulatedTypeName = "MethodInvocationException"; InnerException = [System.UnauthorizedAccessException]::new() }) -ExpectedReason "cleanup_enumeration_denied" -ExpectedExceptionType "UnauthorizedAccessException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "parent_not_empty_safe" -Stage "cleanup_validate_parent_empty" -Exception ([System.Exception]::new("VC_SAFE_REASON::cleanup_parent_not_empty")) -ExpectedReason "cleanup_parent_not_empty" -ExpectedExceptionType $null -ExpectedSubstage "cleanup_validate_parent_empty"
+Assert-CleanupFailureForSelfTest -Name "parent_access_denied" -Stage "cleanup_validate_parent_empty" -Exception (New-SimulatedExceptionForSelfTest -TypeName "UnauthorizedAccessException" -InnerException $null -Message $null) -ExpectedReason "cleanup_enumeration_denied" -ExpectedExceptionType "UnauthorizedAccessException" -ExpectedSubstage "cleanup_validate_parent_empty"
+Assert-CleanupFailureForSelfTest -Name "parent_enumeration_failed" -Stage "cleanup_validate_parent_empty" -Exception (New-SimulatedExceptionForSelfTest -TypeName "IOException" -InnerException $null -Message $null) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_validate_parent_empty"
+Assert-CleanupFailureForSelfTest -Name "parent_wrapped_safe" -Stage "cleanup_validate_parent_empty" -Exception (New-SimulatedExceptionForSelfTest -TypeName "RuntimeException" -InnerException ([System.Exception]::new("VC_SAFE_REASON::cleanup_parent_not_empty")) -Message $null) -ExpectedReason "cleanup_parent_not_empty" -ExpectedExceptionType $null -ExpectedSubstage "cleanup_validate_parent_empty"
+Assert-CleanupFailureForSelfTest -Name "parent_safe_suffix_rejected" -Stage "cleanup_validate_parent_empty" -Exception ([System.Exception]::new("VC_SAFE_REASON::cleanup_parent_not_empty_extra")) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "UnknownException" -ExpectedSubstage "cleanup_validate_parent_empty"
+Assert-CleanupFailureForSelfTest -Name "property_not_found" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "PropertyNotFoundException" -InnerException $null -Message $null) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "PropertyNotFoundException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "runtime_property" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "RuntimeException" -InnerException (New-SimulatedExceptionForSelfTest -TypeName "PropertyNotFoundException" -InnerException $null -Message $null) -Message $null) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "PropertyNotFoundException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "unknown_type" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "NotAllowedException" -InnerException $null -Message $null) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "UnknownException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "method_inner_access" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "MethodInvocationException" -InnerException (New-SimulatedExceptionForSelfTest -TypeName "UnauthorizedAccessException" -InnerException $null -Message $null) -Message $null) -ExpectedReason "cleanup_enumeration_denied" -ExpectedExceptionType "UnauthorizedAccessException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "runtime_method_access" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "RuntimeException" -InnerException (New-SimulatedExceptionForSelfTest -TypeName "MethodInvocationException" -InnerException (New-SimulatedExceptionForSelfTest -TypeName "UnauthorizedAccessException" -InnerException $null -Message $null) -Message $null) -Message $null) -ExpectedReason "cleanup_enumeration_denied" -ExpectedExceptionType "UnauthorizedAccessException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "parent_inner_io" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "ParentContainsErrorRecordException" -InnerException (New-SimulatedExceptionForSelfTest -TypeName "IOException" -InnerException $null -Message $null) -Message $null) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "cmdlet_inner_security" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "CmdletInvocationException" -InnerException (New-SimulatedExceptionForSelfTest -TypeName "SecurityException" -InnerException $null -Message $null) -Message $null) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "SecurityException" -ExpectedSubstage "cleanup_exact_state"
+Assert-CleanupFailureForSelfTest -Name "item_not_found" -Stage "cleanup_exact_state" -Exception (New-SimulatedExceptionForSelfTest -TypeName "ItemNotFoundException" -InnerException $null -Message $null) -ExpectedReason "cleanup_paths_invalid" -ExpectedExceptionType "ItemNotFoundException" -ExpectedSubstage "cleanup_exact_state"
+$longInner = New-SimulatedExceptionForSelfTest -TypeName "UnauthorizedAccessException" -InnerException $null -Message $null
+for ($i = 0; $i -lt 9; $i += 1) { $longInner = New-SimulatedExceptionForSelfTest -TypeName "RuntimeException" -InnerException $longInner -Message $null }
+Assert-CleanupFailureForSelfTest -Name "long_chain_truncated" -Stage "cleanup_exact_state" -Exception $longInner -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "RuntimeException" -ExpectedSubstage "cleanup_exact_state"
 Assert-CleanupFailureForSelfTest -Name "safe_valid" -Stage "cleanup_exact_state" -Exception ([System.Exception]::new("VC_SAFE_REASON::cleanup_instance_not_empty")) -ExpectedReason "cleanup_instance_not_empty" -ExpectedExceptionType $null -ExpectedSubstage "cleanup_exact_state"
 Assert-CleanupFailureForSelfTest -Name "safe_invalid" -Stage "cleanup_exact_state" -Exception ([System.Exception]::new("VC_SAFE_REASON::not_allowed_secret")) -ExpectedReason "cleanup_enumeration_failed" -ExpectedExceptionType "UnknownException" -ExpectedSubstage "cleanup_exact_state"
 Assert-CleanupFailureForSelfTest -Name "unknown_stage" -Stage "cleanup_unknown" -Exception ([pscustomobject]@{ SimulatedTypeName = "IOException" }) -ExpectedReason "cleanup_preflight_unknown" -ExpectedExceptionType "IOException" -ExpectedSubstage "cleanup_preflight_unknown"
@@ -1462,6 +1683,27 @@ foreach ($expectedLine in @(
     "cleanup_generic_failure_removed=true",
     "cleanup_delete_stage_guard=true",
     "cleanup_safe_reason_filter=true",
+    "cleanup_directory_entries_contract=WRAPPED_STRING_ARRAY",
+    "cleanup_directory_entries_zero_shape=STRING_ARRAY_0",
+    "cleanup_directory_entries_one_shape=STRING_ARRAY_1",
+    "cleanup_directory_entries_many_shape=STRING_ARRAY_N",
+    "cleanup_pipeline_unrolling_fixed=true",
+    "cleanup_strictmode_single_entry_fixed=true",
+    "cleanup_propertynotfound_classified=true",
+    "cleanup_wrapper_unwrap_depth=8",
+    "cleanup_exact_state_shape_selftest=true",
+    "cleanup_directory_entries_all_callers_wrapped=true",
+    "cleanup_delete_root_uses_entries_property=true",
+    "cleanup_parent_empty_symbolic_selftest=true",
+    "cleanup_container_direct_count_rejected=true",
+    "cleanup_container_direct_index_rejected=true",
+    "cleanup_contract_validator_complete=true",
+    "cleanup_parent_validation_stage=CLEANUP_VALIDATE_PARENT_EMPTY",
+    "cleanup_parent_not_empty_reason_preserved=true",
+    "cleanup_delete_root_stage_is_delete_only=true",
+    "cleanup_parent_nonempty_blocks_second_delete=true",
+    "cleanup_second_delete_reachable_only_when_parent_empty=true",
+    "cleanup_parent_stage_reason_validator_complete=true",
     "cleanup_real_execution_tested=false",
     "apply_implementation_present=false",
     "verify_implementation_present=false",

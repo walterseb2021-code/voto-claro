@@ -116,6 +116,32 @@ Directory.Delete de InstanceRoot solo puede ejecutarse con stage cleanup_delete_
 
 No volver a intentar CleanupPartialCreate hasta auditar y versionar esta instrumentacion. No se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
 
+
+Incidente cleanup_exact_state / collection contract
+
+Una ejecucion autorizada de CleanupPartialCreate avanzo hasta cleanup_exact_state y fallo con cleanup_enumeration_failed y UnknownException. Una sonda local de solo lectura reprodujo las operaciones esperadas y paso completamente: raices presentes, atributos permitidos, rutas tecnicas ausentes, InstanceRoot vacia, IsolatedRoot con una entrada y comparacion de paths correcta.
+
+La causa raiz fue el contrato inestable de colecciones devuelto por una funcion PowerShell: cero entradas podia llegar al caller como null, una entrada como String escalar y multiples entradas como array. Con StrictMode, Count sobre un String escalar falla antes de la firma TOCTOU o del primer Directory.Delete.
+
+Get-CleanupDirectoryEntries ahora devuelve un objeto contenedor unico con Entries tipado como string[]. Los callers consumen Entries explicitamente y la firma TOCTOU usa el mismo contrato. El clasificador reconoce PropertyNotFoundException y wrappers PowerShell relevantes con desempaquetado seguro limitado.
+
+No volver a intentar CleanupPartialCreate hasta auditar y versionar esta correccion. El estado parcial queda intacto. No se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
+
+Incidente cleanup_delete_root / caller residual
+
+La auditoria posterior detecto que el bloque cleanup_delete_root todavia consumia directamente el contenedor devuelto por Get-CleanupDirectoryEntries y evaluaba Count sobre el contenedor, no sobre Entries. Ese patron podia bloquear el segundo borrado aunque el directorio padre quedara vacio despues de borrar InstanceRoot.
+
+cleanup_delete_root ahora valida el contenedor, consume Entries con cast explicito a string[] y evalua Count solo sobre ese arreglo. Todos los callers inventariados usan Entries y el validador rechaza Count o indexacion directa sobre el contenedor, incluido el caso posterior al primer Directory.Delete.
+
+El contenedor queda definido como PSCustomObject literal con Entries tipado como string[]. No se usa clase personalizada para este contrato. Los SelfTests cubren padre vacio, padre no vacio, cero, una y multiples entradas, ademas del flujo simbolico entre ambos borrados. CleanupPartialCreate sigue suspendido, el estado parcial queda intacto, no se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
+
+Incidente cleanup_validate_parent_empty / reason de padre
+
+La auditoria posterior detecto que cleanup_delete_root empezaba antes de validar que IsolatedRoot estuviera vacia despues de borrar InstanceRoot, y que cleanup_parent_not_empty no estaba preservado de forma coherente en el clasificador seguro. Eso podia clasificar un padre no vacio como fallo de borrado de raiz.
+
+La validacion del padre ahora usa el substage cerrado cleanup_validate_parent_empty. Ese substage cubre enumeracion, guard del contenedor, cast a string[] y Count del padre. cleanup_parent_not_empty queda preservado como reason seguro sin exception_type cuando el padre no esta vacio.
+
+cleanup_delete_root queda reservado exclusivamente para el segundo Directory.Delete y se activa solo despues de confirmar Count=0. El validador fue reforzado para detectar stages adelantados, reasons huerfanos y allowlists incompletas. CleanupPartialCreate sigue suspendido, el estado parcial queda intacto, no se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
 Apply: bloqueada en esta version. En una fase futura debera exigir confirmacion exacta, preflight local aprobado, base vacia y autorizacion humana explicita.
 
 Verify: bloqueada en esta version. En una fase futura debera validar estado restaurado mediante consultas controladas.
@@ -273,3 +299,10 @@ El preflight y la baseline siguen sin autorizacion de ejecucion.
 Apply continua bloqueado.
 
 La siguiente fase debe ser revision semantica del preflight local candidato antes de cualquier Create o Apply.
+Incidente cleanup_revalidate_activity_after_instance_delete / actividad entre borrados
+
+La auditoria final detecto que Assert-CleanupNoPostgresActivity seguia ejecutandose despues de confirmar que IsolatedRoot estaba vacia y antes de cleanup_delete_root. Eso mezclaba una comprobacion de actividad PostgreSQL dentro del contexto semantico de cleanup_validate_parent_empty.
+
+La revalidacion de actividad se conserva y ahora usa el stage cerrado cleanup_revalidate_activity_after_instance_delete despues de confirmar que InstanceRoot ya no existe y antes de la validacion final del padre. cleanup_validate_parent_empty queda reservado solo para enumerar el padre, validar el contenedor, castear Entries a string[] y evaluar Count.
+
+cleanup_delete_root se activa inmediatamente antes del segundo Directory.Delete. Los fallos de actividad se mantienen separados de los fallos de enumeracion del padre y no se clasifican como cleanup_delete_root_failed. CleanupPartialCreate sigue suspendido; no se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
