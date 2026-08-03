@@ -193,6 +193,7 @@ $aclIdentityFunctionText = Get-FunctionText -Name "Convert-IdentityReferenceToSi
 $aclRulesFunctionText = Get-FunctionText -Name "Get-RestrictedAclRulesForValidation"
 $aclSemanticFunctionText = Get-FunctionText -Name "Assert-RestrictedAclSemantics"
 $stateFunctionText = Get-FunctionText -Name "Write-ClusterState"
+$stateConcordanceWrapperFunctionText = Get-FunctionText -Name "Assert-CreateStateMarkerConcordance"
 $concordanceFunctionText = Get-FunctionText -Name "Assert-MarkerStateConcordance"
 $dataRootFunctionText = Get-FunctionText -Name "Assert-DataRoot"
 $pidFunctionText = Get-FunctionText -Name "Get-PostmasterPidInfo"
@@ -479,6 +480,24 @@ Assert-NotContains -Text $stateFunctionText -Pattern 'created_utc = \$now' -Code
 Assert-Contains -Text $stateFunctionText -Pattern 'server_state = \$ServerState' -Code "server_state_field_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'server_cleanup_attempted = \$ServerCleanupAttempted' -Code "server_cleanup_attempted_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'server_cleanup_completed = \$ServerCleanupCompleted' -Code "server_cleanup_completed_missing"
+foreach ($stateStep in @("state_validate_input","state_get_created_utc","state_build_payload","state_serialize_json","state_write_temp","state_move_initial","state_replace_existing","state_apply_acl","state_acl_readback","state_schema_readback")) {
+  Assert-Contains -Text $stateFunctionText -Pattern $stateStep -Code ("state_write_substep_missing_" + $stateStep)
+}
+foreach ($stateReason in @("state_validate_input_failed","state_get_created_utc_failed","state_build_payload_failed","state_serialize_json_failed","state_write_temp_failed","state_move_initial_failed","state_replace_existing_failed","state_apply_acl_failed","state_acl_readback_failed","state_schema_readback_failed","state_temp_file_residual")) {
+  Assert-Contains -Text $stateFunctionText -Pattern $stateReason -Code ("state_write_reason_missing_" + $stateReason)
+}
+Assert-Contains -Text $stateFunctionText -Pattern 'cluster-state\.\*\.tmp' -Code "state_temp_filter_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'File\]::Move\(\$tmp, \$Layout\.StatePath\)' -Code "state_move_initial_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'File\]::Replace\(\$tmp, \$Layout\.StatePath, \$null\)' -Code "state_replace_existing_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'Set-RestrictedAcl -PathValue \$Layout\.StatePath -TargetType File' -Code "state_file_acl_apply_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'Get-Acl -LiteralPath \$Layout\.StatePath' -Code "state_acl_readback_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'Assert-RestrictedAclSemantics[\s\S]+TargetType File' -Code "state_acl_semantic_readback_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'ReadAllText\(\$Layout\.StatePath\)[\s\S]+Assert-StrictFlatStateJson' -Code "state_schema_readback_missing"
+Assert-Contains -Text $stateConcordanceWrapperFunctionText -Pattern 'state_marker_concordance[\s\S]+Assert-MarkerStateConcordance[\s\S]+state_marker_concordance_failed' -Code "state_marker_concordance_wrapper_missing"
+Assert-Contains -Text $createFunctionText -Pattern 'Write-ClusterState[\s\S]+State "initializing"[\s\S]+Assert-CreateStateMarkerConcordance[\s\S]+Set-Stage -Stage "credential"' -Code "create_initial_state_gate_missing"
+Assert-Contains -Text $createFunctionText -Pattern 'catch \{[\s\S]+\$reason = Get-SafeReason[\s\S]+CurrentSecondaryReason[\s\S]+Write-ClusterState[\s\S]+State "failed"[\s\S]+ErrorCode \$reason[\s\S]+catch \{[\s\S]+CurrentSecondaryReason = Get-SafeReason[\s\S]+Throw-SafeError -Code \$reason' -Code "create_primary_secondary_preservation_missing"
+Assert-NotContains -Text $createFunctionText -Pattern '\$reason\s*=\s*"password_file_cleanup_failed"' -Code "create_primary_reason_replaced_by_cleanup"
+Assert-Contains -Text $text -Pattern 'secondary_reason=\$script:CurrentSecondaryReason' -Code "secondary_reason_output_missing"
 Assert-Contains -Text $concordanceFunctionText -Pattern '\$allowedStateKeys = @\(' -Code "state_allowlist_missing"
 Assert-Contains -Text $concordanceFunctionText -Pattern 'state_schema_invalid' -Code "state_schema_invalid_missing"
 Assert-Contains -Text $concordanceFunctionText -Pattern 'server_state' -Code "state_server_state_validation_missing"
@@ -494,7 +513,7 @@ if ($text.IndexOf("Assert-StrictFlatStateJson", [System.StringComparison]::Ordin
 Assert-Contains -Text $concordanceFunctionText -Pattern 'cluster_id' -Code "concordance_cluster_id_missing"
 Assert-Contains -Text $concordanceFunctionText -Pattern 'instance_name' -Code "concordance_instance_name_missing"
 Assert-Contains -Text $concordanceFunctionText -Pattern 'marker_state_mismatch' -Code "marker_state_error_missing"
-if (@([regex]::Matches($createFunctionText, "Assert-MarkerStateConcordance")).Count -lt 5) { Fail -Code "marker_state_concordance_calls_missing" }
+if (@([regex]::Matches($createFunctionText, "Assert-CreateStateMarkerConcordance")).Count -lt 5) { Fail -Code "marker_state_concordance_calls_missing" }
 Assert-Contains -Text $dataRootFunctionText -Pattern 'Assert-Marker[\s\S]+return \$full' -Code "dataroot_marker_success_return_missing"
 Assert-Contains -Text $text -Pattern "VOTO_CLARO_ISOLATED_BASELINE_TEST_V1" -Code "marker_magic_missing"
 Assert-NotContains -Text $text -Pattern "Remove-Item\s+[^\r\n]*-Recurse" -Code "recursive_remove_detected"
@@ -641,6 +660,18 @@ foreach ($code in @(
     "process_access_denied",
     "process_query_failed",
     "state_write_failed",
+    "state_validate_input_failed",
+    "state_get_created_utc_failed",
+    "state_build_payload_failed",
+    "state_serialize_json_failed",
+    "state_write_temp_failed",
+    "state_move_initial_failed",
+    "state_replace_existing_failed",
+    "state_apply_acl_failed",
+    "state_acl_readback_failed",
+    "state_schema_readback_failed",
+    "state_marker_concordance_failed",
+    "state_temp_file_residual",
     "state_schema_invalid",
     "state_duplicate_key",
     "marker_state_mismatch",
@@ -707,6 +738,12 @@ foreach ($line in @(
     "create_retry_blocked_until_cleanup=",
     "marker_state_concordance_required=true",
     "created_utc_stable=true",
+    "state_write_substep_reasons=true",
+    "state_initial_write_fail_closed=true",
+    "state_failed_write_secondary_reason_preserved=true",
+    "state_primary_reason_preserved=true",
+    "state_temp_residual_detection=true",
+    "state_readback_schema_validation=true",
     "git_working_directory_enforced=true",
     "process_output_drain_verified=true",
     "process_output_drain_failure_code=process_output_drain_failed",
@@ -1274,7 +1311,60 @@ Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace '
 Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nif (`$Acl.Access.Count -eq 1) { return }") -ForbiddenPattern '\.Count\s+-eq' -Code "selftest_acl_rule_count_dependency_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nSet-Acl -LiteralPath x") -ForbiddenPattern 'Set-Acl' -Code "selftest_acl_selftest_set_acl_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($stateFunctionText -replace 'created_utc = \$createdUtc', 'created_utc = $now') -ForbiddenPattern 'created_utc = \$now' -Code "selftest_created_utc_regeneration_not_detected"
-Assert-MutationRemovesRequired -MutatedText ($createFunctionText -replace "Assert-MarkerStateConcordance", "Skip-MarkerStateConcordance") -RequiredPattern "Assert-MarkerStateConcordance" -Code "selftest_marker_state_concordance_missing_not_detected"
+function Test-SimulatedStateWriteForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$ExistingState,
+    [Parameter(Mandatory = $true)][bool]$ResidualTemp,
+    [Parameter(Mandatory = $true)][bool]$AclRuleValid,
+    [Parameter(Mandatory = $true)][bool]$MarkerConcordant,
+    [Parameter(Mandatory = $true)][bool]$FailInitialWrite,
+    [Parameter(Mandatory = $true)][bool]$FailFailedWrite,
+    [AllowNull()][string]$ExistingCreatedUtc
+  )
+  $primaryReason = $null
+  $secondaryReason = $null
+  $createdUtc = $(if ([string]::IsNullOrWhiteSpace($ExistingCreatedUtc)) { "2026-01-01T00:00:00.0000000Z" } else { $ExistingCreatedUtc })
+  $operation = $(if ($ExistingState) { "state_replace_existing" } else { "state_move_initial" })
+  if ($ResidualTemp) { $primaryReason = "state_temp_file_residual" }
+  elseif ($FailInitialWrite) { $primaryReason = "state_write_temp_failed" }
+  elseif (-not $AclRuleValid) { $primaryReason = "state_acl_readback_failed" }
+  elseif (-not $MarkerConcordant) { $primaryReason = "state_marker_concordance_failed" }
+  if ($null -ne $primaryReason -and $FailFailedWrite) { $secondaryReason = "state_write_temp_failed" }
+  return [pscustomobject]@{
+    Operation = $operation
+    CreatedUtc = $createdUtc
+    PrimaryReason = $primaryReason
+    SecondaryReason = $secondaryReason
+    CredentialReached = ($null -eq $primaryReason)
+    InitdbReached = ($null -eq $primaryReason)
+    TempResidualDetected = $ResidualTemp
+  }
+}
+$stateInitialOk = Test-SimulatedStateWriteForSelfTest -ExistingState:$false -ResidualTemp:$false -AclRuleValid:$true -MarkerConcordant:$true -FailInitialWrite:$false -FailFailedWrite:$false -ExistingCreatedUtc $null
+if ($stateInitialOk.Operation -ne "state_move_initial" -or $stateInitialOk.CreatedUtc -ne "2026-01-01T00:00:00.0000000Z" -or $stateInitialOk.PrimaryReason -ne $null -or -not $stateInitialOk.CredentialReached) { Fail -Code "selftest_state_initial_write_failed" }
+$stateReplaceOk = Test-SimulatedStateWriteForSelfTest -ExistingState:$true -ResidualTemp:$false -AclRuleValid:$true -MarkerConcordant:$true -FailInitialWrite:$false -FailFailedWrite:$false -ExistingCreatedUtc "2025-12-31T00:00:00.0000000Z"
+if ($stateReplaceOk.Operation -ne "state_replace_existing" -or $stateReplaceOk.CreatedUtc -ne "2025-12-31T00:00:00.0000000Z") { Fail -Code "selftest_state_replace_or_created_utc_failed" }
+$stateAclFail = Test-SimulatedStateWriteForSelfTest -ExistingState:$true -ResidualTemp:$false -AclRuleValid:$false -MarkerConcordant:$true -FailInitialWrite:$false -FailFailedWrite:$false -ExistingCreatedUtc "2025-12-31T00:00:00.0000000Z"
+if ($stateAclFail.PrimaryReason -ne "state_acl_readback_failed" -or $stateAclFail.CredentialReached) { Fail -Code "selftest_state_acl_readback_failure_failed" }
+$stateMarkerFail = Test-SimulatedStateWriteForSelfTest -ExistingState:$true -ResidualTemp:$false -AclRuleValid:$true -MarkerConcordant:$false -FailInitialWrite:$false -FailFailedWrite:$false -ExistingCreatedUtc "2025-12-31T00:00:00.0000000Z"
+if ($stateMarkerFail.PrimaryReason -ne "state_marker_concordance_failed" -or $stateMarkerFail.InitdbReached) { Fail -Code "selftest_state_marker_concordance_failure_failed" }
+$statePrimaryPreserved = Test-SimulatedStateWriteForSelfTest -ExistingState:$false -ResidualTemp:$false -AclRuleValid:$true -MarkerConcordant:$true -FailInitialWrite:$true -FailFailedWrite:$false -ExistingCreatedUtc $null
+if ($statePrimaryPreserved.PrimaryReason -ne "state_write_temp_failed" -or $statePrimaryPreserved.SecondaryReason -ne $null -or $statePrimaryPreserved.CredentialReached) { Fail -Code "selftest_state_primary_preservation_success_failed" }
+$stateSecondaryPreserved = Test-SimulatedStateWriteForSelfTest -ExistingState:$false -ResidualTemp:$false -AclRuleValid:$true -MarkerConcordant:$true -FailInitialWrite:$true -FailFailedWrite:$true -ExistingCreatedUtc $null
+if ($stateSecondaryPreserved.PrimaryReason -ne "state_write_temp_failed" -or $stateSecondaryPreserved.SecondaryReason -ne "state_write_temp_failed" -or $stateSecondaryPreserved.CredentialReached) { Fail -Code "selftest_state_secondary_preservation_failed" }
+$stateResidualTemp = Test-SimulatedStateWriteForSelfTest -ExistingState:$false -ResidualTemp:$true -AclRuleValid:$true -MarkerConcordant:$true -FailInitialWrite:$false -FailFailedWrite:$false -ExistingCreatedUtc $null
+if ($stateResidualTemp.PrimaryReason -ne "state_temp_file_residual" -or -not $stateResidualTemp.TempResidualDetected) { Fail -Code "selftest_state_temp_residual_failed" }
+foreach ($stateStepForMutation in @("state_validate_input","state_get_created_utc","state_build_payload","state_serialize_json","state_write_temp","state_move_initial","state_replace_existing","state_apply_acl","state_acl_readback","state_schema_readback")) {
+  Assert-MutationRemovesRequired -MutatedText ($stateFunctionText -replace $stateStepForMutation, "state_step_removed") -RequiredPattern $stateStepForMutation -Code ("selftest_state_step_missing_not_detected_" + $stateStepForMutation)
+}
+Assert-MutationRemovesRequired -MutatedText ($stateFunctionText -replace 'File\]::Replace\(\$tmp, \$Layout\.StatePath, \$null\)', 'File]::Move($tmp, $Layout.StatePath)') -RequiredPattern 'File\]::Replace\(\$tmp, \$Layout\.StatePath, \$null\)' -Code "selftest_state_replace_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($stateFunctionText -replace 'File\]::Move\(\$tmp, \$Layout\.StatePath\)', 'File]::Replace($tmp, $Layout.StatePath, $null)') -RequiredPattern 'File\]::Move\(\$tmp, \$Layout\.StatePath\)' -Code "selftest_state_move_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($stateFunctionText -replace 'state_temp_file_residual', 'state_write_temp_failed') -RequiredPattern 'state_temp_file_residual' -Code "selftest_state_temp_residual_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($stateFunctionText -replace 'Assert-StrictFlatStateJson -JsonText \$stateText', 'Skip-StateSchemaReadback') -RequiredPattern 'Assert-StrictFlatStateJson -JsonText \$stateText' -Code "selftest_state_schema_readback_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($stateFunctionText -replace 'Get-Acl -LiteralPath \$Layout\.StatePath', 'Skip-StateAclReadback') -RequiredPattern 'Get-Acl -LiteralPath \$Layout\.StatePath' -Code "selftest_state_acl_readback_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($createFunctionText -replace 'Throw-SafeError -Code \$reason', 'Throw-SafeError -Code $script:CurrentSecondaryReason') -RequiredPattern 'Throw-SafeError -Code \$reason' -Code "selftest_primary_reason_preservation_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($createFunctionText + "`n`$reason = `"password_file_cleanup_failed`"") -ForbiddenPattern '\$reason\s*=\s*"password_file_cleanup_failed"' -Code "selftest_secondary_reason_overwrites_primary_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($createFunctionText -replace "Assert-CreateStateMarkerConcordance", "Skip-StateMarkerConcordance") -RequiredPattern "Assert-CreateStateMarkerConcordance" -Code "selftest_marker_state_concordance_missing_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($text -replace 'CleanupPartialCreate', 'CleanupMissing') -RequiredPattern 'CleanupPartialCreate' -Code "selftest_cleanup_action_missing_not_detected"
 Assert-MutationRemovesRequired -MutatedText ($cleanupAuthorizationFunctionText -replace 'ConfirmCleanupPartialCreate', 'ConfirmCreate') -RequiredPattern 'ConfirmCleanupPartialCreate' -Code "selftest_cleanup_confirm_missing_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($cleanupAuthorizationFunctionText + "`n`$CreateApprovalToken = `$script:CreateApprovalToken") -ForbiddenPattern 'CreateApprovalToken\s*=\s*\$script:CreateApprovalToken' -Code "selftest_cleanup_create_token_reuse_not_detected"
@@ -1636,6 +1726,12 @@ foreach ($expectedLine in @(
     "create_retry_blocked_until_cleanup=true",
     "marker_state_concordance_required=true",
     "created_utc_stable=true",
+    "state_write_substep_reasons=true",
+    "state_initial_write_fail_closed=true",
+    "state_failed_write_secondary_reason_preserved=true",
+    "state_primary_reason_preserved=true",
+    "state_temp_residual_detection=true",
+    "state_readback_schema_validation=true",
     "git_working_directory_enforced=true",
     "process_output_drain_verified=true",
     "process_output_drain_failure_code=process_output_drain_failed",

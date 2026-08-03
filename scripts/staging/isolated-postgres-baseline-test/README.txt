@@ -306,3 +306,12 @@ La auditoria final detecto que Assert-CleanupNoPostgresActivity seguia ejecutand
 La revalidacion de actividad se conserva y ahora usa el stage cerrado cleanup_revalidate_activity_after_instance_delete despues de confirmar que InstanceRoot ya no existe y antes de la validacion final del padre. cleanup_validate_parent_empty queda reservado solo para enumerar el padre, validar el contenedor, castear Entries a string[] y evaluar Count.
 
 cleanup_delete_root se activa inmediatamente antes del segundo Directory.Delete. Los fallos de actividad se mantienen separados de los fallos de enumeracion del padre y no se clasifican como cleanup_delete_root_failed. CleanupPartialCreate sigue suspendido; no se ejecuta SQL, no se accede a Supabase y Destroy permanece bloqueada.
+Incidente state_write_failed / escritura de estado Create
+
+La investigacion de B-SEC-23F confirmo que state_write_failed agrupaba demasiados subpasos: validacion de entrada, created_utc, payload, JSON, temporal, move inicial, replace existente, ACL, readback de schema y concordancia marker/state. Eso impedia distinguir el primer punto de fallo.
+
+Write-ClusterState ahora usa stages cerrados de escritura de estado y conserva la escritura atomica. La primera escritura sin StatePath usa move inicial; las transiciones posteriores usan replace existente. Despues de escribir se valida ACL semantica, schema estricto y ausencia de temporales residuales.
+
+Invoke-Create conserva el error primario. Si el registro posterior de state=failed tambien falla, la razon secundaria queda separada como diagnostico seguro y no reemplaza silenciosamente la causa original. Create sigue bloqueado antes de credential e initdb si el estado inicial no queda escrito, protegido y validado.
+
+La correccion no debilita ACL, no ejecuta SQL, no accede a Supabase y no cambia el estado parcial real durante las validaciones locales.

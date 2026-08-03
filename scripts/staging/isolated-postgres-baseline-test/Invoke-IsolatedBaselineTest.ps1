@@ -20,6 +20,7 @@ $ErrorActionPreference = "Stop"
 
 $script:CurrentStage = "initialization"
 $script:CurrentExceptionType = $null
+$script:CurrentSecondaryReason = $null
 $script:AllowedHost = "127.0.0.1"
 $script:MarkerFileName = "VC_ISOLATED_BASELINE_TEST.marker"
 $script:ClusterPrefix = "vc_staging_baseline_test_"
@@ -164,6 +165,18 @@ $script:SafeCodes = @(
   "process_access_denied",
   "process_query_failed",
   "state_write_failed",
+  "state_validate_input_failed",
+  "state_get_created_utc_failed",
+  "state_build_payload_failed",
+  "state_serialize_json_failed",
+  "state_write_temp_failed",
+  "state_move_initial_failed",
+  "state_replace_existing_failed",
+  "state_apply_acl_failed",
+  "state_acl_readback_failed",
+  "state_schema_readback_failed",
+  "state_marker_concordance_failed",
+  "state_temp_file_residual",
   "state_schema_invalid",
   "state_duplicate_key",
   "marker_state_mismatch",
@@ -2022,15 +2035,40 @@ function Write-ClusterState {
     [bool]$ServerCleanupAttempted = $false,
     [bool]$ServerCleanupCompleted = $false
   )
-  if ($script:CreateStates -notcontains $State) {
-    Throw-SafeError -Code "state_write_failed"
-  }
+  $previousStage = $script:CurrentStage
+  $now = $null
+  $createdUtc = $null
+  $payload = $null
+  $json = $null
+  $tmp = $null
+
+  Set-Stage -Stage "state_validate_input"
   try {
+    if ($script:CreateStates -notcontains $State) { Throw-SafeError -Code "state_validate_input_failed" }
+    if ([string]::IsNullOrWhiteSpace($ClusterId) -or [string]::IsNullOrWhiteSpace($Stage)) { Throw-SafeError -Code "state_validate_input_failed" }
+    if (-not (Test-Path -LiteralPath $Layout.StateRoot -PathType Container)) { Throw-SafeError -Code "state_validate_input_failed" }
+    $residualTemps = @(Get-ChildItem -LiteralPath $Layout.StateRoot -Force -File -Filter "cluster-state.*.tmp" -ErrorAction Stop)
+    if ($residualTemps.Count -ne 0) { Throw-SafeError -Code "state_temp_file_residual" }
     $now = [DateTimeOffset]::UtcNow.ToString("o")
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_validate_input"
+    if ((Get-SafeReason -ErrorRecord $_) -eq "state_temp_file_residual") { Throw-SafeError -Code "state_temp_file_residual" }
+    Throw-SafeError -Code "state_validate_input_failed"
+  }
+
+  Set-Stage -Stage "state_get_created_utc"
+  try {
     $createdUtc = Get-StableCreatedUtc -Layout $Layout -ClusterId $ClusterId
-    if ([DateTimeOffset]::Parse($now) -lt [DateTimeOffset]::Parse($createdUtc)) {
-      Throw-SafeError -Code "state_write_failed"
-    }
+    if ([DateTimeOffset]::Parse($now) -lt [DateTimeOffset]::Parse($createdUtc)) { Throw-SafeError -Code "state_get_created_utc_failed" }
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_get_created_utc"
+    Throw-SafeError -Code "state_get_created_utc_failed"
+  }
+
+  Set-Stage -Stage "state_build_payload"
+  try {
     $payload = [ordered]@{
       artifact_type = "voto_claro_isolated_baseline_cluster_state"
       schema_version = 1
@@ -2057,21 +2095,108 @@ function Write-ClusterState {
       server_cleanup_attempted = $ServerCleanupAttempted
       server_cleanup_completed = $ServerCleanupCompleted
     }
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_build_payload"
+    Throw-SafeError -Code "state_build_payload_failed"
+  }
+
+  Set-Stage -Stage "state_serialize_json"
+  try {
     $json = $payload | ConvertTo-Json -Depth 4
+    [void](Assert-StrictFlatStateJson -JsonText $json)
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_serialize_json"
+    Throw-SafeError -Code "state_serialize_json_failed"
+  }
+
+  Set-Stage -Stage "state_write_temp"
+  try {
     $tmp = Join-Path $Layout.StateRoot ("cluster-state." + [Guid]::NewGuid().ToString("N") + ".tmp")
     Write-Utf8NoBomFile -PathValue $tmp -Text $json
-    if (Test-Path -LiteralPath $Layout.StatePath) {
-      [System.IO.File]::Replace($tmp, $Layout.StatePath, $null)
-    } else {
-      [System.IO.File]::Move($tmp, $Layout.StatePath)
-    }
-    Set-RestrictedAcl -PathValue $Layout.StatePath -TargetType File
+    if (-not (Test-Path -LiteralPath $tmp -PathType Leaf)) { Throw-SafeError -Code "state_write_temp_failed" }
+    Set-Stage -Stage $previousStage
   } catch {
-    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
-    Throw-SafeError -Code "state_write_failed"
+    Set-Stage -Stage "state_write_temp"
+    Throw-SafeError -Code "state_write_temp_failed"
+  }
+
+  if (Test-Path -LiteralPath $Layout.StatePath -PathType Leaf) {
+    Set-Stage -Stage "state_replace_existing"
+    try {
+      [System.IO.File]::Replace($tmp, $Layout.StatePath, $null)
+      if (Test-Path -LiteralPath $tmp -PathType Leaf) { Throw-SafeError -Code "state_temp_file_residual" }
+      Set-Stage -Stage $previousStage
+    } catch {
+      Set-Stage -Stage "state_replace_existing"
+      if ((Get-SafeReason -ErrorRecord $_) -eq "state_temp_file_residual") { Throw-SafeError -Code "state_temp_file_residual" }
+      Throw-SafeError -Code "state_replace_existing_failed"
+    }
+  } else {
+    Set-Stage -Stage "state_move_initial"
+    try {
+      [System.IO.File]::Move($tmp, $Layout.StatePath)
+      if (Test-Path -LiteralPath $tmp -PathType Leaf) { Throw-SafeError -Code "state_temp_file_residual" }
+      Set-Stage -Stage $previousStage
+    } catch {
+      Set-Stage -Stage "state_move_initial"
+      if ((Get-SafeReason -ErrorRecord $_) -eq "state_temp_file_residual") { Throw-SafeError -Code "state_temp_file_residual" }
+      Throw-SafeError -Code "state_move_initial_failed"
+    }
+  }
+
+  Set-Stage -Stage "state_apply_acl"
+  try {
+    Set-RestrictedAcl -PathValue $Layout.StatePath -TargetType File
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_apply_acl"
+    $aclReason = Get-SafeReason -ErrorRecord $_
+    if ($aclReason -match '^acl_(readback|rules|identity|unexpected|inherited|missing|rights|inheritance|propagation|not_protected|validation)') { Throw-SafeError -Code "state_acl_readback_failed" }
+    Throw-SafeError -Code "state_apply_acl_failed"
+  }
+
+  Set-Stage -Stage "state_acl_readback"
+  try {
+    $stateAcl = Get-Acl -LiteralPath $Layout.StatePath
+    Assert-RestrictedAclSemantics -Acl $stateAcl -ExpectedSid ([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -TargetType File
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_acl_readback"
+    Throw-SafeError -Code "state_acl_readback_failed"
+  }
+
+  Set-Stage -Stage "state_schema_readback"
+  try {
+    $stateText = [System.IO.File]::ReadAllText($Layout.StatePath)
+    [void](Assert-StrictFlatStateJson -JsonText $stateText)
+    [void]($stateText | ConvertFrom-Json)
+    $residualTemps = @(Get-ChildItem -LiteralPath $Layout.StateRoot -Force -File -Filter "cluster-state.*.tmp" -ErrorAction Stop)
+    if ($residualTemps.Count -ne 0) { Throw-SafeError -Code "state_temp_file_residual" }
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_schema_readback"
+    if ((Get-SafeReason -ErrorRecord $_) -eq "state_temp_file_residual") { Throw-SafeError -Code "state_temp_file_residual" }
+    Throw-SafeError -Code "state_schema_readback_failed"
   }
 }
 
+function Assert-CreateStateMarkerConcordance {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$ClusterId
+  )
+  $previousStage = $script:CurrentStage
+  Set-Stage -Stage "state_marker_concordance"
+  try {
+    Assert-MarkerStateConcordance -Layout $Layout -ClusterId $ClusterId
+    Set-Stage -Stage $previousStage
+  } catch {
+    Set-Stage -Stage "state_marker_concordance"
+    Throw-SafeError -Code "state_marker_concordance_failed"
+  }
+}
 function Write-AtomicState {
   param(
     [Parameter(Mandatory = $true)][object]$Layout,
@@ -2894,7 +3019,7 @@ function Invoke-Create {
     Write-Utf8NoBomFile -PathValue $layout.MarkerPath -Text ($markerText -join "`n")
     Set-RestrictedAcl -PathValue $layout.MarkerPath -TargetType File
     Write-ClusterState -Layout $layout -ClusterId $clusterId -State "initializing" -Stage "initdb"
-    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+    Assert-CreateStateMarkerConcordance -Layout $layout -ClusterId $clusterId
 
     Set-Stage -Stage "credential"
     $plainTextPassword = New-AdminPasswordText
@@ -2910,7 +3035,7 @@ function Invoke-Create {
     $initdbCompleted = $true
     Assert-InitializedDataRoot -Layout $layout
     Write-ClusterState -Layout $layout -ClusterId $clusterId -State "initialized" -Stage "initialized" -InitdbCompleted:$true -CredentialProtected:$credentialProtected
-    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+    Assert-CreateStateMarkerConcordance -Layout $layout -ClusterId $clusterId
 
     Set-Stage -Stage "postgresql_conf"
     Write-ClusterState -Layout $layout -ClusterId $clusterId -State "configuring" -Stage "postgresql_conf" -InitdbCompleted:$true -CredentialProtected:$credentialProtected
@@ -2918,14 +3043,14 @@ function Invoke-Create {
     Set-Stage -Stage "pg_hba"
     Set-ManagedPgHba -Layout $layout
     Write-ClusterState -Layout $layout -ClusterId $clusterId -State "configured" -Stage "configured" -InitdbCompleted:$true -ConfigurationCompleted:$true -CredentialProtected:$credentialProtected
-    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+    Assert-CreateStateMarkerConcordance -Layout $layout -ClusterId $clusterId
 
     Set-Stage -Stage "pg_ctl_start"
     if (-not (Test-CreatePortAvailable)) {
       Throw-SafeError -Code "port_race_detected"
     }
     Write-ClusterState -Layout $layout -ClusterId $clusterId -State "starting" -Stage "pg_ctl_start" -InitdbCompleted:$true -ConfigurationCompleted:$true -CredentialProtected:$credentialProtected -ServerState $serverState -ServerCleanupAttempted:$serverCleanupAttempted -ServerCleanupCompleted:$serverCleanupCompleted
-    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+    Assert-CreateStateMarkerConcordance -Layout $layout -ClusterId $clusterId
     $pgCtl = Get-ToolPath -BinRoot $package.Bin -ToolName "pg_ctl"
     $startArgs = @("start", "-D", $layout.DataRoot, "-l", $layout.ServerLog, "-w", "-t", "60")
     $startResult = Invoke-SafeProcess -FilePath $pgCtl -Arguments $startArgs -WorkingDirectory $layout.InstanceRoot -TimeoutSeconds 75 -ToolName "pg_ctl"
@@ -2972,7 +3097,7 @@ function Invoke-Create {
     }
     $serverState = "running"
     Write-ClusterState -Layout $layout -ClusterId $clusterId -State "running" -Stage "running" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$true -CredentialProtected:$credentialProtected -ServerState $serverState -ServerCleanupAttempted:$serverCleanupAttempted -ServerCleanupCompleted:$serverCleanupCompleted
-    Assert-MarkerStateConcordance -Layout $layout -ClusterId $clusterId
+    Assert-CreateStateMarkerConcordance -Layout $layout -ClusterId $clusterId
 
     Write-Output "CREATE_LOCAL_ISOLATED_CLUSTER_OK"
     Write-Output "state=running"
@@ -2990,13 +3115,19 @@ function Invoke-Create {
     Write-Output "production_connection_used=false"
   } catch {
     $reason = Get-SafeReason -ErrorRecord $_
-    try { Remove-PasswordFileStrict -Layout $layout } catch { $reason = "password_file_cleanup_failed" }
+    $primaryStage = $script:CurrentStage
+    try { Remove-PasswordFileStrict -Layout $layout } catch { if ([string]::IsNullOrWhiteSpace($script:CurrentSecondaryReason)) { $script:CurrentSecondaryReason = "password_file_cleanup_failed" } }
     if ($initdbCompleted -ne $true -and (Test-Path -LiteralPath $layout.CredentialPath -PathType Leaf)) {
       try { [System.IO.File]::Delete($layout.CredentialPath) } catch { }
     }
     if (Test-Path -LiteralPath $layout.StateRoot -PathType Container) {
-      try { Write-ClusterState -Layout $layout -ClusterId $clusterId -State "failed" -Stage $script:CurrentStage -ErrorCode $reason -InitdbCompleted:$initdbCompleted -CredentialProtected:$credentialProtected -ServerState $serverState -ServerCleanupAttempted:$serverCleanupAttempted -ServerCleanupCompleted:$serverCleanupCompleted } catch { }
+      try {
+        Write-ClusterState -Layout $layout -ClusterId $clusterId -State "failed" -Stage $primaryStage -ErrorCode $reason -InitdbCompleted:$initdbCompleted -CredentialProtected:$credentialProtected -ServerState $serverState -ServerCleanupAttempted:$serverCleanupAttempted -ServerCleanupCompleted:$serverCleanupCompleted
+      } catch {
+        if ([string]::IsNullOrWhiteSpace($script:CurrentSecondaryReason)) { $script:CurrentSecondaryReason = Get-SafeReason -ErrorRecord $_ }
+      }
     }
+    Set-Stage -Stage $primaryStage
     Throw-SafeError -Code $reason
   } finally {
     if ($null -ne $plainTextPassword) {
@@ -3061,6 +3192,13 @@ function Invoke-Plan {
   Write-Output "create_retry_blocked_until_cleanup=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
   Write-Output "marker_state_concordance_required=true"
   Write-Output "created_utc_stable=true"
+  Write-Output "state_write_substeps=state_validate_input,state_get_created_utc,state_build_payload,state_serialize_json,state_write_temp,state_move_initial,state_replace_existing,state_apply_acl,state_acl_readback,state_schema_readback,state_marker_concordance"
+  Write-Output "state_write_substep_reasons=true"
+  Write-Output "state_initial_write_fail_closed=true"
+  Write-Output "state_failed_write_secondary_reason_preserved=true"
+  Write-Output "state_primary_reason_preserved=true"
+  Write-Output "state_temp_residual_detection=true"
+  Write-Output "state_readback_schema_validation=true"
   Write-Output "git_working_directory_enforced=true"
   Write-Output "process_output_drain_verified=true"
   Write-Output "process_output_drain_failure_code=process_output_drain_failed"
@@ -3220,6 +3358,9 @@ try {
   Write-Output "reason=$reason"
   if (-not [string]::IsNullOrWhiteSpace($script:CurrentExceptionType)) {
     Write-Output "exception_type=$script:CurrentExceptionType"
+  }
+  if (-not [string]::IsNullOrWhiteSpace($script:CurrentSecondaryReason)) {
+    Write-Output "secondary_reason=$script:CurrentSecondaryReason"
   }
   Write-Output "production_connection_used=false"
   Write-Output "sql_executed=false"
