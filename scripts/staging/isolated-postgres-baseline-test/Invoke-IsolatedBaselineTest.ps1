@@ -74,6 +74,15 @@ $script:SafeCodes = @(
   "cleanup_failed_exact_state_invalid",
   "cleanup_failed_marker_state_invalid",
   "cleanup_failed_acl_invalid",
+  "cleanup_failed_internal_acl_invalid",
+  "cleanup_failed_isolated_root_acl_invalid",
+  "cleanup_failed_acl_owner_invalid",
+  "cleanup_failed_acl_fullcontrol_missing",
+  "cleanup_failed_acl_deny_rule",
+  "cleanup_failed_acl_unexpected_explicit_rule",
+  "cleanup_failed_acl_identity_invalid",
+  "cleanup_failed_acl_read_failed",
+  "cleanup_failed_acl_enumeration_failed",
   "cleanup_failed_activity_detected",
   "cleanup_failed_state_changed",
   "cleanup_failed_delete_state_json_failed",
@@ -1765,6 +1774,8 @@ function Get-CleanupFailedCreateSafeFailure {
     "cleanup_failed_git",
     "cleanup_failed_paths",
     "cleanup_failed_attributes",
+    "cleanup_failed_isolated_root_acl",
+    "cleanup_failed_internal_acl",
     "cleanup_failed_exact_state",
     "cleanup_failed_signature_initial",
     "cleanup_failed_activity",
@@ -1801,6 +1812,15 @@ function Get-CleanupFailedCreateSafeFailure {
     "cleanup_failed_exact_state_invalid",
     "cleanup_failed_marker_state_invalid",
     "cleanup_failed_acl_invalid",
+  "cleanup_failed_internal_acl_invalid",
+  "cleanup_failed_isolated_root_acl_invalid",
+  "cleanup_failed_acl_owner_invalid",
+  "cleanup_failed_acl_fullcontrol_missing",
+  "cleanup_failed_acl_deny_rule",
+  "cleanup_failed_acl_unexpected_explicit_rule",
+  "cleanup_failed_acl_identity_invalid",
+  "cleanup_failed_acl_read_failed",
+  "cleanup_failed_acl_enumeration_failed",
     "cleanup_failed_activity_detected",
     "cleanup_failed_state_changed",
     "cleanup_failed_delete_state_json_failed",
@@ -1877,18 +1897,18 @@ function Get-CleanupFailedCreateSafeFailure {
           "marker_state_mismatch" { "cleanup_failed_marker_state_invalid"; break }
           "marker_missing" { "cleanup_failed_marker_state_invalid"; break }
           "marker_invalid" { "cleanup_failed_marker_state_invalid"; break }
-          "acl_not_protected" { "cleanup_failed_acl_invalid"; break }
-          "acl_rules_missing" { "cleanup_failed_acl_invalid"; break }
-          "acl_rules_read_failed" { "cleanup_failed_acl_invalid"; break }
-          "acl_rules_collection_invalid" { "cleanup_failed_acl_invalid"; break }
-          "acl_rules_enumeration_failed" { "cleanup_failed_acl_invalid"; break }
-          "acl_unexpected_identity" { "cleanup_failed_acl_invalid"; break }
-          "acl_unexpected_deny_rule" { "cleanup_failed_acl_invalid"; break }
-          "acl_inherited_rule_present" { "cleanup_failed_acl_invalid"; break }
-          "acl_missing_authorized_allow" { "cleanup_failed_acl_invalid"; break }
-          "acl_rights_insufficient" { "cleanup_failed_acl_invalid"; break }
-          "acl_inheritance_flags_mismatch" { "cleanup_failed_acl_invalid"; break }
-          "acl_propagation_flags_mismatch" { "cleanup_failed_acl_invalid"; break }
+          "acl_not_protected" { "cleanup_failed_internal_acl_invalid"; break }
+          "acl_rules_missing" { "cleanup_failed_acl_read_failed"; break }
+          "acl_rules_read_failed" { "cleanup_failed_acl_read_failed"; break }
+          "acl_rules_collection_invalid" { "cleanup_failed_acl_enumeration_failed"; break }
+          "acl_rules_enumeration_failed" { "cleanup_failed_acl_enumeration_failed"; break }
+          "acl_unexpected_identity" { "cleanup_failed_acl_identity_invalid"; break }
+          "acl_unexpected_deny_rule" { "cleanup_failed_acl_deny_rule"; break }
+          "acl_inherited_rule_present" { "cleanup_failed_internal_acl_invalid"; break }
+          "acl_missing_authorized_allow" { "cleanup_failed_acl_fullcontrol_missing"; break }
+          "acl_rights_insufficient" { "cleanup_failed_acl_fullcontrol_missing"; break }
+          "acl_inheritance_flags_mismatch" { "cleanup_failed_internal_acl_invalid"; break }
+          "acl_propagation_flags_mismatch" { "cleanup_failed_internal_acl_invalid"; break }
           default { $null }
         }
       }
@@ -1931,6 +1951,8 @@ function Get-CleanupFailedCreateSafeFailure {
     "cleanup_failed_git" { "cleanup_failed_git_invalid"; break }
     "cleanup_failed_paths" { "cleanup_failed_paths_invalid"; break }
     "cleanup_failed_attributes" { "cleanup_failed_attributes_invalid"; break }
+    "cleanup_failed_isolated_root_acl" { "cleanup_failed_isolated_root_acl_invalid"; break }
+    "cleanup_failed_internal_acl" { "cleanup_failed_internal_acl_invalid"; break }
     "cleanup_failed_exact_state" { "cleanup_failed_exact_state_invalid"; break }
     "cleanup_failed_signature_initial" { "cleanup_failed_state_changed"; break }
     "cleanup_failed_activity" { "cleanup_failed_activity_detected"; break }
@@ -1972,6 +1994,113 @@ function Assert-CleanupFailedCreateFileSafe {
   } catch {
     if ($_.Exception.Message -match "^VC_SAFE_REASON::(cleanup_failed_|cleanup_|acl_)") { throw }
     Throw-SafeError -Code "cleanup_failed_acl_invalid"
+  }
+}
+
+function Assert-CleanupFailedCreateAclRulesReadable {
+  param([Parameter(Mandatory = $true)][object]$Acl)
+  $rulesResult = Get-RestrictedAclRulesForValidation -Acl $Acl
+  if (-not $rulesResult.Success) {
+    switch ($rulesResult.SafeErrorCode) {
+      "acl_rules_read_failed" { Throw-SafeError -Code "cleanup_failed_acl_read_failed" }
+      "acl_rules_enumeration_failed" { Throw-SafeError -Code "cleanup_failed_acl_enumeration_failed" }
+      "acl_rules_missing" { Throw-SafeError -Code "cleanup_failed_acl_read_failed" }
+      default { Throw-SafeError -Code "cleanup_failed_acl_enumeration_failed" }
+    }
+  }
+  return $rulesResult.Rules
+}
+
+function Assert-CleanupFailedCreateAclOwnerCurrent {
+  param(
+    [Parameter(Mandatory = $true)][object]$Acl,
+    [Parameter(Mandatory = $true)][System.Security.Principal.SecurityIdentifier]$ExpectedSid
+  )
+  try {
+    $ownerSid = $Acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+  } catch {
+    Throw-SafeError -Code "cleanup_failed_acl_owner_invalid"
+  }
+  if ($null -eq $ownerSid -or -not ($ownerSid -is [System.Security.Principal.SecurityIdentifier])) {
+    Throw-SafeError -Code "cleanup_failed_acl_owner_invalid"
+  }
+  if (-not [string]::Equals($ownerSid.Value, $ExpectedSid.Value, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "cleanup_failed_acl_owner_invalid"
+  }
+}
+
+function Assert-CleanupFailedCreateIsolatedRootSafe {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  try {
+    $expectedRoot = Get-IsolatedRoot
+    $isolatedRoot = [System.IO.Path]::GetFullPath($Layout.IsolatedRoot)
+    $trimSeparators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    if (-not [string]::Equals($isolatedRoot.TrimEnd($trimSeparators), $expectedRoot.TrimEnd($trimSeparators), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "cleanup_failed_paths_invalid"
+    }
+    if (-not (Test-Path -LiteralPath $isolatedRoot -PathType Container)) {
+      Throw-SafeError -Code "cleanup_failed_paths_invalid"
+    }
+    $item = Get-Item -LiteralPath $isolatedRoot -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      Throw-SafeError -Code "cleanup_failed_attributes_invalid"
+    }
+    if (($item.Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0 -or
+        ($item.Attributes -band [System.IO.FileAttributes]::System) -ne 0) {
+      Throw-SafeError -Code "cleanup_failed_attributes_invalid"
+    }
+    try {
+      $acl = Get-Acl -LiteralPath $isolatedRoot
+    } catch {
+      Throw-SafeError -Code "cleanup_failed_acl_read_failed"
+    }
+    $expectedSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    Assert-CleanupFailedCreateAclOwnerCurrent -Acl $acl -ExpectedSid $expectedSid
+    if ($acl.AreAccessRulesProtected -eq $true) {
+      Assert-RestrictedAclSemantics -Acl $acl -ExpectedSid $expectedSid -TargetType Directory
+    } else {
+      $rules = @(Assert-CleanupFailedCreateAclRulesReadable -Acl $acl)
+      if ($rules.Count -eq 0) {
+        Throw-SafeError -Code "cleanup_failed_acl_fullcontrol_missing"
+      }
+      $requiredRights = [int64][System.Security.AccessControl.FileSystemRights]::FullControl
+      $combinedAllowRights = [int64]0
+      $currentAllowFound = $false
+      foreach ($access in $rules) {
+        if ($null -eq $access) {
+          Throw-SafeError -Code "cleanup_failed_acl_enumeration_failed"
+        }
+        if (-not $access.IsInherited) {
+          Throw-SafeError -Code "cleanup_failed_acl_unexpected_explicit_rule"
+        }
+        if ($access.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Deny) {
+          Throw-SafeError -Code "cleanup_failed_acl_deny_rule"
+        }
+        if ($access.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
+          Throw-SafeError -Code "cleanup_failed_acl_enumeration_failed"
+        }
+        $identity = Convert-IdentityReferenceToSidValue -IdentityReference $access.IdentityReference
+        if (-not $identity.Success) {
+          Throw-SafeError -Code "cleanup_failed_acl_identity_invalid"
+        }
+        if ([string]::Equals($identity.SidValue, $expectedSid.Value, [System.StringComparison]::OrdinalIgnoreCase)) {
+          $currentAllowFound = $true
+          $combinedAllowRights = $combinedAllowRights -bor [int64]$access.FileSystemRights
+        }
+      }
+      if (-not $currentAllowFound -or (($combinedAllowRights -band $requiredRights) -ne $requiredRights)) {
+        Throw-SafeError -Code "cleanup_failed_acl_fullcontrol_missing"
+      }
+    }
+    Assert-CleanupFailedCreateExactEntries -PathValue $isolatedRoot -ExpectedEntries @($Layout.InstanceRoot)
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::cleanup_failed_") { throw }
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::acl_unexpected_deny_rule") { Throw-SafeError -Code "cleanup_failed_acl_deny_rule" }
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::acl_unexpected_identity|^VC_SAFE_REASON::acl_identity_") { Throw-SafeError -Code "cleanup_failed_acl_identity_invalid" }
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::acl_missing_authorized_allow|^VC_SAFE_REASON::acl_rights_insufficient") { Throw-SafeError -Code "cleanup_failed_acl_fullcontrol_missing" }
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::acl_rules_read_failed|^VC_SAFE_REASON::acl_rules_missing") { Throw-SafeError -Code "cleanup_failed_acl_read_failed" }
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::acl_rules_") { Throw-SafeError -Code "cleanup_failed_acl_enumeration_failed" }
+    Throw-SafeError -Code "cleanup_failed_isolated_root_acl_invalid"
   }
 }
 
@@ -2070,7 +2199,8 @@ function Assert-CleanupFailedCreateStatePayload {
 
 function Assert-CleanupFailedCreateExactState {
   param([Parameter(Mandatory = $true)][object]$Layout)
-  foreach ($dir in @($Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)) {
+  Assert-CleanupFailedCreateIsolatedRootSafe -Layout $Layout
+  foreach ($dir in @($Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)) {
     Assert-CleanupFailedCreateDirectorySafe -PathValue $dir
   }
   foreach ($file in @($Layout.StatePath, $Layout.MarkerPath)) {
@@ -2157,8 +2287,11 @@ function Invoke-CleanupFailedCreate {
     Set-Stage -Stage "cleanup_failed_paths"
     Assert-CleanupPathFixed -Layout $layout
 
-    Set-Stage -Stage "cleanup_failed_attributes"
-    foreach ($dir in @($layout.IsolatedRoot, $layout.InstanceRoot, $layout.DataRoot, $layout.LogRoot, $layout.SecretRoot, $layout.StateRoot)) {
+    Set-Stage -Stage "cleanup_failed_isolated_root_acl"
+    Assert-CleanupFailedCreateIsolatedRootSafe -Layout $layout
+
+    Set-Stage -Stage "cleanup_failed_internal_acl"
+    foreach ($dir in @($layout.InstanceRoot, $layout.DataRoot, $layout.LogRoot, $layout.SecretRoot, $layout.StateRoot)) {
       Assert-CleanupFailedCreateDirectorySafe -PathValue $dir
     }
 
@@ -3615,6 +3748,10 @@ function Invoke-Create {
     }
 
     Set-Stage -Stage "create_directories"
+    if (-not (Test-Path -LiteralPath $layout.IsolatedRoot -PathType Container)) {
+      New-Item -ItemType Directory -Path $layout.IsolatedRoot -ErrorAction Stop | Out-Null
+    }
+    Set-RestrictedAcl -PathValue $layout.IsolatedRoot -TargetType Directory
     foreach ($dir in @($layout.InstanceRoot, $layout.DataRoot, $layout.LogRoot, $layout.StateRoot, $layout.SecretRoot)) {
       New-Item -ItemType Directory -Path $dir -ErrorAction Stop | Out-Null
       Set-RestrictedAcl -PathValue $dir -TargetType Directory
@@ -3902,6 +4039,11 @@ function Invoke-Plan {
   Write-Output "cleanup_failed_create_package_directory_in_scope=false"
   Write-Output "cleanup_failed_create_marker_state_validation=true"
   Write-Output "cleanup_failed_create_activity_revalidation=true"
+  Write-Output "cleanup_failed_create_isolated_root_acl_contract=SAFE_INHERITED_OWNER_FULLCONTROL"
+  Write-Output "cleanup_failed_create_isolated_root_acl_modified=false"
+  Write-Output "cleanup_failed_create_internal_acl_contract=STRICT_PROTECTED_SINGLE_SID"
+  Write-Output "cleanup_failed_create_acl_contracts_separated=true"
+  Write-Output "create_isolated_root_acl_hardened=true"
   Write-Output "cleanup_failed_create_expected_delete_file_count=2"
   Write-Output "cleanup_failed_create_expected_delete_directory_count=6"
   Write-Output "cleanup_requires_empty_instance=true"

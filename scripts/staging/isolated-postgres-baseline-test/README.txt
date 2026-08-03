@@ -332,3 +332,14 @@ El orden de borrado es explicito y no recursivo: File.Delete de cluster-state.js
 La accion revalida actividad PostgreSQL antes de cualquier borrado, antes de borrar InstanceRoot, antes de borrar IsolatedRoot y al final. Exige cero procesos postgres autorizados o ambiguos, cero servicios PostgreSQL en ejecucion, puerto 127.0.0.1:55432 cerrado y ausencia de postmaster.pid. Usa firma TOCTOU antes de entrar a los grupos destructivos.
 
 CleanupFailedCreate no encadena Create, no ejecuta SQL, no usa Supabase, no toca produccion y no modifica el paquete PostgreSQL. Debe permanecer sin ejecutar hasta una aprobacion humana separada.
+B-SEC-23G1 ACL de IsolatedRoot
+
+El intento real de CleanupFailedCreate mostro que IsolatedRoot conservaba ACL heredada porque Create la creaba implicitamente al crear InstanceRoot y solo aplicaba Set-RestrictedAcl desde InstanceRoot hacia abajo. El estado parcial real no se borro ni se modifico durante esta correccion.
+
+CleanupFailedCreate separa ahora dos contratos ACL. IsolatedRoot usa un contrato seguro especial compatible con el estado heredado: ruta canonica exacta, directorio existente, sin reparse, sin Hidden/System, propietario del usuario actual por SID, FullControl efectivo del usuario actual mediante Allow, sin Deny, sin reglas explicitas inesperadas cuando la ACL no esta protegida, lectura y enumeracion completas, y contenido exacto limitado a InstanceRoot. Esta validacion no modifica ACL.
+
+Los objetos internos conservan el contrato estricto: InstanceRoot, data, logs, secrets, state, marker y cluster-state.json deben tener ACL protegida, SID actual, FullControl, sin herencia, sin Deny y sin identidad inesperada.
+
+Para ejecuciones futuras, Create endurece IsolatedRoot explicitamente: crea IsolatedRoot si falta, aplica Set-RestrictedAcl sobre IsolatedRoot y solo despues continua con InstanceRoot y los directorios internos. Si el readback semantico falla, Create no avanza.
+
+La correccion no autoriza por si sola CleanupFailedCreate. La accion sigue requiriendo aprobacion humana separada, no ejecuta SQL, no usa Supabase, no toca produccion y mantiene borrado explicito no recursivo.

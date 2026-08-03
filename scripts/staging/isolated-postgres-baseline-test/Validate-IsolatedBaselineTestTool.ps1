@@ -182,6 +182,10 @@ $cleanupFailedAuthorizationFunctionText = Get-FunctionText -Name "Assert-Cleanup
 $cleanupFailedStateFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateExactState"
 $cleanupFailedPayloadFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStatePayload"
 $cleanupFailedFailureFunctionText = Get-FunctionText -Name "Get-CleanupFailedCreateSafeFailure"
+$cleanupFailedIsolatedRootFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateIsolatedRootSafe"
+$cleanupFailedDirectorySafeFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateDirectorySafe"
+$cleanupFailedAclRulesFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateAclRulesReadable"
+$cleanupFailedAclOwnerFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateAclOwnerCurrent"
 $cleanupFailureFunctionText = Get-FunctionText -Name "Get-CleanupSafeFailure"
 $cleanupEntriesClassText = ""
 $cleanupEntriesNewFunctionText = Get-FunctionText -Name "New-CleanupDirectoryEntriesResult"
@@ -334,6 +338,49 @@ Assert-Contains -Text $cleanupFailedFunctionText -Pattern 'cleanup_failed_delete
 	 -~]+cleanup_failed_revalidate_activity_before_isolated_delete[
 	 -~]+cleanup_failed_delete_isolated_root[
 	 -~]+Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)' -Code "cleanup_failed_delete_order_missing"
+Assert-Contains -Text $cleanupFailedIsolatedRootFunctionText -Pattern 'Get-IsolatedRoot[
+	 -~]+GetFullPath[
+	 -~]+PathType Container[
+	 -~]+ReparsePoint[
+	 -~]+Hidden[
+	 -~]+System' -Code "cleanup_failed_isolated_root_path_guard_missing"
+Assert-Contains -Text $cleanupFailedAclOwnerFunctionText -Pattern 'GetOwner\(\[System\.Security\.Principal\.SecurityIdentifier\]\)' -Code "cleanup_failed_isolated_root_owner_missing"
+Assert-Contains -Text $cleanupFailedIsolatedRootFunctionText -Pattern 'WindowsIdentity\]::GetCurrent\(\)\.User' -Code "cleanup_failed_isolated_root_owner_missing"
+Assert-Contains -Text $cleanupFailedAclOwnerFunctionText -Pattern 'OrdinalIgnoreCase' -Code "cleanup_failed_isolated_root_owner_missing"
+Assert-Contains -Text $cleanupFailedIsolatedRootFunctionText -Pattern 'AreAccessRulesProtected -eq \$true[
+	 -~]+Assert-RestrictedAclSemantics[
+	 -~]+else[
+	 -~]+Assert-CleanupFailedCreateAclRulesReadable' -Code "cleanup_failed_isolated_root_contract_split_missing"
+Assert-Contains -Text $cleanupFailedIsolatedRootFunctionText -Pattern 'IsInherited[
+	 -~]+cleanup_failed_acl_unexpected_explicit_rule[
+	 -~]+AccessControlType\]::Deny[
+	 -~]+cleanup_failed_acl_deny_rule[
+	 -~]+Convert-IdentityReferenceToSidValue[
+	 -~]+cleanup_failed_acl_identity_invalid[
+	 -~]+FullControl[
+	 -~]+cleanup_failed_acl_fullcontrol_missing' -Code "cleanup_failed_isolated_root_acl_checks_missing"
+Assert-Contains -Text $cleanupFailedIsolatedRootFunctionText -Pattern 'Assert-CleanupFailedCreateExactEntries -PathValue \$isolatedRoot -ExpectedEntries @\(\$Layout\.InstanceRoot\)' -Code "cleanup_failed_isolated_root_content_check_missing"
+Assert-Contains -Text $cleanupFailedStateFunctionText -Pattern 'Assert-CleanupFailedCreateIsolatedRootSafe -Layout \$Layout[
+	 -~]+foreach \(\$dir in @\(\$Layout\.InstanceRoot, \$Layout\.DataRoot, \$Layout\.LogRoot, \$Layout\.SecretRoot, \$Layout\.StateRoot\)\)' -Code "cleanup_failed_exact_state_acl_split_missing"
+Assert-Contains -Text $cleanupFailedFunctionText -Pattern 'cleanup_failed_isolated_root_acl[
+	 -~]+Assert-CleanupFailedCreateIsolatedRootSafe -Layout \$layout[
+	 -~]+cleanup_failed_internal_acl[
+	 -~]+foreach \(\$dir in @\(\$layout\.InstanceRoot, \$layout\.DataRoot, \$layout\.LogRoot, \$layout\.SecretRoot, \$layout\.StateRoot\)\)' -Code "cleanup_failed_action_acl_split_missing"
+Assert-NotContains -Text $cleanupFailedFunctionText -Pattern 'Set-RestrictedAcl|Set-Acl|icacls|takeown' -Code "cleanup_failed_acl_mutation_detected"
+Assert-Contains -Text $createFunctionText -Pattern 'create_directories[
+	 -~]+Test-Path -LiteralPath \$layout\.IsolatedRoot[
+	 -~]+New-Item -ItemType Directory -Path \$layout\.IsolatedRoot[
+	 -~]+Set-RestrictedAcl -PathValue \$layout\.IsolatedRoot -TargetType Directory[
+	 -~]+foreach \(\$dir in @\(\$layout\.InstanceRoot' -Code "create_isolated_root_acl_hardening_missing"
+foreach ($cleanupFailedPlanLine in @(
+    "cleanup_failed_create_isolated_root_acl_contract=SAFE_INHERITED_OWNER_FULLCONTROL",
+    "cleanup_failed_create_isolated_root_acl_modified=false",
+    "cleanup_failed_create_internal_acl_contract=STRICT_PROTECTED_SINGLE_SID",
+    "cleanup_failed_create_acl_contracts_separated=true",
+    "create_isolated_root_acl_hardened=true"
+  )) {
+  Assert-Contains -Text $planFunctionText -Pattern ([regex]::Escape($cleanupFailedPlanLine)) -Code "cleanup_failed_plan_acl_line_missing"
+}
 Assert-Contains -Text $cleanupFailedFailureFunctionText -Pattern 'cleanup_failed_exact_state_invalid[
 	 -~]+cleanup_failed_marker_state_invalid[
 	 -~]+cleanup_failed_acl_invalid[
@@ -1763,6 +1810,63 @@ if ($createInputSnapshot -ne "provided-create-input" -or $cleanupInputSnapshot -
   Fail -Code "authorization_input_parameter_mutated"
 }
 
+function Test-IsolatedRootAclContractForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$OwnerCurrent,
+    [Parameter(Mandatory = $true)][bool]$Protected,
+    [Parameter(Mandatory = $true)][bool]$ReadOk,
+    [Parameter(Mandatory = $true)][bool]$EnumerateOk,
+    [AllowEmptyCollection()][object[]]$Rules
+  )
+  if (-not $ReadOk) { return "cleanup_failed_acl_read_failed" }
+  if (-not $OwnerCurrent) { return "cleanup_failed_acl_owner_invalid" }
+  if (-not $EnumerateOk) { return "cleanup_failed_acl_enumeration_failed" }
+  $requiredRights = [int64][System.Security.AccessControl.FileSystemRights]::FullControl
+  $combinedAllowRights = [int64]0
+  $currentAllowFound = $false
+  foreach ($rule in @($Rules)) {
+    if ($null -eq $rule) { return "cleanup_failed_acl_enumeration_failed" }
+    if (-not [bool]$rule.Translatable) { return "cleanup_failed_acl_identity_invalid" }
+    if ([string]$rule.Type -eq "Deny") { return "cleanup_failed_acl_deny_rule" }
+    if ([string]$rule.Type -ne "Allow") { return "cleanup_failed_acl_enumeration_failed" }
+    if (-not $Protected -and -not [bool]$rule.IsInherited) { return "cleanup_failed_acl_unexpected_explicit_rule" }
+    if ($Protected -and [bool]$rule.IsInherited) { return "cleanup_failed_internal_acl_invalid" }
+    if ([bool]$rule.CurrentSid) {
+      $currentAllowFound = $true
+      $combinedAllowRights = $combinedAllowRights -bor [int64]$rule.Rights
+    }
+  }
+  if (-not $currentAllowFound -or (($combinedAllowRights -band $requiredRights) -ne $requiredRights)) { return "cleanup_failed_acl_fullcontrol_missing" }
+  return "OK"
+}
+function New-AclRuleForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$IsInherited,
+    [Parameter(Mandatory = $true)][string]$Type,
+    [Parameter(Mandatory = $true)][bool]$CurrentSid,
+    [Parameter(Mandatory = $true)][bool]$Translatable,
+    [Parameter(Mandatory = $true)][System.Security.AccessControl.FileSystemRights]$Rights
+  )
+  return [pscustomobject]@{
+    IsInherited = $IsInherited
+    Type = $Type
+    CurrentSid = $CurrentSid
+    Translatable = $Translatable
+    Rights = [int64]$Rights
+  }
+}
+$fullRuleInherited = New-AclRuleForSelfTest -IsInherited:$true -Type "Allow" -CurrentSid:$true -Translatable:$true -Rights ([System.Security.AccessControl.FileSystemRights]::FullControl)
+$fullRuleExplicit = New-AclRuleForSelfTest -IsInherited:$false -Type "Allow" -CurrentSid:$true -Translatable:$true -Rights ([System.Security.AccessControl.FileSystemRights]::FullControl)
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleInherited)) -ne "OK") { Fail -Code "cleanup_failed_isolated_acl_safe_inherited_rejected" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$false -Protected:$false -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleInherited)) -ne "cleanup_failed_acl_owner_invalid") { Fail -Code "cleanup_failed_isolated_acl_owner_not_blocked" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$true -Rules @((New-AclRuleForSelfTest -IsInherited:$true -Type "Allow" -CurrentSid:$true -Translatable:$true -Rights ([System.Security.AccessControl.FileSystemRights]::Read)))) -ne "cleanup_failed_acl_fullcontrol_missing") { Fail -Code "cleanup_failed_isolated_acl_fullcontrol_not_blocked" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$true -Rules @((New-AclRuleForSelfTest -IsInherited:$true -Type "Deny" -CurrentSid:$true -Translatable:$true -Rights ([System.Security.AccessControl.FileSystemRights]::FullControl)))) -ne "cleanup_failed_acl_deny_rule") { Fail -Code "cleanup_failed_isolated_acl_deny_not_blocked" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleExplicit)) -ne "cleanup_failed_acl_unexpected_explicit_rule") { Fail -Code "cleanup_failed_isolated_acl_explicit_not_blocked" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$true -Rules @((New-AclRuleForSelfTest -IsInherited:$true -Type "Allow" -CurrentSid:$true -Translatable:$false -Rights ([System.Security.AccessControl.FileSystemRights]::FullControl)))) -ne "cleanup_failed_acl_identity_invalid") { Fail -Code "cleanup_failed_isolated_acl_identity_not_blocked" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$false -EnumerateOk:$true -Rules @($fullRuleInherited)) -ne "cleanup_failed_acl_read_failed") { Fail -Code "cleanup_failed_isolated_acl_read_not_blocked" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$false -Rules @($fullRuleInherited)) -ne "cleanup_failed_acl_enumeration_failed") { Fail -Code "cleanup_failed_isolated_acl_enumeration_not_blocked" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$true -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleExplicit)) -ne "OK") { Fail -Code "cleanup_failed_isolated_acl_protected_future_rejected" }
+if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$true -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleInherited)) -ne "cleanup_failed_internal_acl_invalid") { Fail -Code "cleanup_failed_internal_inherited_not_blocked" }
 $planOutput = Invoke-Tool -Arguments @("-Action","Plan")
 if ($LASTEXITCODE -ne 0 -or $planOutput -notcontains "ISOLATED_BASELINE_TEST_PLAN_OK") {
   Fail -Code "plan_action_failed"
