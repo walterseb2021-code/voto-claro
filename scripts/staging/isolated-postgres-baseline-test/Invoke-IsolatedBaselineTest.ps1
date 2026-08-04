@@ -1555,6 +1555,7 @@ function Assert-CleanupEntrySafe {
 
 function Assert-CleanupExactPartialState {
   param([Parameter(Mandatory = $true)][object]$Layout)
+  if (Test-CleanupPartialCreateStateReplaceResidual -Layout $Layout) { return }
   Assert-CleanupDirectorySafe -PathValue $Layout.IsolatedRoot
   Assert-CleanupDirectorySafe -PathValue $Layout.InstanceRoot
   foreach ($path in @(
@@ -1597,6 +1598,83 @@ function Assert-CleanupExactPartialState {
   $trimSeparators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
   if (-not [string]::Equals($onlyEntry.TrimEnd($trimSeparators), $Layout.InstanceRoot.TrimEnd($trimSeparators), [System.StringComparison]::OrdinalIgnoreCase)) {
     Throw-SafeError -Code "cleanup_unexpected_content"
+  }
+}
+function Read-ClusterStatePayloadForValidation {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  $text = [System.IO.File]::ReadAllText($PathValue)
+  [void](Assert-StrictFlatStateJson -JsonText $text)
+  return ($text | ConvertFrom-Json)
+}
+
+function Get-StateReplaceResidualTempPath {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $entriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.StateRoot
+  Assert-CleanupDirectoryEntriesResult -Result $entriesResult
+  [string[]]$entries = @($entriesResult.Entries)
+  $temps = @()
+  foreach ($entry in $entries) {
+    Assert-CleanupEntrySafe -PathValue $entry
+    $name = [System.IO.Path]::GetFileName($entry)
+    if ($name -match '^cluster-state\.[0-9a-f]{32}\.tmp$') { $temps += [System.IO.Path]::GetFullPath($entry); continue }
+    if ($name -match '^cluster-state\.[0-9a-f]{32}\.bak$') { Throw-SafeError -Code "cleanup_unexpected_content" }
+    if (-not [string]::Equals([System.IO.Path]::GetFullPath($entry).TrimEnd('\'), $Layout.StatePath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase) -and
+        -not [string]::Equals([System.IO.Path]::GetFullPath($entry).TrimEnd('\'), $Layout.MarkerPath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Throw-SafeError -Code "cleanup_unexpected_content"
+    }
+  }
+  if ($temps.Count -ne 1) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  return $temps[0]
+}
+
+function Assert-CleanupPartialCreateStateReplaceResidual {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  Assert-CleanupDirectorySafe -PathValue $Layout.IsolatedRoot
+  Assert-CleanupDirectorySafe -PathValue $Layout.InstanceRoot
+  foreach ($dir in @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)) {
+    Assert-CleanupDirectorySafe -PathValue $dir
+  }
+  foreach ($file in @($Layout.StatePath, $Layout.MarkerPath, $Layout.CredentialPath)) {
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Throw-SafeError -Code "cleanup_unexpected_content" }
+    Assert-CleanupEntrySafe -PathValue $file
+  }
+  if (Test-Path -LiteralPath $Layout.PasswordFilePath -PathType Leaf) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  if (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postmaster.pid") -PathType Leaf) { Throw-SafeError -Code "cleanup_postmaster_pid_present" }
+  if (-not (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "PG_VERSION") -PathType Leaf)) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.IsolatedRoot -ExpectedEntries @($Layout.InstanceRoot)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.InstanceRoot -ExpectedEntries @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.SecretRoot -ExpectedEntries @($Layout.CredentialPath)
+  $tmpPath = Get-StateReplaceResidualTempPath -Layout $Layout
+  $marker = Read-MarkerMap -MarkerPath $Layout.MarkerPath
+  $clusterId = [string]$marker["cluster_id"]
+  Assert-MarkerStateConcordance -Layout $Layout -ClusterId $clusterId
+  $main = Read-ClusterStatePayloadForValidation -PathValue $Layout.StatePath
+  $temp = Read-ClusterStatePayloadForValidation -PathValue $tmpPath
+  if ($main.cluster_id -ne $clusterId -or $temp.cluster_id -ne $clusterId -or
+      $main.state -ne "initializing" -or $main.stage -ne "initdb" -or
+      $temp.state -ne "initialized" -or $temp.stage -ne "initialized" -or
+      $main.initdb_completed -ne $false -or $temp.initdb_completed -ne $true -or
+      $main.server_started -ne $false -or $temp.server_started -ne $false -or
+      $main.server_state -ne "not_started" -or $temp.server_state -ne "not_started" -or
+      $main.server_cleanup_attempted -ne $false -or $temp.server_cleanup_attempted -ne $false -or
+      $main.server_cleanup_completed -ne $false -or $temp.server_cleanup_completed -ne $false -or
+      [string]$main.created_utc -ne [string]$temp.created_utc) {
+    Throw-SafeError -Code "cleanup_unexpected_content"
+  }
+  $created = Convert-ClusterStateUtcForValidation -Value ([string]$main.created_utc) -FailureCode "cleanup_unexpected_content"
+  $mainUpdated = Convert-ClusterStateUtcForValidation -Value ([string]$main.updated_utc) -FailureCode "cleanup_unexpected_content"
+  $tempUpdated = Convert-ClusterStateUtcForValidation -Value ([string]$temp.updated_utc) -FailureCode "cleanup_unexpected_content"
+  if ($created -gt $mainUpdated -or $created -gt $tempUpdated -or $tempUpdated -lt $mainUpdated) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  return [pscustomobject]@{ Valid = $true; TempPath = $tmpPath; ClusterId = $clusterId }
+}
+
+function Test-CleanupPartialCreateStateReplaceResidual {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  try {
+    [void](Assert-CleanupPartialCreateStateReplaceResidual -Layout $Layout)
+    return $true
+  } catch {
+    return $false
   }
 }
 
@@ -2625,6 +2703,193 @@ function Write-Utf8NoBomFile {
   )
   [System.IO.File]::WriteAllText($PathValue, ($Text.TrimEnd("`r","`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
 }
+function Assert-StateRootChildFilePath {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$StateRoot,
+    [Parameter(Mandatory = $true)][string]$Pattern,
+    [Parameter(Mandatory = $true)][bool]$MustExist
+  )
+  try {
+    if ([string]::IsNullOrWhiteSpace($PathValue) -or [string]::IsNullOrWhiteSpace($StateRoot)) { Throw-SafeError -Code "state_validate_input_failed" }
+    $full = [System.IO.Path]::GetFullPath($PathValue)
+    $root = [System.IO.Path]::GetFullPath($StateRoot)
+    $parent = [System.IO.Path]::GetFullPath((Split-Path -Parent $full))
+    $leaf = [System.IO.Path]::GetFileName($full)
+    if (-not [string]::Equals($parent.TrimEnd('\'), $root.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) { Throw-SafeError -Code "state_validate_input_failed" }
+    if ($leaf -notmatch $Pattern) { Throw-SafeError -Code "state_validate_input_failed" }
+    if ($MustExist -and -not (Test-Path -LiteralPath $full -PathType Leaf)) { Throw-SafeError -Code "state_validate_input_failed" }
+    if (Test-Path -LiteralPath $full) {
+      $item = Get-Item -LiteralPath $full -Force
+      if (($item.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0 -or
+          ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Throw-SafeError -Code "state_validate_input_failed"
+      }
+      if ($item.Length -lt 100 -or $item.Length -gt 4096) { Throw-SafeError -Code "state_validate_input_failed" }
+    }
+    return $full
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "state_validate_input_failed"
+  }
+}
+
+function New-StateRootGuidFilePath {
+  param(
+    [Parameter(Mandatory = $true)][string]$StateRoot,
+    [Parameter(Mandatory = $true)][ValidateSet("tmp","bak")][string]$Kind
+  )
+  $suffix = if ($Kind -eq "tmp") { ".tmp" } else { ".bak" }
+  $path = Join-Path $StateRoot ("cluster-state." + [Guid]::NewGuid().ToString("N") + $suffix)
+  [void](Assert-StateRootChildFilePath -PathValue $path -StateRoot $StateRoot -Pattern ("^cluster-state\.[0-9a-f]{32}\" + $suffix + "$") -MustExist:$false)
+  return $path
+}
+
+function Test-ExclusiveFileOpen {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  if (-not (Test-Path -LiteralPath $PathValue -PathType Leaf)) { return $false }
+  $stream = $null
+  try {
+    $stream = [System.IO.File]::Open($PathValue, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+    return $true
+  } catch {
+    return $false
+  } finally {
+    if ($null -ne $stream) { $stream.Dispose() }
+  }
+}
+
+function Get-StateReplaceFailureClassification {
+  param(
+    [AllowNull()][object]$Exception,
+    [Parameter(Mandatory = $true)][string]$SourcePath,
+    [Parameter(Mandatory = $true)][string]$DestinationPath,
+    [Parameter(Mandatory = $true)][string]$BackupPath
+  )
+  $current = $Exception
+  $selected = $null
+  $depth = 0
+  while ($null -ne $current -and $depth -lt 8) {
+    if ($current -is [System.IO.IOException] -or
+        $current -is [System.UnauthorizedAccessException] -or
+        $current -is [System.PlatformNotSupportedException]) {
+      $selected = $current
+      break
+    }
+    if ($current -is [System.Exception]) { $current = $current.InnerException } else { $current = $null }
+    $depth += 1
+  }
+  if ($null -eq $selected -and $Exception -is [System.Exception]) { $selected = $Exception }
+  $type = if ($null -ne $selected) { $selected.GetType().Name } else { "UnknownException" }
+  if (@("IOException","UnauthorizedAccessException","PlatformNotSupportedException","RuntimeException","MethodInvocationException") -notcontains $type) { $type = "UnknownException" }
+  $hresult = "0x00000000"
+  if ($null -ne $selected) { $hresult = ("0x{0:X8}" -f ($selected.HResult -band 0xffffffff)) }
+  $category = switch ($type) {
+    "IOException" { "io_exception"; break }
+    "UnauthorizedAccessException" { "unauthorized_access"; break }
+    "PlatformNotSupportedException" { "platform_not_supported"; break }
+    default { "unknown_exception" }
+  }
+  $sourceExists = Test-Path -LiteralPath $SourcePath -PathType Leaf
+  $destExists = Test-Path -LiteralPath $DestinationPath -PathType Leaf
+  $backupExists = Test-Path -LiteralPath $BackupPath -PathType Leaf
+  $sourceOpen = Test-ExclusiveFileOpen -PathValue $SourcePath
+  $destOpen = Test-ExclusiveFileOpen -PathValue $DestinationPath
+  $backupOpen = Test-ExclusiveFileOpen -PathValue $BackupPath
+  return [pscustomobject]@{
+    Type = $type
+    HResult = $hresult
+    Category = $category
+    IsIOException = [bool]($type -eq "IOException")
+    IsUnauthorizedAccessException = [bool]($type -eq "UnauthorizedAccessException")
+    IsPlatformNotSupportedException = [bool]($type -eq "PlatformNotSupportedException")
+    SourceExists = [bool]$sourceExists
+    DestinationExists = [bool]$destExists
+    BackupExists = [bool]$backupExists
+    SourceExclusiveOpen = [bool]$sourceOpen
+    DestinationExclusiveOpen = [bool]$destOpen
+    BackupExclusiveOpen = [bool]$backupOpen
+  }
+}
+
+function Set-StateReplaceFailureTelemetry {
+  param([Parameter(Mandatory = $true)][object]$Info)
+  $script:CurrentExceptionType = [string]$Info.Type
+  $script:CurrentSecondaryReason = ("state_replace_category={0};hresult={1};io={2};unauthorized={3};platform={4};source_exists={5};destination_exists={6};backup_exists={7};source_exclusive={8};destination_exclusive={9};backup_exclusive={10}" -f `
+    $Info.Category,
+    $Info.HResult,
+    ([string]$Info.IsIOException).ToLowerInvariant(),
+    ([string]$Info.IsUnauthorizedAccessException).ToLowerInvariant(),
+    ([string]$Info.IsPlatformNotSupportedException).ToLowerInvariant(),
+    ([string]$Info.SourceExists).ToLowerInvariant(),
+    ([string]$Info.DestinationExists).ToLowerInvariant(),
+    ([string]$Info.BackupExists).ToLowerInvariant(),
+    ([string]$Info.SourceExclusiveOpen).ToLowerInvariant(),
+    ([string]$Info.DestinationExclusiveOpen).ToLowerInvariant(),
+    ([string]$Info.BackupExclusiveOpen).ToLowerInvariant())
+}
+
+function Assert-StateJsonPayloadFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$ExpectedClusterId,
+    [Parameter(Mandatory = $true)][string]$ExpectedCreatedUtc,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedUpdatedUtc,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedState,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedStage
+  )
+  $text = [System.IO.File]::ReadAllText($PathValue)
+  [void](Assert-StrictFlatStateJson -JsonText $text)
+  $state = $text | ConvertFrom-Json
+  if ($state.artifact_type -ne "voto_claro_isolated_baseline_cluster_state" -or
+      [int]$state.schema_version -ne 1 -or
+      $state.cluster_id -ne $ExpectedClusterId -or
+      $state.instance_name -ne $script:InstanceName -or
+      $state.host -ne "127.0.0.1" -or
+      [int]$state.port -ne 55432 -or
+      [string]$state.created_utc -ne $ExpectedCreatedUtc) {
+    Throw-SafeError -Code "state_schema_invalid"
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ExpectedUpdatedUtc) -and [string]$state.updated_utc -ne $ExpectedUpdatedUtc) { Throw-SafeError -Code "state_schema_invalid" }
+  if (-not [string]::IsNullOrWhiteSpace($ExpectedState) -and [string]$state.state -ne $ExpectedState) { Throw-SafeError -Code "state_schema_invalid" }
+  if (-not [string]::IsNullOrWhiteSpace($ExpectedStage) -and [string]$state.stage -ne $ExpectedStage) { Throw-SafeError -Code "state_schema_invalid" }
+}
+
+function Invoke-StateFileReplace {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$TempPath,
+    [Parameter(Mandatory = $true)][string]$ClusterId,
+    [Parameter(Mandatory = $true)][string]$ExpectedCreatedUtc,
+    [Parameter(Mandatory = $true)][string]$ExpectedUpdatedUtc,
+    [Parameter(Mandatory = $true)][string]$ExpectedState,
+    [Parameter(Mandatory = $true)][string]$ExpectedStage
+  )
+  $backup = New-StateRootGuidFilePath -StateRoot $Layout.StateRoot -Kind "bak"
+  try {
+    [void](Assert-StateRootChildFilePath -PathValue $TempPath -StateRoot $Layout.StateRoot -Pattern '^cluster-state\.[0-9a-f]{32}\.tmp$' -MustExist:$true)
+    [void](Assert-StateRootChildFilePath -PathValue $Layout.StatePath -StateRoot $Layout.StateRoot -Pattern '^cluster-state\.json$' -MustExist:$true)
+    Set-RestrictedAcl -PathValue $TempPath -TargetType File
+    $tmpAcl = Get-Acl -LiteralPath $TempPath
+    Assert-RestrictedAclSemantics -Acl $tmpAcl -ExpectedSid ([System.Security.Principal.WindowsIdentity]::GetCurrent().User) -TargetType File
+    Assert-StateJsonPayloadFile -PathValue $TempPath -ExpectedClusterId $ClusterId -ExpectedCreatedUtc $ExpectedCreatedUtc -ExpectedUpdatedUtc $ExpectedUpdatedUtc -ExpectedState $ExpectedState -ExpectedStage $ExpectedStage
+    [System.IO.File]::Replace($TempPath, $Layout.StatePath, $backup, $true)
+    if (Test-Path -LiteralPath $TempPath -PathType Leaf) { Throw-SafeError -Code "state_temp_file_residual" }
+    if (-not (Test-Path -LiteralPath $Layout.StatePath -PathType Leaf)) { Throw-SafeError -Code "state_replace_existing_failed" }
+    Set-RestrictedAcl -PathValue $Layout.StatePath -TargetType File
+    Assert-StateJsonPayloadFile -PathValue $Layout.StatePath -ExpectedClusterId $ClusterId -ExpectedCreatedUtc $ExpectedCreatedUtc -ExpectedUpdatedUtc $ExpectedUpdatedUtc -ExpectedState $ExpectedState -ExpectedStage $ExpectedStage
+    if (Test-Path -LiteralPath $backup -PathType Leaf) {
+      Set-RestrictedAcl -PathValue $backup -TargetType File
+      [System.IO.File]::Delete($backup)
+    }
+    if (Test-Path -LiteralPath $backup -PathType Leaf) { Throw-SafeError -Code "state_temp_file_residual" }
+  } catch {
+    $info = Get-StateReplaceFailureClassification -Exception $_.Exception -SourcePath $TempPath -DestinationPath $Layout.StatePath -BackupPath $backup
+    Set-StateReplaceFailureTelemetry -Info $info
+    if ((Get-SafeReason -ErrorRecord $_) -eq "state_temp_file_residual") { Throw-SafeError -Code "state_temp_file_residual" }
+    Throw-SafeError -Code "state_replace_existing_failed"
+  }
+}
 
 function Read-StrictJsonString {
   param(
@@ -2824,7 +3089,7 @@ function Write-ClusterState {
     if ($script:CreateStates -notcontains $State) { Throw-SafeError -Code "state_validate_input_failed" }
     if ([string]::IsNullOrWhiteSpace($ClusterId) -or [string]::IsNullOrWhiteSpace($Stage)) { Throw-SafeError -Code "state_validate_input_failed" }
     if (-not (Test-Path -LiteralPath $Layout.StateRoot -PathType Container)) { Throw-SafeError -Code "state_validate_input_failed" }
-    $residualTemps = @(Get-ChildItem -LiteralPath $Layout.StateRoot -Force -File -Filter "cluster-state.*.tmp" -ErrorAction Stop)
+    $residualTemps = @(Get-ChildItem -LiteralPath $Layout.StateRoot -Force -File -ErrorAction Stop | Where-Object { $_.Name -match '^cluster-state\.[0-9a-f]{32}\.(tmp|bak)$' })
     if ($residualTemps.Count -ne 0) { Throw-SafeError -Code "state_temp_file_residual" }
     $operationUtc = [DateTimeOffset]::UtcNow
     if ($operationUtc.Offset -ne [TimeSpan]::Zero) { Throw-SafeError -Code "state_validate_input_failed" }
@@ -2895,7 +3160,7 @@ function Write-ClusterState {
 
   Set-Stage -Stage "state_write_temp"
   try {
-    $tmp = Join-Path $Layout.StateRoot ("cluster-state." + [Guid]::NewGuid().ToString("N") + ".tmp")
+    $tmp = New-StateRootGuidFilePath -StateRoot $Layout.StateRoot -Kind "tmp"
     Write-Utf8NoBomFile -PathValue $tmp -Text $json
     if (-not (Test-Path -LiteralPath $tmp -PathType Leaf)) { Throw-SafeError -Code "state_write_temp_failed" }
     Set-Stage -Stage $previousStage
@@ -2907,12 +3172,12 @@ function Write-ClusterState {
   if (Test-Path -LiteralPath $Layout.StatePath -PathType Leaf) {
     Set-Stage -Stage "state_replace_existing"
     try {
-      [System.IO.File]::Replace($tmp, $Layout.StatePath, $null)
-      if (Test-Path -LiteralPath $tmp -PathType Leaf) { Throw-SafeError -Code "state_temp_file_residual" }
+      Invoke-StateFileReplace -Layout $Layout -TempPath $tmp -ClusterId $ClusterId -ExpectedCreatedUtc $createdUtc -ExpectedUpdatedUtc $now -ExpectedState $State -ExpectedStage $Stage
       Set-Stage -Stage $previousStage
     } catch {
       Set-Stage -Stage "state_replace_existing"
       if ((Get-SafeReason -ErrorRecord $_) -eq "state_temp_file_residual") { Throw-SafeError -Code "state_temp_file_residual" }
+      if ((Get-SafeReason -ErrorRecord $_) -eq "state_replace_existing_failed") { Throw-SafeError -Code "state_replace_existing_failed" }
       Throw-SafeError -Code "state_replace_existing_failed"
     }
   } else {
@@ -2954,7 +3219,7 @@ function Write-ClusterState {
     $stateText = [System.IO.File]::ReadAllText($Layout.StatePath)
     [void](Assert-StrictFlatStateJson -JsonText $stateText)
     [void]($stateText | ConvertFrom-Json)
-    $residualTemps = @(Get-ChildItem -LiteralPath $Layout.StateRoot -Force -File -Filter "cluster-state.*.tmp" -ErrorAction Stop)
+    $residualTemps = @(Get-ChildItem -LiteralPath $Layout.StateRoot -Force -File -ErrorAction Stop | Where-Object { $_.Name -match '^cluster-state\.[0-9a-f]{32}\.(tmp|bak)$' })
     if ($residualTemps.Count -ne 0) { Throw-SafeError -Code "state_temp_file_residual" }
     Set-Stage -Stage $previousStage
   } catch {
@@ -3935,13 +4200,18 @@ function Invoke-Plan {
   Assert-Port -Value $Port
   Assert-ClusterName -Value $ClusterName
   Assert-DatabaseName -Value $DatabaseName
-  $resolvedDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) { $layout.DataRoot } else { $DataRoot }
-  [void](Assert-DataRoot -Root $resolvedDataRoot -RepoRoot $repoRoot -ExpectedClusterName $ClusterName -RequireMarker:$false)
+  $usingDefaultDataRoot = [string]::IsNullOrWhiteSpace($DataRoot)
+  $resolvedDataRoot = if ($usingDefaultDataRoot) { $layout.DataRoot } else { $DataRoot }
+  $cleanupPartialCreateExactStateValid = Test-CleanupPartialCreateStateReplaceResidual -Layout $layout
+  if (-not $cleanupPartialCreateExactStateValid -or -not $usingDefaultDataRoot) {
+    [void](Assert-DataRoot -Root $resolvedDataRoot -RepoRoot $repoRoot -ExpectedClusterName $ClusterName -RequireMarker:$false)
+  }
   $baselineValid = Invoke-BaselineValidator -RepoRoot $repoRoot
   $portAvailable = Test-PortAvailable -Value $Port
   $dependencies = Get-DependencyScan -RepoRoot $repoRoot
   $localCompat = Invoke-LocalCompatPreflightValidator -RepoRoot $repoRoot
   $partialInstanceCleanupRequired = Test-Path -LiteralPath $layout.InstanceRoot -PathType Container
+  $cleanupPartialCreateRequired = $partialInstanceCleanupRequired -and $cleanupPartialCreateExactStateValid
   $readyForCreate = $baselineValid -and $portAvailable -and $localCompat.Valid -and (-not $partialInstanceCleanupRequired)
   $readyForApply = $false
   $readyForVerify = $false
@@ -3980,6 +4250,13 @@ function Invoke-Plan {
   Write-Output "acl_fullcontrol_bitmask_validation=true"
   Write-Output "partial_instance_cleanup_required=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
   Write-Output "create_retry_blocked_until_cleanup=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
+  Write-Output "cleanup_partial_create_required=$(([string]$cleanupPartialCreateRequired).ToLowerInvariant())"
+  Write-Output "cleanup_partial_create_exact_state_valid=$(([string]$cleanupPartialCreateExactStateValid).ToLowerInvariant())"
+  Write-Output "cleanup_partial_create_state_replace_residual_supported=true"
+  Write-Output "state_replace_strategy_windows_compatible=true"
+  Write-Output "state_replace_temp_acl_hardened=true"
+  Write-Output "state_replace_real_filesystem_self_test=true"
+  Write-Output "state_replace_failure_classification=true"
   Write-Output "marker_state_concordance_required=true"
   Write-Output "created_utc_stable=true"
   Write-Output "state_initial_created_utc_single_clock=true"

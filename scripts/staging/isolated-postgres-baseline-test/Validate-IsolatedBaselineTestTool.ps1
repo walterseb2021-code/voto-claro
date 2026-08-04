@@ -206,6 +206,9 @@ $aclRulesFunctionText = Get-FunctionText -Name "Get-RestrictedAclRulesForValidat
 $aclSemanticFunctionText = Get-FunctionText -Name "Assert-RestrictedAclSemantics"
 $clusterStateUtcFunctionText = Get-FunctionText -Name "Convert-ClusterStateUtcForValidation"
 $stableCreatedUtcFunctionText = Get-FunctionText -Name "Get-StableCreatedUtc"
+$stateReplaceFunctionText = Get-FunctionText -Name "Invoke-StateFileReplace"
+$stateReplaceTelemetryFunctionText = Get-FunctionText -Name "Get-StateReplaceFailureClassification"
+$cleanupStateReplaceResidualFunctionText = Get-FunctionText -Name "Assert-CleanupPartialCreateStateReplaceResidual"
 $stateFunctionText = Get-FunctionText -Name "Write-ClusterState"
 $stateConcordanceWrapperFunctionText = Get-FunctionText -Name "Assert-CreateStateMarkerConcordance"
 $concordanceFunctionText = Get-FunctionText -Name "Assert-MarkerStateConcordance"
@@ -611,9 +614,13 @@ foreach ($stateStep in @("state_validate_input","state_get_created_utc","state_b
 foreach ($stateReason in @("state_validate_input_failed","state_get_created_utc_failed","state_build_payload_failed","state_serialize_json_failed","state_write_temp_failed","state_move_initial_failed","state_replace_existing_failed","state_apply_acl_failed","state_acl_readback_failed","state_schema_readback_failed","state_temp_file_residual")) {
   Assert-Contains -Text $stateFunctionText -Pattern $stateReason -Code ("state_write_reason_missing_" + $stateReason)
 }
-Assert-Contains -Text $stateFunctionText -Pattern 'cluster-state\.\*\.tmp' -Code "state_temp_filter_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'cluster-state\\\.\[0-9a-f\]\{32\}\\\.\(tmp\|bak\)' -Code "state_temp_filter_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'File\]::Move\(\$tmp, \$Layout\.StatePath\)' -Code "state_move_initial_missing"
-Assert-Contains -Text $stateFunctionText -Pattern 'File\]::Replace\(\$tmp, \$Layout\.StatePath, \$null\)' -Code "state_replace_existing_missing"
+Assert-Contains -Text $stateReplaceFunctionText -Pattern 'File\]::Replace\(\$TempPath, \$Layout\.StatePath, \$backup, \$true\)' -Code "state_replace_existing_missing"
+Assert-NotContains -Text $stateFunctionText -Pattern 'File\]::Replace\(\$tmp, \$Layout\.StatePath, \$null\)' -Code "state_replace_null_backup_detected"
+Assert-Contains -Text $stateReplaceFunctionText -Pattern 'Set-RestrictedAcl -PathValue \$TempPath -TargetType File' -Code "state_replace_temp_acl_missing"
+Assert-Contains -Text $stateReplaceFunctionText -Pattern 'New-StateRootGuidFilePath -StateRoot \$Layout\.StateRoot -Kind "bak"' -Code "state_replace_backup_guid_missing"
+Assert-Contains -Text $stateReplaceTelemetryFunctionText -Pattern 'HResult[\s\S]+IsIOException[\s\S]+IsUnauthorizedAccessException[\s\S]+IsPlatformNotSupportedException[\s\S]+SourceExclusiveOpen[\s\S]+DestinationExclusiveOpen[\s\S]+BackupExclusiveOpen' -Code "state_replace_failure_telemetry_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'Set-RestrictedAcl -PathValue \$Layout\.StatePath -TargetType File' -Code "state_file_acl_apply_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'Get-Acl -LiteralPath \$Layout\.StatePath' -Code "state_acl_readback_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'Assert-RestrictedAclSemantics[\s\S]+TargetType File' -Code "state_acl_semantic_readback_missing"
@@ -2202,6 +2209,13 @@ foreach ($expectedLine in @(
     "cleanup_failed_create_state_length_exact_hardcode=false",
     "cleanup_failed_create_state_size_bounded=true",
     "cleanup_failed_create_state_get_created_utc_failure_supported=true",
+    "cleanup_partial_create_required=true",
+    "cleanup_partial_create_exact_state_valid=true",
+    "cleanup_partial_create_state_replace_residual_supported=true",
+    "state_replace_strategy_windows_compatible=true",
+    "state_replace_temp_acl_hardened=true",
+    "state_replace_real_filesystem_self_test=true",
+    "state_replace_failure_classification=true",
     "apply_implementation_present=false",
     "verify_implementation_present=false",
     "destroy_implementation_present=false",
@@ -2255,4 +2269,157 @@ Assert-Contains -Text $text -Pattern 'readyForApply = \$false' -Code "dependenci
 Assert-Contains -Text $text -Pattern "source_counts_only" -Code "source_counts_strategy_missing"
 Assert-Contains -Text $text -Pattern "semantic_verification_required" -Code "acl_strategy_missing"
 
+function Set-StateReplaceSelfTestAcl {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][ValidateSet("Directory","File")][string]$TargetType
+  )
+  $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+  $acl = if ($TargetType -eq "Directory") {
+    [System.Security.AccessControl.DirectorySecurity]::new()
+  } else {
+    [System.Security.AccessControl.FileSecurity]::new()
+  }
+  $acl.SetAccessRuleProtection($true, $false)
+  $inherit = if ($TargetType -eq "Directory") { [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit" } else { [System.Security.AccessControl.InheritanceFlags]"None" }
+  $propagation = [System.Security.AccessControl.PropagationFlags]"None"
+  $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, "FullControl", $inherit, $propagation, "Allow")
+  $acl.AddAccessRule($rule)
+  if ($TargetType -eq "Directory") {
+    [System.IO.Directory]::SetAccessControl($PathValue, $acl)
+  } else {
+    [System.IO.File]::SetAccessControl($PathValue, $acl)
+  }
+}
+
+function Assert-StateReplaceSelfTestAcl {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][ValidateSet("Directory","File")][string]$TargetType
+  )
+  $acl = Get-Acl -LiteralPath $PathValue
+  if ($acl.AreAccessRulesProtected -ne $true) { Fail -Code "state_replace_selftest_acl_not_protected" }
+  $rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+  if ($rules.Count -ne 1) { Fail -Code "state_replace_selftest_acl_rule_count" }
+  $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  $rule = $rules[0]
+  if ($rule.IsInherited -or $rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { Fail -Code "state_replace_selftest_acl_rule_type" }
+  if (-not [string]::Equals($rule.IdentityReference.Value, $sid, [System.StringComparison]::OrdinalIgnoreCase)) { Fail -Code "state_replace_selftest_acl_sid" }
+  if ((([int64]$rule.FileSystemRights) -band ([int64][System.Security.AccessControl.FileSystemRights]::FullControl)) -ne ([int64][System.Security.AccessControl.FileSystemRights]::FullControl)) { Fail -Code "state_replace_selftest_acl_rights" }
+  $expectedInheritance = if ($TargetType -eq "Directory") { [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit" } else { [System.Security.AccessControl.InheritanceFlags]"None" }
+  if ([int]$rule.InheritanceFlags -ne [int]$expectedInheritance) { Fail -Code "state_replace_selftest_acl_inheritance" }
+  if ([int]$rule.PropagationFlags -ne [int][System.Security.AccessControl.PropagationFlags]"None") { Fail -Code "state_replace_selftest_acl_propagation" }
+}
+
+function New-StateReplaceSelfTestJson {
+  param(
+    [Parameter(Mandatory = $true)][string]$ClusterId,
+    [Parameter(Mandatory = $true)][string]$State,
+    [Parameter(Mandatory = $true)][string]$Stage,
+    [Parameter(Mandatory = $true)][string]$CreatedUtc,
+    [Parameter(Mandatory = $true)][string]$UpdatedUtc,
+    [Parameter(Mandatory = $true)][bool]$InitdbCompleted
+  )
+  $payload = [ordered]@{
+    artifact_type = "voto_claro_isolated_baseline_cluster_state"
+    schema_version = 1
+    cluster_id = $ClusterId
+    state = $State
+    stage = $Stage
+    created_utc = $CreatedUtc
+    updated_utc = $UpdatedUtc
+    postgres_major = "17"
+    postgres_version = "17.10"
+    host = "127.0.0.1"
+    port = 55432
+    admin_role = "vc_isolated_admin"
+    instance_name = "pg17-port55432"
+    data_directory_name = "data"
+    server_log_name = "postgresql-server.log"
+    last_error_code = $null
+    initdb_completed = $InitdbCompleted
+    configuration_completed = $false
+    server_started = $false
+    credential_protected = $true
+    plaintext_password_file_present = $false
+    server_state = "not_started"
+    server_cleanup_attempted = $false
+    server_cleanup_completed = $false
+  }
+  return (($payload | ConvertTo-Json -Depth 4).TrimEnd("`r","`n") + "`n")
+}
+
+function Invoke-StateReplaceSelfTestReplacement {
+  param(
+    [Parameter(Mandatory = $true)][string]$StateRoot,
+    [Parameter(Mandatory = $true)][string]$StatePath,
+    [Parameter(Mandatory = $true)][string]$TempPath,
+    [Parameter(Mandatory = $true)][string]$ExpectedCreatedUtc,
+    [Parameter(Mandatory = $true)][string]$ExpectedUpdatedUtc
+  )
+  if (-not [string]::Equals((Split-Path -Parent ([System.IO.Path]::GetFullPath($TempPath))).TrimEnd('\'), ([System.IO.Path]::GetFullPath($StateRoot)).TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) { Fail -Code "state_replace_selftest_temp_outside" }
+  if ([System.IO.Path]::GetFileName($TempPath) -notmatch '^cluster-state\.[0-9a-f]{32}\.tmp$') { Fail -Code "state_replace_selftest_temp_name" }
+  $backup = Join-Path $StateRoot ("cluster-state." + [Guid]::NewGuid().ToString("N") + ".bak")
+  if ([System.IO.Path]::GetFileName($backup) -notmatch '^cluster-state\.[0-9a-f]{32}\.bak$') { Fail -Code "state_replace_selftest_backup_name" }
+  Set-StateReplaceSelfTestAcl -PathValue $TempPath -TargetType File
+  Assert-StateReplaceSelfTestAcl -PathValue $TempPath -TargetType File
+  [System.IO.File]::Replace($TempPath, $StatePath, $backup, $true)
+  if (Test-Path -LiteralPath $TempPath -PathType Leaf) { Fail -Code "state_replace_selftest_temp_residual" }
+  Set-StateReplaceSelfTestAcl -PathValue $StatePath -TargetType File
+  Assert-StateReplaceSelfTestAcl -PathValue $StatePath -TargetType File
+  $content = [System.IO.File]::ReadAllText($StatePath) | ConvertFrom-Json
+  if ([string]$content.created_utc -ne $ExpectedCreatedUtc -or [string]$content.updated_utc -ne $ExpectedUpdatedUtc) { Fail -Code "state_replace_selftest_content" }
+  if (Test-Path -LiteralPath $backup -PathType Leaf) {
+    Set-StateReplaceSelfTestAcl -PathValue $backup -TargetType File
+    [System.IO.File]::Delete($backup)
+  }
+  if (Test-Path -LiteralPath $backup -PathType Leaf) { Fail -Code "state_replace_selftest_backup_residual" }
+}
+
+function Invoke-StateReplaceRealFilesystemSelfTest {
+  $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  $root = Join-Path $tempRoot ("vc-state-replace-selftest-" + [Guid]::NewGuid().ToString("N"))
+  $created = "2026-01-01T00:00:00.0000000+00:00"
+  $updated1 = "2026-01-01T00:00:01.0000000+00:00"
+  $updated2 = "2026-01-01T00:00:02.0000000+00:00"
+  $clusterId = [Guid]::NewGuid().ToString()
+  $state = Join-Path $root "cluster-state.json"
+  $tmp1 = Join-Path $root ("cluster-state." + [Guid]::NewGuid().ToString("N") + ".tmp")
+  $tmp2 = Join-Path $root ("cluster-state." + [Guid]::NewGuid().ToString("N") + ".tmp")
+  try {
+    [System.IO.Directory]::CreateDirectory($root) | Out-Null
+    if (-not ([System.IO.Path]::GetFullPath($root).StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase))) { Fail -Code "state_replace_selftest_root_outside_temp" }
+    if ([System.IO.Path]::GetFileName($root) -notmatch '^vc-state-replace-selftest-[0-9a-f]{32}$') { Fail -Code "state_replace_selftest_root_prefix" }
+    $rootItem = Get-Item -LiteralPath $root -Force
+    if (($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Fail -Code "state_replace_selftest_root_reparse" }
+    Set-StateReplaceSelfTestAcl -PathValue $root -TargetType Directory
+    Assert-StateReplaceSelfTestAcl -PathValue $root -TargetType Directory
+    [System.IO.File]::WriteAllText($state, (New-StateReplaceSelfTestJson -ClusterId $clusterId -State "initializing" -Stage "initdb" -CreatedUtc $created -UpdatedUtc $created -InitdbCompleted:$false), [System.Text.UTF8Encoding]::new($false))
+    Set-StateReplaceSelfTestAcl -PathValue $state -TargetType File
+    Assert-StateReplaceSelfTestAcl -PathValue $state -TargetType File
+    [System.IO.File]::WriteAllText($tmp1, (New-StateReplaceSelfTestJson -ClusterId $clusterId -State "initialized" -Stage "initialized" -CreatedUtc $created -UpdatedUtc $updated1 -InitdbCompleted:$true), [System.Text.UTF8Encoding]::new($false))
+    Invoke-StateReplaceSelfTestReplacement -StateRoot $root -StatePath $state -TempPath $tmp1 -ExpectedCreatedUtc $created -ExpectedUpdatedUtc $updated1
+    [System.IO.File]::WriteAllText($tmp2, (New-StateReplaceSelfTestJson -ClusterId $clusterId -State "configuring" -Stage "postgresql_conf" -CreatedUtc $created -UpdatedUtc $updated2 -InitdbCompleted:$true), [System.Text.UTF8Encoding]::new($false))
+    Invoke-StateReplaceSelfTestReplacement -StateRoot $root -StatePath $state -TempPath $tmp2 -ExpectedCreatedUtc $created -ExpectedUpdatedUtc $updated2
+    $remaining = @([System.IO.Directory]::GetFileSystemEntries($root))
+    if ($remaining.Count -ne 1 -or -not [string]::Equals([System.IO.Path]::GetFullPath($remaining[0]).TrimEnd('\'), [System.IO.Path]::GetFullPath($state).TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) { Fail -Code "state_replace_selftest_residual_entries" }
+  } finally {
+    if (Test-Path -LiteralPath $root -PathType Container) {
+      $entries = @([System.IO.Directory]::GetFileSystemEntries($root))
+      foreach ($entry in $entries) {
+        $entryFull = [System.IO.Path]::GetFullPath($entry)
+        if (-not $entryFull.StartsWith(([System.IO.Path]::GetFullPath($root) + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) { Fail -Code "state_replace_selftest_cleanup_outside" }
+        $item = Get-Item -LiteralPath $entryFull -Force
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or ($item.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0) { Fail -Code "state_replace_selftest_cleanup_shape" }
+        if ([System.IO.Path]::GetFileName($entryFull) -notmatch '^cluster-state(\.[0-9a-f]{32}\.(tmp|bak)|\.json)$') { Fail -Code "state_replace_selftest_cleanup_name" }
+        [System.IO.File]::Delete($entryFull)
+      }
+      [System.IO.Directory]::Delete($root, $false)
+    }
+  }
+  if (Test-Path -LiteralPath $root) { Fail -Code "state_replace_selftest_root_residual" }
+  Write-Output "STATE_REPLACE_REAL_FILESYSTEM_SELF_TEST_OK"
+}
+
+Invoke-StateReplaceRealFilesystemSelfTest
 Write-Output "SELF_TEST_OK"

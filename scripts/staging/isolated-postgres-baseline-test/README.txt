@@ -353,3 +353,18 @@ Write-ClusterState usa ahora un unico reloj autoritativo por escritura. Ese valo
 CleanupFailedCreate acepta ahora de forma segura el estado fallido stage=state_get_created_utc con last_error_code=state_get_created_utc_failed, siempre que el schema estricto, marker/state, tamanos acotados, directorios exactos, ACL, ausencia de actividad PostgreSQL y firma TOCTOU sigan siendo validos. La comprobacion de longitud exacta del JSON fue reemplazada por limites cerrados para cubrir el JSON real actual sin aceptar contenido arbitrario.
 
 CleanupFailedCreate, CleanupPartialCreate, Create, Destroy, PostgreSQL, SQL, Supabase y operaciones Git de escritura permanecen sin ejecutar durante esta correccion.
+B-SEC-23I reemplazo de cluster-state.json en Windows
+
+El fallo real posterior a B-SEC-23H demostro que la primera escritura de cluster-state.json funcionaba, pero la actualizacion despues de initdb podia fallar en File.Replace cuando se usaba sin respaldo explicito. El estado principal quedaba en initializing/initdb y el temporal residual contenia el avance initialized/initialized con el mismo cluster_id y created_utc preservado.
+
+La estrategia elegida conserva File.Replace, pero ahora usa un respaldo GUID explicito dentro de StateRoot y endurece el temporal antes del reemplazo. El temporal se escribe primero, se valida como JSON estricto, se protege con ACL estricta de archivo, se valida por SID y bitmask, y luego se reemplaza el estado usando el respaldo controlado. El archivo final vuelve a validarse con ACL estricta, created_utc preservado, updated_utc nuevo, schema esperado y ausencia de temporales o respaldos residuales.
+
+Los nombres auxiliares permitidos son exclusivamente cluster-state.<guid>.tmp y cluster-state.<guid>.bak dentro de StateRoot. Cualquier temporal o respaldo residual se trata como estado ambiguo y bloquea nuevos writes. El respaldo exitoso se elimina de forma explicita por ruta exacta; no se usa Remove-Item, borrado recursivo ni rutas suministradas por usuario.
+
+La clasificacion de fallo de reemplazo mantiene reason=state_replace_existing_failed y agrega solo telemetria sanitizada: tipo de excepcion allowlisted, HResult hexadecimal, categoria estable, banderas de IOException, UnauthorizedAccessException y PlatformNotSupportedException, existencia de origen/destino/respaldo y apertura exclusiva posterior. No se imprimen mensajes del sistema ni rutas privadas.
+
+Validate-IsolatedBaselineTestTool ejecuta una prueba real de filesystem bajo Path.GetTempPath: crea una carpeta desechable propia, aplica ACL equivalente, realiza dos reemplazos con el mismo protocolo, verifica contenido, created_utc, updated_utc, ACL final, ausencia de temporales/respaldo y retira exclusivamente la carpeta creada.
+
+Plan reconoce ahora de solo lectura el estado parcial avanzado con DataRoot inicializado, cluster-state.json atrasado y exactamente un temporal residual valido. Cuando esa forma exacta se cumple, emite cleanup_partial_create_required=true y bloquea ready_for_create. CleanupPartialCreate reconoce esa forma exacta para diagnostico y autorizacion futura separada. CleanupFailedCreate no se amplio para borrar DataRoot inicializado.
+
+No repetir Create mientras exista este estado parcial. Cualquier limpieza futura requiere revision posterior por ChatGPT y autorizacion humana independiente. Esta fase no ejecuta Create, CleanupPartialCreate, CleanupFailedCreate, PostgreSQL, SQL, Supabase, produccion ni Git de escritura.
