@@ -2144,7 +2144,7 @@ function Test-PlanRuntimeStateContractForSelfTest {
     [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
-    [string]::Equals($modeValue, "", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($modeValue, "NONE", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
   )
   if ($isPartial) { return "OK" }
@@ -2170,7 +2170,7 @@ function Test-PlanRuntimeStateContractForSelfTest {
     [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
-    [string]::Equals($modeValue, "", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($modeValue, "NONE", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["ready_for_create"], "true", [System.StringComparison]::Ordinal)
   )
   if ($isClean) { return "OK" }
@@ -2203,7 +2203,7 @@ $planRuntimePartial = @(
   "cleanup_partial_create_manifest_valid=true",
   "cleanup_failed_create_required=false",
   "cleanup_failed_create_exact_state_valid=false",
-  "cleanup_failed_create_mode=",
+  "cleanup_failed_create_mode=NONE",
   "cleanup_failed_create_manifest_valid=false",
   "ready_for_create=false"
 )
@@ -2227,7 +2227,7 @@ $planRuntimeClean = @(
   "cleanup_partial_create_manifest_valid=false",
   "cleanup_failed_create_required=false",
   "cleanup_failed_create_exact_state_valid=false",
-  "cleanup_failed_create_mode=",
+  "cleanup_failed_create_mode=NONE",
   "cleanup_failed_create_manifest_valid=false",
   "ready_for_create=true"
 )
@@ -2248,6 +2248,7 @@ Assert-PlanRuntimeContractCaseForSelfTest -Name "mixed_true_false" -Lines @($pla
 Assert-PlanRuntimeContractCaseForSelfTest -Name "partial_ready_true" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "failed_pg_ctl_wrong_mode" -Lines @($planRuntimeFailedPgCtlStart | ForEach-Object { if ($_ -like "cleanup_failed_create_mode=*") { "cleanup_failed_create_mode=EARLY_FAILED_CREATE" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "failed_pg_ctl_ready_true" -Lines @($planRuntimeFailedPgCtlStart | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_with_failed_cleanup_required" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "cleanup_failed_create_required=*") { "cleanup_failed_create_required=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_ready_false" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_true_in_clean" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "cleanup_partial_create_required=*") { "cleanup_partial_create_required=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_true_in_clean" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "cleanup_partial_create_exact_state_valid=*") { "cleanup_partial_create_exact_state_valid=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
@@ -2381,10 +2382,6 @@ foreach ($expectedLine in @(
     "cleanup_failed_create_action_present=true",
     "cleanup_failed_create_authorized=false",
     "cleanup_failed_create_execution_blocked=true",
-    "cleanup_failed_create_required=true",
-    "cleanup_failed_create_exact_state_valid=true",
-    "cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL",
-    "cleanup_failed_create_manifest_valid=true",
     "cleanup_failed_create_exact_state_required=true",
     "cleanup_failed_create_pg_ctl_start_mode_supported=true",
     "cleanup_failed_create_pg_ctl_start_manifest_supported=true",
