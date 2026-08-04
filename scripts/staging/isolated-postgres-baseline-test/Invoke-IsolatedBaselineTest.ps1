@@ -2178,7 +2178,7 @@ function Assert-CleanupFailedCreateStatePayload {
     "acl_validation_failed"
   )
   if ($state.state -ne "failed" -or
-      $state.stage -ne "create_directories" -or
+      @("create_directories","state_get_created_utc") -notcontains $state.stage -or
       $state.host -ne "127.0.0.1" -or
       [int]$state.port -ne 55432 -or
       $state.instance_name -ne $script:InstanceName -or
@@ -2195,8 +2195,30 @@ function Assert-CleanupFailedCreateStatePayload {
   if ($null -eq $state.last_error_code -or $allowedFailureCodes -notcontains [string]$state.last_error_code) {
     Throw-SafeError -Code "cleanup_failed_marker_state_invalid"
   }
+  if ($state.stage -eq "state_get_created_utc" -and [string]$state.last_error_code -ne "state_get_created_utc_failed") {
+    Throw-SafeError -Code "cleanup_failed_marker_state_invalid"
+  }
+  if ($state.stage -eq "create_directories" -and [string]$state.last_error_code -eq "state_get_created_utc_failed") {
+    Throw-SafeError -Code "cleanup_failed_marker_state_invalid"
+  }
 }
 
+function Assert-CleanupFailedCreateStateFileSize {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  try {
+    $stateLength = (Get-Item -LiteralPath $Layout.StatePath -Force).Length
+    $markerLength = (Get-Item -LiteralPath $Layout.MarkerPath -Force).Length
+    if ($stateLength -lt 700 -or $stateLength -gt 4096) {
+      Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+    }
+    if ($markerLength -lt 80 -or $markerLength -gt 512) {
+      Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+    }
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
+  }
+}
 function Assert-CleanupFailedCreateExactState {
   param([Parameter(Mandatory = $true)][object]$Layout)
   Assert-CleanupFailedCreateIsolatedRootSafe -Layout $Layout
@@ -2206,10 +2228,7 @@ function Assert-CleanupFailedCreateExactState {
   foreach ($file in @($Layout.StatePath, $Layout.MarkerPath)) {
     Assert-CleanupFailedCreateFileSafe -PathValue $file
   }
-  if ((Get-Item -LiteralPath $Layout.StatePath -Force).Length -ne 975 -or
-      (Get-Item -LiteralPath $Layout.MarkerPath -Force).Length -ne 146) {
-    Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
-  }
+  Assert-CleanupFailedCreateStateFileSize -Layout $Layout
   Assert-CleanupFailedCreateExactEntries -PathValue $Layout.IsolatedRoot -ExpectedEntries @($Layout.InstanceRoot)
   Assert-CleanupFailedCreateExactEntries -PathValue $Layout.InstanceRoot -ExpectedEntries @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)
   Assert-CleanupFailedCreateEmptyDirectory -PathValue $Layout.DataRoot
@@ -2725,14 +2744,34 @@ function Assert-StrictFlatStateJson {
   return @($seen)
 }
 
+function Convert-ClusterStateUtcForValidation {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value,
+    [Parameter(Mandatory = $true)][string]$FailureCode
+  )
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    Throw-SafeError -Code $FailureCode
+  }
+  $parsed = [DateTimeOffset]::MinValue
+  $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
+  if (-not [DateTimeOffset]::TryParseExact($Value, "o", [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) {
+    Throw-SafeError -Code $FailureCode
+  }
+  if ($parsed.Offset -ne [TimeSpan]::Zero) {
+    Throw-SafeError -Code $FailureCode
+  }
+  return $parsed
+}
+
 function Get-StableCreatedUtc {
   param(
     [Parameter(Mandatory = $true)][object]$Layout,
-    [Parameter(Mandatory = $true)][string]$ClusterId
+    [Parameter(Mandatory = $true)][string]$ClusterId,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$FallbackCreatedUtc
   )
-  $now = [DateTimeOffset]::UtcNow.ToString("o")
+  $operationUtc = Convert-ClusterStateUtcForValidation -Value $FallbackCreatedUtc -FailureCode "state_get_created_utc_failed"
   if (-not (Test-Path -LiteralPath $Layout.StatePath -PathType Leaf)) {
-    return $now
+    return $FallbackCreatedUtc
   }
   try {
     $existingText = [System.IO.File]::ReadAllText($Layout.StatePath)
@@ -2745,12 +2784,16 @@ function Get-StableCreatedUtc {
         $existing.host -ne "127.0.0.1" -or
         [int]$existing.port -ne 55432 -or
         [string]::IsNullOrWhiteSpace([string]$existing.created_utc)) {
-      Throw-SafeError -Code "state_write_failed"
+      Throw-SafeError -Code "state_get_created_utc_failed"
+    }
+    $existingCreatedUtc = Convert-ClusterStateUtcForValidation -Value ([string]$existing.created_utc) -FailureCode "state_get_created_utc_failed"
+    if ($existingCreatedUtc -gt $operationUtc) {
+      Throw-SafeError -Code "state_get_created_utc_failed"
     }
     return [string]$existing.created_utc
   } catch {
     if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
-    Throw-SafeError -Code "state_write_failed"
+    Throw-SafeError -Code "state_get_created_utc_failed"
   }
 }
 
@@ -2783,7 +2826,10 @@ function Write-ClusterState {
     if (-not (Test-Path -LiteralPath $Layout.StateRoot -PathType Container)) { Throw-SafeError -Code "state_validate_input_failed" }
     $residualTemps = @(Get-ChildItem -LiteralPath $Layout.StateRoot -Force -File -Filter "cluster-state.*.tmp" -ErrorAction Stop)
     if ($residualTemps.Count -ne 0) { Throw-SafeError -Code "state_temp_file_residual" }
-    $now = [DateTimeOffset]::UtcNow.ToString("o")
+    $operationUtc = [DateTimeOffset]::UtcNow
+    if ($operationUtc.Offset -ne [TimeSpan]::Zero) { Throw-SafeError -Code "state_validate_input_failed" }
+    $now = $operationUtc.ToString("o")
+    [void](Convert-ClusterStateUtcForValidation -Value $now -FailureCode "state_validate_input_failed")
     Set-Stage -Stage $previousStage
   } catch {
     Set-Stage -Stage "state_validate_input"
@@ -2793,8 +2839,10 @@ function Write-ClusterState {
 
   Set-Stage -Stage "state_get_created_utc"
   try {
-    $createdUtc = Get-StableCreatedUtc -Layout $Layout -ClusterId $ClusterId
-    if ([DateTimeOffset]::Parse($now) -lt [DateTimeOffset]::Parse($createdUtc)) { Throw-SafeError -Code "state_get_created_utc_failed" }
+    $createdUtc = Get-StableCreatedUtc -Layout $Layout -ClusterId $ClusterId -FallbackCreatedUtc $now
+    $createdUtcParsed = Convert-ClusterStateUtcForValidation -Value $createdUtc -FailureCode "state_get_created_utc_failed"
+    $operationUtcParsed = Convert-ClusterStateUtcForValidation -Value $now -FailureCode "state_get_created_utc_failed"
+    if ($createdUtcParsed -gt $operationUtcParsed) { Throw-SafeError -Code "state_get_created_utc_failed" }
     Set-Stage -Stage $previousStage
   } catch {
     Set-Stage -Stage "state_get_created_utc"
@@ -3934,6 +3982,10 @@ function Invoke-Plan {
   Write-Output "create_retry_blocked_until_cleanup=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
   Write-Output "marker_state_concordance_required=true"
   Write-Output "created_utc_stable=true"
+  Write-Output "state_initial_created_utc_single_clock=true"
+  Write-Output "state_created_utc_preserved_on_rewrite=true"
+  Write-Output "state_created_utc_future_rejected=true"
+  Write-Output "state_created_utc_tolerance_used=false"
   Write-Output "state_write_substeps=state_validate_input,state_get_created_utc,state_build_payload,state_serialize_json,state_write_temp,state_move_initial,state_replace_existing,state_apply_acl,state_acl_readback,state_schema_readback,state_marker_concordance"
   Write-Output "state_write_substep_reasons=true"
   Write-Output "state_initial_write_fail_closed=true"
@@ -4046,6 +4098,9 @@ function Invoke-Plan {
   Write-Output "create_isolated_root_acl_hardened=true"
   Write-Output "cleanup_failed_create_expected_delete_file_count=2"
   Write-Output "cleanup_failed_create_expected_delete_directory_count=6"
+  Write-Output "cleanup_failed_create_state_length_exact_hardcode=false"
+  Write-Output "cleanup_failed_create_state_size_bounded=true"
+  Write-Output "cleanup_failed_create_state_get_created_utc_failure_supported=true"
   Write-Output "cleanup_requires_empty_instance=true"
   Write-Output "cleanup_recursive_delete_allowed=false"
   Write-Output "cleanup_acl_modification_allowed=false"

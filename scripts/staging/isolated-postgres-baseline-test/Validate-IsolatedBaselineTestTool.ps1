@@ -180,6 +180,7 @@ $cleanupFailedFunctionText = Get-FunctionText -Name "Invoke-CleanupFailedCreate"
 $cleanupFailedAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CleanupFailedCreateAuthorization"
 $cleanupFailedAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateAuthorization"
 $cleanupFailedStateFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateExactState"
+$cleanupFailedStateFileSizeFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStateFileSize"
 $cleanupFailedPayloadFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStatePayload"
 $cleanupFailedFailureFunctionText = Get-FunctionText -Name "Get-CleanupFailedCreateSafeFailure"
 $cleanupFailedIsolatedRootFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateIsolatedRootSafe"
@@ -203,6 +204,8 @@ $aclFunctionText = Get-FunctionText -Name "Set-RestrictedAcl"
 $aclIdentityFunctionText = Get-FunctionText -Name "Convert-IdentityReferenceToSidValue"
 $aclRulesFunctionText = Get-FunctionText -Name "Get-RestrictedAclRulesForValidation"
 $aclSemanticFunctionText = Get-FunctionText -Name "Assert-RestrictedAclSemantics"
+$clusterStateUtcFunctionText = Get-FunctionText -Name "Convert-ClusterStateUtcForValidation"
+$stableCreatedUtcFunctionText = Get-FunctionText -Name "Get-StableCreatedUtc"
 $stateFunctionText = Get-FunctionText -Name "Write-ClusterState"
 $stateConcordanceWrapperFunctionText = Get-FunctionText -Name "Assert-CreateStateMarkerConcordance"
 $concordanceFunctionText = Get-FunctionText -Name "Assert-MarkerStateConcordance"
@@ -314,9 +317,14 @@ Assert-Contains -Text $cleanupFailedStateFunctionText -Pattern 'DataRoot[
 	 -~]+CredentialPath[
 	 -~]+PasswordFilePath[
 	 -~]+ServerLog' -Code "cleanup_failed_exact_paths_missing"
-foreach ($payloadPattern in @('state -ne "failed"','stage -ne "create_directories"','server_state -ne "not_started"','initdb_completed -ne \$false','configuration_completed -ne \$false','server_started -ne \$false','credential_protected -ne \$false','plaintext_password_file_present -ne \$false')) {
+foreach ($payloadPattern in @('state -ne "failed"','create_directories','state_get_created_utc','state_get_created_utc_failed','server_state -ne "not_started"','initdb_completed -ne \$false','configuration_completed -ne \$false','server_started -ne \$false','credential_protected -ne \$false','plaintext_password_file_present -ne \$false')) {
   Assert-Contains -Text $cleanupFailedPayloadFunctionText -Pattern $payloadPattern -Code "cleanup_failed_payload_validation_missing"
 }
+Assert-Contains -Text $cleanupFailedPayloadFunctionText -Pattern 'state\.stage -eq "state_get_created_utc"[\s\S]+last_error_code -ne "state_get_created_utc_failed"' -Code "cleanup_failed_state_get_created_utc_guard_missing"
+Assert-Contains -Text $cleanupFailedPayloadFunctionText -Pattern 'state\.stage -eq "create_directories"[\s\S]+last_error_code -eq "state_get_created_utc_failed"' -Code "cleanup_failed_create_directories_error_guard_missing"
+Assert-Contains -Text $cleanupFailedStateFunctionText -Pattern 'Assert-CleanupFailedCreateStateFileSize' -Code "cleanup_failed_state_size_guard_missing"
+Assert-Contains -Text $cleanupFailedStateFileSizeFunctionText -Pattern 'stateLength -lt 700[\s\S]+stateLength -gt 4096[\s\S]+markerLength -lt 80[\s\S]+markerLength -gt 512' -Code "cleanup_failed_state_size_bounds_missing"
+Assert-NotContains -Text $cleanupFailedStateFunctionText -Pattern 'Length\s+-ne\s+975|Length\s+-ne\s+146' -Code "cleanup_failed_fixed_length_detected"
 if (@([regex]::Matches($cleanupFailedFunctionText, '\[System\.IO\.File\]::Delete\(')).Count -ne 2) { Fail -Code "cleanup_failed_file_delete_count_invalid" }
 if (@([regex]::Matches($cleanupFailedFunctionText, '\[System\.IO\.Directory\]::Delete\([^\r\n]+, \$false\)')).Count -ne 6) { Fail -Code "cleanup_failed_directory_delete_count_invalid" }
 Assert-NotContains -Text $cleanupFailedFunctionText -Pattern 'Directory\]::Delete\([^\r\n]+,\s*\$true\)|Remove-Item|Set-Acl|Invoke-Create|Invoke-CleanupPartialCreate|Invoke-BlockedFutureAction|Stop-Process|taskkill' -Code "cleanup_failed_forbidden_operation_detected"
@@ -584,6 +592,16 @@ Assert-Contains -Text $stateFunctionText -Pattern 'Get-StableCreatedUtc' -Code "
 Assert-Contains -Text $stateFunctionText -Pattern 'created_utc = \$createdUtc' -Code "created_utc_not_stable"
 Assert-Contains -Text $stateFunctionText -Pattern 'updated_utc = \$now' -Code "updated_utc_not_updated"
 Assert-NotContains -Text $stateFunctionText -Pattern 'created_utc = \$now' -Code "created_utc_regenerated"
+if (@([regex]::Matches($stateFunctionText, 'DateTimeOffset\]::UtcNow')).Count -ne 1) { Fail -Code "state_single_utcnow_capture_missing" }
+Assert-Contains -Text $stateFunctionText -Pattern 'FallbackCreatedUtc \$now' -Code "state_created_utc_fallback_not_authoritative"
+Assert-Contains -Text $stateFunctionText -Pattern 'Convert-ClusterStateUtcForValidation' -Code "state_utc_validation_missing"
+Assert-Contains -Text $stateFunctionText -Pattern 'createdUtcParsed -gt \$operationUtcParsed' -Code "state_future_created_utc_rejection_missing"
+Assert-Contains -Text $stableCreatedUtcFunctionText -Pattern 'FallbackCreatedUtc' -Code "stable_created_utc_fallback_param_missing"
+Assert-Contains -Text $stableCreatedUtcFunctionText -Pattern 'Test-Path -LiteralPath \$Layout\.StatePath[\s\S]+return \$FallbackCreatedUtc' -Code "stable_created_utc_initial_fallback_missing"
+Assert-Contains -Text $stableCreatedUtcFunctionText -Pattern 'existingCreatedUtc -gt \$operationUtc' -Code "stable_created_utc_future_rejection_missing"
+Assert-Contains -Text $clusterStateUtcFunctionText -Pattern 'TryParseExact[\s\S]+"o"[\s\S]+InvariantCulture[\s\S]+Offset -ne \[TimeSpan\]::Zero' -Code "state_utc_tryparse_exact_missing"
+Assert-NotContains -Text $stableCreatedUtcFunctionText -Pattern 'UtcNow|Start-Sleep|CreationTimeUtc|DateTime\]::Now|AddMilliseconds|TotalMilliseconds|tolerance' -Code "stable_created_utc_second_clock_or_tolerance_detected"
+Assert-NotContains -Text $stateFunctionText -Pattern 'Start-Sleep|CreationTimeUtc|DateTime\]::Now|AddMilliseconds|TotalMilliseconds|tolerance' -Code "state_write_tolerance_or_filesystem_clock_detected"
 Assert-Contains -Text $stateFunctionText -Pattern 'server_state = \$ServerState' -Code "server_state_field_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'server_cleanup_attempted = \$ServerCleanupAttempted' -Code "server_cleanup_attempted_missing"
 Assert-Contains -Text $stateFunctionText -Pattern 'server_cleanup_completed = \$ServerCleanupCompleted' -Code "server_cleanup_completed_missing"
@@ -845,6 +863,10 @@ foreach ($line in @(
     "create_retry_blocked_until_cleanup=",
     "marker_state_concordance_required=true",
     "created_utc_stable=true",
+    "state_initial_created_utc_single_clock=true",
+    "state_created_utc_preserved_on_rewrite=true",
+    "state_created_utc_future_rejected=true",
+    "state_created_utc_tolerance_used=false",
     "state_write_substep_reasons=true",
     "state_initial_write_fail_closed=true",
     "state_failed_write_secondary_reason_preserved=true",
@@ -1418,6 +1440,92 @@ Assert-MutationRemovesRequired -MutatedText ($aclSemanticFunctionText -replace '
 Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nif (`$Acl.Access.Count -eq 1) { return }") -ForbiddenPattern '\.Count\s+-eq' -Code "selftest_acl_rule_count_dependency_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($aclSemanticFunctionText + "`nSet-Acl -LiteralPath x") -ForbiddenPattern 'Set-Acl' -Code "selftest_acl_selftest_set_acl_not_detected"
 Assert-MutationAddsForbidden -MutatedText ($stateFunctionText -replace 'created_utc = \$createdUtc', 'created_utc = $now') -ForbiddenPattern 'created_utc = \$now' -Code "selftest_created_utc_regeneration_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($stateFunctionText -replace 'FallbackCreatedUtc \$now', 'FallbackCreatedUtc ([DateTimeOffset]::UtcNow.ToString("o"))') -RequiredPattern 'FallbackCreatedUtc \$now' -Code "selftest_state_fallback_clock_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($stableCreatedUtcFunctionText + "`n`$now = [DateTimeOffset]::UtcNow") -ForbiddenPattern 'UtcNow' -Code "selftest_stable_created_utc_second_clock_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($stableCreatedUtcFunctionText + "`nStart-Sleep -Milliseconds 1") -ForbiddenPattern 'Start-Sleep' -Code "selftest_stable_created_utc_sleep_not_detected"
+Assert-MutationAddsForbidden -MutatedText ($stateFunctionText + "`n`$createdUtc = (Get-Item `$Layout.StatePath).CreationTimeUtc") -ForbiddenPattern 'CreationTimeUtc' -Code "selftest_state_filesystem_clock_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($clusterStateUtcFunctionText -replace 'TryParseExact', 'Parse') -RequiredPattern 'TryParseExact' -Code "selftest_state_tryparse_exact_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($clusterStateUtcFunctionText -replace 'Offset -ne \[TimeSpan\]::Zero', 'Offset -eq [TimeSpan]::Zero') -RequiredPattern 'Offset -ne \[TimeSpan\]::Zero' -Code "selftest_state_utc_offset_missing_not_detected"
+
+function Convert-UtcForSelfTest {
+  param(
+    [AllowEmptyString()][string]$Value
+  )
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+  $parsed = [DateTimeOffset]::MinValue
+  if (-not [DateTimeOffset]::TryParseExact($Value, "o", [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) { return $null }
+  if ($parsed.Offset -ne [TimeSpan]::Zero) { return $null }
+  return $parsed
+}
+
+function Resolve-StableCreatedUtcForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$ExistingState,
+    [AllowEmptyString()][string]$ExistingCreatedUtc,
+    [AllowEmptyString()][string]$FallbackCreatedUtc,
+    [Parameter(Mandatory = $true)][bool]$SchemaValid,
+    [Parameter(Mandatory = $true)][bool]$ClusterMatches
+  )
+  $operationUtc = Convert-UtcForSelfTest -Value $FallbackCreatedUtc
+  if ($null -eq $operationUtc) { return [pscustomobject]@{ Ok = $false; Reason = "state_get_created_utc_failed"; CreatedUtc = $null } }
+  if (-not $ExistingState) { return [pscustomobject]@{ Ok = $true; Reason = $null; CreatedUtc = $FallbackCreatedUtc } }
+  if (-not $SchemaValid -or -not $ClusterMatches) { return [pscustomobject]@{ Ok = $false; Reason = "state_get_created_utc_failed"; CreatedUtc = $null } }
+  $existingUtc = Convert-UtcForSelfTest -Value $ExistingCreatedUtc
+  if ($null -eq $existingUtc -or $existingUtc -gt $operationUtc) { return [pscustomobject]@{ Ok = $false; Reason = "state_get_created_utc_failed"; CreatedUtc = $null } }
+  return [pscustomobject]@{ Ok = $true; Reason = $null; CreatedUtc = $ExistingCreatedUtc }
+}
+
+$clockFirst = Resolve-StableCreatedUtcForSelfTest -ExistingState:$false -ExistingCreatedUtc $null -FallbackCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -SchemaValid:$true -ClusterMatches:$true
+if (-not $clockFirst.Ok -or $clockFirst.CreatedUtc -ne "2026-01-01T00:00:00.0000000+00:00") { Fail -Code "selftest_single_clock_initial_created_utc_failed" }
+$clockPreserved = Resolve-StableCreatedUtcForSelfTest -ExistingState:$true -ExistingCreatedUtc "2025-12-31T23:59:59.0000000+00:00" -FallbackCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -SchemaValid:$true -ClusterMatches:$true
+if (-not $clockPreserved.Ok -or $clockPreserved.CreatedUtc -ne "2025-12-31T23:59:59.0000000+00:00") { Fail -Code "selftest_created_utc_preservation_failed" }
+$clockEqual = Resolve-StableCreatedUtcForSelfTest -ExistingState:$true -ExistingCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -FallbackCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -SchemaValid:$true -ClusterMatches:$true
+if (-not $clockEqual.Ok) { Fail -Code "selftest_created_utc_equal_operation_rejected" }
+$clockFuture = Resolve-StableCreatedUtcForSelfTest -ExistingState:$true -ExistingCreatedUtc "2026-01-01T00:00:00.0000001+00:00" -FallbackCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -SchemaValid:$true -ClusterMatches:$true
+if ($clockFuture.Ok -or $clockFuture.Reason -ne "state_get_created_utc_failed") { Fail -Code "selftest_created_utc_future_not_rejected" }
+$clockMissingFallback = Resolve-StableCreatedUtcForSelfTest -ExistingState:$false -ExistingCreatedUtc $null -FallbackCreatedUtc "" -SchemaValid:$true -ClusterMatches:$true
+if ($clockMissingFallback.Ok -or $clockMissingFallback.Reason -ne "state_get_created_utc_failed") { Fail -Code "selftest_created_utc_missing_fallback_not_rejected" }
+$clockNonUtcFallback = Resolve-StableCreatedUtcForSelfTest -ExistingState:$false -ExistingCreatedUtc $null -FallbackCreatedUtc "2026-01-01T00:00:00.0000000-05:00" -SchemaValid:$true -ClusterMatches:$true
+if ($clockNonUtcFallback.Ok -or $clockNonUtcFallback.Reason -ne "state_get_created_utc_failed") { Fail -Code "selftest_created_utc_non_utc_fallback_not_rejected" }
+$clockBadExisting = Resolve-StableCreatedUtcForSelfTest -ExistingState:$true -ExistingCreatedUtc "2026-01-01 00:00:00" -FallbackCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -SchemaValid:$true -ClusterMatches:$true
+if ($clockBadExisting.Ok -or $clockBadExisting.Reason -ne "state_get_created_utc_failed") { Fail -Code "selftest_created_utc_bad_existing_not_rejected" }
+$clockBadSchema = Resolve-StableCreatedUtcForSelfTest -ExistingState:$true -ExistingCreatedUtc "2025-12-31T23:59:59.0000000+00:00" -FallbackCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -SchemaValid:$false -ClusterMatches:$true
+if ($clockBadSchema.Ok -or $clockBadSchema.Reason -ne "state_get_created_utc_failed") { Fail -Code "selftest_created_utc_bad_schema_not_rejected" }
+$clockClusterMismatch = Resolve-StableCreatedUtcForSelfTest -ExistingState:$true -ExistingCreatedUtc "2025-12-31T23:59:59.0000000+00:00" -FallbackCreatedUtc "2026-01-01T00:00:00.0000000+00:00" -SchemaValid:$true -ClusterMatches:$false
+if ($clockClusterMismatch.Ok -or $clockClusterMismatch.Reason -ne "state_get_created_utc_failed") { Fail -Code "selftest_created_utc_cluster_mismatch_not_rejected" }
+
+function Test-CleanupFailedCreateStateCompatibilityForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][int]$StateLength,
+    [Parameter(Mandatory = $true)][int]$MarkerLength,
+    [Parameter(Mandatory = $true)][string]$Stage,
+    [Parameter(Mandatory = $true)][string]$LastErrorCode,
+    [Parameter(Mandatory = $true)][bool]$ServerStarted,
+    [Parameter(Mandatory = $true)][bool]$ServerCleanupCompleted,
+    [Parameter(Mandatory = $true)][bool]$StrictSchema,
+    [Parameter(Mandatory = $true)][bool]$MarkerConcordant
+  )
+  if ($StateLength -lt 700 -or $StateLength -gt 4096 -or $MarkerLength -lt 80 -or $MarkerLength -gt 512) { return "cleanup_failed_exact_state_invalid" }
+  if (-not $StrictSchema) { return "cleanup_failed_state_schema_invalid" }
+  if (-not $MarkerConcordant) { return "cleanup_failed_marker_state_invalid" }
+  if ($Stage -notin @("create_directories","state_get_created_utc")) { return "cleanup_failed_marker_state_invalid" }
+  if ($LastErrorCode -notin @("create_directories_failed","state_get_created_utc_failed")) { return "cleanup_failed_marker_state_invalid" }
+  if ($Stage -eq "state_get_created_utc" -and $LastErrorCode -ne "state_get_created_utc_failed") { return "cleanup_failed_marker_state_invalid" }
+  if ($Stage -eq "create_directories" -and $LastErrorCode -eq "state_get_created_utc_failed") { return "cleanup_failed_marker_state_invalid" }
+  if ($ServerStarted -or $ServerCleanupCompleted) { return "cleanup_failed_marker_state_invalid" }
+  return "OK"
+}
+
+if ((Test-CleanupFailedCreateStateCompatibilityForSelfTest -StateLength 988 -MarkerLength 146 -Stage "state_get_created_utc" -LastErrorCode "state_get_created_utc_failed" -ServerStarted:$false -ServerCleanupCompleted:$false -StrictSchema:$true -MarkerConcordant:$true) -ne "OK") { Fail -Code "selftest_cleanup_failed_state_get_created_utc_not_supported" }
+if ((Test-CleanupFailedCreateStateCompatibilityForSelfTest -StateLength 975 -MarkerLength 146 -Stage "create_directories" -LastErrorCode "create_directories_failed" -ServerStarted:$false -ServerCleanupCompleted:$false -StrictSchema:$true -MarkerConcordant:$true) -ne "OK") { Fail -Code "selftest_cleanup_failed_create_directories_regressed" }
+if ((Test-CleanupFailedCreateStateCompatibilityForSelfTest -StateLength 699 -MarkerLength 146 -Stage "state_get_created_utc" -LastErrorCode "state_get_created_utc_failed" -ServerStarted:$false -ServerCleanupCompleted:$false -StrictSchema:$true -MarkerConcordant:$true) -ne "cleanup_failed_exact_state_invalid") { Fail -Code "selftest_cleanup_failed_state_min_size_not_detected" }
+if ((Test-CleanupFailedCreateStateCompatibilityForSelfTest -StateLength 4097 -MarkerLength 146 -Stage "state_get_created_utc" -LastErrorCode "state_get_created_utc_failed" -ServerStarted:$false -ServerCleanupCompleted:$false -StrictSchema:$true -MarkerConcordant:$true) -ne "cleanup_failed_exact_state_invalid") { Fail -Code "selftest_cleanup_failed_state_max_size_not_detected" }
+if ((Test-CleanupFailedCreateStateCompatibilityForSelfTest -StateLength 988 -MarkerLength 146 -Stage "state_get_created_utc" -LastErrorCode "create_directories_failed" -ServerStarted:$false -ServerCleanupCompleted:$false -StrictSchema:$true -MarkerConcordant:$true) -ne "cleanup_failed_marker_state_invalid") { Fail -Code "selftest_cleanup_failed_stage_error_mismatch_not_detected" }
+if ((Test-CleanupFailedCreateStateCompatibilityForSelfTest -StateLength 988 -MarkerLength 146 -Stage "create_directories" -LastErrorCode "state_get_created_utc_failed" -ServerStarted:$false -ServerCleanupCompleted:$false -StrictSchema:$true -MarkerConcordant:$true) -ne "cleanup_failed_marker_state_invalid") { Fail -Code "selftest_cleanup_failed_cross_stage_error_not_detected" }
+if ((Test-CleanupFailedCreateStateCompatibilityForSelfTest -StateLength 988 -MarkerLength 146 -Stage "state_get_created_utc" -LastErrorCode "state_get_created_utc_failed" -ServerStarted:$true -ServerCleanupCompleted:$false -StrictSchema:$true -MarkerConcordant:$true) -ne "cleanup_failed_marker_state_invalid") { Fail -Code "selftest_cleanup_failed_server_started_not_detected" }
+Assert-MutationAddsForbidden -MutatedText ($cleanupFailedStateFunctionText + "`nif ((Get-Item -LiteralPath `$Layout.StatePath).Length -ne 975) { }") -ForbiddenPattern 'Length\s+-ne\s+975' -Code "selftest_cleanup_failed_exact_state_length_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($cleanupFailedPayloadFunctionText -replace 'state_get_created_utc', 'state_missing') -RequiredPattern 'state_get_created_utc' -Code "selftest_cleanup_failed_state_stage_missing_not_detected"
+Assert-MutationRemovesRequired -MutatedText ($cleanupFailedPayloadFunctionText -replace 'state_get_created_utc_failed', 'state_missing_failed') -RequiredPattern 'state_get_created_utc_failed' -Code "selftest_cleanup_failed_state_error_missing_not_detected"
 function Test-SimulatedStateWriteForSelfTest {
   param(
     [Parameter(Mandatory = $true)][bool]$ExistingState,
@@ -2091,6 +2199,9 @@ foreach ($expectedLine in @(
     "cleanup_failed_create_activity_revalidation=true",
     "cleanup_failed_create_expected_delete_file_count=2",
     "cleanup_failed_create_expected_delete_directory_count=6",
+    "cleanup_failed_create_state_length_exact_hardcode=false",
+    "cleanup_failed_create_state_size_bounded=true",
+    "cleanup_failed_create_state_get_created_utc_failure_supported=true",
     "apply_implementation_present=false",
     "verify_implementation_present=false",
     "destroy_implementation_present=false",

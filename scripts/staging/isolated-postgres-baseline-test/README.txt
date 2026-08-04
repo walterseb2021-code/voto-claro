@@ -343,3 +343,13 @@ Los objetos internos conservan el contrato estricto: InstanceRoot, data, logs, s
 Para ejecuciones futuras, Create endurece IsolatedRoot explicitamente: crea IsolatedRoot si falta, aplica Set-RestrictedAcl sobre IsolatedRoot y solo despues continua con InstanceRoot y los directorios internos. Si el readback semantico falla, Create no avanza.
 
 La correccion no autoriza por si sola CleanupFailedCreate. La accion sigue requiriendo aprobacion humana separada, no ejecuta SQL, no usa Supabase, no toca produccion y mantiene borrado explicito no recursivo.
+
+B-SEC-23H created_utc y CleanupFailedCreate
+
+El fallo real state_get_created_utc_failed confirmo una carrera temporal interna: la escritura de estado tomaba un reloj para updated_utc y Get-StableCreatedUtc tomaba otro reloj cuando aun no existia StatePath. En la primera escritura, created_utc podia quedar unos milisegundos en el futuro respecto del reloj de la misma operacion y el flujo fallaba cerrado antes de iniciar PostgreSQL.
+
+Write-ClusterState usa ahora un unico reloj autoritativo por escritura. Ese valor se pasa como fallback explicito a Get-StableCreatedUtc. Si StatePath no existe, created_utc queda exactamente igual al fallback de la misma operacion. Si StatePath existe, se preserva el created_utc previo tras validar schema, identidad de instancia y fecha UTC exacta. La validacion de fechas sigue fallando cerrado si created_utc esta en el futuro; no se agrego tolerancia, Sleep, CreationTimeUtc ni reloj local.
+
+CleanupFailedCreate acepta ahora de forma segura el estado fallido stage=state_get_created_utc con last_error_code=state_get_created_utc_failed, siempre que el schema estricto, marker/state, tamanos acotados, directorios exactos, ACL, ausencia de actividad PostgreSQL y firma TOCTOU sigan siendo validos. La comprobacion de longitud exacta del JSON fue reemplazada por limites cerrados para cubrir el JSON real actual sin aceptar contenido arbitrario.
+
+CleanupFailedCreate, CleanupPartialCreate, Create, Destroy, PostgreSQL, SQL, Supabase y operaciones Git de escritura permanecen sin ejecutar durante esta correccion.
