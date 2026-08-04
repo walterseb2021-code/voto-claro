@@ -181,6 +181,11 @@ $cleanupFailedAuthorizationFunctionText = Get-FunctionText -Name "Assert-Cleanup
 $cleanupFailedStateFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateExactState"
 $cleanupFailedStateFileSizeFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStateFileSize"
 $cleanupFailedPayloadFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStatePayload"
+$cleanupFailedPgCtlPayloadFunctionText = Get-FunctionText -Name "Assert-CleanupFailedPgCtlStartStatePayload"
+$cleanupFailedPgCtlResidualFunctionText = Get-FunctionText -Name "Assert-CleanupFailedPgCtlStartResidual"
+$cleanupFailedPgCtlManifestFunctionText = Get-FunctionText -Name "New-CleanupFailedPgCtlStartManifest"
+$cleanupFailedPgCtlManifestDeleteFunctionText = Get-FunctionText -Name "Invoke-CleanupFailedPgCtlStartManifestDelete"
+$cleanupFailedPgCtlSelfTestFunctionText = Get-FunctionText -Name "Invoke-CleanupFailedPgCtlStartRealFilesystemSelfTest"
 $cleanupFailedFailureFunctionText = Get-FunctionText -Name "Get-CleanupFailedCreateSafeFailure"
 $cleanupFailedIsolatedRootFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateIsolatedRootSafe"
 $cleanupFailedDirectorySafeFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateDirectorySafe"
@@ -370,6 +375,15 @@ Assert-Contains -Text $cleanupFailedPayloadFunctionText -Pattern 'state\.stage -
 Assert-Contains -Text $cleanupFailedStateFunctionText -Pattern 'Assert-CleanupFailedCreateStateFileSize' -Code "cleanup_failed_state_size_guard_missing"
 Assert-Contains -Text $cleanupFailedStateFileSizeFunctionText -Pattern 'stateLength -lt 700[\s\S]+stateLength -gt 4096[\s\S]+markerLength -lt 80[\s\S]+markerLength -gt 512' -Code "cleanup_failed_state_size_bounds_missing"
 Assert-NotContains -Text $cleanupFailedStateFunctionText -Pattern 'Length\s+-ne\s+975|Length\s+-ne\s+146' -Code "cleanup_failed_fixed_length_detected"
+Assert-Contains -Text $cleanupFailedPgCtlPayloadFunctionText -Pattern 'stage -ne "pg_ctl_start"[\s\S]+last_error_code -ne "unexpected_failure"[\s\S]+initdb_completed -ne \$true[\s\S]+configuration_completed -ne \$false[\s\S]+server_started -ne \$false[\s\S]+server_state -ne "not_started"[\s\S]+credential_protected -ne \$true[\s\S]+plaintext_password_file_present -ne \$false' -Code "cleanup_failed_pg_ctl_payload_contract_missing"
+Assert-Contains -Text $cleanupFailedPgCtlResidualFunctionText -Pattern 'Assert-CleanupPathFixed[\s\S]+Get-PostgresRoot[\s\S]+Assert-CleanupFailedCreateDirectorySafe[\s\S]+StatePath[\s\S]+MarkerPath[\s\S]+CredentialPath[\s\S]+ServerLog[\s\S]+PasswordFilePath[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf[\s\S]+pg_tblspc' -Code "cleanup_failed_pg_ctl_residual_contract_missing"
+Assert-Contains -Text $cleanupFailedPgCtlResidualFunctionText -Pattern 'Assert-CleanupFailedCreateExactEntries -PathValue \$Layout\.InstanceRoot -ExpectedEntries @\(\$Layout\.DataRoot, \$Layout\.LogRoot, \$Layout\.SecretRoot, \$Layout\.StateRoot\)[\s\S]+Assert-CleanupFailedCreateExactEntries -PathValue \$Layout\.LogRoot -ExpectedEntries @\(\$Layout\.ServerLog\)[\s\S]+Assert-CleanupFailedCreateExactEntries -PathValue \$Layout\.SecretRoot -ExpectedEntries @\(\$Layout\.CredentialPath\)[\s\S]+Assert-CleanupFailedCreateExactEntries -PathValue \$Layout\.StateRoot -ExpectedEntries @\(\$Layout\.StatePath, \$Layout\.MarkerPath\)' -Code "cleanup_failed_pg_ctl_exact_entries_missing"
+Assert-Contains -Text $cleanupFailedPgCtlManifestFunctionText -Pattern 'Assert-CleanupFailedPgCtlStartResidual[\s\S]+Get-CleanupManifestTree -RootPath \$Layout\.DataRoot[\s\S]+Mode = "PG_CTL_START_INITIALIZED_RESIDUAL"[\s\S]+FixedPathValidationSkipped[\s\S]+Files = \$fileArray[\s\S]+Directories = \$dirArray[\s\S]+Signature = \(Get-CleanupFailedPgCtlStartManifestSignature' -Code "cleanup_failed_pg_ctl_manifest_contract_missing"
+Assert-Contains -Text $text -Pattern 'function Get-CleanupFailedPgCtlStartManifestSignature[\s\S]+Get-FileSha256ForCleanupManifest[\s\S]+Get-StableStringHashForCleanupManifest' -Code "cleanup_failed_pg_ctl_manifest_signature_missing"
+Assert-Contains -Text $cleanupFailedPgCtlManifestDeleteFunctionText -Pattern 'Assert-CleanupFailedPgCtlStartManifestUnchanged[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+foreach \(\$file in \$Manifest\.Files\)[\s\S]+File\]::Delete\(\$file\)[\s\S]+foreach \(\$dir in \$Manifest\.Directories\)[\s\S]+Directory\]::Delete\(\$dir, \$false\)[\s\S]+Assert-PostgresTools' -Code "cleanup_failed_pg_ctl_manifest_delete_contract_missing"
+Assert-NotContains -Text ($cleanupFailedFunctionText + "`n" + $cleanupFailedPgCtlManifestDeleteFunctionText) -Pattern 'Remove-Item|Directory\]::Delete\([^\r\n]+,\s*\$true\)|-Recurse|Set-Acl|takeown|icacls|Stop-Process|taskkill' -Code "cleanup_failed_pg_ctl_forbidden_operation_detected"
+Assert-Contains -Text $cleanupFailedFunctionText -Pattern 'PG_CTL_START_INITIALIZED_RESIDUAL[\s\S]+New-CleanupFailedPgCtlStartManifest[\s\S]+Assert-CleanupFailedPgCtlStartManifestUnchanged[\s\S]+cleanup_failed_delete_pg_ctl_start_manifest[\s\S]+Invoke-CleanupFailedPgCtlStartManifestDelete[\s\S]+cleanup_failed_create_manifest_valid=true' -Code "cleanup_failed_pg_ctl_flow_missing"
+Assert-Contains -Text $cleanupFailedPgCtlSelfTestFunctionText -Pattern 'Path\]::GetTempPath\(\)[\s\S]+package-out-of-scope[\s\S]+repo-out-of-scope[\s\S]+New-CleanupFailedPgCtlStartManifest[\s\S]+Invoke-CleanupFailedPgCtlStartManifestDelete[\s\S]+CLEANUP_FAILED_PG_CTL_START_RESIDUAL_SELF_TEST_OK[\s\S]+CLEANUP_FAILED_PG_CTL_START_MUTATION_SELF_TEST_OK[\s\S]+CLEANUP_FAILED_PG_CTL_START_PLAN_SELF_TEST_OK' -Code "cleanup_failed_pg_ctl_selftest_missing"
 if (@([regex]::Matches($cleanupFailedFunctionText, '\[System\.IO\.File\]::Delete\(')).Count -ne 2) { Fail -Code "cleanup_failed_file_delete_count_invalid" }
 if (@([regex]::Matches($cleanupFailedFunctionText, '\[System\.IO\.Directory\]::Delete\([^\r\n]+, \$false\)')).Count -ne 6) { Fail -Code "cleanup_failed_directory_delete_count_invalid" }
 Assert-NotContains -Text $cleanupFailedFunctionText -Pattern 'Directory\]::Delete\([^\r\n]+,\s*\$true\)|Remove-Item|Set-Acl|Invoke-Create|Invoke-CleanupPartialCreate|Invoke-BlockedFutureAction|Stop-Process|taskkill' -Code "cleanup_failed_forbidden_operation_detected"
@@ -544,7 +558,7 @@ Assert-Contains -Text $text -Pattern "0\.0\.0\.0/0\s+reject" -Code "pg_hba_ipv4_
 Assert-Contains -Text $text -Pattern "::/0\s+reject" -Code "pg_hba_ipv6_reject_missing"
 Assert-NotContains -Text $text -Pattern "::0/0" -Code "pg_hba_ipv6_ambiguous_detected"
 Assert-NotContains -Text $text -Pattern "\btrust\b|\bmd5\b|\bident\b|\bpeer\b|\bsspi\b|::1|host\s+all\s+all[^\r\n]+\bpassword\b" -Code "unsafe_pg_hba_method_detected"
-if (@([regex]::Matches($text, "host\s+all\s+all\s+127\.0\.0\.1/32\s+scram-sha-256")).Count -ne 1) { Fail -Code "pg_hba_scram_count_invalid" }
+if (@([regex]::Matches($text, "host    all    all    127\.0\.0\.1/32    scram-sha-256")).Count -ne 1) { Fail -Code "pg_hba_scram_count_invalid" }
 if (@([regex]::Matches($text, "host\s+all\s+all\s+(0\.0\.0\.0/0|::/0)\s+reject")).Count -ne 2) { Fail -Code "pg_hba_reject_count_invalid" }
 Assert-Contains -Text $aclFunctionText -Pattern '\[ValidateSet\("Directory","File"\)\]' -Code "acl_target_type_missing"
 Assert-Contains -Text $aclFunctionText -Pattern 'TargetType -eq "Directory"[\s\S]+ContainerInherit,ObjectInherit' -Code "directory_acl_inheritance_missing"
@@ -757,6 +771,11 @@ foreach ($code in @(
     "cleanup_delete_instance_failed",
     "cleanup_delete_root_failed",
     "cleanup_postcheck_failed",
+    "cleanup_failed_manifest_invalid",
+    "cleanup_failed_manifest_changed",
+    "cleanup_failed_delete_file_failed",
+    "cleanup_failed_delete_directory_failed",
+    "cleanup_failed_parent_not_empty",
     "cleanup_preflight_unknown",
     "cleanup_environment_invalid",
     "cleanup_postgres_package_incomplete",
@@ -960,6 +979,10 @@ foreach ($line in @(
     "state_schema_flat_strict=true",
     "server_state_unresolved_fail_closed=true",
     "ready_for_create=",
+    "cleanup_failed_create_required=",
+    "cleanup_failed_create_exact_state_valid=",
+    "cleanup_failed_create_mode=",
+    "cleanup_failed_create_manifest_valid=",
     "create_authorized=false",
     "create_execution_blocked=true",
     "create_execution_requires_exact_approval=true",
@@ -2070,6 +2093,26 @@ function Get-PlanRuntimeBooleanSignalForSelfTest {
   return [pscustomobject]@{ Ok = $true; Reason = "none"; Value = $value }
 }
 
+function Get-PlanRuntimeStringSignalForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines,
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+  [string[]]$matches = @($Lines | Where-Object { $_.StartsWith(($Name + "="), [System.StringComparison]::Ordinal) })
+  if ($matches.Count -eq 0) {
+    return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_signal_missing"; Value = $null }
+  }
+  if ($matches.Count -ne 1) {
+    return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_signal_duplicate"; Value = $null }
+  }
+  $line = [string]$matches[0]
+  $expectedPrefix = $Name + "="
+  if (-not $line.StartsWith($expectedPrefix, [System.StringComparison]::Ordinal)) {
+    return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_value_invalid"; Value = $null }
+  }
+  return [pscustomobject]@{ Ok = $true; Reason = "none"; Value = $line.Substring($expectedPrefix.Length) }
+}
+
 function Test-PlanRuntimeStateContractForSelfTest {
   param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines)
   $signalNames = @(
@@ -2078,6 +2121,9 @@ function Test-PlanRuntimeStateContractForSelfTest {
     "cleanup_partial_create_required",
     "cleanup_partial_create_exact_state_valid",
     "cleanup_partial_create_manifest_valid",
+    "cleanup_failed_create_required",
+    "cleanup_failed_create_exact_state_valid",
+    "cleanup_failed_create_manifest_valid",
     "ready_for_create"
   )
   $values = @{}
@@ -2086,21 +2132,45 @@ function Test-PlanRuntimeStateContractForSelfTest {
     if (-not $signal.Ok) { return $signal.Reason }
     $values[$name] = $signal.Value
   }
+  $modeSignal = Get-PlanRuntimeStringSignalForSelfTest -Lines $Lines -Name "cleanup_failed_create_mode"
+  if (-not $modeSignal.Ok) { return $modeSignal.Reason }
+  $modeValue = [string]$modeSignal.Value
   $isPartial = (
     [string]::Equals($values["partial_instance_cleanup_required"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["create_retry_blocked_until_cleanup"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_required"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_manifest_valid"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($modeValue, "", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
   )
   if ($isPartial) { return "OK" }
+  $isFailedPgCtlStart = (
+    [string]::Equals($values["partial_instance_cleanup_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_retry_blocked_until_cleanup"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_manifest_valid"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($modeValue, "PG_CTL_START_INITIALIZED_RESIDUAL", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
+  )
+  if ($isFailedPgCtlStart) { return "OK" }
   $isClean = (
     [string]::Equals($values["partial_instance_cleanup_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["create_retry_blocked_until_cleanup"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($modeValue, "", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["ready_for_create"], "true", [System.StringComparison]::Ordinal)
   )
   if ($isClean) { return "OK" }
@@ -2131,6 +2201,22 @@ $planRuntimePartial = @(
   "cleanup_partial_create_required=true",
   "cleanup_partial_create_exact_state_valid=true",
   "cleanup_partial_create_manifest_valid=true",
+  "cleanup_failed_create_required=false",
+  "cleanup_failed_create_exact_state_valid=false",
+  "cleanup_failed_create_mode=",
+  "cleanup_failed_create_manifest_valid=false",
+  "ready_for_create=false"
+)
+$planRuntimeFailedPgCtlStart = @(
+  "partial_instance_cleanup_required=true",
+  "create_retry_blocked_until_cleanup=true",
+  "cleanup_partial_create_required=false",
+  "cleanup_partial_create_exact_state_valid=false",
+  "cleanup_partial_create_manifest_valid=false",
+  "cleanup_failed_create_required=true",
+  "cleanup_failed_create_exact_state_valid=true",
+  "cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL",
+  "cleanup_failed_create_manifest_valid=true",
   "ready_for_create=false"
 )
 $planRuntimeClean = @(
@@ -2139,25 +2225,34 @@ $planRuntimeClean = @(
   "cleanup_partial_create_required=false",
   "cleanup_partial_create_exact_state_valid=false",
   "cleanup_partial_create_manifest_valid=false",
+  "cleanup_failed_create_required=false",
+  "cleanup_failed_create_exact_state_valid=false",
+  "cleanup_failed_create_mode=",
+  "cleanup_failed_create_manifest_valid=false",
   "ready_for_create=true"
 )
 Assert-PlanRuntimeContractCaseForSelfTest -Name "partial_accept" -Lines $planRuntimePartial -ExpectedResult "OK"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "failed_pg_ctl_start_accept" -Lines $planRuntimeFailedPgCtlStart -ExpectedResult "OK"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_accept" -Lines $planRuntimeClean -ExpectedResult "OK"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_cleanup_required" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_exact_state" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_cleanup_required" -Lines @($planRuntimePartial | Where-Object { $_ -notlike "cleanup_partial_create_required=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_exact_state" -Lines @($planRuntimePartial | Where-Object { $_ -notlike "cleanup_partial_create_exact_state_valid=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_failed_mode" -Lines @($planRuntimeFailedPgCtlStart | Where-Object { $_ -notlike "cleanup_failed_create_mode=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_cleanup_required" -Lines @($planRuntimePartial + "cleanup_partial_create_required=true") -ExpectedResult "plan_runtime_state_signal_duplicate"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_exact_state" -Lines @($planRuntimePartial + "cleanup_partial_create_exact_state_valid=true") -ExpectedResult "plan_runtime_state_signal_duplicate"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "uppercase" -Lines @("partial_instance_cleanup_required=TRUE","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "one" -Lines @("partial_instance_cleanup_required=1","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "yes" -Lines @("partial_instance_cleanup_required=yes","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "empty" -Lines @("partial_instance_cleanup_required=","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "mixed_true_false" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "partial_ready_true" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_ready_false" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=false","cleanup_partial_create_exact_state_valid=false","cleanup_partial_create_manifest_valid=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_true_in_clean" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=false","cleanup_partial_create_manifest_valid=false","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_true_in_clean" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=false","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=false","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_false_in_partial" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=false","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_false_in_partial" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=false","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_failed_mode" -Lines @($planRuntimeFailedPgCtlStart + "cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL") -ExpectedResult "plan_runtime_state_signal_duplicate"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "uppercase" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "partial_instance_cleanup_required=*") { "partial_instance_cleanup_required=TRUE" } else { $_ } }) -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "one" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "partial_instance_cleanup_required=*") { "partial_instance_cleanup_required=1" } else { $_ } }) -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "yes" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "partial_instance_cleanup_required=*") { "partial_instance_cleanup_required=yes" } else { $_ } }) -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "empty" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "partial_instance_cleanup_required=*") { "partial_instance_cleanup_required=" } else { $_ } }) -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "mixed_true_false" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "create_retry_blocked_until_cleanup=*") { "create_retry_blocked_until_cleanup=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "partial_ready_true" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "failed_pg_ctl_wrong_mode" -Lines @($planRuntimeFailedPgCtlStart | ForEach-Object { if ($_ -like "cleanup_failed_create_mode=*") { "cleanup_failed_create_mode=EARLY_FAILED_CREATE" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "failed_pg_ctl_ready_true" -Lines @($planRuntimeFailedPgCtlStart | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_ready_false" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_true_in_clean" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "cleanup_partial_create_required=*") { "cleanup_partial_create_required=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_true_in_clean" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "cleanup_partial_create_exact_state_valid=*") { "cleanup_partial_create_exact_state_valid=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_false_in_partial" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "cleanup_partial_create_required=*") { "cleanup_partial_create_required=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_false_in_partial" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "cleanup_partial_create_exact_state_valid=*") { "cleanup_partial_create_exact_state_valid=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "zero_lines" -Lines @() -ExpectedResult "plan_runtime_state_signal_missing"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "one_line" -Lines @("partial_instance_cleanup_required=true") -ExpectedResult "plan_runtime_state_signal_missing"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "noise_allowed" -Lines @(@("noise=ignored") + $planRuntimeClean + @("production_connection_used=false")) -ExpectedResult "OK"
@@ -2286,7 +2381,13 @@ foreach ($expectedLine in @(
     "cleanup_failed_create_action_present=true",
     "cleanup_failed_create_authorized=false",
     "cleanup_failed_create_execution_blocked=true",
+    "cleanup_failed_create_required=true",
+    "cleanup_failed_create_exact_state_valid=true",
+    "cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL",
+    "cleanup_failed_create_manifest_valid=true",
     "cleanup_failed_create_exact_state_required=true",
+    "cleanup_failed_create_pg_ctl_start_mode_supported=true",
+    "cleanup_failed_create_pg_ctl_start_manifest_supported=true",
     "cleanup_failed_create_recursive_delete_allowed=false",
     "cleanup_failed_create_acl_modification_allowed=false",
     "cleanup_failed_create_package_directory_in_scope=false",
@@ -2800,6 +2901,18 @@ if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains
 if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK") {
   Fail -Code "cleanup_partial_real_filesystem_selftest_runtime_failed"
 }
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_FAILED_PG_CTL_START_RESIDUAL_SELF_TEST_OK") {
+  Fail -Code "cleanup_failed_pg_ctl_start_residual_selftest_runtime_failed"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_FAILED_PG_CTL_START_MUTATION_SELF_TEST_OK") {
+  Fail -Code "cleanup_failed_pg_ctl_start_mutation_selftest_runtime_failed"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_FAILED_PG_CTL_START_PLAN_SELF_TEST_OK") {
+  Fail -Code "cleanup_failed_pg_ctl_start_plan_selftest_runtime_failed"
+}
+Write-Output "CLEANUP_FAILED_PG_CTL_START_RESIDUAL_SELF_TEST_OK"
+Write-Output "CLEANUP_FAILED_PG_CTL_START_MUTATION_SELF_TEST_OK"
+Write-Output "CLEANUP_FAILED_PG_CTL_START_PLAN_SELF_TEST_OK"
 Write-Output "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK"
 Write-Output "CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK"
 Invoke-StateReplaceRealFilesystemSelfTest

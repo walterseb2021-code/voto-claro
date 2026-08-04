@@ -394,3 +394,17 @@ Para pg_ctl start se usa una estrategia nativa separada. El proceso se lanza con
 La evidencia de stdout/stderr se lee como cola sanitizada desde esos archivos. Si un hijo persistente retiene temporalmente un archivo, la lectura se tolera sin convertir un pg_ctl start exitoso en fallo; la decision de exito sigue dependiendo de las verificaciones posteriores de postmaster.pid, DataRoot, PID, ejecutable, listener y puerto 127.0.0.1:55432.
 
 No repetir Create despues de un fallo con instancia parcial. La instancia parcial debe revisarse y limpiarse solo mediante una accion autorizada separada. Esta documentacion no autoriza Create, CleanupPartialCreate, CleanupFailedCreate, Destroy, SQL, Supabase ni produccion.
+
+B-SEC-23M CleanupFailedCreate para pg_ctl_start
+
+CleanupFailedCreate conserva el contrato temprano existente y agrega un segundo modo exacto llamado PG_CTL_START_INITIALIZED_RESIDUAL. Este modo solo aplica a un Create fallido en pg_ctl_start cuando initdb ya dejo un cluster PostgreSQL 17 inicializado, el servidor nunca quedo iniciado, PostgreSQL esta detenido, no existe postmaster.pid y el puerto 127.0.0.1:55432 esta cerrado.
+
+El contrato valida rutas fijas bajo LOCALAPPDATA, InstanceRoot dentro de IsolatedRoot y el paquete PostgreSQL 17.10 fuera del alcance de limpieza. Exige IsolatedRoot con una sola entrada InstanceRoot; InstanceRoot con data, logs, secrets y state; logs con postgresql-server.log; secrets con solo la credencial DPAPI; state con cluster-state.json y marker concordantes; ausencia de password file en texto plano, temporales residuales, postmaster.pid y reparse points. El JSON mantiene schema estricto, state=failed, stage=pg_ctl_start, last_error_code=unexpected_failure, host 127.0.0.1, port 55432, version 17.10, server_state=not_started e initdb_completed=true con configuration_completed, server_started y server_cleanup en false.
+
+Antes de cualquier borrado autorizado, el modo construye un manifest completo en memoria con rutas relativas, tipo, tamanos y firmas estables. Los archivos se hashean con SHA-256 y las rutas de directorios se firman de forma determinista. El manifest se revalida antes del primer borrado junto con Git, actividad PostgreSQL y estado exacto; cualquier archivo agregado, faltante o modificado bloquea fail-closed.
+
+La secuencia de borrado preparada es explicita: archivos autorizados uno por uno con File.Delete y directorios vacios de abajo hacia arriba con Directory.Delete(path,false). No se permite Remove-Item, borrado recursivo, Directory.Delete(path,true), takeown, icacls ni cambios de ACL. El paquete PostgreSQL, el repositorio y cualquier hermano quedan fuera del scope. IsolatedRoot solo se elimina cuando queda vacia.
+
+Plan reconoce este residuo de solo lectura y emite cleanup_failed_create_required=true, cleanup_failed_create_exact_state_valid=true, cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL, cleanup_failed_create_manifest_valid=true y ready_for_create=false. Plan no borra, no escribe, no cambia ACL, no abre puertos, no inicia PostgreSQL, no ejecuta SQL y no accede a produccion.
+
+La limpieza real de este modo requiere revision humana separada y autorizacion independiente de CleanupFailedCreate. No se debe reintentar manualmente despues de una salida ambigua. Ante cualquier diferencia de estructura, ACL, manifest, actividad PostgreSQL, paquete o estado, el flujo debe quedar bloqueado y no debe encadenar Create.

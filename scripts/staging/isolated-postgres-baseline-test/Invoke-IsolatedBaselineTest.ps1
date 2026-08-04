@@ -85,6 +85,11 @@ $script:SafeCodes = @(
   "cleanup_failed_acl_enumeration_failed",
   "cleanup_failed_activity_detected",
   "cleanup_failed_state_changed",
+  "cleanup_failed_parent_not_empty",
+  "cleanup_failed_delete_directory_failed",
+  "cleanup_failed_delete_file_failed",
+  "cleanup_failed_manifest_changed",
+  "cleanup_failed_manifest_invalid",
   "cleanup_failed_delete_state_json_failed",
   "cleanup_failed_delete_marker_failed",
   "cleanup_failed_delete_state_root_failed",
@@ -2097,6 +2102,144 @@ function Invoke-CleanupPartialRealFilesystemSelfTest {
     Remove-CleanupPartialSelfTestTreeControlled -RootPath $base
   }
 }
+
+function New-CleanupFailedPgCtlStartSelfTestJson {
+  param([Parameter(Mandatory = $true)][string]$ClusterId)
+  $payload = [ordered]@{
+    artifact_type = "voto_claro_isolated_baseline_cluster_state"
+    schema_version = 1
+    cluster_id = $ClusterId
+    state = "failed"
+    stage = "pg_ctl_start"
+    created_utc = "2026-01-01T00:00:00.0000000+00:00"
+    updated_utc = "2026-01-01T00:00:01.0000000+00:00"
+    postgres_major = "17"
+    postgres_version = "17.10"
+    host = "127.0.0.1"
+    port = 55432
+    admin_role = $script:LocalAdminUser
+    instance_name = $script:InstanceName
+    data_directory_name = "data"
+    server_log_name = "postgresql-server.log"
+    last_error_code = "unexpected_failure"
+    initdb_completed = $true
+    configuration_completed = $false
+    server_started = $false
+    credential_protected = $true
+    plaintext_password_file_present = $false
+    server_state = "not_started"
+    server_cleanup_attempted = $false
+    server_cleanup_completed = $false
+  }
+  return ($payload | ConvertTo-Json -Depth 4)
+}
+
+function Initialize-CleanupFailedPgCtlStartSelfTestLayout {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  foreach ($dir in @(
+      $Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot,
+      (Join-Path $Layout.DataRoot "base"), (Join-Path $Layout.DataRoot "base\1"), (Join-Path $Layout.DataRoot "global"),
+      (Join-Path $Layout.DataRoot "pg_tblspc"), (Join-Path $Layout.DataRoot "pg_wal")
+    )) {
+    [System.IO.Directory]::CreateDirectory($dir) | Out-Null
+    Set-RestrictedAcl -PathValue $dir -TargetType Directory
+  }
+  $clusterId = [Guid]::NewGuid().ToString()
+  Write-Utf8NoBomFile -PathValue $Layout.MarkerPath -Text ((New-MarkerText -ClusterId $clusterId -LocalPort 55432) -join "`n")
+  Write-Utf8NoBomFile -PathValue $Layout.StatePath -Text (New-CleanupFailedPgCtlStartSelfTestJson -ClusterId $clusterId)
+  Write-Utf8NoBomFile -PathValue $Layout.CredentialPath -Text "selftest-dpapi-placeholder"
+  Write-Utf8NoBomFile -PathValue $Layout.ServerLog -Text "database system is ready to accept connections"
+  foreach ($file in @($Layout.MarkerPath, $Layout.StatePath)) { Set-RestrictedAcl -PathValue $file -TargetType File }
+  foreach ($file in @($Layout.CredentialPath, $Layout.ServerLog)) { Set-RestrictedAcl -PathValue $file -TargetType File }
+  $dataFiles = @{
+    "PG_VERSION" = "17"
+    "postgresql.conf" = "listen_addresses = '127.0.0.1'"
+    "pg_hba.conf" = "host all all 127.0.0.1/32 scram-sha-256"
+    "global\pg_control" = "selftest-control"
+    "base\1\123" = "selftest-relation"
+    "pg_wal\000000010000000000000001" = "selftest-wal"
+  }
+  foreach ($relative in $dataFiles.Keys) {
+    $path = Join-Path $Layout.DataRoot $relative
+    Write-Utf8NoBomFile -PathValue $path -Text $dataFiles[$relative]
+    Set-RestrictedAcl -PathValue $path -TargetType File
+  }
+}
+
+function Assert-CleanupFailedPgCtlStartNegativePreserved {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$PackageSibling,
+    [Parameter(Mandatory = $true)][string]$RepoSibling
+  )
+  if (-not (Test-Path -LiteralPath $Layout.InstanceRoot -PathType Container)) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+  if (-not (Test-Path -LiteralPath (Join-Path $PackageSibling "keep.txt") -PathType Leaf)) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+  if (-not (Test-Path -LiteralPath (Join-Path $RepoSibling "keep.txt") -PathType Leaf)) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+}
+
+function Invoke-CleanupFailedPgCtlStartRealFilesystemSelfTest {
+  $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  $base = Join-Path $tempRoot ("vc-cleanup-partial-selftest-pgctl-" + [Guid]::NewGuid().ToString("N"))
+  $packageSibling = Join-Path $base "package-out-of-scope"
+  $repoSibling = Join-Path $base "repo-out-of-scope"
+  try {
+    [System.IO.Directory]::CreateDirectory($base) | Out-Null
+    [System.IO.Directory]::CreateDirectory($packageSibling) | Out-Null
+    [System.IO.Directory]::CreateDirectory($repoSibling) | Out-Null
+    Write-Utf8NoBomFile -PathValue (Join-Path $packageSibling "keep.txt") -Text "package-intact"
+    Write-Utf8NoBomFile -PathValue (Join-Path $repoSibling "keep.txt") -Text "repo-intact"
+    $package = Assert-PostgresTools -BinRoot $PostgresBin
+
+    $layout = New-CleanupPartialSelfTestLayout -BaseRoot (Join-Path $base "positive")
+    Initialize-CleanupFailedPgCtlStartSelfTestLayout -Layout $layout
+    $manifest = New-CleanupFailedPgCtlStartManifest -Layout $layout -SkipFixedPathValidation
+    if ($manifest.Mode -ne "PG_CTL_START_INITIALIZED_RESIDUAL" -or $manifest.Files.Count -lt 10 -or $manifest.Directories.Count -lt 8) { Throw-SafeError -Code "cleanup_failed_manifest_invalid" }
+    Invoke-CleanupFailedPgCtlStartManifestDelete -Layout $layout -Manifest $manifest -Package $package
+    if (Test-Path -LiteralPath $layout.IsolatedRoot -PathType Container) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+    if (-not (Test-Path -LiteralPath (Join-Path $packageSibling "keep.txt") -PathType Leaf)) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+    if (-not (Test-Path -LiteralPath (Join-Path $repoSibling "keep.txt") -PathType Leaf)) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+    Write-Output "CLEANUP_FAILED_PG_CTL_START_RESIDUAL_SELF_TEST_OK"
+
+    $addedLayout = New-CleanupPartialSelfTestLayout -BaseRoot (Join-Path $base "added-after-manifest")
+    Initialize-CleanupFailedPgCtlStartSelfTestLayout -Layout $addedLayout
+    $addedManifest = New-CleanupFailedPgCtlStartManifest -Layout $addedLayout -SkipFixedPathValidation
+    Write-Utf8NoBomFile -PathValue (Join-Path $addedLayout.DataRoot "added-after-manifest.txt") -Text "changed"
+    try { Invoke-CleanupFailedPgCtlStartManifestDelete -Layout $addedLayout -Manifest $addedManifest -Package $package; Throw-SafeError -Code "cleanup_failed_postcheck_failed" } catch { if ((Get-SafeReason -ErrorRecord $_) -ne "cleanup_failed_manifest_changed") { throw } }
+    Assert-CleanupFailedPgCtlStartNegativePreserved -Layout $addedLayout -PackageSibling $packageSibling -RepoSibling $repoSibling
+
+    $negativeCases = @(
+      @{ Name="extra-before"; Mutate={ param($l) Write-Utf8NoBomFile -PathValue (Join-Path $l.InstanceRoot "unexpected.txt") -Text "extra" } },
+      @{ Name="postmaster"; Mutate={ param($l) Write-Utf8NoBomFile -PathValue (Join-Path $l.DataRoot "postmaster.pid") -Text "pid" } },
+      @{ Name="tblspc"; Mutate={ param($l) [System.IO.Directory]::CreateDirectory((Join-Path $l.DataRoot "pg_tblspc\unexpected")) | Out-Null } },
+      @{ Name="missing-log"; Mutate={ param($l) [System.IO.File]::Delete($l.ServerLog) } },
+      @{ Name="missing-credential"; Mutate={ param($l) [System.IO.File]::Delete($l.CredentialPath) } },
+      @{ Name="state-extra"; Mutate={ param($l) Write-Utf8NoBomFile -PathValue (Join-Path $l.StateRoot "extra.json") -Text "extra" } },
+      @{ Name="stage"; Mutate={ param($l) $j=Get-Content -LiteralPath $l.StatePath -Raw | ConvertFrom-Json; $j.stage="initdb"; Write-Utf8NoBomFile -PathValue $l.StatePath -Text ($j | ConvertTo-Json -Depth 4) } },
+      @{ Name="last-error"; Mutate={ param($l) $j=Get-Content -LiteralPath $l.StatePath -Raw | ConvertFrom-Json; $j.last_error_code="pg_ctl_start_failed"; Write-Utf8NoBomFile -PathValue $l.StatePath -Text ($j | ConvertTo-Json -Depth 4) } },
+      @{ Name="initdb"; Mutate={ param($l) $j=Get-Content -LiteralPath $l.StatePath -Raw | ConvertFrom-Json; $j.initdb_completed=$false; Write-Utf8NoBomFile -PathValue $l.StatePath -Text ($j | ConvertTo-Json -Depth 4) } },
+      @{ Name="server-started"; Mutate={ param($l) $j=Get-Content -LiteralPath $l.StatePath -Raw | ConvertFrom-Json; $j.server_started=$true; Write-Utf8NoBomFile -PathValue $l.StatePath -Text ($j | ConvertTo-Json -Depth 4) } },
+      @{ Name="server-state"; Mutate={ param($l) $j=Get-Content -LiteralPath $l.StatePath -Raw | ConvertFrom-Json; $j.server_state="running"; Write-Utf8NoBomFile -PathValue $l.StatePath -Text ($j | ConvertTo-Json -Depth 4) } },
+      @{ Name="marker"; Mutate={ param($l) Write-Utf8NoBomFile -PathValue $l.MarkerPath -Text ((New-MarkerText -ClusterId ([Guid]::NewGuid().ToString()) -LocalPort 55432) -join "`n") } },
+      @{ Name="pg-version"; Mutate={ param($l) Write-Utf8NoBomFile -PathValue (Join-Path $l.DataRoot "PG_VERSION") -Text "16" } }
+    )
+    foreach ($case in $negativeCases) {
+      $caseLayout = New-CleanupPartialSelfTestLayout -BaseRoot (Join-Path $base ("negative-" + $case.Name))
+      Initialize-CleanupFailedPgCtlStartSelfTestLayout -Layout $caseLayout
+      & $case.Mutate $caseLayout
+      try { [void](New-CleanupFailedPgCtlStartManifest -Layout $caseLayout -SkipFixedPathValidation); Throw-SafeError -Code "cleanup_failed_postcheck_failed" } catch { if (@("cleanup_failed_exact_state_invalid","cleanup_failed_marker_state_invalid","marker_state_mismatch","cleanup_postmaster_pid_present","cleanup_failed_attributes_invalid") -notcontains (Get-SafeReason -ErrorRecord $_)) { throw } }
+      Assert-CleanupFailedPgCtlStartNegativePreserved -Layout $caseLayout -PackageSibling $packageSibling -RepoSibling $repoSibling
+    }
+    Write-Output "CLEANUP_FAILED_PG_CTL_START_MUTATION_SELF_TEST_OK"
+    $planLayout = New-CleanupPartialSelfTestLayout -BaseRoot (Join-Path $base "plan")
+    Initialize-CleanupFailedPgCtlStartSelfTestLayout -Layout $planLayout
+    $planManifest = New-CleanupFailedPgCtlStartManifest -Layout $planLayout -SkipFixedPathValidation
+    if ($planManifest.Mode -ne "PG_CTL_START_INITIALIZED_RESIDUAL") { Throw-SafeError -Code "cleanup_failed_manifest_invalid" }
+    Write-Output "CLEANUP_FAILED_PG_CTL_START_PLAN_SELF_TEST_OK"
+  } finally {
+    Remove-CleanupPartialSelfTestTreeControlled -RootPath $base
+  }
+}
+
 function Get-CleanupPartialStateSignature {
   param([Parameter(Mandatory = $true)][object]$Layout)
   $isolatedEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot
@@ -2272,6 +2415,7 @@ function Get-CleanupFailedCreateSafeFailure {
     "cleanup_failed_revalidate_signature",
     "cleanup_failed_revalidate_state",
     "cleanup_failed_revalidate_activity",
+    "cleanup_failed_delete_pg_ctl_start_manifest",
     "cleanup_failed_delete_state_json",
     "cleanup_failed_delete_marker",
     "cleanup_failed_validate_state_empty",
@@ -2313,6 +2457,11 @@ function Get-CleanupFailedCreateSafeFailure {
   "cleanup_failed_acl_enumeration_failed",
     "cleanup_failed_activity_detected",
     "cleanup_failed_state_changed",
+    "cleanup_failed_manifest_invalid",
+    "cleanup_failed_manifest_changed",
+    "cleanup_failed_delete_file_failed",
+    "cleanup_failed_delete_directory_failed",
+    "cleanup_failed_parent_not_empty",
     "cleanup_failed_delete_state_json_failed",
     "cleanup_failed_delete_marker_failed",
     "cleanup_failed_delete_state_root_failed",
@@ -2376,6 +2525,11 @@ function Get-CleanupFailedCreateSafeFailure {
           "cleanup_enumeration_failed" { "cleanup_failed_exact_state_invalid"; break }
           "cleanup_signature_failed" { "cleanup_failed_state_changed"; break }
           "cleanup_state_changed" { "cleanup_failed_state_changed"; break }
+          "cleanup_failed_manifest_invalid" { "cleanup_failed_manifest_invalid"; break }
+          "cleanup_failed_manifest_changed" { "cleanup_failed_manifest_changed"; break }
+          "cleanup_failed_delete_file_failed" { "cleanup_failed_delete_file_failed"; break }
+          "cleanup_failed_delete_directory_failed" { "cleanup_failed_delete_directory_failed"; break }
+          "cleanup_failed_parent_not_empty" { "cleanup_failed_parent_not_empty"; break }
           "cleanup_activity_detected" { "cleanup_failed_activity_detected"; break }
           "cleanup_postgres_process_detected" { "cleanup_failed_activity_detected"; break }
           "cleanup_postgres_process_ambiguous" { "cleanup_failed_activity_detected"; break }
@@ -2449,6 +2603,7 @@ function Get-CleanupFailedCreateSafeFailure {
     "cleanup_failed_revalidate_signature" { "cleanup_failed_state_changed"; break }
     "cleanup_failed_revalidate_state" { "cleanup_failed_state_changed"; break }
     "cleanup_failed_revalidate_activity" { "cleanup_failed_activity_detected"; break }
+    "cleanup_failed_delete_pg_ctl_start_manifest" { "cleanup_failed_delete_directory_failed"; break }
     "cleanup_failed_delete_state_json" { "cleanup_failed_delete_state_json_failed"; break }
     "cleanup_failed_delete_marker" { "cleanup_failed_delete_marker_failed"; break }
     "cleanup_failed_delete_state_root" { "cleanup_failed_delete_state_root_failed"; break }
@@ -2709,6 +2864,185 @@ function Assert-CleanupFailedCreateStateFileSize {
     Throw-SafeError -Code "cleanup_failed_exact_state_invalid"
   }
 }
+
+function Assert-CleanupFailedPgCtlStartStatePayload {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $marker = Read-MarkerMap -MarkerPath $Layout.MarkerPath
+  $clusterId = [string]$marker["cluster_id"]
+  $parsedGuid = [Guid]::Empty
+  if (-not [Guid]::TryParse($clusterId, [ref]$parsedGuid)) { Throw-SafeError -Code "cleanup_failed_marker_state_invalid" }
+  Assert-MarkerStateConcordance -Layout $Layout -ClusterId $clusterId
+  $stateText = [System.IO.File]::ReadAllText($Layout.StatePath)
+  [void](Assert-StrictFlatStateJson -JsonText $stateText)
+  $state = $stateText | ConvertFrom-Json
+  if ($state.cluster_id -ne $clusterId -or
+      $state.state -ne "failed" -or
+      $state.stage -ne "pg_ctl_start" -or
+      [string]$state.last_error_code -ne "unexpected_failure" -or
+      $state.host -ne "127.0.0.1" -or
+      [int]$state.port -ne 55432 -or
+      [string]$state.postgres_major -ne "17" -or
+      [string]$state.postgres_version -ne "17.10" -or
+      $state.admin_role -ne $script:LocalAdminUser -or
+      $state.instance_name -ne $script:InstanceName -or
+      $state.data_directory_name -ne "data" -or
+      $state.server_log_name -ne "postgresql-server.log" -or
+      $state.initdb_completed -ne $true -or
+      $state.configuration_completed -ne $false -or
+      $state.server_started -ne $false -or
+      $state.server_state -ne "not_started" -or
+      $state.server_cleanup_attempted -ne $false -or
+      $state.server_cleanup_completed -ne $false -or
+      $state.credential_protected -ne $true -or
+      $state.plaintext_password_file_present -ne $false) {
+    Throw-SafeError -Code "cleanup_failed_marker_state_invalid"
+  }
+  [void](Convert-ClusterStateUtcForValidation -Value ([string]$state.created_utc) -FailureCode "cleanup_failed_marker_state_invalid")
+  [void](Convert-ClusterStateUtcForValidation -Value ([string]$state.updated_utc) -FailureCode "cleanup_failed_marker_state_invalid")
+  return [pscustomobject]@{ ClusterId = $clusterId }
+}
+
+function Assert-CleanupFailedPgCtlStartResidual {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [switch]$SkipFixedPathValidation
+  )
+  if (-not $SkipFixedPathValidation) {
+    Assert-CleanupPathFixed -Layout $Layout
+    $packageRoot = Get-PostgresRoot
+    if (Test-IsInsideDirectory -ChildPath $packageRoot -ParentPath $Layout.IsolatedRoot) { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+  }
+  foreach ($dir in @($Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)) {
+    Assert-CleanupFailedCreateDirectorySafe -PathValue $dir
+  }
+  foreach ($file in @($Layout.StatePath, $Layout.MarkerPath)) {
+    Assert-CleanupFailedCreateFileSafe -PathValue $file
+  }
+  foreach ($file in @($Layout.CredentialPath, $Layout.ServerLog)) {
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+    Assert-CleanupEntrySafe -PathValue $file
+  }
+  Assert-CleanupFailedCreateStateFileSize -Layout $Layout
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.IsolatedRoot -ExpectedEntries @($Layout.InstanceRoot)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.InstanceRoot -ExpectedEntries @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.LogRoot -ExpectedEntries @($Layout.ServerLog)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.SecretRoot -ExpectedEntries @($Layout.CredentialPath)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.StateRoot -ExpectedEntries @($Layout.StatePath, $Layout.MarkerPath)
+  if (Test-Path -LiteralPath $Layout.PasswordFilePath -PathType Leaf) { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+  if (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postmaster.pid") -PathType Leaf) { Throw-SafeError -Code "cleanup_postmaster_pid_present" }
+  foreach ($requiredFile in @((Join-Path $Layout.DataRoot "PG_VERSION"), (Join-Path $Layout.DataRoot "postgresql.conf"), (Join-Path $Layout.DataRoot "pg_hba.conf"))) {
+    if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+    Assert-CleanupEntrySafe -PathValue $requiredFile
+  }
+  $pgVersion = ([System.IO.File]::ReadAllText((Join-Path $Layout.DataRoot "PG_VERSION"))).Trim()
+  if ($pgVersion -ne "17") { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+  $tblspc = Join-Path $Layout.DataRoot "pg_tblspc"
+  if (-not (Test-Path -LiteralPath $tblspc -PathType Container)) { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+  Assert-CleanupDirectorySafe -PathValue $tblspc
+  $tblspcEntriesResult = Get-CleanupDirectoryEntries -PathValue $tblspc
+  Assert-CleanupDirectoryEntriesResult -Result $tblspcEntriesResult
+  [string[]]$tblspcEntries = @($tblspcEntriesResult.Entries)
+  if ($tblspcEntries.Count -ne 0) { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+  $dataTree = Get-CleanupManifestTree -RootPath $Layout.DataRoot -AuthorizedRoot $Layout.InstanceRoot
+  if ($dataTree.Files.Count -lt 3 -or $dataTree.Directories.Count -lt 1) { Throw-SafeError -Code "cleanup_failed_exact_state_invalid" }
+  return (Assert-CleanupFailedPgCtlStartStatePayload -Layout $Layout)
+}
+
+function Test-CleanupFailedPgCtlStartResidual {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  try { [void](Assert-CleanupFailedPgCtlStartResidual -Layout $Layout); return $true } catch { return $false }
+}
+
+function Get-CleanupFailedPgCtlStartManifestSignature {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$DataTree,
+    [Parameter(Mandatory = $true)][string[]]$Files,
+    [Parameter(Mandatory = $true)][string[]]$Directories
+  )
+  $parts = New-Object System.Collections.Generic.List[string]
+  [void]$parts.Add("mode=PG_CTL_START_INITIALIZED_RESIDUAL")
+  foreach ($file in @($Files | Sort-Object)) {
+    $item = Get-Item -LiteralPath $file -Force
+    $relative = $file.Substring($Layout.InstanceRoot.Length).TrimStart('\')
+    [void]$parts.Add(("F:{0}:{1}:{2}" -f $relative, $item.Length, (Get-FileSha256ForCleanupManifest -PathValue $file)))
+  }
+  foreach ($dir in @($Directories | Sort-Object)) {
+    $relative = if ([string]::Equals($dir.TrimEnd('\'), $Layout.IsolatedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) { ".isolated" } else { $dir.Substring($Layout.InstanceRoot.Length).TrimStart('\') }
+    [void]$parts.Add("D:" + $relative)
+  }
+  return (Get-StableStringHashForCleanupManifest -Text ($parts -join "`n"))
+}
+
+function New-CleanupFailedPgCtlStartManifest {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [switch]$SkipFixedPathValidation
+  )
+  $residual = Assert-CleanupFailedPgCtlStartResidual -Layout $Layout -SkipFixedPathValidation:$SkipFixedPathValidation
+  $dataTree = Get-CleanupManifestTree -RootPath $Layout.DataRoot -AuthorizedRoot $Layout.InstanceRoot
+  $files = New-Object System.Collections.Generic.List[string]
+  foreach ($file in $dataTree.Files) { [void]$files.Add($file) }
+  foreach ($file in @($Layout.ServerLog, $Layout.CredentialPath, $Layout.StatePath, $Layout.MarkerPath)) { [void]$files.Add($file) }
+  $dirs = New-Object System.Collections.Generic.List[string]
+  foreach ($dir in $dataTree.Directories) { [void]$dirs.Add($dir) }
+  foreach ($dir in @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot, $Layout.InstanceRoot, $Layout.IsolatedRoot)) { [void]$dirs.Add($dir) }
+  [string[]]$fileArray = @($files.ToArray() | Sort-Object -Unique)
+  [string[]]$dirArray = @($dirs.ToArray() | Sort-Object -Unique | Sort-Object { $_.Length } -Descending)
+  return [pscustomobject]@{
+    Mode = "PG_CTL_START_INITIALIZED_RESIDUAL"
+    FixedPathValidationSkipped = [bool]$SkipFixedPathValidation
+    ClusterId = $residual.ClusterId
+    Files = $fileArray
+    Directories = $dirArray
+    DataFileCount = $dataTree.Files.Count
+    DataDirectoryCount = $dataTree.Directories.Count
+    Signature = (Get-CleanupFailedPgCtlStartManifestSignature -Layout $Layout -DataTree $dataTree -Files $fileArray -Directories $dirArray)
+  }
+}
+
+function Assert-CleanupFailedPgCtlStartManifestUnchanged {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Manifest
+  )
+  $current = New-CleanupFailedPgCtlStartManifest -Layout $Layout -SkipFixedPathValidation:([bool]$Manifest.FixedPathValidationSkipped)
+  if (-not [string]::Equals($current.Signature, $Manifest.Signature, [System.StringComparison]::Ordinal) -or
+      $current.Files.Count -ne $Manifest.Files.Count -or
+      $current.Directories.Count -ne $Manifest.Directories.Count) {
+    Throw-SafeError -Code "cleanup_failed_manifest_changed"
+  }
+}
+
+function Invoke-CleanupFailedPgCtlStartManifestDelete {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Manifest,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  Assert-CleanupFailedPgCtlStartManifestUnchanged -Layout $Layout -Manifest $Manifest
+  Assert-CleanupNoPostgresActivity -Package $Package -Layout $Layout
+  foreach ($file in $Manifest.Files) {
+    [void](Assert-CleanupManifestChildPath -PathValue $file -RootPath $Layout.InstanceRoot)
+    try { if (Test-Path -LiteralPath $file -PathType Leaf) { [System.IO.File]::Delete($file) } } catch { Throw-SafeError -Code "cleanup_failed_delete_file_failed" }
+  }
+  foreach ($dir in $Manifest.Directories) {
+    $rootForCheck = if ([string]::Equals([System.IO.Path]::GetFullPath($dir).TrimEnd('\'), $Layout.IsolatedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) { $Layout.IsolatedRoot } else { $Layout.InstanceRoot }
+    [void](Assert-CleanupManifestChildPath -PathValue $dir -RootPath $rootForCheck)
+    if ([string]::Equals([System.IO.Path]::GetFullPath($dir).TrimEnd('\'), $Layout.InstanceRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Assert-CleanupNoPostgresActivity -Package $Package -Layout $Layout
+    }
+    if ([string]::Equals([System.IO.Path]::GetFullPath($dir).TrimEnd('\'), $Layout.IsolatedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Assert-CleanupNoPostgresActivity -Package $Package -Layout $Layout
+      Assert-CleanupFailedCreateEmptyDirectory -PathValue $Layout.IsolatedRoot
+    }
+    try { if (Test-Path -LiteralPath $dir -PathType Container) { [System.IO.Directory]::Delete($dir, $false) } } catch { Throw-SafeError -Code "cleanup_failed_delete_directory_failed" }
+  }
+  if (Test-Path -LiteralPath $Layout.InstanceRoot -PathType Container) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+  if (Test-Path -LiteralPath $Layout.IsolatedRoot -PathType Container) { Throw-SafeError -Code "cleanup_failed_postcheck_failed" }
+  [void](Assert-PostgresTools -BinRoot $PostgresBin)
+}
+
 function Assert-CleanupFailedCreateExactState {
   param([Parameter(Mandatory = $true)][object]$Layout)
   Assert-CleanupFailedCreateIsolatedRootSafe -Layout $Layout
@@ -2805,25 +3139,58 @@ function Invoke-CleanupFailedCreate {
     }
 
     Set-Stage -Stage "cleanup_failed_exact_state"
-    Assert-CleanupFailedCreateExactState -Layout $layout
+    $cleanupFailedCreateMode = "EARLY_FAILED_CREATE"
+    $pgCtlStartManifest = $null
+    if (Test-CleanupFailedPgCtlStartResidual -Layout $layout) {
+      $cleanupFailedCreateMode = "PG_CTL_START_INITIALIZED_RESIDUAL"
+      $pgCtlStartManifest = New-CleanupFailedPgCtlStartManifest -Layout $layout
+    } else {
+      Assert-CleanupFailedCreateExactState -Layout $layout
+    }
 
     Set-Stage -Stage "cleanup_failed_signature_initial"
-    $initialStateSignature = Get-CleanupFailedCreateStateSignature -Layout $layout
+    $initialStateSignature = if ($cleanupFailedCreateMode -eq "PG_CTL_START_INITIALIZED_RESIDUAL") { $pgCtlStartManifest.Signature } else { Get-CleanupFailedCreateStateSignature -Layout $layout }
 
     Set-Stage -Stage "cleanup_failed_activity"
     Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
 
     Set-Stage -Stage "cleanup_failed_revalidate_signature"
-    $revalidatedStateSignature = Get-CleanupFailedCreateStateSignature -Layout $layout
-    if (-not [string]::Equals($initialStateSignature, $revalidatedStateSignature, [System.StringComparison]::Ordinal)) {
-      Throw-SafeError -Code "cleanup_failed_state_changed"
+    if ($cleanupFailedCreateMode -eq "PG_CTL_START_INITIALIZED_RESIDUAL") {
+      Assert-CleanupFailedPgCtlStartManifestUnchanged -Layout $layout -Manifest $pgCtlStartManifest
+    } else {
+      $revalidatedStateSignature = Get-CleanupFailedCreateStateSignature -Layout $layout
+      if (-not [string]::Equals($initialStateSignature, $revalidatedStateSignature, [System.StringComparison]::Ordinal)) {
+        Throw-SafeError -Code "cleanup_failed_state_changed"
+      }
     }
 
     Set-Stage -Stage "cleanup_failed_revalidate_state"
-    Assert-CleanupFailedCreateExactState -Layout $layout
+    if ($cleanupFailedCreateMode -eq "PG_CTL_START_INITIALIZED_RESIDUAL") {
+      [void](Assert-CleanupFailedPgCtlStartResidual -Layout $layout)
+    } else {
+      Assert-CleanupFailedCreateExactState -Layout $layout
+    }
 
     Set-Stage -Stage "cleanup_failed_revalidate_activity"
     Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
+
+    if ($cleanupFailedCreateMode -eq "PG_CTL_START_INITIALIZED_RESIDUAL") {
+      Set-Stage -Stage "cleanup_failed_delete_pg_ctl_start_manifest"
+      Invoke-CleanupFailedPgCtlStartManifestDelete -Layout $layout -Manifest $pgCtlStartManifest -Package $package
+      Write-Output "FAILED_CREATE_CLEANUP_OK"
+      Write-Output "cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL"
+      Write-Output "cleanup_failed_create_manifest_valid=true"
+      Write-Output "isolated_root_removed=true"
+      Write-Output "instance_root_removed=true"
+      Write-Output "postgres_process_detected=false"
+      Write-Output "postgres_service_detected=false"
+      Write-Output "port_55432_listening=false"
+      Write-Output "sql_executed=false"
+      Write-Output "production_connection_used=false"
+      Write-Output "package_directory_modified=false"
+      Write-Output "ready_for_create_recheck=true"
+      return
+    }
 
     Set-Stage -Stage "cleanup_failed_delete_state_json"
     try { [System.IO.File]::Delete($layout.StatePath) } catch { Throw-SafeError -Code "cleanup_failed_delete_state_json_failed" }
@@ -4743,7 +5110,12 @@ function Invoke-Plan {
   $usingDefaultDataRoot = [string]::IsNullOrWhiteSpace($DataRoot)
   $resolvedDataRoot = if ($usingDefaultDataRoot) { $layout.DataRoot } else { $DataRoot }
   $cleanupPartialCreateExactStateValid = Test-CleanupPartialCreateStateReplaceResidual -Layout $layout
-  if (-not $cleanupPartialCreateExactStateValid -or -not $usingDefaultDataRoot) {
+  $cleanupFailedPgCtlStartExactStateValid = Test-CleanupFailedPgCtlStartResidual -Layout $layout
+  $cleanupFailedPgCtlStartManifestValid = $false
+  if ($cleanupFailedPgCtlStartExactStateValid) {
+    try { [void](New-CleanupFailedPgCtlStartManifest -Layout $layout); $cleanupFailedPgCtlStartManifestValid = $true } catch { $cleanupFailedPgCtlStartManifestValid = $false }
+  }
+  if ((-not $cleanupPartialCreateExactStateValid) -and (-not $cleanupFailedPgCtlStartExactStateValid) -or -not $usingDefaultDataRoot) {
     [void](Assert-DataRoot -Root $resolvedDataRoot -RepoRoot $repoRoot -ExpectedClusterName $ClusterName -RequireMarker:$false)
   }
   $baselineValid = Invoke-BaselineValidator -RepoRoot $repoRoot
@@ -4752,6 +5124,8 @@ function Invoke-Plan {
   $localCompat = Invoke-LocalCompatPreflightValidator -RepoRoot $repoRoot
   $partialInstanceCleanupRequired = Test-Path -LiteralPath $layout.InstanceRoot -PathType Container
   $cleanupPartialCreateRequired = $partialInstanceCleanupRequired -and $cleanupPartialCreateExactStateValid
+  $cleanupFailedCreateRequired = $partialInstanceCleanupRequired -and $cleanupFailedPgCtlStartExactStateValid
+  $cleanupFailedCreateMode = if ($cleanupFailedPgCtlStartExactStateValid) { "PG_CTL_START_INITIALIZED_RESIDUAL" } else { "NONE" }
   $readyForCreate = $baselineValid -and $portAvailable -and $localCompat.Valid -and (-not $partialInstanceCleanupRequired)
   $readyForApply = $false
   $readyForVerify = $false
@@ -4905,7 +5279,13 @@ function Invoke-Plan {
   Write-Output "cleanup_failed_create_action_present=true"
   Write-Output "cleanup_failed_create_authorized=false"
   Write-Output "cleanup_failed_create_execution_blocked=true"
+  Write-Output "cleanup_failed_create_required=$(([string]$cleanupFailedCreateRequired).ToLowerInvariant())"
+  Write-Output "cleanup_failed_create_exact_state_valid=$(([string]$cleanupFailedPgCtlStartExactStateValid).ToLowerInvariant())"
+  Write-Output "cleanup_failed_create_mode=$cleanupFailedCreateMode"
+  Write-Output "cleanup_failed_create_manifest_valid=$(([string]$cleanupFailedPgCtlStartManifestValid).ToLowerInvariant())"
   Write-Output "cleanup_failed_create_exact_state_required=true"
+  Write-Output "cleanup_failed_create_pg_ctl_start_mode_supported=true"
+  Write-Output "cleanup_failed_create_pg_ctl_start_manifest_supported=true"
   Write-Output "cleanup_failed_create_recursive_delete_allowed=false"
   Write-Output "cleanup_failed_create_acl_modification_allowed=false"
   Write-Output "cleanup_failed_create_package_directory_in_scope=false"
@@ -4957,6 +5337,7 @@ function Invoke-BlockedFutureAction {
 
 try {
   if ($SelfTest) {
+    Invoke-CleanupFailedPgCtlStartRealFilesystemSelfTest
     Invoke-CleanupPartialRealFilesystemSelfTest
     exit 0
   }
