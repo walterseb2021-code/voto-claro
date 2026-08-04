@@ -3964,10 +3964,137 @@ function Invoke-SafeProcess {
     $stderrTail = Get-SafeOutputTail -Text $stderrTask.Result
     return [pscustomobject]@{ Tool = $ToolName; ExitCode = $process.ExitCode; TimedOut = $false; ProcessKilled = $false; OutputDrainCompleted = $true; Success = ($process.ExitCode -eq 0); SafeErrorCode = $(if ($process.ExitCode -eq 0) { "none" } else { $ToolName + "_failed" }); StdOut = $stdoutTail; StdErr = $stderrTail; StdOutTailSanitized = $stdoutTail; StdErrTailSanitized = $stderrTail }
   } finally {
-    if ($null -ne $stdoutTask) { $stdoutTask.Dispose() }
-    if ($null -ne $stderrTask) { $stderrTask.Dispose() }
-    $process.Dispose()
+    if ($null -ne $stdoutTask -and $stdoutTask.IsCompleted) { try { $stdoutTask.Dispose() } catch { } }
+    if ($null -ne $stderrTask -and $stderrTask.IsCompleted) { try { $stderrTask.Dispose() } catch { } }
+    try { $process.Dispose() } catch { }
   }
+}
+
+function Read-PersistentProcessOutputTail {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  try {
+    if (-not (Test-Path -LiteralPath $PathValue -PathType Leaf)) {
+      return [pscustomobject]@{ Ok = $false; SafeErrorCode = "persistent_process_output_missing"; Tail = "" }
+    }
+    $stream = $null
+    $reader = $null
+    try {
+      $stream = [System.IO.FileStream]::new($PathValue, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+      $reader = [System.IO.StreamReader]::new($stream, [System.Text.UTF8Encoding]::new($false), $true)
+      $text = $reader.ReadToEnd()
+    } finally {
+      if ($null -ne $reader) { $reader.Dispose() }
+      elseif ($null -ne $stream) { $stream.Dispose() }
+    }
+    return [pscustomobject]@{ Ok = $true; SafeErrorCode = "none"; Tail = (Get-SafeOutputTail -Text $text) }
+  } catch {
+    return [pscustomobject]@{ Ok = $false; SafeErrorCode = "persistent_process_output_read_failed"; Tail = "" }
+  }
+}
+
+function Invoke-PersistentChildSafeProcess {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+    [Parameter(Mandatory = $true)][string]$OutputDirectory,
+    [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+    [Parameter(Mandatory = $true)][string]$ToolName
+  )
+  if (-not [System.IO.Path]::IsPathRooted($FilePath) -or -not (Test-Path -LiteralPath $FilePath -PathType Leaf)) { Throw-SafeError -Code "postgres_tools_missing" }
+  if (-not (Test-Path -LiteralPath $WorkingDirectory -PathType Container)) { Throw-SafeError -Code "postgres_tools_missing" }
+  if (-not (Test-Path -LiteralPath $OutputDirectory -PathType Container)) { Throw-SafeError -Code "postgres_tools_missing" }
+  $workFull = [System.IO.Path]::GetFullPath($WorkingDirectory)
+  $outFull = [System.IO.Path]::GetFullPath($OutputDirectory)
+  if (-not (Test-IsInsideDirectory -ChildPath $outFull -ParentPath $workFull)) { Throw-SafeError -Code "postgres_tools_missing" }
+  $runId = [Guid]::NewGuid().ToString("N")
+  $stdoutPath = Join-Path $outFull ("persistent-child." + $runId + ".stdout.log")
+  $stderrPath = Join-Path $outFull ("persistent-child." + $runId + ".stderr.log")
+  if (-not ("VotoClaroPersistentChildProcess" -as [type])) {
+    $sourceLines = @(
+      'using System;',
+      'using System.IO;',
+      'using System.Runtime.InteropServices;',
+      'public static class VotoClaroPersistentChildProcess {',
+      '  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct STARTUPINFO {',
+      '    public UInt32 cb; public IntPtr lpReserved; public IntPtr lpDesktop; public IntPtr lpTitle;',
+      '    public UInt32 dwX; public UInt32 dwY; public UInt32 dwXSize; public UInt32 dwYSize;',
+      '    public UInt32 dwXCountChars; public UInt32 dwYCountChars; public UInt32 dwFillAttribute;',
+      '    public UInt32 dwFlags; public UInt16 wShowWindow; public UInt16 cbReserved2;',
+      '    public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError;',
+      '  }',
+      '  [StructLayout(LayoutKind.Sequential)] public struct PROCESS_INFORMATION {',
+      '    public IntPtr hProcess; public IntPtr hThread; public UInt32 dwProcessId; public UInt32 dwThreadId;',
+      '  }',
+      '  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool CreateProcessW(string app, string cmd, IntPtr pa, IntPtr ta, bool inherit, UInt32 flags, IntPtr env, string cwd, ref STARTUPINFO si, out PROCESS_INFORMATION pi);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetStdHandle(Int32 n);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetCurrentProcess();',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool DuplicateHandle(IntPtr sp, IntPtr sh, IntPtr tp, ref IntPtr th, UInt32 access, bool inherit, UInt32 opts);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern UInt32 WaitForSingleObject(IntPtr h, UInt32 ms);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool TerminateProcess(IntPtr h, UInt32 exitCode);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetExitCodeProcess(IntPtr h, out UInt32 exitCode);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr h);',
+      '  private static string Quote(string value) {',
+      '    if (value == null) { value = String.Empty; }',
+      '    if (value.Length == 0) { return "\"\""; }',
+      '    bool needs = false;',
+      '    for (int i = 0; i < value.Length; i++) { char c = value[i]; if (Char.IsWhiteSpace(c) || c == ''"'') { needs = true; break; } }',
+      '    if (!needs) { return value; }',
+      '    System.Text.StringBuilder b = new System.Text.StringBuilder(); b.Append(''"''); int slash = 0;',
+      '    foreach (char c in value) {',
+      '      if (c == ''\\'') { slash++; continue; }',
+      '      if (c == ''"'') { b.Append(''\\'', slash * 2 + 1); b.Append(''"''); slash = 0; continue; }',
+      '      if (slash > 0) { b.Append(''\\'', slash); slash = 0; }',
+      '      b.Append(c);',
+      '    }',
+      '    if (slash > 0) { b.Append(''\\'', slash * 2); } b.Append(''"''); return b.ToString();',
+      '  }',
+      '  public static int[] Run(string file, string[] args, string cwd, string stdout, string stderr, int timeoutMs) {',
+      '    string cmd = Quote(file); foreach (string a in args) { cmd += " " + Quote(a); }',
+      '    using (FileStream outStream = new FileStream(stdout, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))',
+      '    using (FileStream errStream = new FileStream(stderr, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) {',
+      '      IntPtr current = GetCurrentProcess(); IntPtr hIn = IntPtr.Zero; IntPtr hOut = IntPtr.Zero; IntPtr hErr = IntPtr.Zero;',
+      '      DuplicateHandle(current, GetStdHandle(-10), current, ref hIn, 0, true, 2);',
+      '      if (!DuplicateHandle(current, outStream.SafeFileHandle.DangerousGetHandle(), current, ref hOut, 0, true, 2)) { return new int[] { -1, 0, 0, 0 }; }',
+      '      if (!DuplicateHandle(current, errStream.SafeFileHandle.DangerousGetHandle(), current, ref hErr, 0, true, 2)) { if (hOut != IntPtr.Zero) CloseHandle(hOut); return new int[] { -1, 0, 0, 0 }; }',
+      '      STARTUPINFO si = new STARTUPINFO(); si.cb = (UInt32)Marshal.SizeOf(typeof(STARTUPINFO)); si.dwFlags = 0x00000100; si.hStdInput = hIn; si.hStdOutput = hOut; si.hStdError = hErr;',
+      '      PROCESS_INFORMATION pi; bool ok = CreateProcessW(file, cmd, IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, cwd, ref si, out pi);',
+      '      if (hIn != IntPtr.Zero) CloseHandle(hIn); if (hOut != IntPtr.Zero) CloseHandle(hOut); if (hErr != IntPtr.Zero) CloseHandle(hErr);',
+      '      if (!ok) { return new int[] { -1, 0, 0, 0 }; }',
+      '      if (pi.hThread != IntPtr.Zero) CloseHandle(pi.hThread);',
+      '      UInt32 wait = WaitForSingleObject(pi.hProcess, (UInt32)timeoutMs);',
+      '      if (wait == 258) { TerminateProcess(pi.hProcess, 1); CloseHandle(pi.hProcess); return new int[] { -1, 1, 1, 1 }; }',
+      '      UInt32 exitCode; if (!GetExitCodeProcess(pi.hProcess, out exitCode)) { CloseHandle(pi.hProcess); return new int[] { -1, 0, 0, 1 }; }',
+      '      CloseHandle(pi.hProcess); return new int[] { unchecked((int)exitCode), 0, 0, 1 };',
+      '    }',
+      '  }',
+      '}'
+    )
+    Add-Type -TypeDefinition ($sourceLines -join "`r`n")
+  }
+  try {
+    $native = [VotoClaroPersistentChildProcess]::Run($FilePath, [string[]]$Arguments, $WorkingDirectory, $stdoutPath, $stderrPath, ($TimeoutSeconds * 1000))
+  } catch {
+    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $null; TimedOut = $false; ProcessKilled = $false; OutputDrainCompleted = $true; Success = $false; SafeErrorCode = ($ToolName + "_failed"); StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = ""; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
+  }
+  $stdout = Read-PersistentProcessOutputTail -PathValue $stdoutPath
+  $stderr = Read-PersistentProcessOutputTail -PathValue $stderrPath
+  $exitCode = [int]$native[0]
+  $timedOut = ([int]$native[1] -eq 1)
+  $killed = ([int]$native[2] -eq 1)
+  $started = ([int]$native[3] -eq 1)
+  $success = ($started -and -not $timedOut -and $exitCode -eq 0)
+  if (-not $started) { $success = $false }
+  if (-not $stdout.Ok -and -not $success) {
+    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; Success = $false; SafeErrorCode = $stdout.SafeErrorCode; StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = ""; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
+  }
+  if (-not $stderr.Ok -and -not $success) {
+    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; Success = $false; SafeErrorCode = $stderr.SafeErrorCode; StdOut = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErr = ""; StdOutTailSanitized = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErrTailSanitized = ""; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
+  }
+  $stdoutTail = if ($stdout.Ok) { $stdout.Tail } else { "" }
+  $stderrTail = if ($stderr.Ok) { $stderr.Tail } else { "" }
+  $safeCode = if ($success) { "none" } elseif ($timedOut) { $ToolName + "_timeout" } else { $ToolName + "_failed" }
+  return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; Success = $success; SafeErrorCode = $safeCode; StdOut = $stdoutTail; StdErr = $stderrTail; StdOutTailSanitized = $stdoutTail; StdErrTailSanitized = $stderrTail; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
 }
 
 function Assert-InitializedDataRoot {
@@ -4521,7 +4648,7 @@ function Invoke-Create {
     Assert-CreateStateMarkerConcordance -Layout $layout -ClusterId $clusterId
     $pgCtl = Get-ToolPath -BinRoot $package.Bin -ToolName "pg_ctl"
     $startArgs = @("start", "-D", $layout.DataRoot, "-l", $layout.ServerLog, "-w", "-t", "60")
-    $startResult = Invoke-SafeProcess -FilePath $pgCtl -Arguments $startArgs -WorkingDirectory $layout.InstanceRoot -TimeoutSeconds 75 -ToolName "pg_ctl"
+    $startResult = Invoke-PersistentChildSafeProcess -FilePath $pgCtl -Arguments $startArgs -WorkingDirectory $layout.InstanceRoot -OutputDirectory $layout.StateRoot -TimeoutSeconds 75 -ToolName "pg_ctl_start"
     if ($startResult.TimedOut -or -not $startResult.Success) {
       $recovery = Resolve-VerifiedPgCtlStartFailure -Layout $layout -Package $package
       $serverCleanupAttempted = $recovery.CleanupAttempted
@@ -4686,6 +4813,9 @@ function Invoke-Plan {
   Write-Output "git_working_directory_enforced=true"
   Write-Output "process_output_drain_verified=true"
   Write-Output "process_output_drain_failure_code=process_output_drain_failed"
+  Write-Output "pg_ctl_start_process_strategy=FILE_REDIRECT_NO_PIPE_INHERITANCE"
+  Write-Output "pg_ctl_start_output_capture=CONTROLLED_FILES_SANITIZED_TAIL"
+  Write-Output "process_incomplete_task_dispose_safe=true"
   Write-Output "no_pidfile_process_inventory=DOTNET_LOCAL_PROCESS_ENUMERATION"
   Write-Output "no_server_evidence_requires_zero_authorized_or_ambiguous_processes=true"
   Write-Output "process_executable_path_strategy=MAINMODULE_FILENAME_PS51"

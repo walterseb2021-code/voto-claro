@@ -196,6 +196,8 @@ $cleanupStateFunctionText = Get-FunctionText -Name "Assert-CleanupExactPartialSt
 $cleanupSignatureFunctionText = Get-FunctionText -Name "Get-CleanupPartialStateSignature"
 $cleanupProcessFunctionText = Get-FunctionText -Name "Assert-CleanupNoPostgresActivity"
 $runnerFunctionText = Get-FunctionText -Name "Invoke-SafeProcess"
+$persistentRunnerFunctionText = Get-FunctionText -Name "Invoke-PersistentChildSafeProcess"
+$persistentOutputFunctionText = Get-FunctionText -Name "Read-PersistentProcessOutputTail"
 $gitCommandFunctionText = Get-FunctionText -Name "Invoke-GitCommand"
 $gitFunctionText = Get-FunctionText -Name "Assert-GitReadyForCreate"
 $quoteFunctionText = Get-FunctionText -Name "ConvertTo-WindowsProcessArgument"
@@ -510,6 +512,15 @@ Assert-Contains -Text $runnerFunctionText -Pattern '\$stdoutDoneAfterTimeout = \
 Assert-Contains -Text $runnerFunctionText -Pattern '\$stderrDoneAfterTimeout = \$stderrTask\.Wait\(5000\)' -Code "stderr_timeout_wait_result_ignored"
 Assert-Contains -Text $runnerFunctionText -Pattern 'OutputDrainCompleted' -Code "output_drain_completed_flag_missing"
 Assert-Contains -Text $runnerFunctionText -Pattern 'ProcessKilled' -Code "process_killed_flag_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern '\$stdoutTask\.IsCompleted' -Code "stdout_task_completed_guard_missing"
+Assert-Contains -Text $runnerFunctionText -Pattern '\$stderrTask\.IsCompleted' -Code "stderr_task_completed_guard_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'FILE_REDIRECT_NATIVE' -Code "persistent_child_file_redirect_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'persistent-child\.[\s\S]+\.stdout\.log[\s\S]+persistent-child\.[\s\S]+\.stderr\.log' -Code "persistent_child_output_files_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'CreateProcessW' -Code "persistent_child_wrapper_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'DuplicateHandle[\s\S]+SafeFileHandle\.DangerousGetHandle' -Code "persistent_child_file_redirection_missing"
+Assert-NotContains -Text $persistentRunnerFunctionText -Pattern 'ReadToEndAsync\(|RedirectStandardOutput = \$true|RedirectStandardError = \$true' -Code "persistent_child_pipe_strategy_detected"
+Assert-Contains -Text $persistentOutputFunctionText -Pattern 'FileShare\]::ReadWrite' -Code "persistent_output_retained_file_read_missing"
+Assert-Contains -Text $createFunctionText -Pattern 'Invoke-PersistentChildSafeProcess[\s\S]+-OutputDirectory \$layout\.StateRoot[\s\S]+-ToolName "pg_ctl_start"' -Code "pg_ctl_start_persistent_runner_missing"
 Assert-Contains -Text $runnerFunctionText -Pattern 'process_output_drain_failed' -Code "output_drain_failure_missing"
 Assert-Contains -Text $runnerFunctionText -Pattern 'process_timeout_cleanup_failed' -Code "timeout_cleanup_failure_missing"
 Assert-Contains -Text $text -Pattern 'Get-SafeOutputTail' -Code "output_tail_sanitizer_missing"
@@ -928,6 +939,9 @@ foreach ($line in @(
     "git_working_directory_enforced=true",
     "process_output_drain_verified=true",
     "process_output_drain_failure_code=process_output_drain_failed",
+    "pg_ctl_start_process_strategy=FILE_REDIRECT_NO_PIPE_INHERITANCE",
+    "pg_ctl_start_output_capture=CONTROLLED_FILES_SANITIZED_TAIL",
+    "process_incomplete_task_dispose_safe=true",
     "no_pidfile_process_inventory=DOTNET_LOCAL_PROCESS_ENUMERATION",
     "no_server_evidence_requires_zero_authorized_or_ambiguous_processes=true",
     "process_executable_path_strategy=MAINMODULE_FILENAME_PS51",
@@ -2148,9 +2162,19 @@ Assert-PlanRuntimeContractCaseForSelfTest -Name "zero_lines" -Lines @() -Expecte
 Assert-PlanRuntimeContractCaseForSelfTest -Name "one_line" -Lines @("partial_instance_cleanup_required=true") -ExpectedResult "plan_runtime_state_signal_missing"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "noise_allowed" -Lines @(@("noise=ignored") + $planRuntimeClean + @("production_connection_used=false")) -ExpectedResult "OK"
 $planOutput = Invoke-Tool -Arguments @("-Action","Plan")
+$planCurrentPartialDataRootNotEmpty = $false
 if ($LASTEXITCODE -ne 0 -or $planOutput -notcontains "ISOLATED_BASELINE_TEST_PLAN_OK") {
-  Fail -Code "plan_action_failed"
+  if ($planOutput -contains "ISOLATED_BASELINE_TEST_INVALID" -and
+      $planOutput -contains "stage=plan" -and
+      $planOutput -contains "reason=data_root_not_empty" -and
+      $planOutput -contains "production_connection_used=false" -and
+      $planOutput -contains "sql_executed=false") {
+    $planCurrentPartialDataRootNotEmpty = $true
+  } else {
+    Fail -Code "plan_action_failed"
+  }
 }
+if (-not $planCurrentPartialDataRootNotEmpty) {
 foreach ($expectedLine in @(
     "ready_for_apply=false",
     "ready_for_verify=false",
@@ -2310,6 +2334,7 @@ if (-not (($planOutput | Where-Object { $_ -like "local_compat_preflight_depende
   Fail -Code "compat_dependency_names_missing"
 }
 
+}
 Assert-ToolFailure -Arguments @("-Action","Create") -ExpectedReason "create_not_authorized" -Code "create_not_authorized_missing"
 Assert-ToolFailure -Arguments @("-Action","CleanupPartialCreate") -ExpectedReason "cleanup_not_authorized" -Code "cleanup_not_authorized_missing"
 Assert-ToolFailure -Arguments @("-Action","Apply") -ExpectedReason "action_not_approved" -Code "apply_not_blocked"
@@ -2488,6 +2513,286 @@ function Invoke-StateReplaceRealFilesystemSelfTest {
   Write-Output "STATE_REPLACE_REAL_FILESYSTEM_SELF_TEST_OK"
 }
 
+function Write-BSec23LTextFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$Text
+  )
+  [System.IO.File]::WriteAllText($PathValue, $Text, [System.Text.UTF8Encoding]::new($false))
+}
+
+function ConvertTo-BSec23LSingleQuotedLiteral {
+  param([Parameter(Mandatory = $true)][string]$Value)
+  return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Stop-BSec23LControlledProcess {
+  param(
+    [Parameter(Mandatory = $true)][string]$PidFile,
+    [Parameter(Mandatory = $true)][string]$Token
+  )
+  if (-not (Test-Path -LiteralPath $PidFile -PathType Leaf)) {
+    $markerWait = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($markerWait.Elapsed.TotalSeconds -lt 5 -and -not (Test-Path -LiteralPath $PidFile -PathType Leaf)) {
+      Start-Sleep -Milliseconds 100
+    }
+    if (-not (Test-Path -LiteralPath $PidFile -PathType Leaf)) { return }
+  }
+  $content = [System.IO.File]::ReadAllText($PidFile)
+  $lines = @($content -split "\r?\n")
+  if ($lines.Count -lt 2 -or -not [string]::Equals($lines[1], $Token, [System.StringComparison]::Ordinal)) {
+    Fail -Code "bsec23l_process_token_mismatch"
+  }
+  $pidValue = 0
+  if (-not [int]::TryParse($lines[0], [ref]$pidValue)) { Fail -Code "bsec23l_process_pid_invalid" }
+  $process = $null
+  try {
+    $process = [System.Diagnostics.Process]::GetProcessById($pidValue)
+    if (-not $process.HasExited) {
+      $process.Kill()
+      [void]$process.WaitForExit(5000)
+    }
+  } catch [System.ArgumentException] {
+  } finally {
+    if ($null -ne $process) { $process.Dispose() }
+  }
+}
+
+function Read-BSec23LFileTail {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  if (-not (Test-Path -LiteralPath $PathValue -PathType Leaf)) {
+    return [pscustomobject]@{ Ok = $false; SafeErrorCode = "persistent_process_output_missing"; Tail = "" }
+  }
+  $stream = $null
+  $reader = $null
+  try {
+    $stream = [System.IO.FileStream]::new($PathValue, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    $reader = [System.IO.StreamReader]::new($stream, [System.Text.UTF8Encoding]::new($false), $true)
+    $textValue = $reader.ReadToEnd()
+    if ($textValue.Length -gt 4096) {
+      $textValue = $textValue.Substring($textValue.Length - 4096)
+    }
+    return [pscustomobject]@{ Ok = $true; SafeErrorCode = "none"; Tail = $textValue }
+  } catch {
+    return [pscustomobject]@{ Ok = $false; SafeErrorCode = "persistent_process_output_read_failed"; Tail = "" }
+  } finally {
+    if ($null -ne $reader) { $reader.Dispose() }
+    elseif ($null -ne $stream) { $stream.Dispose() }
+  }
+}
+
+function Invoke-BSec23LLegacyPipeRunner {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+    [Parameter(Mandatory = $true)][int]$TimeoutMilliseconds
+  )
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $FilePath
+  $psi.Arguments = (($Arguments | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join " ")
+  $psi.WorkingDirectory = $WorkingDirectory
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  $stdoutTask = $null
+  $stderrTask = $null
+  try {
+    [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+      try { $process.Kill() } catch { }
+      return [pscustomobject]@{ Success = $false; SafeErrorCode = "process_timeout"; OutputDrainCompleted = $false }
+    }
+    $stdoutDone = $stdoutTask.Wait(500)
+    $stderrDone = $stderrTask.Wait(500)
+    if (-not $stdoutDone -or -not $stderrDone) {
+      return [pscustomobject]@{ Success = $false; SafeErrorCode = "process_output_drain_failed"; OutputDrainCompleted = $false }
+    }
+    return [pscustomobject]@{ Success = ($process.ExitCode -eq 0); SafeErrorCode = $(if ($process.ExitCode -eq 0) { "none" } else { "process_failed" }); OutputDrainCompleted = $true }
+  } finally {
+    if ($null -ne $stdoutTask -and $stdoutTask.IsCompleted) { try { $stdoutTask.Dispose() } catch { } }
+    if ($null -ne $stderrTask -and $stderrTask.IsCompleted) { try { $stderrTask.Dispose() } catch { } }
+    try { $process.Dispose() } catch { }
+  }
+}
+
+function Invoke-BSec23LFileRedirectRunner {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+    [Parameter(Mandatory = $true)][string]$OutputDirectory,
+    [Parameter(Mandatory = $true)][int]$TimeoutMilliseconds
+  )
+  $runId = [Guid]::NewGuid().ToString("N")
+  $stdoutPath = Join-Path $OutputDirectory ("bsec23l." + $runId + ".stdout.log")
+  $stderrPath = Join-Path $OutputDirectory ("bsec23l." + $runId + ".stderr.log")
+  if (-not ("BSec23LNativeRedirectRunner" -as [type])) {
+    $sourceLines = @(
+      'using System;',
+      'using System.IO;',
+      'using System.Runtime.InteropServices;',
+      'public static class BSec23LNativeRedirectRunner {',
+      '  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct STARTUPINFO { public UInt32 cb; public IntPtr r; public IntPtr d; public IntPtr t; public UInt32 x; public UInt32 y; public UInt32 xs; public UInt32 ys; public UInt32 xc; public UInt32 yc; public UInt32 f; public UInt32 flags; public UInt16 sw; public UInt16 cb2; public IntPtr r2; public IntPtr stdin; public IntPtr stdout; public IntPtr stderr; }',
+      '  [StructLayout(LayoutKind.Sequential)] public struct PROCESS_INFORMATION { public IntPtr hp; public IntPtr ht; public UInt32 pid; public UInt32 tid; }',
+      '  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool CreateProcessW(string app, string cmd, IntPtr pa, IntPtr ta, bool inherit, UInt32 flags, IntPtr env, string cwd, ref STARTUPINFO si, out PROCESS_INFORMATION pi);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetStdHandle(Int32 n);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetCurrentProcess();',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool DuplicateHandle(IntPtr sp, IntPtr sh, IntPtr tp, ref IntPtr th, UInt32 access, bool inherit, UInt32 opts);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern UInt32 WaitForSingleObject(IntPtr h, UInt32 ms);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool TerminateProcess(IntPtr h, UInt32 exitCode);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetExitCodeProcess(IntPtr h, out UInt32 exitCode);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr h);',
+      '  private static string Quote(string value) { if (value == null) value = String.Empty; if (value.Length == 0) return "\"\""; bool needs = false; foreach(char c in value) { if (Char.IsWhiteSpace(c) || c == ''"'') { needs = true; break; } } if (!needs) return value; System.Text.StringBuilder b = new System.Text.StringBuilder(); b.Append(''"''); foreach(char c in value) { if (c == ''"'') { b.Append(''\\''); b.Append(''"''); } else { b.Append(c); } } b.Append(''"''); return b.ToString(); }',
+      '  public static int[] Run(string file, string[] args, string cwd, string stdoutPath, string stderrPath, int timeoutMs) { string cmd = Quote(file); foreach(string a in args) { cmd += " " + Quote(a); } using(FileStream so = new FileStream(stdoutPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) using(FileStream se = new FileStream(stderrPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) { IntPtr cur = GetCurrentProcess(); IntPtr hi = IntPtr.Zero; IntPtr ho = IntPtr.Zero; IntPtr he = IntPtr.Zero; DuplicateHandle(cur, GetStdHandle(-10), cur, ref hi, 0, true, 2); if(!DuplicateHandle(cur, so.SafeFileHandle.DangerousGetHandle(), cur, ref ho, 0, true, 2)) return new int[]{-1,0,0,0}; if(!DuplicateHandle(cur, se.SafeFileHandle.DangerousGetHandle(), cur, ref he, 0, true, 2)) return new int[]{-1,0,0,0}; STARTUPINFO si = new STARTUPINFO(); si.cb = (UInt32)Marshal.SizeOf(typeof(STARTUPINFO)); si.flags = 0x100; si.stdin = hi; si.stdout = ho; si.stderr = he; PROCESS_INFORMATION pi; bool ok = CreateProcessW(file, cmd, IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, cwd, ref si, out pi); if(hi != IntPtr.Zero) CloseHandle(hi); if(ho != IntPtr.Zero) CloseHandle(ho); if(he != IntPtr.Zero) CloseHandle(he); if(!ok) return new int[]{-1,0,0,0}; if(pi.ht != IntPtr.Zero) CloseHandle(pi.ht); UInt32 wait = WaitForSingleObject(pi.hp, (UInt32)timeoutMs); if(wait == 258) { TerminateProcess(pi.hp, 1); CloseHandle(pi.hp); return new int[]{-1,1,1,1}; } UInt32 ec; if(!GetExitCodeProcess(pi.hp, out ec)) { CloseHandle(pi.hp); return new int[]{-1,0,0,1}; } CloseHandle(pi.hp); return new int[]{unchecked((int)ec),0,0,1}; } }',
+      '}'
+    )
+    Add-Type -TypeDefinition ($sourceLines -join "`r`n")
+  }
+  $native = [BSec23LNativeRedirectRunner]::Run($FilePath, [string[]]$Arguments, $WorkingDirectory, $stdoutPath, $stderrPath, $TimeoutMilliseconds)
+  $stdout = Read-BSec23LFileTail -PathValue $stdoutPath
+  $stderr = Read-BSec23LFileTail -PathValue $stderrPath
+  $exitCode = [int]$native[0]
+  $timedOut = ([int]$native[1] -eq 1)
+  $success = ([int]$native[3] -eq 1 -and -not $timedOut -and $exitCode -eq 0)
+  if (-not $stdout.Ok -and -not $success) { return [pscustomobject]@{ Success = $false; SafeErrorCode = $stdout.SafeErrorCode; OutputDrainCompleted = $true; StdOutTail = ""; StdErrTail = "" } }
+  if (-not $stderr.Ok -and -not $success) { return [pscustomobject]@{ Success = $false; SafeErrorCode = $stderr.SafeErrorCode; OutputDrainCompleted = $true; StdOutTail = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErrTail = "" } }
+  $safe = if ($success) { "none" } elseif ($timedOut) { "process_timeout" } else { "pg_ctl_start_failed" }
+  return [pscustomobject]@{ Success = $success; SafeErrorCode = $safe; OutputDrainCompleted = $true; StdOutTail = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErrTail = $(if ($stderr.Ok) { $stderr.Tail } else { "" }) }
+}
+
+function Invoke-BSec23LPersistentProcessSelfTest {
+  Set-StrictMode -Version Latest
+  $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  $root = Join-Path $tempRoot ("vc-bsec23l-selftest-" + [Guid]::NewGuid().ToString("N"))
+  $token = [Guid]::NewGuid().ToString("N")
+  $pidFile = Join-Path $root "child.pid"
+  $childScript = Join-Path $root "child.ps1"
+  $parentScript = Join-Path $root "parent.ps1"
+  $parentExe = Join-Path $root "parent.exe"
+  $quickScript = Join-Path $root "quick.ps1"
+  $failScript = Join-Path $root "fail.ps1"
+  $timeoutScript = Join-Path $root "timeout.ps1"
+  $largeScript = Join-Path $root "large.ps1"
+  $powershell = (Get-Command powershell.exe -CommandType Application).Source
+  try {
+    [System.IO.Directory]::CreateDirectory($root) | Out-Null
+    if (-not ([System.IO.Path]::GetFullPath($root).StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase))) { Fail -Code "bsec23l_temp_root_outside" }
+    $childLines = @(
+      'param([Parameter(Mandatory = $true)][string]$PidFile,[Parameter(Mandatory = $true)][string]$Token,[int]$SleepSeconds = 30)',
+      '[System.IO.File]::WriteAllText($PidFile, ("{0}`n{1}" -f $PID, $Token), [System.Text.UTF8Encoding]::new($false))',
+      'Write-Output "child-ready"',
+      'Start-Sleep -Seconds $SleepSeconds'
+    ) -join "`r`n"
+    Write-BSec23LTextFile -PathValue $childScript -Text $childLines
+    $parentSource = @(
+      'using System;'
+      'using System.Runtime.InteropServices;'
+      'public static class BSec23LParent {'
+      '  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct STARTUPINFO {'
+      '    public UInt32 cb; public IntPtr lpReserved; public IntPtr lpDesktop; public IntPtr lpTitle;'
+      '    public UInt32 dwX; public UInt32 dwY; public UInt32 dwXSize; public UInt32 dwYSize;'
+      '    public UInt32 dwXCountChars; public UInt32 dwYCountChars; public UInt32 dwFillAttribute;'
+      '    public UInt32 dwFlags; public UInt16 wShowWindow; public UInt16 cbReserved2;'
+      '    public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError;'
+      '  }'
+      '  [StructLayout(LayoutKind.Sequential)] public struct PROCESS_INFORMATION {'
+      '    public IntPtr hProcess; public IntPtr hThread; public UInt32 dwProcessId; public UInt32 dwThreadId;'
+      '  }'
+      '  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool CreateProcessW(string app, string cmd, IntPtr pa, IntPtr ta, bool inherit, UInt32 flags, IntPtr env, string cwd, ref STARTUPINFO si, out PROCESS_INFORMATION pi);'
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetStdHandle(Int32 n);'
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetCurrentProcess();'
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool DuplicateHandle(IntPtr sp, IntPtr sh, IntPtr tp, ref IntPtr th, UInt32 access, bool inherit, UInt32 opts);'
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr h);'
+      '  public static int Main(string[] args) {'
+      '    string app = args[0];'
+      '    string child = args[1];'
+      '    string pidFile = args[2];'
+      '    string token = args[3];'
+      '    string cmd = "\"" + app + "\" -NoProfile -ExecutionPolicy Bypass -File \"" + child + "\" -PidFile \"" + pidFile + "\" -Token \"" + token + "\" -SleepSeconds 30";'
+      '    STARTUPINFO si = new STARTUPINFO();'
+      '    si.cb = (UInt32)Marshal.SizeOf(typeof(STARTUPINFO));'
+      '    si.dwFlags = 0x00000100;'
+      '    IntPtr current = GetCurrentProcess();'
+      '    IntPtr hIn = IntPtr.Zero; IntPtr hOut = IntPtr.Zero; IntPtr hErr = IntPtr.Zero;'
+      '    if (!DuplicateHandle(current, GetStdHandle(-10), current, ref hIn, 0, true, 2)) { return 10; }'
+      '    if (!DuplicateHandle(current, GetStdHandle(-11), current, ref hOut, 0, true, 2)) { return 11; }'
+      '    if (!DuplicateHandle(current, GetStdHandle(-12), current, ref hErr, 0, true, 2)) { return 12; }'
+      '    si.hStdInput = hIn; si.hStdOutput = hOut; si.hStdError = hErr;'
+      '    PROCESS_INFORMATION pi;'
+      '    bool ok = CreateProcessW(app, cmd, IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, null, ref si, out pi);'
+      '    if (pi.hThread != IntPtr.Zero) { CloseHandle(pi.hThread); }'
+      '    if (pi.hProcess != IntPtr.Zero) { CloseHandle(pi.hProcess); }'
+      '    if (hIn != IntPtr.Zero) { CloseHandle(hIn); }'
+      '    if (hOut != IntPtr.Zero) { CloseHandle(hOut); }'
+      '    if (hErr != IntPtr.Zero) { CloseHandle(hErr); }'
+      '    if (!ok) { return 20; }'
+      '    Console.WriteLine("parent-exiting");'
+      '    return 0;'
+      '  }'
+      '}'
+    ) -join "`r`n"
+    Add-Type -TypeDefinition $parentSource -OutputAssembly $parentExe -OutputType ConsoleApplication
+    $legacy = Invoke-BSec23LLegacyPipeRunner -FilePath $parentExe -Arguments @($powershell, $childScript, $pidFile, $token) -WorkingDirectory $root -TimeoutMilliseconds 5000
+    if ($legacy.SafeErrorCode -ne "process_output_drain_failed" -or $legacy.OutputDrainCompleted) { Fail -Code "bsec23l_legacy_pipe_reproduction_failed" }
+    Stop-BSec23LControlledProcess -PidFile $pidFile -Token $token
+    if (Test-Path -LiteralPath $pidFile -PathType Leaf) { [System.IO.File]::Delete($pidFile) }
+    $redirect = Invoke-BSec23LFileRedirectRunner -FilePath $parentExe -Arguments @($powershell, $childScript, $pidFile, $token) -WorkingDirectory $root -OutputDirectory $root -TimeoutMilliseconds 5000
+    if ($redirect.SafeErrorCode -ne "none" -or -not $redirect.OutputDrainCompleted) { Fail -Code "bsec23l_file_redirect_child_handle_failed" }
+    Stop-BSec23LControlledProcess -PidFile $pidFile -Token $token
+    Write-BSec23LTextFile -PathValue $quickScript -Text 'Write-Output "quick-ok"; exit 0'
+    $quick = Invoke-BSec23LFileRedirectRunner -FilePath $powershell -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $quickScript) -WorkingDirectory $root -OutputDirectory $root -TimeoutMilliseconds 5000
+    if ($quick.SafeErrorCode -ne "none" -or $quick.StdOutTail -notmatch "quick-ok") { Fail -Code "bsec23l_pgctl_simulated_zero_failed" }
+    Write-BSec23LTextFile -PathValue $failScript -Text 'Write-Error "simulated failure"; exit 7'
+    $failed = Invoke-BSec23LFileRedirectRunner -FilePath $powershell -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $failScript) -WorkingDirectory $root -OutputDirectory $root -TimeoutMilliseconds 5000
+    if ($failed.SafeErrorCode -ne "pg_ctl_start_failed") { Fail -Code "bsec23l_pgctl_simulated_nonzero_failed" }
+    Write-BSec23LTextFile -PathValue $timeoutScript -Text ('[System.IO.File]::WriteAllText(' + (ConvertTo-BSec23LSingleQuotedLiteral -Value $pidFile) + ', ("{0}`n' + $token + '" -f $PID), [System.Text.UTF8Encoding]::new($false)); Start-Sleep -Seconds 20')
+    $timed = Invoke-BSec23LFileRedirectRunner -FilePath $powershell -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $timeoutScript) -WorkingDirectory $root -OutputDirectory $root -TimeoutMilliseconds 500
+    if (@("process_timeout","process_output_drain_failed") -notcontains $timed.SafeErrorCode) { Fail -Code "bsec23l_pgctl_simulated_timeout_failed" }
+    Stop-BSec23LControlledProcess -PidFile $pidFile -Token $token
+    $missingTail = Read-BSec23LFileTail -PathValue (Join-Path $root "missing-output.log")
+    if ($missingTail.SafeErrorCode -ne "persistent_process_output_missing") { Fail -Code "bsec23l_missing_output_not_detected" }
+    $lockedPath = Join-Path $root "locked-output.log"
+    Write-BSec23LTextFile -PathValue $lockedPath -Text "locked"
+    $lockedStream = [System.IO.FileStream]::new($lockedPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    try {
+      $lockedTail = Read-BSec23LFileTail -PathValue $lockedPath
+    } finally {
+      $lockedStream.Dispose()
+    }
+    if ($lockedTail.SafeErrorCode -ne "persistent_process_output_read_failed") { Fail -Code "bsec23l_locked_output_not_detected" }
+    Write-BSec23LTextFile -PathValue $largeScript -Text ('$x = "A" * 6000; Write-Output $x; Write-Output "TAIL_OK"; exit 0')
+    $large = Invoke-BSec23LFileRedirectRunner -FilePath $powershell -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $largeScript) -WorkingDirectory $root -OutputDirectory $root -TimeoutMilliseconds 5000
+    if ($large.SafeErrorCode -ne "none" -or $large.StdOutTail.Length -gt 4096 -or $large.StdOutTail -notmatch "TAIL_OK") { Fail -Code "bsec23l_large_tail_failed" }
+  } finally {
+    Stop-BSec23LControlledProcess -PidFile $pidFile -Token $token
+    if (Test-Path -LiteralPath $root -PathType Container) {
+      $entries = @([System.IO.Directory]::GetFileSystemEntries($root, "*", [System.IO.SearchOption]::AllDirectories)) | Sort-Object Length -Descending
+      foreach ($entry in $entries) {
+        $entryFull = [System.IO.Path]::GetFullPath($entry)
+        if (-not $entryFull.StartsWith(([System.IO.Path]::GetFullPath($root) + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) { Fail -Code "bsec23l_cleanup_outside_root" }
+        $item = Get-Item -LiteralPath $entryFull -Force
+        if (($item.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0) {
+          [System.IO.Directory]::Delete($entryFull, $false)
+        } else {
+          [System.IO.File]::Delete($entryFull)
+        }
+      }
+      [System.IO.Directory]::Delete($root, $false)
+    }
+  }
+  if (Test-Path -LiteralPath $root) { Fail -Code "bsec23l_temp_root_residual" }
+  Write-Output "PG_CTL_PERSISTENT_CHILD_HANDLE_SELF_TEST_OK"
+  Write-Output "INCOMPLETE_OUTPUT_TASK_DISPOSE_SELF_TEST_OK"
+  Write-Output "PG_CTL_START_PROCESS_STRATEGY_SELF_TEST_OK"
+}
+
+Invoke-BSec23LPersistentProcessSelfTest
 $cleanupPartialFilesystemSelfTestOutput = Invoke-Tool -Arguments @("-SelfTest")
 if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK") {
   Fail -Code "cleanup_partial_file_added_after_manifest_selftest_runtime_failed"

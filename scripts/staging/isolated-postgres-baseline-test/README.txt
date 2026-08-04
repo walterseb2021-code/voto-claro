@@ -384,3 +384,13 @@ No repetir Create mientras exista el estado parcial real. La siguiente accion op
 Revision puntual B-SEC-23J file_added_after
 
 El SelfTest desechable de CleanupPartialCreate cubre ahora explicitamente el caso en que se construye un manifiesto valido y luego aparece un archivo nuevo dentro de una raiz controlada antes de invocar el helper de borrado. El helper usado es el mismo que usa CleanupPartialCreate. La prueba exige rechazo fail-closed por cambio de estado y comprueba que los archivos autorizados, la instancia de prueba, el paquete simulado y el repositorio simulado no sean eliminados. La senal de cobertura es CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK.
+
+B-SEC-23L pg_ctl start y procesos persistentes
+
+pg_ctl start no usa la estrategia general de pipes de Invoke-SafeProcess. Ese runner sigue reservado para procesos cortos: drena stdout/stderr con ReadToEndAsync y ahora su finally solo dispone tareas completadas para no enmascarar process_output_drain_failed.
+
+Para pg_ctl start se usa una estrategia nativa separada. El proceso se lanza con CreateProcessW y stdout/stderr apuntan a archivos controlados dentro de StateRoot mediante handles heredables de archivo, no pipes del proceso llamador. El llamador espera solo a pg_ctl; si postgres queda persistente, no puede retener un pipe que bloquee al PowerShell exterior.
+
+La evidencia de stdout/stderr se lee como cola sanitizada desde esos archivos. Si un hijo persistente retiene temporalmente un archivo, la lectura se tolera sin convertir un pg_ctl start exitoso en fallo; la decision de exito sigue dependiendo de las verificaciones posteriores de postmaster.pid, DataRoot, PID, ejecutable, listener y puerto 127.0.0.1:55432.
+
+No repetir Create despues de un fallo con instancia parcial. La instancia parcial debe revisarse y limpiarse solo mediante una accion autorizada separada. Esta documentacion no autoriza Create, CleanupPartialCreate, CleanupFailedCreate, Destroy, SQL, Supabase ni produccion.
