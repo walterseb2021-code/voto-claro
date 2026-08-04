@@ -1867,6 +1867,107 @@ if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$fal
 if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$false -Rules @($fullRuleInherited)) -ne "cleanup_failed_acl_enumeration_failed") { Fail -Code "cleanup_failed_isolated_acl_enumeration_not_blocked" }
 if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$true -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleExplicit)) -ne "OK") { Fail -Code "cleanup_failed_isolated_acl_protected_future_rejected" }
 if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$true -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleInherited)) -ne "cleanup_failed_internal_acl_invalid") { Fail -Code "cleanup_failed_internal_inherited_not_blocked" }
+function Get-PlanRuntimeStateSignalForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines,
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+  [string[]]$matches = @($Lines | Where-Object { $_.StartsWith(($Name + "="), [System.StringComparison]::Ordinal) })
+  if ($matches.Count -eq 0) {
+    return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_signal_missing"; Value = $null }
+  }
+  if ($matches.Count -ne 1) {
+    return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_signal_duplicate"; Value = $null }
+  }
+  $line = [string]$matches[0]
+  if (-not $line.StartsWith(($Name + "="), [System.StringComparison]::Ordinal)) {
+    return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_value_invalid"; Value = $null }
+  }
+  $value = $line.Substring($Name.Length + 1)
+  if (-not ([string]::Equals($value, "true", [System.StringComparison]::Ordinal) -or [string]::Equals($value, "false", [System.StringComparison]::Ordinal))) {
+    return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_value_invalid"; Value = $null }
+  }
+  return [pscustomobject]@{ Ok = $true; Reason = "none"; Value = $value }
+}
+
+function Test-PlanRuntimeStateTripletForSelfTest {
+  param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines)
+  $allowedReasons = @(
+    "plan_runtime_state_signal_missing",
+    "plan_runtime_state_signal_duplicate",
+    "plan_runtime_state_value_invalid",
+    "plan_runtime_state_combination_invalid"
+  )
+  [void]$allowedReasons
+  $partial = Get-PlanRuntimeStateSignalForSelfTest -Lines $Lines -Name "partial_instance_cleanup_required"
+  if (-not $partial.Ok) { return $partial.Reason }
+  $blocked = Get-PlanRuntimeStateSignalForSelfTest -Lines $Lines -Name "create_retry_blocked_until_cleanup"
+  if (-not $blocked.Ok) { return $blocked.Reason }
+  $ready = Get-PlanRuntimeStateSignalForSelfTest -Lines $Lines -Name "ready_for_create"
+  if (-not $ready.Ok) { return $ready.Reason }
+  if ([string]::Equals($partial.Value, "true", [System.StringComparison]::Ordinal) -and
+      [string]::Equals($blocked.Value, "true", [System.StringComparison]::Ordinal) -and
+      [string]::Equals($ready.Value, "false", [System.StringComparison]::Ordinal)) {
+    return "OK"
+  }
+  if ([string]::Equals($partial.Value, "false", [System.StringComparison]::Ordinal) -and
+      [string]::Equals($blocked.Value, "false", [System.StringComparison]::Ordinal) -and
+      [string]::Equals($ready.Value, "true", [System.StringComparison]::Ordinal)) {
+    return "OK"
+  }
+  return "plan_runtime_state_combination_invalid"
+}
+
+function Assert-PlanRuntimeStateTripletForSelfTest {
+  param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines)
+  $result = Test-PlanRuntimeStateTripletForSelfTest -Lines $Lines
+  if ($result -ne "OK") { Fail -Code $result }
+}
+
+function Assert-PlanRuntimeTripletCaseForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines,
+    [Parameter(Mandatory = $true)][string]$ExpectedResult
+  )
+  $actual = Test-PlanRuntimeStateTripletForSelfTest -Lines $Lines
+  if (-not [string]::Equals($actual, $ExpectedResult, [System.StringComparison]::Ordinal)) {
+    Fail -Code ("plan_runtime_triplet_case_" + $Name)
+  }
+}
+
+$planTripletPartial = @(
+  "partial_instance_cleanup_required=true",
+  "create_retry_blocked_until_cleanup=true",
+  "ready_for_create=false"
+)
+$planTripletClean = @(
+  "partial_instance_cleanup_required=false",
+  "create_retry_blocked_until_cleanup=false",
+  "ready_for_create=true"
+)
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "partial_accept" -Lines $planTripletPartial -ExpectedResult "OK"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "clean_accept" -Lines $planTripletClean -ExpectedResult "OK"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "missing_partial" -Lines @("create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "missing_blocked" -Lines @("partial_instance_cleanup_required=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "missing_ready" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "duplicate_partial" -Lines @("partial_instance_cleanup_required=true","partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_duplicate"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "duplicate_blocked" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_duplicate"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "duplicate_ready" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","ready_for_create=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_duplicate"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "uppercase" -Lines @("partial_instance_cleanup_required=TRUE","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "one" -Lines @("partial_instance_cleanup_required=1","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "yes" -Lines @("partial_instance_cleanup_required=yes","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "empty" -Lines @("partial_instance_cleanup_required=","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "true_true_true" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "true_false_false" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "false_true_false" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "false_false_false" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "true_false_true" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=false","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "false_true_true" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=true","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "spaces" -Lines @("partial_instance_cleanup_required =true","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "zero_lines" -Lines @() -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "one_line" -Lines @("partial_instance_cleanup_required=true") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeTripletCaseForSelfTest -Name "many_lines_valid" -Lines @("noise=ignored","partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","ready_for_create=true","production_connection_used=false") -ExpectedResult "OK"
 $planOutput = Invoke-Tool -Arguments @("-Action","Plan")
 if ($LASTEXITCODE -ne 0 -or $planOutput -notcontains "ISOLATED_BASELINE_TEST_PLAN_OK") {
   Fail -Code "plan_action_failed"
@@ -1902,8 +2003,6 @@ foreach ($expectedLine in @(
     "acl_validation_semantic_set=true",
     "acl_rule_order_dependency=false",
     "acl_fullcontrol_bitmask_validation=true",
-    "partial_instance_cleanup_required=true",
-    "create_retry_blocked_until_cleanup=true",
     "marker_state_concordance_required=true",
     "created_utc_stable=true",
     "state_write_substep_reasons=true",
@@ -2009,6 +2108,7 @@ foreach ($expectedLine in @(
     Fail -Code ("plan_line_missing_" + ($expectedLine -replace "[^a-z_]", ""))
   }
 }
+Assert-PlanRuntimeStateTripletForSelfTest -Lines ([string[]]$planOutput)
 if (-not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "auth.users") -or
     -not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "storage.objects") -or
     -not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "extensions.gen_random_uuid")) {
