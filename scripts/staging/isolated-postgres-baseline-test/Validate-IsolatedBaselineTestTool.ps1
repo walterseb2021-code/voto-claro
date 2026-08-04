@@ -2032,7 +2032,7 @@ if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$fal
 if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$false -ReadOk:$true -EnumerateOk:$false -Rules @($fullRuleInherited)) -ne "cleanup_failed_acl_enumeration_failed") { Fail -Code "cleanup_failed_isolated_acl_enumeration_not_blocked" }
 if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$true -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleExplicit)) -ne "OK") { Fail -Code "cleanup_failed_isolated_acl_protected_future_rejected" }
 if ((Test-IsolatedRootAclContractForSelfTest -OwnerCurrent:$true -Protected:$true -ReadOk:$true -EnumerateOk:$true -Rules @($fullRuleInherited)) -ne "cleanup_failed_internal_acl_invalid") { Fail -Code "cleanup_failed_internal_inherited_not_blocked" }
-function Get-PlanRuntimeStateSignalForSelfTest {
+function Get-PlanRuntimeBooleanSignalForSelfTest {
   param(
     [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines,
     [Parameter(Mandatory = $true)][string]$Name
@@ -2045,94 +2045,108 @@ function Get-PlanRuntimeStateSignalForSelfTest {
     return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_signal_duplicate"; Value = $null }
   }
   $line = [string]$matches[0]
-  if (-not $line.StartsWith(($Name + "="), [System.StringComparison]::Ordinal)) {
+  $expectedPrefix = $Name + "="
+  if (-not $line.StartsWith($expectedPrefix, [System.StringComparison]::Ordinal)) {
     return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_value_invalid"; Value = $null }
   }
-  $value = $line.Substring($Name.Length + 1)
+  $value = $line.Substring($expectedPrefix.Length)
   if (-not ([string]::Equals($value, "true", [System.StringComparison]::Ordinal) -or [string]::Equals($value, "false", [System.StringComparison]::Ordinal))) {
     return [pscustomobject]@{ Ok = $false; Reason = "plan_runtime_state_value_invalid"; Value = $null }
   }
   return [pscustomobject]@{ Ok = $true; Reason = "none"; Value = $value }
 }
 
-function Test-PlanRuntimeStateTripletForSelfTest {
+function Test-PlanRuntimeStateContractForSelfTest {
   param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines)
-  $allowedReasons = @(
-    "plan_runtime_state_signal_missing",
-    "plan_runtime_state_signal_duplicate",
-    "plan_runtime_state_value_invalid",
-    "plan_runtime_state_combination_invalid"
+  $signalNames = @(
+    "partial_instance_cleanup_required",
+    "create_retry_blocked_until_cleanup",
+    "cleanup_partial_create_required",
+    "cleanup_partial_create_exact_state_valid",
+    "cleanup_partial_create_manifest_valid",
+    "ready_for_create"
   )
-  [void]$allowedReasons
-  $partial = Get-PlanRuntimeStateSignalForSelfTest -Lines $Lines -Name "partial_instance_cleanup_required"
-  if (-not $partial.Ok) { return $partial.Reason }
-  $blocked = Get-PlanRuntimeStateSignalForSelfTest -Lines $Lines -Name "create_retry_blocked_until_cleanup"
-  if (-not $blocked.Ok) { return $blocked.Reason }
-  $ready = Get-PlanRuntimeStateSignalForSelfTest -Lines $Lines -Name "ready_for_create"
-  if (-not $ready.Ok) { return $ready.Reason }
-  if ([string]::Equals($partial.Value, "true", [System.StringComparison]::Ordinal) -and
-      [string]::Equals($blocked.Value, "true", [System.StringComparison]::Ordinal) -and
-      [string]::Equals($ready.Value, "false", [System.StringComparison]::Ordinal)) {
-    return "OK"
+  $values = @{}
+  foreach ($name in $signalNames) {
+    $signal = Get-PlanRuntimeBooleanSignalForSelfTest -Lines $Lines -Name $name
+    if (-not $signal.Ok) { return $signal.Reason }
+    $values[$name] = $signal.Value
   }
-  if ([string]::Equals($partial.Value, "false", [System.StringComparison]::Ordinal) -and
-      [string]::Equals($blocked.Value, "false", [System.StringComparison]::Ordinal) -and
-      [string]::Equals($ready.Value, "true", [System.StringComparison]::Ordinal)) {
-    return "OK"
-  }
+  $isPartial = (
+    [string]::Equals($values["partial_instance_cleanup_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_retry_blocked_until_cleanup"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_manifest_valid"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
+  )
+  if ($isPartial) { return "OK" }
+  $isClean = (
+    [string]::Equals($values["partial_instance_cleanup_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_retry_blocked_until_cleanup"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["ready_for_create"], "true", [System.StringComparison]::Ordinal)
+  )
+  if ($isClean) { return "OK" }
   return "plan_runtime_state_combination_invalid"
 }
 
-function Assert-PlanRuntimeStateTripletForSelfTest {
+function Assert-PlanRuntimeStateContractForSelfTest {
   param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines)
-  $result = Test-PlanRuntimeStateTripletForSelfTest -Lines $Lines
+  $result = Test-PlanRuntimeStateContractForSelfTest -Lines $Lines
   if ($result -ne "OK") { Fail -Code $result }
 }
 
-function Assert-PlanRuntimeTripletCaseForSelfTest {
+function Assert-PlanRuntimeContractCaseForSelfTest {
   param(
     [Parameter(Mandatory = $true)][string]$Name,
     [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines,
     [Parameter(Mandatory = $true)][string]$ExpectedResult
   )
-  $actual = Test-PlanRuntimeStateTripletForSelfTest -Lines $Lines
+  $actual = Test-PlanRuntimeStateContractForSelfTest -Lines $Lines
   if (-not [string]::Equals($actual, $ExpectedResult, [System.StringComparison]::Ordinal)) {
-    Fail -Code ("plan_runtime_triplet_case_" + $Name)
+    Fail -Code ("plan_runtime_contract_case_" + $Name)
   }
 }
 
-$planTripletPartial = @(
+$planRuntimePartial = @(
   "partial_instance_cleanup_required=true",
   "create_retry_blocked_until_cleanup=true",
+  "cleanup_partial_create_required=true",
+  "cleanup_partial_create_exact_state_valid=true",
+  "cleanup_partial_create_manifest_valid=true",
   "ready_for_create=false"
 )
-$planTripletClean = @(
+$planRuntimeClean = @(
   "partial_instance_cleanup_required=false",
   "create_retry_blocked_until_cleanup=false",
+  "cleanup_partial_create_required=false",
+  "cleanup_partial_create_exact_state_valid=false",
+  "cleanup_partial_create_manifest_valid=false",
   "ready_for_create=true"
 )
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "partial_accept" -Lines $planTripletPartial -ExpectedResult "OK"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "clean_accept" -Lines $planTripletClean -ExpectedResult "OK"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "missing_partial" -Lines @("create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "missing_blocked" -Lines @("partial_instance_cleanup_required=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "missing_ready" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true") -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "duplicate_partial" -Lines @("partial_instance_cleanup_required=true","partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_duplicate"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "duplicate_blocked" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_duplicate"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "duplicate_ready" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","ready_for_create=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_duplicate"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "uppercase" -Lines @("partial_instance_cleanup_required=TRUE","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "one" -Lines @("partial_instance_cleanup_required=1","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "yes" -Lines @("partial_instance_cleanup_required=yes","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "empty" -Lines @("partial_instance_cleanup_required=","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "true_true_true" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "true_false_false" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "false_true_false" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "false_false_false" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "true_false_true" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=false","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "false_true_true" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=true","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "spaces" -Lines @("partial_instance_cleanup_required =true","create_retry_blocked_until_cleanup=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "zero_lines" -Lines @() -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "one_line" -Lines @("partial_instance_cleanup_required=true") -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeTripletCaseForSelfTest -Name "many_lines_valid" -Lines @("noise=ignored","partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","ready_for_create=true","production_connection_used=false") -ExpectedResult "OK"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "partial_accept" -Lines $planRuntimePartial -ExpectedResult "OK"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_accept" -Lines $planRuntimeClean -ExpectedResult "OK"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_cleanup_required" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_exact_state" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_cleanup_required" -Lines @($planRuntimePartial + "cleanup_partial_create_required=true") -ExpectedResult "plan_runtime_state_signal_duplicate"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_exact_state" -Lines @($planRuntimePartial + "cleanup_partial_create_exact_state_valid=true") -ExpectedResult "plan_runtime_state_signal_duplicate"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "uppercase" -Lines @("partial_instance_cleanup_required=TRUE","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "one" -Lines @("partial_instance_cleanup_required=1","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "yes" -Lines @("partial_instance_cleanup_required=yes","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "empty" -Lines @("partial_instance_cleanup_required=","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_value_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "mixed_true_false" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "partial_ready_true" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_ready_false" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=false","cleanup_partial_create_exact_state_valid=false","cleanup_partial_create_manifest_valid=false","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_true_in_clean" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=false","cleanup_partial_create_manifest_valid=false","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_true_in_clean" -Lines @("partial_instance_cleanup_required=false","create_retry_blocked_until_cleanup=false","cleanup_partial_create_required=false","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=false","ready_for_create=true") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_false_in_partial" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=false","cleanup_partial_create_exact_state_valid=true","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_false_in_partial" -Lines @("partial_instance_cleanup_required=true","create_retry_blocked_until_cleanup=true","cleanup_partial_create_required=true","cleanup_partial_create_exact_state_valid=false","cleanup_partial_create_manifest_valid=true","ready_for_create=false") -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "zero_lines" -Lines @() -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "one_line" -Lines @("partial_instance_cleanup_required=true") -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "noise_allowed" -Lines @(@("noise=ignored") + $planRuntimeClean + @("production_connection_used=false")) -ExpectedResult "OK"
 $planOutput = Invoke-Tool -Arguments @("-Action","Plan")
 if ($LASTEXITCODE -ne 0 -or $planOutput -notcontains "ISOLATED_BASELINE_TEST_PLAN_OK") {
   Fail -Code "plan_action_failed"
@@ -2259,11 +2273,8 @@ foreach ($expectedLine in @(
     "cleanup_failed_create_state_length_exact_hardcode=false",
     "cleanup_failed_create_state_size_bounded=true",
     "cleanup_failed_create_state_get_created_utc_failure_supported=true",
-    "cleanup_partial_create_required=true",
-    "cleanup_partial_create_exact_state_valid=true",
     "cleanup_partial_create_state_replace_residual_supported=true",
     "cleanup_partial_create_nonempty_instance_supported=true",
-    "cleanup_partial_create_manifest_valid=true",
     "cleanup_partial_create_bottom_up_delete=true",
     "cleanup_partial_create_recursive_delete_used=false",
     "cleanup_partial_create_recovery_deterministic=true",
@@ -2289,7 +2300,7 @@ foreach ($expectedLine in @(
     Fail -Code ("plan_line_missing_" + ($expectedLine -replace "[^a-z_]", ""))
   }
 }
-Assert-PlanRuntimeStateTripletForSelfTest -Lines ([string[]]$planOutput)
+Assert-PlanRuntimeStateContractForSelfTest -Lines ([string[]]$planOutput)
 if (-not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "auth.users") -or
     -not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "storage.objects") -or
     -not (($planOutput | Where-Object { $_ -like "dependency_names=*" }) -match "extensions.gen_random_uuid")) {
@@ -2487,4 +2498,5 @@ if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains
 Write-Output "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK"
 Write-Output "CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK"
 Invoke-StateReplaceRealFilesystemSelfTest
+Write-Output "CLEAN_PLAN_RUNTIME_VALIDATION_SELF_TEST_OK"
 Write-Output "SELF_TEST_OK"
