@@ -368,3 +368,19 @@ Validate-IsolatedBaselineTestTool ejecuta una prueba real de filesystem bajo Pat
 Plan reconoce ahora de solo lectura el estado parcial avanzado con DataRoot inicializado, cluster-state.json atrasado y exactamente un temporal residual valido. Cuando esa forma exacta se cumple, emite cleanup_partial_create_required=true y bloquea ready_for_create. CleanupPartialCreate reconoce esa forma exacta para diagnostico y autorizacion futura separada. CleanupFailedCreate no se amplio para borrar DataRoot inicializado.
 
 No repetir Create mientras exista este estado parcial. Cualquier limpieza futura requiere revision posterior por ChatGPT y autorizacion humana independiente. Esta fase no ejecuta Create, CleanupPartialCreate, CleanupFailedCreate, PostgreSQL, SQL, Supabase, produccion ni Git de escritura.
+B-SEC-23J CleanupPartialCreate con DataRoot inicializado
+
+El fallo previo confirmo una contradiccion operativa: Plan reconocia un estado parcial avanzado con DataRoot inicializado, cluster-state.json atrasado y un temporal residual valido, pero CleanupPartialCreate conservaba un borrado pensado para InstanceRoot vacia. Directory.Delete(InstanceRoot,false) no podia borrar de forma controlada una instancia initdb no vacia.
+
+CleanupPartialCreate usa ahora un manifiesto cerrado para ese estado exacto. Antes de borrar valida rutas fijas, ausencia de reparse points, estado marker/state, temporal residual unico, SecretRoot con solo la credencial permitida, LogRoot vacio, PG_VERSION=17, ausencia de postmaster.pid y pg_tblspc vacio. El manifiesto enumera archivos y directorios dentro de la instancia autorizada, conserva firma determinista y crea un journal GUID en StateRoot con telemetria segura.
+
+El borrado es bottom-up y no generico: primero File.Delete sobre archivos manifestados, despues Directory.Delete(path,false) sobre directorios ordenados por profundidad descendente. No usa Remove-Item, comodines, Directory.Delete(path,true), takeown, icacls ni ACL forcing. StateRoot se conserva hasta despues de borrar data, logs y secrets; el journal se retira antes de borrar StateRoot. La recuperacion es determinista porque cualquier cambio frente al manifiesto invalida la limpieza antes del primer borrado.
+
+CleanupPartialCreate sigue siendo una accion humana separada y suspendida. No encadena Create, no ejecuta SQL, no accede a Supabase, no toca produccion y no modifica el paquete PostgreSQL. CleanupFailedCreate conserva su alcance anterior para fallos tempranos sin DataRoot inicializado.
+
+Validate-IsolatedBaselineTestTool ejecuta ahora un SelfTest real y desechable bajo Path.GetTempPath. Ese test crea una estructura parcial equivalente con DataRoot no vacio, usa el mismo helper de manifiesto que CleanupPartialCreate, verifica que los siblings fuera de alcance queden intactos, prueba un rechazo fail-closed por contenido inesperado y elimina solo el arbol temporal creado para la prueba.
+
+No repetir Create mientras exista el estado parcial real. La siguiente accion operativa debe ser revision por ChatGPT y autorizacion humana separada para la limpieza correspondiente.
+Revision puntual B-SEC-23J file_added_after
+
+El SelfTest desechable de CleanupPartialCreate cubre ahora explicitamente el caso en que se construye un manifiesto valido y luego aparece un archivo nuevo dentro de una raiz controlada antes de invocar el helper de borrado. El helper usado es el mismo que usa CleanupPartialCreate. La prueba exige rechazo fail-closed por cambio de estado y comprueba que los archivos autorizados, la instancia de prueba, el paquete simulado y el repositorio simulado no sean eliminados. La senal de cobertura es CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK.

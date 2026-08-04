@@ -1617,6 +1617,7 @@ function Get-StateReplaceResidualTempPath {
     Assert-CleanupEntrySafe -PathValue $entry
     $name = [System.IO.Path]::GetFileName($entry)
     if ($name -match '^cluster-state\.[0-9a-f]{32}\.tmp$') { $temps += [System.IO.Path]::GetFullPath($entry); continue }
+    if ($name -match '^cleanup-partial\.[0-9a-f]{32}\.journal\.json$') { continue }
     if ($name -match '^cluster-state\.[0-9a-f]{32}\.bak$') { Throw-SafeError -Code "cleanup_unexpected_content" }
     if (-not [string]::Equals([System.IO.Path]::GetFullPath($entry).TrimEnd('\'), $Layout.StatePath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase) -and
         -not [string]::Equals([System.IO.Path]::GetFullPath($entry).TrimEnd('\'), $Layout.MarkerPath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -1677,7 +1678,425 @@ function Test-CleanupPartialCreateStateReplaceResidual {
     return $false
   }
 }
+function Get-FileSha256ForCleanupManifest {
+  param([Parameter(Mandatory = $true)][string]$PathValue)
+  $stream = $null
+  $sha = $null
+  try {
+    $stream = [System.IO.File]::Open($PathValue, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    return ([System.BitConverter]::ToString($sha.ComputeHash($stream)).Replace("-", "").ToLowerInvariant())
+  } finally {
+    if ($null -ne $sha) { $sha.Dispose() }
+    if ($null -ne $stream) { $stream.Dispose() }
+  }
+}
 
+function Assert-CleanupManifestChildPath {
+  param(
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$RootPath
+  )
+  $full = [System.IO.Path]::GetFullPath($PathValue)
+  $root = [System.IO.Path]::GetFullPath($RootPath)
+  $rootWithSlash = $root.TrimEnd('\') + [System.IO.Path]::DirectorySeparatorChar
+  if (-not $full.StartsWith($rootWithSlash, [System.StringComparison]::OrdinalIgnoreCase) -and
+      -not [string]::Equals($full.TrimEnd('\'), $root.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Throw-SafeError -Code "cleanup_unexpected_content"
+  }
+  return $full
+}
+
+function Get-CleanupManifestTree {
+  param(
+    [Parameter(Mandatory = $true)][string]$RootPath,
+    [Parameter(Mandatory = $true)][string]$AuthorizedRoot
+  )
+  $root = Assert-CleanupManifestChildPath -PathValue $RootPath -RootPath $AuthorizedRoot
+  if (-not (Test-Path -LiteralPath $root -PathType Container)) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  $files = New-Object System.Collections.Generic.List[string]
+  $dirs = New-Object System.Collections.Generic.List[string]
+  $stack = New-Object System.Collections.Generic.Stack[string]
+  $stack.Push($root)
+  while ($stack.Count -gt 0) {
+    $dir = $stack.Pop()
+    $dirItem = Get-Item -LiteralPath $dir -Force
+    if (($dirItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Throw-SafeError -Code "cleanup_reparse_detected" }
+    foreach ($entry in [System.IO.Directory]::GetFileSystemEntries($dir)) {
+      $entryFull = Assert-CleanupManifestChildPath -PathValue $entry -RootPath $AuthorizedRoot
+      $item = Get-Item -LiteralPath $entryFull -Force
+      if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Throw-SafeError -Code "cleanup_reparse_detected" }
+      if (($item.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0) {
+        [void]$dirs.Add($entryFull)
+        $stack.Push($entryFull)
+      } else {
+        [void]$files.Add($entryFull)
+      }
+    }
+  }
+  return [pscustomobject]@{
+    Files = [string[]]@($files.ToArray() | Sort-Object)
+    Directories = [string[]]@($dirs.ToArray() | Sort-Object { $_.Length } -Descending)
+  }
+}
+
+function Get-CleanupPartialManifestSignature {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][string]$TempPath,
+    [Parameter(Mandatory = $true)][object]$DataTree
+  )
+  $parts = New-Object System.Collections.Generic.List[string]
+  foreach ($path in @($Layout.StatePath, $TempPath, $Layout.MarkerPath, $Layout.CredentialPath)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Throw-SafeError -Code "cleanup_unexpected_content" }
+    $item = Get-Item -LiteralPath $path -Force
+    [void]$parts.Add(([System.IO.Path]::GetFileName($path) + ":" + $item.Length + ":" + (Get-FileSha256ForCleanupManifest -PathValue $path)))
+  }
+  [void]$parts.Add("data_files=" + $DataTree.Files.Count)
+  [void]$parts.Add("data_dirs=" + $DataTree.Directories.Count)
+  foreach ($path in @($DataTree.Files + $DataTree.Directories)) {
+    $relative = [System.IO.Path]::GetFullPath($path).Substring($Layout.DataRoot.TrimEnd('\').Length).TrimStart('\')
+    [void]$parts.Add($relative)
+  }
+  return (Get-StableStringHashForCleanupManifest -Text ($parts -join "`n"))
+}
+
+function Get-StableStringHashForCleanupManifest {
+  param([Parameter(Mandatory = $true)][string]$Text)
+  $sha = $null
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Text)
+    return ([System.BitConverter]::ToString($sha.ComputeHash($bytes)).Replace("-", "").ToLowerInvariant())
+  } finally {
+    if ($null -ne $sha) { $sha.Dispose() }
+  }
+}
+
+function New-CleanupPartialManifest {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $residual = Assert-CleanupPartialCreateStateReplaceResidual -Layout $Layout
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.InstanceRoot -ExpectedEntries @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.LogRoot -ExpectedEntries @()
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.SecretRoot -ExpectedEntries @($Layout.CredentialPath)
+  if (Test-Path -LiteralPath $Layout.PasswordFilePath -PathType Leaf) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  if (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postmaster.pid") -PathType Leaf) { Throw-SafeError -Code "cleanup_postmaster_pid_present" }
+  $pgVersionPath = Join-Path $Layout.DataRoot "PG_VERSION"
+  if (-not (Test-Path -LiteralPath $pgVersionPath -PathType Leaf)) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  $pgVersion = ([System.IO.File]::ReadAllText($pgVersionPath)).Trim()
+  if ($pgVersion -ne "17") { Throw-SafeError -Code "cleanup_unexpected_content" }
+  $tblspc = Join-Path $Layout.DataRoot "pg_tblspc"
+  if (Test-Path -LiteralPath $tblspc -PathType Container) {
+    $tblspcEntries = @([System.IO.Directory]::GetFileSystemEntries($tblspc))
+    if ($tblspcEntries.Count -ne 0) { Throw-SafeError -Code "cleanup_unexpected_content" }
+  }
+  $dataTree = Get-CleanupManifestTree -RootPath $Layout.DataRoot -AuthorizedRoot $Layout.InstanceRoot
+  $signature = Get-CleanupPartialManifestSignature -Layout $Layout -TempPath $residual.TempPath -DataTree $dataTree
+  $files = New-Object System.Collections.Generic.List[string]
+  foreach ($file in $dataTree.Files) { [void]$files.Add($file) }
+  [void]$files.Add($Layout.CredentialPath)
+  [void]$files.Add($residual.TempPath)
+  [void]$files.Add($Layout.StatePath)
+  [void]$files.Add($Layout.MarkerPath)
+  $dirs = New-Object System.Collections.Generic.List[string]
+  foreach ($dir in $dataTree.Directories) { [void]$dirs.Add($dir) }
+  foreach ($dir in @($Layout.DataRoot, $Layout.SecretRoot, $Layout.LogRoot, $Layout.StateRoot, $Layout.InstanceRoot, $Layout.IsolatedRoot)) { [void]$dirs.Add($dir) }
+  return [pscustomobject]@{
+    ClusterId = $residual.ClusterId
+    TempPath = $residual.TempPath
+    Files = [string[]]$files.ToArray()
+    Directories = [string[]]$dirs.ToArray()
+    DataFileCount = $dataTree.Files.Count
+    DataDirectoryCount = $dataTree.Directories.Count
+    Signature = $signature
+  }
+}
+
+function Assert-CleanupPartialManifestUnchanged {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Manifest
+  )
+  $current = New-CleanupPartialManifest -Layout $Layout
+  if (-not [string]::Equals($current.Signature, $Manifest.Signature, [System.StringComparison]::Ordinal) -or
+      $current.Files.Count -ne $Manifest.Files.Count -or
+      $current.Directories.Count -ne $Manifest.Directories.Count) {
+    Throw-SafeError -Code "cleanup_state_changed"
+  }
+}
+
+function New-CleanupPartialJournalPath {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  return (Join-Path $Layout.StateRoot ("cleanup-partial." + [Guid]::NewGuid().ToString("N") + ".journal.json"))
+}
+
+function Write-CleanupPartialJournal {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Manifest,
+    [Parameter(Mandatory = $true)][string]$JournalPath,
+    [Parameter(Mandatory = $true)][string]$Step
+  )
+  $leaf = [System.IO.Path]::GetFileName($JournalPath)
+  if ($leaf -notmatch '^cleanup-partial\.[0-9a-f]{32}\.journal\.json$') { Throw-SafeError -Code "cleanup_unexpected_content" }
+  [void](Assert-CleanupManifestChildPath -PathValue $JournalPath -RootPath $Layout.StateRoot)
+  $payload = [ordered]@{
+    artifact_type = "voto_claro_cleanup_partial_manifest_journal"
+    schema_version = 1
+    cluster_id = $Manifest.ClusterId
+    step = $Step
+    manifest_signature = $Manifest.Signature
+    data_file_count = $Manifest.DataFileCount
+    data_directory_count = $Manifest.DataDirectoryCount
+    server_started = $false
+    production_connection_used = $false
+    sql_executed = $false
+  }
+  Write-Utf8NoBomFile -PathValue $JournalPath -Text ($payload | ConvertTo-Json -Depth 4)
+  Set-RestrictedAcl -PathValue $JournalPath -TargetType File
+}
+
+function Get-CleanupDeleteFailureInfo {
+  param(
+    [AllowNull()][object]$Exception,
+    [Parameter(Mandatory = $true)][string]$PathValue,
+    [Parameter(Mandatory = $true)][ValidateSet("File","Directory")][string]$Kind
+  )
+  $type = if ($Exception -is [System.Exception]) { $Exception.GetType().Name } else { "UnknownException" }
+  if (@("IOException","UnauthorizedAccessException","DirectoryNotFoundException","FileNotFoundException","RuntimeException","MethodInvocationException") -notcontains $type) { $type = "UnknownException" }
+  $hresult = if ($Exception -is [System.Exception]) { "0x{0:X8}" -f ($Exception.HResult -band 0xffffffff) } else { "0x00000000" }
+  $exists = if ($Kind -eq "File") { Test-Path -LiteralPath $PathValue -PathType Leaf } else { Test-Path -LiteralPath $PathValue -PathType Container }
+  $childCount = 0
+  $empty = $true
+  if ($Kind -eq "Directory" -and (Test-Path -LiteralPath $PathValue -PathType Container)) {
+    $childCount = @([System.IO.Directory]::GetFileSystemEntries($PathValue)).Count
+    $empty = $childCount -eq 0
+  }
+  return [pscustomobject]@{ Type = $type; HResult = $hresult; ExistsAfter = [bool]$exists; DirectoryEmpty = [bool]$empty; ChildCount = $childCount }
+}
+
+function Set-CleanupDeleteFailureTelemetry {
+  param([Parameter(Mandatory = $true)][object]$Info)
+  $script:CurrentExceptionType = [string]$Info.Type
+  $script:CurrentSecondaryReason = ("delete_hresult={0};exists_after={1};directory_empty={2};child_count={3}" -f $Info.HResult, ([string]$Info.ExistsAfter).ToLowerInvariant(), ([string]$Info.DirectoryEmpty).ToLowerInvariant(), $Info.ChildCount)
+}
+
+function Invoke-CleanupPartialManifestDelete {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Manifest,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  $journal = New-CleanupPartialJournalPath -Layout $Layout
+  $completed = $false
+  Write-CleanupPartialJournal -Layout $Layout -Manifest $Manifest -JournalPath $journal -Step "prepared"
+  try {
+    Assert-CleanupPartialManifestUnchanged -Layout $Layout -Manifest $Manifest
+    Assert-CleanupNoPostgresActivity -Package $Package -Layout $Layout
+    Write-CleanupPartialJournal -Layout $Layout -Manifest $Manifest -JournalPath $journal -Step "deleting_files"
+    foreach ($file in $Manifest.Files) {
+      [void](Assert-CleanupManifestChildPath -PathValue $file -RootPath $Layout.InstanceRoot)
+      try {
+        if (Test-Path -LiteralPath $file -PathType Leaf) { [System.IO.File]::Delete($file) }
+      } catch {
+        $info = Get-CleanupDeleteFailureInfo -Exception $_.Exception -PathValue $file -Kind "File"
+        Set-CleanupDeleteFailureTelemetry -Info $info
+        Throw-SafeError -Code "cleanup_delete_instance_failed"
+      }
+    }
+    Write-CleanupPartialJournal -Layout $Layout -Manifest $Manifest -JournalPath $journal -Step "deleting_directories"
+    foreach ($dir in $Manifest.Directories) {
+      $rootForCheck = if ([string]::Equals([System.IO.Path]::GetFullPath($dir).TrimEnd('\'), $Layout.IsolatedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) { $Layout.IsolatedRoot } else { $Layout.InstanceRoot }
+      [void](Assert-CleanupManifestChildPath -PathValue $dir -RootPath $rootForCheck)
+      try {
+        if ([string]::Equals([System.IO.Path]::GetFullPath($dir).TrimEnd('\'), $Layout.StateRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $journal -PathType Leaf)) {
+          [System.IO.File]::Delete($journal)
+        }
+        if (Test-Path -LiteralPath $dir -PathType Container) { [System.IO.Directory]::Delete($dir, $false) }
+      } catch {
+        $info = Get-CleanupDeleteFailureInfo -Exception $_.Exception -PathValue $dir -Kind "Directory"
+        Set-CleanupDeleteFailureTelemetry -Info $info
+        Throw-SafeError -Code "cleanup_delete_instance_failed"
+      }
+    }
+    $completed = $true
+  } finally {
+    if ($completed -and (Test-Path -LiteralPath $journal -PathType Leaf)) {
+      try { [System.IO.File]::Delete($journal) } catch { }
+    }
+  }
+}
+
+function Remove-CleanupPartialSelfTestTreeControlled {
+  param([Parameter(Mandatory = $true)][string]$RootPath)
+  if (-not (Test-Path -LiteralPath $RootPath -PathType Container)) { return }
+  $root = [System.IO.Path]::GetFullPath($RootPath)
+  if (-not [System.IO.Path]::GetFileName($root).StartsWith("vc-cleanup-partial-selftest-", [System.StringComparison]::Ordinal)) { return }
+  $files = New-Object System.Collections.Generic.List[string]
+  $dirs = New-Object System.Collections.Generic.List[string]
+  $stack = New-Object System.Collections.Generic.Stack[string]
+  $stack.Push($root)
+  while ($stack.Count -gt 0) {
+    $dir = $stack.Pop()
+    foreach ($entry in [System.IO.Directory]::GetFileSystemEntries($dir)) {
+      $full = [System.IO.Path]::GetFullPath($entry)
+      if (-not $full.StartsWith(($root.TrimEnd('\') + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) { return }
+      $item = Get-Item -LiteralPath $full -Force
+      if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return }
+      if (($item.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0) { [void]$dirs.Add($full); $stack.Push($full) } else { [void]$files.Add($full) }
+    }
+  }
+  foreach ($file in $files) { if (Test-Path -LiteralPath $file -PathType Leaf) { [System.IO.File]::Delete($file) } }
+  foreach ($dir in @($dirs.ToArray() | Sort-Object { $_.Length } -Descending)) { if (Test-Path -LiteralPath $dir -PathType Container) { [System.IO.Directory]::Delete($dir, $false) } }
+  if (Test-Path -LiteralPath $root -PathType Container) { [System.IO.Directory]::Delete($root, $false) }
+}
+
+function New-CleanupPartialSelfTestJson {
+  param(
+    [Parameter(Mandatory = $true)][string]$ClusterId,
+    [Parameter(Mandatory = $true)][string]$State,
+    [Parameter(Mandatory = $true)][string]$Stage,
+    [Parameter(Mandatory = $true)][string]$CreatedUtc,
+    [Parameter(Mandatory = $true)][string]$UpdatedUtc,
+    [Parameter(Mandatory = $true)][bool]$InitdbCompleted
+  )
+  $payload = [ordered]@{
+    artifact_type = "voto_claro_isolated_baseline_cluster_state"
+    schema_version = 1
+    cluster_id = $ClusterId
+    state = $State
+    stage = $Stage
+    created_utc = $CreatedUtc
+    updated_utc = $UpdatedUtc
+    postgres_major = "17"
+    postgres_version = "17.10"
+    host = "127.0.0.1"
+    port = 55432
+    admin_role = $script:LocalAdminUser
+    instance_name = $script:InstanceName
+    data_directory_name = "data"
+    server_log_name = "postgresql-server.log"
+    last_error_code = $null
+    initdb_completed = $InitdbCompleted
+    configuration_completed = $false
+    server_started = $false
+    credential_protected = $true
+    plaintext_password_file_present = $false
+    server_state = "not_started"
+    server_cleanup_attempted = $false
+    server_cleanup_completed = $false
+  }
+  return ($payload | ConvertTo-Json -Depth 4)
+}
+
+function New-CleanupPartialSelfTestLayout {
+  param([Parameter(Mandatory = $true)][string]$BaseRoot)
+  $isolatedRoot = Join-Path $BaseRoot "isolated-baseline-test"
+  $instanceRoot = Join-Path $isolatedRoot $script:InstanceName
+  $data = Join-Path $instanceRoot "data"
+  $logs = Join-Path $instanceRoot "logs"
+  $state = Join-Path $instanceRoot "state"
+  $secrets = Join-Path $instanceRoot "secrets"
+  return [pscustomobject]@{
+    IsolatedRoot = [System.IO.Path]::GetFullPath($isolatedRoot)
+    InstanceRoot = [System.IO.Path]::GetFullPath($instanceRoot)
+    DataRoot = [System.IO.Path]::GetFullPath($data)
+    LogRoot = [System.IO.Path]::GetFullPath($logs)
+    StateRoot = [System.IO.Path]::GetFullPath($state)
+    SecretRoot = [System.IO.Path]::GetFullPath($secrets)
+    ServerLog = [System.IO.Path]::GetFullPath((Join-Path $logs "postgresql-server.log"))
+    MarkerPath = [System.IO.Path]::GetFullPath((Join-Path $state $script:MarkerFileName))
+    StatePath = [System.IO.Path]::GetFullPath((Join-Path $state "cluster-state.json"))
+    CredentialPath = [System.IO.Path]::GetFullPath((Join-Path $secrets "vc_isolated_admin.dpapi"))
+    PasswordFilePath = [System.IO.Path]::GetFullPath((Join-Path $secrets "initdb-password.tmp"))
+  }
+}
+
+function Initialize-CleanupPartialSelfTestLayout {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  foreach ($dir in @($Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.StateRoot, $Layout.SecretRoot, (Join-Path $Layout.DataRoot "base"), (Join-Path $Layout.DataRoot "base\1"), (Join-Path $Layout.DataRoot "global"), (Join-Path $Layout.DataRoot "pg_tblspc"))) {
+    [System.IO.Directory]::CreateDirectory($dir) | Out-Null
+    Set-RestrictedAcl -PathValue $dir -TargetType Directory
+  }
+  $clusterId = [Guid]::NewGuid().ToString()
+  $created = "2026-01-01T00:00:00.0000000+00:00"
+  $mainUpdated = "2026-01-01T00:00:00.0000000+00:00"
+  $tempUpdated = "2026-01-01T00:00:01.0000000+00:00"
+  Write-Utf8NoBomFile -PathValue $Layout.MarkerPath -Text ((New-MarkerText -ClusterId $clusterId -LocalPort 55432) -join "`n")
+  Write-Utf8NoBomFile -PathValue $Layout.StatePath -Text (New-CleanupPartialSelfTestJson -ClusterId $clusterId -State "initializing" -Stage "initdb" -CreatedUtc $created -UpdatedUtc $mainUpdated -InitdbCompleted:$false)
+  $tmp = Join-Path $Layout.StateRoot ("cluster-state." + [Guid]::NewGuid().ToString("N") + ".tmp")
+  Write-Utf8NoBomFile -PathValue $tmp -Text (New-CleanupPartialSelfTestJson -ClusterId $clusterId -State "initialized" -Stage "initialized" -CreatedUtc $created -UpdatedUtc $tempUpdated -InitdbCompleted:$true)
+  Write-Utf8NoBomFile -PathValue $Layout.CredentialPath -Text "selftest-non-secret-placeholder"
+  foreach ($file in @($Layout.MarkerPath, $Layout.StatePath, $tmp, $Layout.CredentialPath)) { Set-RestrictedAcl -PathValue $file -TargetType File }
+  foreach ($file in @((Join-Path $Layout.DataRoot "PG_VERSION"), (Join-Path $Layout.DataRoot "global\pg_control"), (Join-Path $Layout.DataRoot "base\1\123"), (Join-Path $Layout.DataRoot "base\1\456"))) {
+    Write-Utf8NoBomFile -PathValue $file -Text $(if ([System.IO.Path]::GetFileName($file) -eq "PG_VERSION") { "17" } else { "selftest" })
+    Set-RestrictedAcl -PathValue $file -TargetType File
+  }
+}
+
+function Invoke-CleanupPartialRealFilesystemSelfTest {
+  $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  $base = Join-Path $tempRoot ("vc-cleanup-partial-selftest-" + [Guid]::NewGuid().ToString("N"))
+  $packageSibling = Join-Path $base "package-out-of-scope"
+  $repoSibling = Join-Path $base "repo-out-of-scope"
+  try {
+    [System.IO.Directory]::CreateDirectory($base) | Out-Null
+    [System.IO.Directory]::CreateDirectory($packageSibling) | Out-Null
+    [System.IO.Directory]::CreateDirectory($repoSibling) | Out-Null
+    Write-Utf8NoBomFile -PathValue (Join-Path $packageSibling "keep.txt") -Text "package-intact"
+    Write-Utf8NoBomFile -PathValue (Join-Path $repoSibling "keep.txt") -Text "repo-intact"
+    $layout = New-CleanupPartialSelfTestLayout -BaseRoot $base
+    Initialize-CleanupPartialSelfTestLayout -Layout $layout
+    $package = Assert-PostgresTools -BinRoot $PostgresBin
+    $manifest = New-CleanupPartialManifest -Layout $layout
+    if ($manifest.DataFileCount -lt 4 -or $manifest.DataDirectoryCount -lt 4) { Throw-SafeError -Code "cleanup_unexpected_content" }
+    Invoke-CleanupPartialManifestDelete -Layout $layout -Manifest $manifest -Package $package
+    $isolatedStillExists = Test-Path -LiteralPath $layout.IsolatedRoot -PathType Container
+    $packageSiblingIntact = Test-Path -LiteralPath (Join-Path $packageSibling "keep.txt") -PathType Leaf
+    $repoSiblingIntact = Test-Path -LiteralPath (Join-Path $repoSibling "keep.txt") -PathType Leaf
+    if ($isolatedStillExists -or -not $packageSiblingIntact -or -not $repoSiblingIntact) {
+      Throw-SafeError -Code "cleanup_postcheck_failed"
+    }
+    $addedBase = Join-Path $base "file-added-after-manifest-case"
+    $addedLayout = New-CleanupPartialSelfTestLayout -BaseRoot $addedBase
+    Initialize-CleanupPartialSelfTestLayout -Layout $addedLayout
+    $addedManifest = New-CleanupPartialManifest -Layout $addedLayout
+    $authorizedProbeFiles = @(
+      (Join-Path $addedLayout.DataRoot "PG_VERSION"),
+      (Join-Path $addedLayout.DataRoot "global\pg_control"),
+      (Join-Path $addedLayout.DataRoot "base\1\123"),
+      $addedLayout.StatePath,
+      $addedLayout.MarkerPath,
+      $addedLayout.CredentialPath
+    )
+    $addedAfterManifestPath = Join-Path $addedLayout.DataRoot "added-after-manifest.txt"
+    Write-Utf8NoBomFile -PathValue $addedAfterManifestPath -Text "added-after-manifest"
+    try {
+      Invoke-CleanupPartialManifestDelete -Layout $addedLayout -Manifest $addedManifest -Package $package
+      Throw-SafeError -Code "cleanup_postcheck_failed"
+    } catch {
+      if ((Get-SafeReason -ErrorRecord $_) -ne "cleanup_state_changed") { throw }
+    }
+    foreach ($authorizedProbeFile in $authorizedProbeFiles) {
+      if (-not (Test-Path -LiteralPath $authorizedProbeFile -PathType Leaf)) { Throw-SafeError -Code "cleanup_postcheck_failed" }
+    }
+    if (-not (Test-Path -LiteralPath $addedAfterManifestPath -PathType Leaf)) { Throw-SafeError -Code "cleanup_postcheck_failed" }
+    if (-not (Test-Path -LiteralPath $addedLayout.InstanceRoot -PathType Container)) { Throw-SafeError -Code "cleanup_postcheck_failed" }
+    if (-not (Test-Path -LiteralPath (Join-Path $packageSibling "keep.txt") -PathType Leaf)) { Throw-SafeError -Code "cleanup_postcheck_failed" }
+    if (-not (Test-Path -LiteralPath (Join-Path $repoSibling "keep.txt") -PathType Leaf)) { Throw-SafeError -Code "cleanup_postcheck_failed" }
+    Remove-CleanupPartialSelfTestTreeControlled -RootPath $addedBase
+    Write-Output "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK"
+    $failureBase = Join-Path $base "failure-case"
+    $failureLayout = New-CleanupPartialSelfTestLayout -BaseRoot $failureBase
+    Initialize-CleanupPartialSelfTestLayout -Layout $failureLayout
+    Write-Utf8NoBomFile -PathValue (Join-Path $failureLayout.InstanceRoot "unexpected.txt") -Text "unexpected"
+    try { [void](New-CleanupPartialManifest -Layout $failureLayout); Throw-SafeError -Code "cleanup_postcheck_failed" } catch { $negativeReason = Get-SafeReason -ErrorRecord $_; if (@("cleanup_unexpected_content", "cleanup_failed_exact_state_invalid") -notcontains $negativeReason) { throw } }
+    Remove-CleanupPartialSelfTestTreeControlled -RootPath $failureBase
+    Write-Output "CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK"
+  } finally {
+    Remove-CleanupPartialSelfTestTreeControlled -RootPath $base
+  }
+}
 function Get-CleanupPartialStateSignature {
   param([Parameter(Mandatory = $true)][object]$Layout)
   $isolatedEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.IsolatedRoot
@@ -1774,17 +2193,16 @@ function Invoke-CleanupPartialCreate {
     Assert-CleanupExactPartialState -Layout $layout
 
     Set-Stage -Stage "cleanup_signature_initial"
-    $initialStateSignature = Get-CleanupPartialStateSignature -Layout $layout
+    $manifest = New-CleanupPartialManifest -Layout $layout
+    $initialStateSignature = $manifest.Signature
 
     Set-Stage -Stage "cleanup_activity"
     Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
 
     Set-Stage -Stage "cleanup_revalidate_signature"
     Assert-CleanupPathFixed -Layout $layout
-    $revalidatedStateSignature = Get-CleanupPartialStateSignature -Layout $layout
-    if (-not [string]::Equals($initialStateSignature, $revalidatedStateSignature, [System.StringComparison]::Ordinal)) {
-      Throw-SafeError -Code "cleanup_state_changed"
-    }
+    Assert-CleanupPartialManifestUnchanged -Layout $layout -Manifest $manifest
+
     Set-Stage -Stage "cleanup_revalidate_state"
     Assert-CleanupExactPartialState -Layout $layout
 
@@ -1792,11 +2210,8 @@ function Invoke-CleanupPartialCreate {
     Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
 
     Set-Stage -Stage "cleanup_delete_instance"
-    try {
-      [System.IO.Directory]::Delete($layout.InstanceRoot, $false)
-    } catch {
-      Throw-SafeError -Code "cleanup_delete_instance_failed"
-    }
+    Assert-CleanupGitReady -RepoRoot $repoRoot
+    Invoke-CleanupPartialManifestDelete -Layout $layout -Manifest $manifest -Package $package
 
     Set-Stage -Stage "cleanup_postcheck"
     if (Test-Path -LiteralPath $layout.InstanceRoot) {
@@ -1807,18 +2222,15 @@ function Invoke-CleanupPartialCreate {
     Assert-CleanupNoPostgresActivity -Package $package -Layout $layout
 
     Set-Stage -Stage "cleanup_validate_parent_empty"
-    $parentEntriesResult = Get-CleanupDirectoryEntries -PathValue $layout.IsolatedRoot
-    Assert-CleanupDirectoryEntriesResult -Result $parentEntriesResult
-    [string[]]$parentEntryValues = @($parentEntriesResult.Entries)
-    if ($parentEntryValues.Count -ne 0) {
-      Throw-SafeError -Code "cleanup_parent_not_empty"
+    if (Test-Path -LiteralPath $layout.IsolatedRoot) {
+      $parentEntriesResult = Get-CleanupDirectoryEntries -PathValue $layout.IsolatedRoot
+      Assert-CleanupDirectoryEntriesResult -Result $parentEntriesResult
+      [string[]]$parentEntryValues = @($parentEntriesResult.Entries)
+      if ($parentEntryValues.Count -ne 0) {
+        Throw-SafeError -Code "cleanup_parent_not_empty"
+      }
     }
-    Set-Stage -Stage "cleanup_delete_root"
-    try {
-      [System.IO.Directory]::Delete($layout.IsolatedRoot, $false)
-    } catch {
-      Throw-SafeError -Code "cleanup_delete_root_failed"
-    }
+
     Set-Stage -Stage "cleanup_postcheck"
     if (Test-Path -LiteralPath $layout.IsolatedRoot) {
       Throw-SafeError -Code "cleanup_postcheck_failed"
@@ -2666,15 +3078,12 @@ function Set-RestrictedAcl {
       Throw-SafeError -Code "reparse_point_detected"
     }
     $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-    $acl = Get-Acl -LiteralPath $PathValue
+    $acl = if ($TargetType -eq "Directory") {
+      [System.Security.AccessControl.DirectorySecurity]::new()
+    } else {
+      [System.Security.AccessControl.FileSecurity]::new()
+    }
     $acl.SetAccessRuleProtection($true, $false)
-    $existingRules = Get-RestrictedAclRulesForValidation -Acl $acl
-    if (-not $existingRules.Success) {
-      Throw-SafeError -Code $existingRules.SafeErrorCode
-    }
-    foreach ($rule in @($existingRules.Rules)) {
-      [void]$acl.RemoveAccessRule($rule)
-    }
     $inherit = if ($TargetType -eq "Directory") {
       [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
     } else {
@@ -2683,7 +3092,11 @@ function Set-RestrictedAcl {
     $propagation = [System.Security.AccessControl.PropagationFlags]"None"
     $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, "FullControl", $inherit, $propagation, "Allow")
     $acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $PathValue -AclObject $acl
+    if ($TargetType -eq "Directory") {
+      [System.IO.Directory]::SetAccessControl($PathValue, $acl)
+    } else {
+      [System.IO.File]::SetAccessControl($PathValue, $acl)
+    }
     try {
       $verify = Get-Acl -LiteralPath $PathValue
     } catch {
@@ -4378,7 +4791,12 @@ function Invoke-Plan {
   Write-Output "cleanup_failed_create_state_length_exact_hardcode=false"
   Write-Output "cleanup_failed_create_state_size_bounded=true"
   Write-Output "cleanup_failed_create_state_get_created_utc_failure_supported=true"
-  Write-Output "cleanup_requires_empty_instance=true"
+  Write-Output "cleanup_partial_create_nonempty_instance_supported=true"
+  Write-Output "cleanup_partial_create_manifest_valid=$(([string]$cleanupPartialCreateExactStateValid).ToLowerInvariant())"
+  Write-Output "cleanup_partial_create_bottom_up_delete=true"
+  Write-Output "cleanup_partial_create_recursive_delete_used=false"
+  Write-Output "cleanup_partial_create_recovery_deterministic=true"
+  Write-Output "cleanup_partial_create_real_filesystem_self_test=true"
   Write-Output "cleanup_recursive_delete_allowed=false"
   Write-Output "cleanup_acl_modification_allowed=false"
   Write-Output "cleanup_reparse_points_allowed=false"
@@ -4409,7 +4827,7 @@ function Invoke-BlockedFutureAction {
 
 try {
   if ($SelfTest) {
-    Write-Output "SELF_TEST_DELEGATED_TO_VALIDATE_TOOL"
+    Invoke-CleanupPartialRealFilesystemSelfTest
     exit 0
   }
 

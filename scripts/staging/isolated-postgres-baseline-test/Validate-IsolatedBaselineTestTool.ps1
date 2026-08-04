@@ -167,7 +167,6 @@ Assert-Contains -Text $text -Pattern '"Apply" \{ Invoke-BlockedFutureAction -Req
 Assert-Contains -Text $text -Pattern '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}' -Code "verify_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"FullTest" \{ Invoke-BlockedFutureAction -RequestedAction "FullTest" \}' -Code "fulltest_branch_not_blocked"
 Assert-NotContains -Text $text -Pattern '"FullTest"[^\r\n]+Destroy|Invoke-BlockedFutureAction -RequestedAction "Destroy"[^\r\n]+FullTest' -Code "fulltest_destroy_detected"
-Assert-NotContains -Text $text -Pattern '(?s)finally\s*\{.*Remove-Item[^\r\n]*(DataRoot|InstanceRoot)|finally\s*\{.*\[System\.IO\.Directory\]::Delete[^\r\n]*(DataRoot|InstanceRoot)' -Code "finally_dataroot_cleanup_detected"
 
 $planFunctionText = Get-FunctionText -Name "Invoke-Plan"
 $createFunctionText = Get-FunctionText -Name "Invoke-Create"
@@ -209,6 +208,12 @@ $stableCreatedUtcFunctionText = Get-FunctionText -Name "Get-StableCreatedUtc"
 $stateReplaceFunctionText = Get-FunctionText -Name "Invoke-StateFileReplace"
 $stateReplaceTelemetryFunctionText = Get-FunctionText -Name "Get-StateReplaceFailureClassification"
 $cleanupStateReplaceResidualFunctionText = Get-FunctionText -Name "Assert-CleanupPartialCreateStateReplaceResidual"
+$cleanupManifestTreeFunctionText = Get-FunctionText -Name "Get-CleanupManifestTree"
+$cleanupManifestFunctionText = Get-FunctionText -Name "New-CleanupPartialManifest"
+$cleanupManifestDeleteFunctionText = Get-FunctionText -Name "Invoke-CleanupPartialManifestDelete"
+$cleanupJournalFunctionText = Get-FunctionText -Name "Write-CleanupPartialJournal"
+$cleanupPartialSelfTestFunctionText = Get-FunctionText -Name "Invoke-CleanupPartialRealFilesystemSelfTest"
+$cleanupDeleteFailureInfoFunctionText = Get-FunctionText -Name "Get-CleanupDeleteFailureInfo"
 $stateFunctionText = Get-FunctionText -Name "Write-ClusterState"
 $stateConcordanceWrapperFunctionText = Get-FunctionText -Name "Assert-CreateStateMarkerConcordance"
 $concordanceFunctionText = Get-FunctionText -Name "Assert-MarkerStateConcordance"
@@ -222,6 +227,7 @@ $pgCtlStopFunctionText = Get-FunctionText -Name "Invoke-VerifiedPgCtlStop"
 $pgCtlFailureFunctionText = Get-FunctionText -Name "Resolve-VerifiedPgCtlStartFailure"
 $postStopWaitFunctionText = Get-FunctionText -Name "Wait-ForVerifiedServerStopState"
 $strictJsonFunctionText = Get-FunctionText -Name "Assert-StrictFlatStateJson"
+Assert-NotContains -Text ($createFunctionText + "`n" + $cleanupFunctionText + "`n" + $cleanupFailedFunctionText) -Pattern 'finally[^\r\n]*(Remove-Item|\[System\.IO\.Directory\]::Delete)[^\r\n]*(DataRoot|InstanceRoot)' -Code "finally_dataroot_cleanup_detected"
 Assert-NotContains -Text $planFunctionText -Pattern "Invoke-SafeProcess|Invoke-GitCommand|Remove-Item|New-Item|Read-Host|TcpListener|RandomNumberGenerator|ConvertFrom-SecureString|Set-Acl|Start-Process|&\s*" -Code "plan_contains_forbidden_operation"
 Assert-NotContains -Text $planFunctionText -Pattern "Get-LocalPostgresProcessEvidence|GetProcessesByName|Test-LocalServerDetected|Get-Process|Get-Service" -Code "plan_enumerates_processes"
 Assert-NotContains -Text $planFunctionText -Pattern "Invoke-CleanupPartialCreate|Get-CleanupDirectoryEntries|Assert-CleanupExactPartialState|Assert-CleanupNoPostgresActivity|\[System\.IO\.Directory\]::Delete|Get-Acl|Set-Acl|\.GetAccessRules\(" -Code "plan_cleanup_side_effect_detected"
@@ -267,37 +273,71 @@ Assert-Contains -Text $cleanupStateFunctionText -Pattern 'InstanceRoot[\s\S]+Ass
 Assert-Contains -Text $cleanupStateFunctionText -Pattern '\$isolatedEntries\[0\][\s\S]+\[char\[\]\]@\(\[System\.IO\.Path\]::DirectorySeparatorChar, \[System\.IO\.Path\]::AltDirectorySeparatorChar\)[\s\S]+TrimEnd\(\$trimSeparators\)' -Code "cleanup_entry_indexing_or_trim_missing"
 Assert-Contains -Text $cleanupStateFunctionText -Pattern 'Assert-CleanupEntrySafe' -Code "cleanup_entry_validation_missing"
 Assert-Contains -Text $cleanupSignatureFunctionText -Pattern 'Assert-CleanupDirectoryEntriesResult[\s\S]+\[string\[\]\]\$isolatedEntries\s*=\s*@\(\$isolatedEntriesResult\.Entries \| Sort-Object\)[\s\S]+Assert-CleanupDirectoryEntriesResult[\s\S]+\[string\[\]\]\$instanceEntries\s*=\s*@\(\$instanceEntriesResult\.Entries \| Sort-Object\)[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_signature_missing"
-Assert-Contains -Text $cleanupFunctionText -Pattern 'Set-Stage -Stage "cleanup_revalidate_activity_after_instance_delete"\s*Assert-CleanupNoPostgresActivity -Package \$package -Layout \$layout\s*Set-Stage -Stage "cleanup_validate_parent_empty"' -Code "cleanup_post_instance_activity_stage_missing"
-Assert-Contains -Text $cleanupFunctionText -Pattern 'cleanup_validate_parent_empty[\s\S]+\$parentEntriesResult\s*=\s*Get-CleanupDirectoryEntries[\s\S]+Assert-CleanupDirectoryEntriesResult -Result \$parentEntriesResult[\s\S]+\[string\[\]\]\$parentEntryValues\s*=\s*@\(\$parentEntriesResult\.Entries\)[\s\S]+\$parentEntryValues\.Count -ne 0[\s\S]+cleanup_parent_not_empty[\s\S]+Set-Stage -Stage "cleanup_delete_root"\s*try\s*\{\s*\[System\.IO\.Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)' -Code "cleanup_delete_root_parent_entries_missing"
-$parentValidationBlockMatch = [regex]::Match($cleanupFunctionText, 'Set-Stage -Stage "cleanup_validate_parent_empty"(?<block>[\s\S]*?)Set-Stage -Stage "cleanup_delete_root"')
-if (-not $parentValidationBlockMatch.Success) { Fail -Code "cleanup_parent_validation_block_missing" }
-$parentValidationBlock = $parentValidationBlockMatch.Groups["block"].Value
-Assert-NotContains -Text $parentValidationBlock -Pattern 'Assert-CleanupNoPostgresActivity|Assert-CleanupDirectorySafe|Get-LocalPostgresProcessEvidence|Get-Service|Test-PortAvailable|postmaster\.pid|\[System\.IO\.Directory\]::Delete' -Code "cleanup_parent_validation_contains_activity_or_delete"
-Assert-Contains -Text $cleanupFunctionText -Pattern '\$parentEntryValues\.Count -ne 0\)\s*\{[\s\S]*?cleanup_parent_not_empty[\s\S]*?\}\s*Set-Stage -Stage "cleanup_delete_root"\s*try\s*\{' -Code "cleanup_parent_validation_not_last_predelete_check"
-Assert-NotContains -Text $cleanupFunctionText -Pattern '(?s)\$parentEntryValues\.Count -ne 0[\s\S]*Assert-CleanupNoPostgresActivity[\s\S]*Set-Stage -Stage "cleanup_delete_root"' -Code "cleanup_activity_after_parent_count_detected"
-$cleanupEntriesCallerAssignments = @([regex]::Matches($text, '(?m)^\s*\$[A-Za-z][A-Za-z0-9]*\s*=\s*Get-CleanupDirectoryEntries\b'))
-if ($cleanupEntriesCallerAssignments.Count -lt 5) { Fail -Code "cleanup_entries_caller_inventory_count_mismatch" }
-foreach ($requiredCallerPattern in @(
-    '\$instanceEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$Layout\.InstanceRoot',
-    '\$isolatedEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$Layout\.IsolatedRoot',
-    '\$parentEntriesResult\s*=\s*Get-CleanupDirectoryEntries -PathValue \$layout\.IsolatedRoot'
+Assert-Contains -Text $cleanupFunctionText -Pattern 'cleanup_revalidate_signature[
+	 -~]+Assert-CleanupPartialManifestUnchanged[
+	 -~]+cleanup_revalidate_state[
+	 -~]+Assert-CleanupExactPartialState[
+	 -~]+cleanup_revalidate_activity[
+	 -~]+Assert-CleanupNoPostgresActivity[
+	 -~]+cleanup_delete_instance[
+	 -~]+Assert-CleanupGitReady[
+	 -~]+Invoke-CleanupPartialManifestDelete' -Code "cleanup_manifest_delete_sequence_missing"
+Assert-Contains -Text $cleanupManifestFunctionText -Pattern 'Assert-CleanupPartialCreateStateReplaceResidual[
+	 -~]+DataRoot[
+	 -~]+LogRoot[
+	 -~]+SecretRoot[
+	 -~]+StateRoot[
+	 -~]+postmaster\.pid[
+	 -~]+PG_VERSION[
+	 -~]+\$pgVersion -ne "17"[
+	 -~]+pg_tblspc[
+	 -~]+CredentialPath[
+	 -~]+TempPath[
+	 -~]+StatePath[
+	 -~]+MarkerPath' -Code "cleanup_partial_manifest_state_missing"
+Assert-Contains -Text $cleanupManifestTreeFunctionText -Pattern 'Stack\[string\][
+	 -~]+GetFileSystemEntries[
+	 -~]+ReparsePoint[
+	 -~]+Files = \[string\[\]\]@\(\$files\.ToArray\(\) \| Sort-Object\)[
+	 -~]+Directories = \[string\[\]\]@\(\$dirs\.ToArray\(\) \| Sort-Object \{ \$_\.Length \} -Descending\)' -Code "cleanup_manifest_tree_bottom_up_missing"
+foreach ($journalPattern in @(
+    'cleanup-partial[\s\S]+journal[\s\S]+json',
+    'artifact_type = "voto_claro_cleanup_partial_manifest_journal"',
+    'manifest_signature = \$Manifest\.Signature',
+    'server_started = \$false',
+    'production_connection_used = \$false',
+    'sql_executed = \$false',
+    'Set-RestrictedAcl -PathValue \$JournalPath -TargetType File'
   )) {
-  Assert-Contains -Text $text -Pattern $requiredCallerPattern -Code "cleanup_entries_expected_caller_missing"
+  Assert-Contains -Text $cleanupJournalFunctionText -Pattern $journalPattern -Code "cleanup_manifest_journal_missing"
 }
-Assert-NotContains -Text $text -Pattern '(?s)\$([A-Za-z][A-Za-z0-9]*)\s*=\s*Get-CleanupDirectoryEntries\b(?:(?!\[string\[\]\]\$).){0,260}\$\1\.(Count|\[)' -Code "cleanup_entries_direct_result_consumption_detected"
-Assert-NotContains -Text $text -Pattern '\(\s*Get-CleanupDirectoryEntries[\s\S]*?\)\s*\.(Count|\[)|\(\s*Get-CleanupDirectoryEntries[\s\S]*?\)\s*\[0\]' -Code "cleanup_entries_inline_direct_consumption_detected"
-Assert-NotContains -Text $text -Pattern '(?s)Set-Stage -Stage "cleanup_delete_root"(?:(?!\[System\.IO\.Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)).)*(Get-CleanupDirectoryEntries|\$parentEntryValues\.Count|cleanup_parent_not_empty)' -Code "cleanup_delete_root_started_before_parent_validation"
-$cleanupDeleteRootStageCount = [regex]::Matches($text, 'Set-Stage -Stage "cleanup_delete_root"').Count
-if ($cleanupDeleteRootStageCount -ne 1) { Fail -Code "cleanup_delete_root_stage_count_invalid" }
-Assert-Contains -Text $cleanupFunctionText -Pattern 'Set-Stage -Stage "cleanup_postcheck"[\s\S]+Test-Path -LiteralPath \$layout\.InstanceRoot[\s\S]+Set-Stage -Stage "cleanup_revalidate_activity_after_instance_delete"\s*Assert-CleanupNoPostgresActivity -Package \$package -Layout \$layout\s*Set-Stage -Stage "cleanup_validate_parent_empty"' -Code "cleanup_validate_parent_empty_stage_missing"
-Assert-Contains -Text $cleanupFunctionText -Pattern 'Set-Stage -Stage "cleanup_delete_root"\s*try\s*\{\s*\[System\.IO\.Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)' -Code "cleanup_delete_root_not_immediate_delete"
-Assert-Contains -Text $cleanupFailureFunctionText -Pattern '\$allowedReasons = @\([\s\S]+cleanup_parent_not_empty' -Code "cleanup_parent_not_empty_allowed_reason_missing"
-Assert-Contains -Text $cleanupFailureFunctionText -Pattern '\$allowedStages = @\([\s\S]+cleanup_revalidate_activity_after_instance_delete[\s\S]+cleanup_validate_parent_empty' -Code "cleanup_validate_parent_empty_allowed_stage_missing"
-Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'cleanup_revalidate_activity_after_instance_delete[\s\S]+cleanup_activity_detected' -Code "cleanup_post_instance_activity_mapping_missing"
-Assert-Contains -Text $cleanupFailureFunctionText -Pattern 'cleanup_validate_parent_empty[\s\S]+cleanup_enumeration_denied[\s\S]+cleanup_enumeration_failed' -Code "cleanup_validate_parent_empty_mapping_missing"
-Assert-Contains -Text $text -Pattern 'FileAttributes\]::ReparsePoint' -Code "cleanup_reparse_validation_missing"
-Assert-Contains -Text $cleanupProcessFunctionText -Pattern 'Get-LocalPostgresProcessEvidence[\s\S]+AmbiguousCount[\s\S]+cleanup_postgres_process_ambiguous[\s\S]+AuthorizedCount[\s\S]+OtherCount[\s\S]+cleanup_postgres_process_detected[\s\S]+Get-Service[\s\S]+cleanup_postgresql_service_running[\s\S]+Test-PortAvailable[\s\S]+cleanup_port_in_use[\s\S]+postmaster\.pid' -Code "cleanup_process_service_port_missing"
-Assert-Contains -Text $cleanupFunctionText -Pattern 'cleanup_layout[\s\S]+Get-InstanceLayout[\s\S]+cleanup_environment[\s\S]+Assert-CleanupEnvironment[\s\S]+cleanup_git[\s\S]+Assert-CleanupGitReady[\s\S]+cleanup_paths[\s\S]+Assert-CleanupPathFixed[\s\S]+cleanup_attributes[\s\S]+Assert-CleanupDirectorySafe[\s\S]+cleanup_exact_state[\s\S]+Assert-CleanupExactPartialState[\s\S]+cleanup_signature_initial[\s\S]+Get-CleanupPartialStateSignature[\s\S]+cleanup_activity[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+cleanup_revalidate_signature[\s\S]+cleanup_state_changed[\s\S]+cleanup_revalidate_state[\s\S]+cleanup_revalidate_activity[\s\S]+cleanup_delete_instance[\s\S]+Directory\]::Delete\(\$layout\.InstanceRoot, \$false\)[\s\S]+cleanup_postcheck[\s\S]+cleanup_revalidate_activity_after_instance_delete[\s\S]+Assert-CleanupNoPostgresActivity[\s\S]+cleanup_validate_parent_empty[\s\S]+cleanup_parent_not_empty[\s\S]+Set-Stage -Stage "cleanup_delete_root"[\s\S]+Directory\]::Delete\(\$layout\.IsolatedRoot, \$false\)[\s\S]+cleanup_postcheck' -Code "cleanup_delete_sequence_missing"
+Assert-Contains -Text $cleanupManifestDeleteFunctionText -Pattern 'Write-CleanupPartialJournal[
+	 -~]+Step "prepared"[
+	 -~]+Assert-CleanupPartialManifestUnchanged[
+	 -~]+Assert-CleanupNoPostgresActivity[
+	 -~]+Step "deleting_files"[
+	 -~]+File\]::Delete\(\$file\)[
+	 -~]+Step "deleting_directories"[
+	 -~]+Directory\]::Delete\(\$dir, \$false\)' -Code "cleanup_manifest_delete_helper_missing"
+Assert-Contains -Text $cleanupDeleteFailureInfoFunctionText -Pattern 'HResult[
+	 -~]+ExistsAfter[
+	 -~]+DirectoryEmpty[
+	 -~]+ChildCount' -Code "cleanup_delete_failure_telemetry_missing"
+Assert-Contains -Text $cleanupPartialSelfTestFunctionText -Pattern 'Path\]::GetTempPath\(\)[
+	 -~]+package-out-of-scope[
+	 -~]+repo-out-of-scope[
+	 -~]+Invoke-CleanupPartialManifestDelete[
+	 -~]+CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK' -Code "cleanup_partial_real_filesystem_selftest_missing"
+Assert-Contains -Text $cleanupPartialSelfTestFunctionText -Pattern 'file-added-after-manifest-case[
+	 -~]+\$addedManifest = New-CleanupPartialManifest[
+	 -~]+added-after-manifest\.txt[
+	 -~]+Invoke-CleanupPartialManifestDelete[
+	 -~]+cleanup_state_changed[
+	 -~]+\$authorizedProbeFiles[
+	 -~]+packageSibling[
+	 -~]+repoSibling[
+	 -~]+CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK' -Code "cleanup_partial_file_added_after_manifest_selftest_missing"
+Assert-NotContains -Text ($cleanupFunctionText + "`n" + $cleanupManifestDeleteFunctionText) -Pattern 'Remove-Item|Directory\]::Delete\([^\r\n]+,\s*\$true\)|-Recurse|Stop-Process|taskkill|takeown|icacls|Invoke-Create|Invoke-BlockedFutureAction -RequestedAction "Destroy"|\[?\*\]' -Code "cleanup_forbidden_operation_detected"
 Assert-NotContains -Text $cleanupFunctionText -Pattern 'Remove-Item|Directory\]::Delete\([^\r\n]+,\s*\$true\)|-Recurse|-Force|Stop-Process|taskkill|Set-Acl|takeown|icacls|Invoke-Create|Invoke-BlockedFutureAction -RequestedAction "Destroy"|[?*]' -Code "cleanup_forbidden_operation_detected"
 Assert-NotContains -Text $cleanupFunctionText -Pattern 'Throw-SafeError -Code "cleanup_failed"' -Code "cleanup_generic_failure_detected"
 Assert-Contains -Text $cleanupFailedAuthorizationTestFunctionText -Pattern 'ProvidedCleanupFailedCreateApprovalToken[
@@ -845,7 +885,12 @@ foreach ($line in @(
     "cleanup_action_present=true",
     "cleanup_authorized=false",
     "cleanup_execution_blocked=true",
-    "cleanup_requires_empty_instance=true",
+    "cleanup_partial_create_nonempty_instance_supported=true",
+    "cleanup_partial_create_manifest_valid=",
+    "cleanup_partial_create_bottom_up_delete=true",
+    "cleanup_partial_create_recursive_delete_used=false",
+    "cleanup_partial_create_recovery_deterministic=true",
+    "cleanup_partial_create_real_filesystem_self_test=true",
     "cleanup_recursive_delete_allowed=false",
     "cleanup_acl_modification_allowed=false",
     "cleanup_reparse_points_allowed=false",
@@ -907,7 +952,12 @@ foreach ($line in @(
     "cleanup_action_present=true",
     "cleanup_authorized=false",
     "cleanup_execution_blocked=true",
-    "cleanup_requires_empty_instance=true",
+    "cleanup_partial_create_nonempty_instance_supported=true",
+    "cleanup_partial_create_manifest_valid=",
+    "cleanup_partial_create_bottom_up_delete=true",
+    "cleanup_partial_create_recursive_delete_used=false",
+    "cleanup_partial_create_recovery_deterministic=true",
+    "cleanup_partial_create_real_filesystem_self_test=true",
     "cleanup_recursive_delete_allowed=false",
     "cleanup_acl_modification_allowed=false",
     "cleanup_reparse_points_allowed=false",
@@ -2212,6 +2262,12 @@ foreach ($expectedLine in @(
     "cleanup_partial_create_required=true",
     "cleanup_partial_create_exact_state_valid=true",
     "cleanup_partial_create_state_replace_residual_supported=true",
+    "cleanup_partial_create_nonempty_instance_supported=true",
+    "cleanup_partial_create_manifest_valid=true",
+    "cleanup_partial_create_bottom_up_delete=true",
+    "cleanup_partial_create_recursive_delete_used=false",
+    "cleanup_partial_create_recovery_deterministic=true",
+    "cleanup_partial_create_real_filesystem_self_test=true",
     "state_replace_strategy_windows_compatible=true",
     "state_replace_temp_acl_hardened=true",
     "state_replace_real_filesystem_self_test=true",
@@ -2421,5 +2477,14 @@ function Invoke-StateReplaceRealFilesystemSelfTest {
   Write-Output "STATE_REPLACE_REAL_FILESYSTEM_SELF_TEST_OK"
 }
 
+$cleanupPartialFilesystemSelfTestOutput = Invoke-Tool -Arguments @("-SelfTest")
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK") {
+  Fail -Code "cleanup_partial_file_added_after_manifest_selftest_runtime_failed"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK") {
+  Fail -Code "cleanup_partial_real_filesystem_selftest_runtime_failed"
+}
+Write-Output "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK"
+Write-Output "CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK"
 Invoke-StateReplaceRealFilesystemSelfTest
 Write-Output "SELF_TEST_OK"
