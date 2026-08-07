@@ -3297,4 +3297,55 @@ Assert-Contains `
   -Pattern '(?s)function Invoke-P1GAclPackageReparseSelfTest \{.*?-ItemType Junction.*?Test-HasReparsePointInPath.*?P1G_ACL_PACKAGE_REPARSE_NEGATIVE_SELF_TEST_OK' `
   -Code "p1h_real_reparse_selftest_missing"
 # B-SEC-23P1H_CHATGPT_STATIC_GUARDS_END
+# B-SEC-23P1V_RECOVERSTART_CALL_OPERATOR_SCOPE_BEGIN
+$p1vInvokePath = Join-Path $PSScriptRoot "Invoke-IsolatedBaselineTest.ps1"
+$p1vInvokeText = [System.IO.File]::ReadAllText($p1vInvokePath)
+$p1vTokens = $null
+$p1vErrors = $null
+$p1vAst = [System.Management.Automation.Language.Parser]::ParseInput(
+  $p1vInvokeText,
+  [ref]$p1vTokens,
+  [ref]$p1vErrors
+)
+
+if (@($p1vErrors).Count -ne 0) {
+  throw "P1V_RECOVERSTART_SCOPE_REGRESSION_FAILED: parser"
+}
+
+$p1vRecover = @(
+  $p1vAst.FindAll(
+    { param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] },
+    $true
+  ) | Where-Object { $_.Name -eq "Invoke-RecoverStart" }
+)
+
+if ($p1vRecover.Count -ne 1) {
+  throw "P1V_RECOVERSTART_SCOPE_REGRESSION_FAILED: function_count"
+}
+
+$p1vRecoverText = $p1vRecover[0].Extent.Text
+$p1vClosureCount = ([regex]::Matches(
+  $p1vRecoverText,
+  '\}\.GetNewClosure\(\)'
+)).Count
+
+if ($p1vClosureCount -ne 0) {
+  throw "P1V_RECOVERSTART_SCOPE_REGRESSION_FAILED: getnewclosure_present"
+}
+
+foreach ($p1vCallbackName in @(
+  "classify",
+  "revalidate",
+  "writeState",
+  "removePidfile",
+  "startServer",
+  "resolveStart"
+)) {
+  if ($p1vRecoverText -notmatch ('(?m)^\s*\$' + [regex]::Escape($p1vCallbackName) + '\s*=\s*\{')) {
+    throw "P1V_RECOVERSTART_SCOPE_REGRESSION_FAILED: callback_missing::$p1vCallbackName"
+  }
+}
+
+Write-Output "P1V_RECOVERSTART_CALL_OPERATOR_SCOPE_SELF_TEST_OK"
+# B-SEC-23P1V_RECOVERSTART_CALL_OPERATOR_SCOPE_END
 Write-Output "SELF_TEST_OK"

@@ -6635,13 +6635,13 @@ function Invoke-RecoverStart {
     $context.Classification = $localClassification
     $context.Signature = Get-LifecycleStateSignature -Layout $layout
     return $localClassification
-  }.GetNewClosure()
+  }
   $revalidate = {
     Set-Stage -Stage "recover_start_revalidate"
     $localRevalidated = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
     if ($allowedStates -notcontains $localRevalidated.State -or -not [string]::Equals((Get-LifecycleStateSignature -Layout $layout), $context.Signature, [System.StringComparison]::Ordinal)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
     return $localRevalidated
-  }.GetNewClosure()
+  }
   $writeState = {
     param([string]$Name)
     try {
@@ -6662,7 +6662,7 @@ function Invoke-RecoverStart {
     } catch {
       return [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_state_write_failed" }
     }
-  }.GetNewClosure()
+  }
   $removePidfile = {
     try {
       $pidPath = Join-Path $layout.DataRoot "postmaster.pid"
@@ -6677,7 +6677,7 @@ function Invoke-RecoverStart {
     } catch {
       return [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_pidfile_remove_failed" }
     }
-  }.GetNewClosure()
+  }
   $startServer = {
     Set-Stage -Stage "recover_start_pg_ctl"
     $pgCtl = Get-ToolPath -BinRoot $package.Bin -ToolName "pg_ctl"
@@ -6688,9 +6688,9 @@ function Invoke-RecoverStart {
     $server = Get-VerifiedServerState -Layout $layout -Package $package
     if ($server.State -ne "VERIFIED_SERVER_RUNNING" -or -not (Test-PgIsReadyOk -Package $package -ExactPort 55432)) { return [pscustomobject]@{ Success=$false; SafeErrorCode="postgres_server_state_unresolved" } }
     return [pscustomobject]@{ Success=$true }
-  }.GetNewClosure()
+  }
   $stopServer = { [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_stop_not_applicable" } }
-  $resolveStart = { Resolve-VerifiedPgCtlStartFailure -Layout $layout -Package $package }.GetNewClosure()
+  $resolveStart = { Resolve-VerifiedPgCtlStartFailure -Layout $layout -Package $package }
 
   $engineResult = Invoke-RecoverStopTransitionEngine -Operation "RecoverStart" -Classify $classify -Revalidate $revalidate -WriteState $writeState -StartServer $startServer -StopServer $stopServer -RemovePidfile $removePidfile -ResolveStartFailure $resolveStart
   if ($engineResult.SafeErrorCode -eq "none" -and $engineResult.FinalLogicalState -eq "running") {
