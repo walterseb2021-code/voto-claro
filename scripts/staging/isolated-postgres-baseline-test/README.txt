@@ -408,3 +408,88 @@ La secuencia de borrado preparada es explicita: archivos autorizados uno por uno
 Plan reconoce este residuo de solo lectura y emite cleanup_failed_create_required=true, cleanup_failed_create_exact_state_valid=true, cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL, cleanup_failed_create_manifest_valid=true y ready_for_create=false. Plan no borra, no escribe, no cambia ACL, no abre puertos, no inicia PostgreSQL, no ejecuta SQL y no accede a produccion.
 
 La limpieza real de este modo requiere revision humana separada y autorizacion independiente de CleanupFailedCreate. No se debe reintentar manualmente despues de una salida ambigua. Ante cualquier diferencia de estructura, ACL, manifest, actividad PostgreSQL, paquete o estado, el flujo debe quedar bloqueado y no debe encadenar Create.
+
+B-SEC-23P1 ciclo de vida PostgreSQL aislado
+
+Create sigue siendo una accion de una sola vez para crear la instancia aislada. No debe repetirse cuando ya existe un cluster exacto, aunque el estado diga running y postmaster.pid haya quedado residual despues de una interrupcion de consola.
+
+El inicio persistente de pg_ctl/postgres queda separado del runner general de procesos cortos. La estrategia usa STARTUPINFOEX con PROC_THREAD_ATTRIBUTE_HANDLE_LIST, stdout/stderr en archivos controlados y proceso desacoplado de la consola, de modo que cerrar el terminal no debe apagar PostgreSQL ni bloquear el PowerShell exterior por handles heredados.
+
+Plan clasifica de solo lectura los estados CLEAN_ABSENT, RUNNING_EXACT, STOPPED_CLEAN_EXACT y STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT. El estado stale solo es aceptado si coinciden estrictamente rutas fijas, marker, state, credencial DPAPI, PG_VERSION 17, host 127.0.0.1, puerto 55432, rol vc_isolated_admin, postmaster.pid residual con PID inexistente, cero procesos, cero listener, cero servicios, pg_isready no disponible, pg_controldata en production, sin password en texto plano, sin reparse points y ACL esperadas.
+
+RecoverStart, tambien disponible como StartExisting, inicia un cluster existente y exacto sin ejecutar initdb, sin recrear directorios, sin cambiar credenciales, sin ejecutar SQL y sin tocar Supabase ni produccion. Requiere autorizacion y token propios, revalida TOCTOU y acepta solo STOPPED_CLEAN_EXACT o STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT.
+
+Stop apaga un RUNNING_EXACT mediante pg_ctl stop -m fast con autorizacion y token propios. No usa Stop-Process, taskkill, Ctrl+C ni cierre del terminal. Debe verificar cero listener, cero proceso de esa instancia, postmaster.pid ausente y pg_controldata shut down antes de registrar stopped.
+
+No borrar postmaster.pid manualmente. No usar Ctrl+C para apagar el cluster. Apply, Verify, Destroy y FullTest continuan bloqueados mientras no tengan implementacion autorizada. Todas las acciones siguen siendo locales: no SQL, no Supabase, no produccion.
+
+B-SEC-23P1A correccion puntual launcher y plan
+
+La correccion P1A valida dinamicamente el launcher persistente: compila el C# real usado por Invoke-PersistentChildSafeProcess y ejecuta un PowerShell temporal inocuo con argumentos que incluyen espacios, comillas, backslash final y valor vacio. stdin usa un handle controlado a NUL mediante CreateFileW, stdout/stderr quedan en archivos controlados y la lista PROC_THREAD_ATTRIBUTE_HANDLE_LIST contiene solo handles validos.
+
+La estrategia documentada para el proceso iniciador usa STARTUPINFOEX, CREATE_NO_WINDOW y CREATE_NEW_PROCESS_GROUP con stdout/stderr locales. No combina DETACHED_PROCESS con CREATE_NO_WINDOW. Plan refleja que enumera procesos locales y que verifica estado local; create_retry_blocked_until_cleanup queda reservado para residuos que requieren limpieza, mientras create_blocked_existing_cluster cubre clusters exactos existentes.
+
+Create, CleanupPartialCreate y CleanupFailedCreate rechazan switches o tokens de RecoverStart y Stop antes de cualquier efecto. RecoverStart/StartExisting y Stop siguen siendo acciones separadas, con autorizacion propia, y no se ejecutan durante validaciones.
+
+B-SEC-23P1B cierre final
+
+El launcher persistente publica ahora la estrategia STARTUPINFOEX_HANDLE_LIST_NO_WINDOW. El contrato nativo expone ChildPid, WaitResult, ProcessStateUnresolved, TimedOut, ProcessKilled y ProcessExitConfirmed para que WAIT_FAILED, timeout no confirmado y resultados desconocidos fallen cerrado.
+
+Plan separa create_blocked_existing_cluster de create_retry_blocked_until_cleanup y mantiene la clasificacion exacta STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT para el residuo actual sin modificarlo. La clasificacion valida payload persistido, configuracion administrada, pg_controldata esperado y contratos cerrados de StateRoot, LogRoot y SecretRoot.
+
+RecoverStart persiste una etapa recuperable antes de tocar postmaster.pid stale, persiste otra etapa despues de retirarlo y verifica runtime antes de escribir running. Stop conserva la verificacion fisica antes de escribir stopped y registra estados stale recuperables ante fallo de escritura. Las pruebas P1B usan procesos y carpetas temporales controlados, llaman el runner persistente y funciones reales de validacion/autorizacion, y no ejecutan PostgreSQL real, SQL, Supabase ni produccion.
+
+B-SEC-23P1C correccion real
+El SelfTest P1B simulado fue reemplazado por Invoke-P1BRealLifecycleSelfTest. Cada senal se emite despues de asserts sobre procesos temporales, salida stdout/stderr del runner, nieto temporal verificado por PID/ruta/marker, independencia de consola, matriz WAIT fail-closed, payloads exactos y autorizacion cruzada. El validador rechaza el nombre antiguo Invoke-P1BSimulatedLifecycleSelfTest y patrones que solo imprimen senales OK sin usar helpers reales.
+El runner persistent-child usa nombres fijos derivados de ToolName dentro del OutputDirectory de la accion y elimina stdout/stderr cuando el proceso directo ya cerro handles. StateRoot ya no acepta archivos persistent-child arbitrarios; Plan debe fallar cerrado ante residuos inesperados.
+B-SEC-23P1D correccion puntual final
+
+La prueba P1B real verifica ahora un handle Windows heredable distinto de stdin/stdout/stderr y confirma que el hijo no lo hereda cuando STARTUPINFOEX publica solo la lista autorizada. El mismo SelfTest conserva controles positivos de stdout/stderr, ejecuta el runner real para WAIT_OBJECT_0 y timeout, y usa inyeccion solo en memoria para WAIT_FAILED y terminacion no confirmada dentro del mismo interpretador nativo.
+
+RecoverStart reconcilia RUNTIME_RUNNING_STATE_STALE_EXACT escribiendo running sin invocar pg_ctl start. STOPPED_RUNTIME_STATE_STALE_EXACT y recover_start_failed_no_server se reconcilian primero a stopped y requieren una ejecucion autorizada posterior para iniciar. Stop acepta RUNNING_EXACT y RUNTIME_RUNNING_STATE_STALE_EXACT, siempre mediante pg_ctl stop verificado y sin iniciar PostgreSQL.
+
+La clasificacion de runtime activo exige listener exacto 127.0.0.1:55432 con OwningPid, postmaster verificado por PID/ruta/StartTimeUtc, arbol de procesos obtenido por Toolhelp, cero procesos fuera del arbol, cero OTHER y cero AMBIGUOUS. La firma TOCTOU incluye ACL normalizada de raices y archivos de control, mas rutas y hashes de postgres.exe, pg_ctl.exe, pg_isready.exe y pg_controldata.exe.
+
+Plan separa recover_start_required, recovery_reconciliation_required y start_required, y publica los estados exactos aceptados por RecoverStart y Stop. El validador exige P1B_REAL_SELF_TEST_OK, las ocho senales Recover/Stop por casos separados, listener propietario, arbol de procesos, firma ACL/paquete y rechaza senales agrupadas.
+B-SEC-23P1E correccion confirmada
+
+Get-LoopbackTcpListenerOwnerEvidence usa ahora un resultado estructurado con ApiSuccess, ErrorCode, Rows y QuerySucceeded. La conversion del puerto TCP evita el resultado firmado de Int16 y conserva el rango 0..65535. Cualquier fallo de GetExtendedTcpTable, longitud invalida o fila malformada produce fallo cerrado con AmbiguousCount mayor que cero, de modo que stale, stopped y running exactos no aceptan una consulta TCP fallida como ausencia de listener.
+
+El SelfTest P1E abre un TcpListener temporal real en 127.0.0.1 con puerto alto, valida que OwningPid corresponda al proceso propietario, confirma ExactOwner con AllowedPids correcto y rechaza AllowedPids incorrecto y puerto diferente. Tambien inyecta resultados TCP de error API y fila malformada para verificar fail-closed sin tocar PostgreSQL real.
+
+RecoverStart y Stop pasan por Invoke-RecoverStopTransitionEngine, un motor comun con callbacks. Produccion lo usa como preflight compartido de transicion y los SelfTests Recover/Stop ejecutan los ocho casos contra el mismo motor, incluidos fallo de start, fallo de stop, fallo de escritura running, fallo de escritura stopped y doble fallo de escritura recuperable.
+
+La autorizacion superior SelfTest/KeepOnSuccess se concentra en Assert-TopLevelActionGuards y la matriz SelfTest prueba autorizacion propia de Create, CleanupPartialCreate, CleanupFailedCreate, RecoverStart y Stop, switches extranjeros, tokens extranjeros y guards reales. La firma TOCTOU ya no convierte ACL o paquete ilegibles en sentinels estables: lifecycle_acl_unreadable y lifecycle_package_unverified fallan cerrado.
+
+La clasificacion de runtime exige listener propietario con QuerySucceeded, postmaster incluido en TreePids, cero procesos fuera del arbol, cero OTHER y cero AMBIGUOUS, con segunda captura antes de devolver estados activos exactos. recover_start_preparing persiste un origen controlado mediante last_error_code recover_origin_stale o recover_origin_stopped.
+
+B-SEC-23P1F correccion de bloqueadores finales
+
+RecoverStart y Stop ya no usan Invoke-RecoverStopTransitionEngine como ProbeOnly decorativo. Ambas acciones construyen callbacks productivos reales y delegan en el motor compartido la clasificacion inicial, revalidacion TOCTOU, escritura de estado, retiro exacto de postmaster.pid stale, pg_ctl start, resolucion de fallo de arranque, pg_ctl stop y reconciliaciones running/stopped stale. La decision de exito o error se toma desde el resultado estructurado del motor.
+
+El resultado del motor expone InitialState, RevalidatedState, FinalLogicalState, RuntimeState, SafeErrorCode, ReconciliationRequired, StartInvoked, StopInvoked, PidfileRemovalInvoked, PidfileRemovalSucceeded y StateWrites. DestructiveOperationUsed refleja start, stop o retiro real de pidfile. Si RemovePidfile falla, el motor no escribe recover_start_pidfile_removed ni invoca start.
+
+El snapshot de arbol de procesos devuelve QuerySucceeded, ErrorCode, ParentByPid y RowCount. Fallos de CreateToolhelp32Snapshot, Process32FirstW, filas malformadas o duplicadas incompatibles son fail-closed y aumentan evidencia ambigua; no se fabrica TreePids con el postmaster esperado en caso de error.
+
+RUNNING_EXACT y RUNTIME_RUNNING_STATE_STALE_EXACT requieren dos capturas activas completas. La segunda captura vuelve a validar postmaster.pid, PID, ruta ejecutable, StartTimeUtc, listener propietario, inventario de procesos, arbol exacto con postmaster incluido, cero procesos fuera del arbol, cero OTHER, cero AMBIGUOUS, pg_isready, ausencia de servicio PostgreSQL ajeno y pg_controldata IN_PRODUCTION.
+
+recover_start_preparing se clasifica por origen. RECOVER_START_PREPARING_STALE_EXACT exige recover_origin_stale, postmaster.pid residual, runtime detenido y pg_controldata IN_PRODUCTION. RECOVER_START_PREPARING_STOPPED_EXACT exige recover_origin_stopped, postmaster.pid ausente, runtime detenido y pg_controldata SHUT_DOWN. RecoverStart solo retira pidfile para el origen stale y no sobrescribe el origen detenido.
+
+El SelfTest agrega casos negativos del motor para fallo de RemovePidfile, arranque no resuelto, doble fallo de escritura running/stopped y origen stale/stopped interrumpido. Tambien agrega contratos negativos inyectados para snapshot de procesos fallido, fila malformada, proceso autorizado fuera del arbol, OTHER, AMBIGUOUS y postmaster ausente de TreePids. Las senales nuevas son P1F_ENGINE_NEGATIVE_CASES_SELF_TEST_OK y P1F_NEGATIVE_RUNTIME_CONTRACT_SELF_TEST_OK.
+
+B-SEC-23P1G correccion final confirmada
+
+El snapshot de arbol de procesos valida Process32NextW hasta ERROR_NO_MORE_FILES=18. Cualquier terminacion distinta se considera error estructurado y no captura parcial valida. El resultado expone QuerySucceeded, ApiSuccess, ErrorCode, Rows, ParentByPid, ProcessIds y RowCount.
+
+La pertenencia del postmaster al arbol exige que el PID esperado exista en el snapshot y en ProcessEvidence como AUTHORIZED_PACKAGE_PROCESS. Test-ProcessBelongsToPostmasterTree ya no suple la ausencia del PID raiz. El arbol exacto requiere RowCount positivo, todos los PID autorizados presentes en snapshot, cero OutsideTree, cero OTHER y cero AMBIGUOUS.
+
+Los estados activos contradictorios validan primero el payload especifico con Assert-LifecycleStatePayloadExact. recover_start_preparing conserva y valida recover_origin_stale o recover_origin_stopped; recover_start_pidfile_removed solo acepta recover_origin_stale. running y runtime_running_state_stale con runtime fisico detenido y pg_controldata SHUT_DOWN clasifican STOPPED_RUNTIME_STATE_STALE_EXACT para que RecoverStart reconcilie a stopped sin arrancar en esa ejecucion.
+
+El doble fallo real de Stop queda cubierto desde RUNNING_EXACT y RUNTIME_RUNNING_STATE_STALE_EXACT. StopServer se invoca, stopped falla, stopped_runtime_state_stale falla, RuntimeState queda stopped, SafeErrorCode queda stop_state_write_failed, ReconciliationRequired queda true y StateWrites conserva ambas escrituras en orden.
+
+Las pruebas negativas P1G cubren Process32NextW parcial, membresia de postmaster en snapshot, mutaciones de payload contradictorio, reparse mediante helper/inyeccion segura, lifecycle_acl_unreadable, lifecycle_package_unverified y mutacion de hash en archivo temporal controlado. El paquete PostgreSQL real no se modifica.
+
+El motor ya no expone ProbeOnly. Usa allowlist interna por operacion y preserva lifecycle_exact_state_invalid, recover_start_not_allowed y stop_not_allowed sin colapsarlos a errores genericos.
+B-SEC-23P1H revision ChatGPT PowerShell
+
+La revision independiente posterior a P1G endurece la validacion exacta de los payloads recover_start_failed_no_server, runtime_running_state_stale y stopped_runtime_state_stale, incluyendo todos los flags de runtime y cleanup. Stop preserva lifecycle_exact_state_invalid y stop_not_allowed devueltos por el motor compartido. El SelfTest de payload cubre todos los estados transitorios y el SelfTest de reparse usa un junction temporal real; ningun archivo del paquete PostgreSQL real es modificado.

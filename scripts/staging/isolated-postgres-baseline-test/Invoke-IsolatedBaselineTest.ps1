@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan","Create","CleanupPartialCreate","CleanupFailedCreate","Apply","Verify","Destroy","FullTest")]
+  [ValidateSet("Plan","Create","CleanupPartialCreate","CleanupFailedCreate","RecoverStart","StartExisting","Stop","Apply","Verify","Destroy","FullTest")]
   [string]$Action = "Plan",
   [string]$PostgresBin = (Join-Path $env:LOCALAPPDATA "VotoClaro\PostgreSQL\17.10-complete\bin"),
   [int]$Port = 55432,
@@ -13,6 +13,10 @@ param(
   [string]$CleanupApprovalToken,
   [switch]$ConfirmCleanupFailedCreate,
   [string]$CleanupFailedCreateApprovalToken,
+  [switch]$ConfirmRecoverStart,
+  [string]$RecoverStartApprovalToken,
+  [switch]$ConfirmStop,
+  [string]$StopApprovalToken,
   [switch]$KeepOnSuccess,
   [switch]$SelfTest
 )
@@ -31,6 +35,8 @@ $script:LocalAdminUser = "vc_isolated_admin"
 $script:ExpectedCreateApprovalToken = "CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
 $script:ExpectedCleanupApprovalToken = "CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
 $script:ExpectedCleanupFailedCreateApprovalToken = "CLEANUP_FAILED_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432"
+$script:ExpectedRecoverStartApprovalToken = "RECOVER_START_VOTO_CLARO_ISOLATED_PG17_127001_55432"
+$script:ExpectedStopApprovalToken = "STOP_VOTO_CLARO_ISOLATED_PG17_127001_55432"
 $script:PostgresPackageRelativePath = "VotoClaro\PostgreSQL\17.10-complete"
 $script:IsolatedRootRelativePath = "VotoClaro\PostgreSQL\isolated-baseline-test"
 $script:InstanceName = "pg17-port55432"
@@ -45,6 +51,11 @@ $script:CreateStates = @(
   "running",
   "failed",
   "stopped",
+  "recover_start_preparing",
+  "recover_start_pidfile_removed",
+  "recover_start_failed_no_server",
+  "runtime_running_state_stale",
+  "stopped_runtime_state_stale",
   "destroy_pending"
 )
 $script:RequiredConfirmations = @{
@@ -66,6 +77,14 @@ $script:SafeCodes = @(
   "create_not_authorized",
   "cleanup_not_authorized",
   "cleanup_failed_not_authorized",
+  "recover_start_not_authorized",
+  "stop_not_authorized",
+  "recover_start_not_allowed",
+  "stop_not_allowed",
+  "lifecycle_state_invalid",
+  "lifecycle_exact_state_invalid",
+  "pg_isready_failed",
+  "pg_controldata_failed",
   "cleanup_failed_layout_failed",
   "cleanup_failed_environment_invalid",
   "cleanup_failed_git_invalid",
@@ -188,6 +207,9 @@ $script:SafeCodes = @(
   "pg_ctl_start_failed_server_stopped",
   "postgres_server_state_unresolved",
   "postgres_server_cleanup_failed",
+  "recover_start_state_write_failed",
+  "recover_start_pidfile_remove_failed",
+  "stop_state_write_failed",
   "postmaster_pid_missing",
   "postmaster_pid_invalid",
   "postmaster_dataroot_mismatch",
@@ -196,6 +218,8 @@ $script:SafeCodes = @(
   "listener_verification_failed",
   "process_output_drain_failed",
   "process_timeout_cleanup_failed",
+  "persistent_child_selftest_failed",
+  "persistent_child_wait_selftest_failed",
   "process_object_missing",
   "process_already_exited",
   "process_main_module_unavailable",
@@ -241,10 +265,22 @@ $script:SafeCodes = @(
   "destroy_refused",
   "action_not_approved",
   "admin_user_invalid",
+  "lifecycle_acl_unreadable",
+  "lifecycle_package_unverified",
   "unexpected_failure"
 )
 
 
+function Assert-TopLevelActionGuards {
+  param(
+    [Parameter(Mandatory = $true)][string]$RequestedAction,
+    [Parameter(Mandatory = $true)][bool]$SelfTestRequested,
+    [Parameter(Mandatory = $true)][bool]$KeepOnSuccessRequested
+  )
+  if ($SelfTestRequested -and $RequestedAction -ne "Plan") { Throw-SafeError -Code "action_not_approved" }
+  if ($KeepOnSuccessRequested -and $RequestedAction -ne "Create") { Throw-SafeError -Code "action_not_approved" }
+  return $true
+}
 function Set-Stage {
   param([Parameter(Mandatory = $true)][string]$Stage)
   $script:CurrentStage = $Stage
@@ -2302,9 +2338,14 @@ function Invoke-CleanupPartialCreate {
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
     [AllowNull()][string]$CreateApprovalToken,
     [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
-    [AllowNull()][string]$CleanupFailedCreateApprovalToken
+    [AllowNull()][string]$CleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$RecoverStartApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$StopApprovalToken
   )
   Set-Stage -Stage "cleanup_authorization"
+  if ($ConfirmRecoverStart -or -not [string]::IsNullOrWhiteSpace($RecoverStartApprovalToken) -or $ConfirmStop -or -not [string]::IsNullOrWhiteSpace($StopApprovalToken)) { Throw-SafeError -Code "cleanup_not_authorized" }
   Assert-CleanupAuthorization `
     -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
     -ProvidedCleanupApprovalToken $CleanupApprovalToken `
@@ -3106,9 +3147,14 @@ function Invoke-CleanupFailedCreate {
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
     [AllowNull()][string]$CreateApprovalToken,
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
-    [AllowNull()][string]$CleanupApprovalToken
+    [AllowNull()][string]$CleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$RecoverStartApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$StopApprovalToken
   )
   Set-Stage -Stage "cleanup_failed_authorization"
+  if ($ConfirmRecoverStart -or -not [string]::IsNullOrWhiteSpace($RecoverStartApprovalToken) -or $ConfirmStop -or -not [string]::IsNullOrWhiteSpace($StopApprovalToken)) { Throw-SafeError -Code "cleanup_failed_not_authorized" }
   Assert-CleanupFailedCreateAuthorization `
     -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
     -ProvidedCleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
@@ -4359,10 +4405,31 @@ function Read-PersistentProcessOutputTail {
   }
 }
 
+function Convert-PersistentChildNativeResult {
+  param(
+    [Parameter(Mandatory = $true)][int[]]$Native,
+    [Parameter(Mandatory = $true)][string]$ToolName
+  )
+  if ($Native.Count -lt 8) {
+    return [pscustomobject]@{ ExitCode = -1; TimedOut = $false; ProcessKilled = $false; Started = $false; WaitFailed = $true; ChildPid = 0; WaitResult = -9; ProcessExitConfirmed = $false; ProcessStateUnresolved = $true; Success = $false; SafeErrorCode = ($ToolName + "_process_state_unresolved") }
+  }
+  $exitCode = [int]$Native[0]
+  $timedOut = ([int]$Native[1] -eq 1)
+  $killed = ([int]$Native[2] -eq 1)
+  $started = ([int]$Native[3] -eq 1)
+  $waitFailed = ([int]$Native[4] -eq 1)
+  $childPid = [int]$Native[5]
+  $waitResult = [int]$Native[6]
+  $exitConfirmed = ([int]$Native[7] -eq 1)
+  $processStateUnresolved = ($waitFailed -or ($timedOut -and -not $exitConfirmed))
+  $success = ($started -and $exitConfirmed -and -not $timedOut -and -not $waitFailed -and $exitCode -eq 0)
+  $safeCode = if ($processStateUnresolved) { $ToolName + "_process_state_unresolved" } elseif ($timedOut) { $ToolName + "_timeout" } elseif (-not $started) { $ToolName + "_start_failed" } elseif (-not $success) { $ToolName + "_failed" } else { "none" }
+  return [pscustomobject]@{ ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; Started = $started; WaitFailed = $waitFailed; ChildPid = $childPid; WaitResult = $waitResult; ProcessExitConfirmed = $exitConfirmed; ProcessStateUnresolved = $processStateUnresolved; Success = $success; SafeErrorCode = $safeCode }
+}
 function Invoke-PersistentChildSafeProcess {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
-    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Arguments,
     [Parameter(Mandatory = $true)][string]$WorkingDirectory,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
@@ -4374,15 +4441,33 @@ function Invoke-PersistentChildSafeProcess {
   $workFull = [System.IO.Path]::GetFullPath($WorkingDirectory)
   $outFull = [System.IO.Path]::GetFullPath($OutputDirectory)
   if (-not (Test-IsInsideDirectory -ChildPath $outFull -ParentPath $workFull)) { Throw-SafeError -Code "postgres_tools_missing" }
-  $runId = [Guid]::NewGuid().ToString("N")
-  $stdoutPath = Join-Path $outFull ("persistent-child." + $runId + ".stdout.log")
-  $stderrPath = Join-Path $outFull ("persistent-child." + $runId + ".stderr.log")
+  $safeToolName = ([regex]::Replace($ToolName, '[^A-Za-z0-9_.-]', '_'))
+  if ([string]::IsNullOrWhiteSpace($safeToolName)) { $safeToolName = "tool" }
+  $stdoutPath = Join-Path $outFull ("persistent-child." + $safeToolName + ".stdout.log")
+  $stderrPath = Join-Path $outFull ("persistent-child." + $safeToolName + ".stderr.log")
+  foreach ($existingOutput in @($stdoutPath, $stderrPath)) {
+    if (Test-Path -LiteralPath $existingOutput -PathType Leaf) { [System.IO.File]::Delete($existingOutput) }
+  }
   if (-not ("VotoClaroPersistentChildProcess" -as [type])) {
     $sourceLines = @(
       'using System;',
       'using System.IO;',
       'using System.Runtime.InteropServices;',
       'public static class VotoClaroPersistentChildProcess {',
+      '  private const UInt32 STARTF_USESTDHANDLES = 0x00000100;',
+      '  private const UInt32 EXTENDED_STARTUPINFO_PRESENT = 0x00080000;',
+      '  private const UInt32 CREATE_NO_WINDOW = 0x08000000;',
+      '  private const UInt32 CREATE_NEW_PROCESS_GROUP = 0x00000200;',
+      '  private const UInt32 WAIT_OBJECT_0 = 0x00000000;',
+      '  private const UInt32 WAIT_TIMEOUT = 0x00000102;',
+      '  private const UInt32 WAIT_FAILED = 0xFFFFFFFF;',
+      '  private static readonly IntPtr PROC_THREAD_ATTRIBUTE_HANDLE_LIST = (IntPtr)0x00020002;',
+      '  private static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);',
+      '  private const UInt32 GENERIC_READ = 0x80000000;',
+      '  private const UInt32 FILE_SHARE_READ = 0x00000001;',
+      '  private const UInt32 FILE_SHARE_WRITE = 0x00000002;',
+      '  private const UInt32 OPEN_EXISTING = 3;',
+      '  private const UInt32 FILE_ATTRIBUTE_NORMAL = 0x00000080;',
       '  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct STARTUPINFO {',
       '    public UInt32 cb; public IntPtr lpReserved; public IntPtr lpDesktop; public IntPtr lpTitle;',
       '    public UInt32 dwX; public UInt32 dwY; public UInt32 dwXSize; public UInt32 dwYSize;',
@@ -4390,80 +4475,924 @@ function Invoke-PersistentChildSafeProcess {
       '    public UInt32 dwFlags; public UInt16 wShowWindow; public UInt16 cbReserved2;',
       '    public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError;',
       '  }',
-      '  [StructLayout(LayoutKind.Sequential)] public struct PROCESS_INFORMATION {',
-      '    public IntPtr hProcess; public IntPtr hThread; public UInt32 dwProcessId; public UInt32 dwThreadId;',
-      '  }',
-      '  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool CreateProcessW(string app, string cmd, IntPtr pa, IntPtr ta, bool inherit, UInt32 flags, IntPtr env, string cwd, ref STARTUPINFO si, out PROCESS_INFORMATION pi);',
-      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetStdHandle(Int32 n);',
+      '  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct STARTUPINFOEX { public STARTUPINFO StartupInfo; public IntPtr lpAttributeList; }',
+      '  [StructLayout(LayoutKind.Sequential)] public struct PROCESS_INFORMATION { public IntPtr hProcess; public IntPtr hThread; public UInt32 dwProcessId; public UInt32 dwThreadId; }',
+      '  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool CreateProcessW(string app, string cmd, IntPtr pa, IntPtr ta, bool inherit, UInt32 flags, IntPtr env, string cwd, ref STARTUPINFOEX si, out PROCESS_INFORMATION pi);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool UpdateProcThreadAttribute(IntPtr list, UInt32 flags, IntPtr attribute, IntPtr value, IntPtr size, IntPtr prev, IntPtr ret);',
+      '  [DllImport("kernel32.dll", SetLastError = true)] public static extern void DeleteProcThreadAttributeList(IntPtr list);',
       '  [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetCurrentProcess();',
       '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool DuplicateHandle(IntPtr sp, IntPtr sh, IntPtr tp, ref IntPtr th, UInt32 access, bool inherit, UInt32 opts);',
       '  [DllImport("kernel32.dll", SetLastError = true)] public static extern UInt32 WaitForSingleObject(IntPtr h, UInt32 ms);',
       '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool TerminateProcess(IntPtr h, UInt32 exitCode);',
       '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetExitCodeProcess(IntPtr h, out UInt32 exitCode);',
       '  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr h);',
-      '  private static string Quote(string value) {',
-      '    if (value == null) { value = String.Empty; }',
-      '    if (value.Length == 0) { return "\"\""; }',
-      '    bool needs = false;',
-      '    for (int i = 0; i < value.Length; i++) { char c = value[i]; if (Char.IsWhiteSpace(c) || c == ''"'') { needs = true; break; } }',
-      '    if (!needs) { return value; }',
-      '    System.Text.StringBuilder b = new System.Text.StringBuilder(); b.Append(''"''); int slash = 0;',
-      '    foreach (char c in value) {',
-      '      if (c == ''\\'') { slash++; continue; }',
-      '      if (c == ''"'') { b.Append(''\\'', slash * 2 + 1); b.Append(''"''); slash = 0; continue; }',
-      '      if (slash > 0) { b.Append(''\\'', slash); slash = 0; }',
-      '      b.Append(c);',
-      '    }',
-      '    if (slash > 0) { b.Append(''\\'', slash * 2); } b.Append(''"''); return b.ToString();',
-      '  }',
+      '  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern IntPtr CreateFileW(string name, UInt32 access, UInt32 share, IntPtr security, UInt32 creation, UInt32 flags, IntPtr template);',
+      '  private static bool IsValidHandle(IntPtr value) { return value != IntPtr.Zero && value != INVALID_HANDLE_VALUE; }',
+      '  public static string QuoteForSelfTest(string value) { return Quote(value); }',
+      '  private static string Quote(string value) { if (value == null) value = String.Empty; if (value.Length == 0) return "\"\""; bool needs = false; for (int i = 0; i < value.Length; i++) { char c = value[i]; if (Char.IsWhiteSpace(c) || c == ''"'') { needs = true; break; } } if (!needs) return value; System.Text.StringBuilder b = new System.Text.StringBuilder(); b.Append(''"''); int slash = 0; foreach (char c in value) { if (c == ''\\'') { slash++; continue; } if (c == ''"'') { b.Append(''\\'', slash * 2 + 1); b.Append(''"''); slash = 0; continue; } if (slash > 0) { b.Append(''\\'', slash); slash = 0; } b.Append(c); } if (slash > 0) { b.Append(''\\'', slash * 2); } b.Append(''"''); return b.ToString(); }',
+      '  private static bool DuplicateForChild(IntPtr source, ref IntPtr target) { if (!IsValidHandle(source)) return false; return DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(), ref target, 0, true, 2) && IsValidHandle(target); }',
       '  public static int[] Run(string file, string[] args, string cwd, string stdout, string stderr, int timeoutMs) {',
       '    string cmd = Quote(file); foreach (string a in args) { cmd += " " + Quote(a); }',
-      '    using (FileStream outStream = new FileStream(stdout, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))',
-      '    using (FileStream errStream = new FileStream(stderr, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) {',
-      '      IntPtr current = GetCurrentProcess(); IntPtr hIn = IntPtr.Zero; IntPtr hOut = IntPtr.Zero; IntPtr hErr = IntPtr.Zero;',
-      '      DuplicateHandle(current, GetStdHandle(-10), current, ref hIn, 0, true, 2);',
-      '      if (!DuplicateHandle(current, outStream.SafeFileHandle.DangerousGetHandle(), current, ref hOut, 0, true, 2)) { return new int[] { -1, 0, 0, 0 }; }',
-      '      if (!DuplicateHandle(current, errStream.SafeFileHandle.DangerousGetHandle(), current, ref hErr, 0, true, 2)) { if (hOut != IntPtr.Zero) CloseHandle(hOut); return new int[] { -1, 0, 0, 0 }; }',
-      '      STARTUPINFO si = new STARTUPINFO(); si.cb = (UInt32)Marshal.SizeOf(typeof(STARTUPINFO)); si.dwFlags = 0x00000100; si.hStdInput = hIn; si.hStdOutput = hOut; si.hStdError = hErr;',
-      '      PROCESS_INFORMATION pi; bool ok = CreateProcessW(file, cmd, IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, cwd, ref si, out pi);',
-      '      if (hIn != IntPtr.Zero) CloseHandle(hIn); if (hOut != IntPtr.Zero) CloseHandle(hOut); if (hErr != IntPtr.Zero) CloseHandle(hErr);',
-      '      if (!ok) { return new int[] { -1, 0, 0, 0 }; }',
-      '      if (pi.hThread != IntPtr.Zero) CloseHandle(pi.hThread);',
-      '      UInt32 wait = WaitForSingleObject(pi.hProcess, (UInt32)timeoutMs);',
-      '      if (wait == 258) { TerminateProcess(pi.hProcess, 1); CloseHandle(pi.hProcess); return new int[] { -1, 1, 1, 1 }; }',
-      '      UInt32 exitCode; if (!GetExitCodeProcess(pi.hProcess, out exitCode)) { CloseHandle(pi.hProcess); return new int[] { -1, 0, 0, 1 }; }',
-      '      CloseHandle(pi.hProcess); return new int[] { unchecked((int)exitCode), 0, 0, 1 };',
+      '    using (FileStream outStream = new FileStream(stdout, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) using (FileStream errStream = new FileStream(stderr, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) {',
+      '      IntPtr nulHandle = IntPtr.Zero; IntPtr hIn = IntPtr.Zero; IntPtr hOut = IntPtr.Zero; IntPtr hErr = IntPtr.Zero; IntPtr attr = IntPtr.Zero; GCHandle pinned = new GCHandle(); PROCESS_INFORMATION pi = new PROCESS_INFORMATION(); bool attrInitialized = false;',
+      '      try {',
+      '        nulHandle = CreateFileW("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero); if (!DuplicateForChild(nulHandle, ref hIn)) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; }',
+      '        if (!DuplicateForChild(outStream.SafeFileHandle.DangerousGetHandle(), ref hOut)) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; }',
+      '        if (!DuplicateForChild(errStream.SafeFileHandle.DangerousGetHandle(), ref hErr)) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; }',
+      '        IntPtr bytes = IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref bytes); if (bytes == IntPtr.Zero) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; }',
+      '        attr = Marshal.AllocHGlobal(bytes); if (!InitializeProcThreadAttributeList(attr, 1, 0, ref bytes)) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; } attrInitialized = true;',
+      '        IntPtr[] allowedHandles = new IntPtr[] { hIn, hOut, hErr }; pinned = GCHandle.Alloc(allowedHandles, GCHandleType.Pinned);',
+      '        for (int i = 0; i < allowedHandles.Length; i++) { if (!IsValidHandle(allowedHandles[i])) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; } }',
+      '        if (!UpdateProcThreadAttribute(attr, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, pinned.AddrOfPinnedObject(), (IntPtr)(IntPtr.Size * allowedHandles.Length), IntPtr.Zero, IntPtr.Zero)) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; }',
+      '        STARTUPINFOEX si = new STARTUPINFOEX(); si.StartupInfo.cb = (UInt32)Marshal.SizeOf(typeof(STARTUPINFOEX)); si.StartupInfo.dwFlags = STARTF_USESTDHANDLES; si.StartupInfo.hStdInput = hIn; si.StartupInfo.hStdOutput = hOut; si.StartupInfo.hStdError = hErr; si.lpAttributeList = attr;',
+      '        UInt32 flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP;',
+      '        bool ok = CreateProcessW(file, cmd, IntPtr.Zero, IntPtr.Zero, true, flags, IntPtr.Zero, cwd, ref si, out pi); if (!ok) { return new int[] { -1, 0, 0, 0, 0, 0, -2, 0 }; }',
+      '        UInt32 wait = WaitForSingleObject(pi.hProcess, (UInt32)timeoutMs);',
+      '        if (wait == WAIT_OBJECT_0) { UInt32 exitCode; if (!GetExitCodeProcess(pi.hProcess, out exitCode)) { return new int[] { -1, 0, 0, 1, 1, unchecked((int)pi.dwProcessId), unchecked((int)WAIT_FAILED), 0 }; } return new int[] { unchecked((int)exitCode), 0, 0, 1, 0, unchecked((int)pi.dwProcessId), unchecked((int)wait), 1 }; }',
+      '        if (wait == WAIT_TIMEOUT) { bool killed = TerminateProcess(pi.hProcess, 1); UInt32 stopped = WaitForSingleObject(pi.hProcess, 5000); return new int[] { -1, 1, killed ? 1 : 0, 1, stopped == WAIT_OBJECT_0 ? 0 : 1, unchecked((int)pi.dwProcessId), unchecked((int)stopped), stopped == WAIT_OBJECT_0 ? 1 : 0 }; }',
+      '        if (wait == WAIT_FAILED) { return new int[] { -1, 0, 0, 1, 1, unchecked((int)pi.dwProcessId), unchecked((int)WAIT_FAILED), 0 }; }',
+      '        return new int[] { -1, 0, 0, 1, 1, unchecked((int)pi.dwProcessId), unchecked((int)WAIT_FAILED), 0 };',
+      '      } finally { if (pinned.IsAllocated) pinned.Free(); if (attr != IntPtr.Zero) { if (attrInitialized) DeleteProcThreadAttributeList(attr); Marshal.FreeHGlobal(attr); } if (IsValidHandle(pi.hThread)) CloseHandle(pi.hThread); if (IsValidHandle(pi.hProcess)) CloseHandle(pi.hProcess); if (IsValidHandle(hIn)) CloseHandle(hIn); if (IsValidHandle(nulHandle)) CloseHandle(nulHandle); if (IsValidHandle(hOut)) CloseHandle(hOut); if (IsValidHandle(hErr)) CloseHandle(hErr); }',
       '    }',
       '  }',
       '}'
     )
-    Add-Type -TypeDefinition ($sourceLines -join "`r`n")
+    Add-Type -TypeDefinition ($sourceLines -join "
+")
   }
-  try {
-    $native = [VotoClaroPersistentChildProcess]::Run($FilePath, [string[]]$Arguments, $WorkingDirectory, $stdoutPath, $stderrPath, ($TimeoutSeconds * 1000))
-  } catch {
-    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $null; TimedOut = $false; ProcessKilled = $false; OutputDrainCompleted = $true; Success = $false; SafeErrorCode = ($ToolName + "_failed"); StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = ""; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
+  try { $native = [VotoClaroPersistentChildProcess]::Run($FilePath, [string[]]$Arguments, $WorkingDirectory, $stdoutPath, $stderrPath, ($TimeoutSeconds * 1000)) } catch {
+    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $null; TimedOut = $false; ProcessKilled = $false; OutputDrainCompleted = $true; ChildPid = 0; WaitResult = -9; ProcessStateUnresolved = $true; ProcessExitConfirmed = $false; Success = $false; SafeErrorCode = ($ToolName + "_failed"); StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = ""; PersistentChildStrategy = "STARTUPINFOEX_HANDLE_LIST_NO_WINDOW" }
   }
   $stdout = Read-PersistentProcessOutputTail -PathValue $stdoutPath
   $stderr = Read-PersistentProcessOutputTail -PathValue $stderrPath
-  $exitCode = [int]$native[0]
-  $timedOut = ([int]$native[1] -eq 1)
-  $killed = ([int]$native[2] -eq 1)
-  $started = ([int]$native[3] -eq 1)
-  $success = ($started -and -not $timedOut -and $exitCode -eq 0)
-  if (-not $started) { $success = $false }
-  if (-not $stdout.Ok -and -not $success) {
-    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; Success = $false; SafeErrorCode = $stdout.SafeErrorCode; StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = ""; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
-  }
-  if (-not $stderr.Ok -and -not $success) {
-    return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; Success = $false; SafeErrorCode = $stderr.SafeErrorCode; StdOut = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErr = ""; StdOutTailSanitized = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErrTailSanitized = ""; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
-  }
+  $interpretedNative = Convert-PersistentChildNativeResult -Native ([int[]]$native) -ToolName $ToolName
+  $exitCode = $interpretedNative.ExitCode
+  $timedOut = $interpretedNative.TimedOut
+  $killed = $interpretedNative.ProcessKilled
+  $started = $interpretedNative.Started
+  $waitFailed = $interpretedNative.WaitFailed
+  $childPid = $interpretedNative.ChildPid
+  $waitResult = $interpretedNative.WaitResult
+  $exitConfirmed = $interpretedNative.ProcessExitConfirmed
+  $processStateUnresolved = $interpretedNative.ProcessStateUnresolved
+  $success = $interpretedNative.Success
+  if (-not $stdout.Ok -and -not $success) { return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; ChildPid = $childPid; WaitResult = $waitResult; ProcessStateUnresolved = $processStateUnresolved; ProcessExitConfirmed = $exitConfirmed; Success = $false; SafeErrorCode = $stdout.SafeErrorCode; StdOut = ""; StdErr = ""; StdOutTailSanitized = ""; StdErrTailSanitized = ""; PersistentChildStrategy = "STARTUPINFOEX_HANDLE_LIST_NO_WINDOW" } }
+  if (-not $stderr.Ok -and -not $success) { return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; ChildPid = $childPid; WaitResult = $waitResult; ProcessStateUnresolved = $processStateUnresolved; ProcessExitConfirmed = $exitConfirmed; Success = $false; SafeErrorCode = $stderr.SafeErrorCode; StdOut = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErr = ""; StdOutTailSanitized = $(if ($stdout.Ok) { $stdout.Tail } else { "" }); StdErrTailSanitized = ""; PersistentChildStrategy = "STARTUPINFOEX_HANDLE_LIST_NO_WINDOW" } }
   $stdoutTail = if ($stdout.Ok) { $stdout.Tail } else { "" }
   $stderrTail = if ($stderr.Ok) { $stderr.Tail } else { "" }
-  $safeCode = if ($success) { "none" } elseif ($timedOut) { $ToolName + "_timeout" } else { $ToolName + "_failed" }
-  return [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; Success = $success; SafeErrorCode = $safeCode; StdOut = $stdoutTail; StdErr = $stderrTail; StdOutTailSanitized = $stdoutTail; StdErrTailSanitized = $stderrTail; PersistentChildStrategy = "FILE_REDIRECT_NATIVE" }
+  $safeCode = $interpretedNative.SafeErrorCode
+  $resultObject = [pscustomobject]@{ Tool = $ToolName; ExitCode = $exitCode; TimedOut = $timedOut; ProcessKilled = $killed; OutputDrainCompleted = $true; ChildPid = $childPid; WaitResult = $waitResult; ProcessStateUnresolved = $processStateUnresolved; ProcessExitConfirmed = $exitConfirmed; Success = $success; SafeErrorCode = $safeCode; StdOut = $stdoutTail; StdErr = $stderrTail; StdOutTailSanitized = $stdoutTail; StdErrTailSanitized = $stderrTail; PersistentChildStrategy = "STARTUPINFOEX_HANDLE_LIST_NO_WINDOW" }
+  foreach ($completedOutput in @($stdoutPath, $stderrPath)) {
+    try { if (Test-Path -LiteralPath $completedOutput -PathType Leaf) { [System.IO.File]::Delete($completedOutput) } } catch { }
+  }
+  return $resultObject
 }
 
+
+
+function Invoke-P1APersistentChildDynamicSelfTest {
+  $root = Join-Path ([System.IO.Path]::GetTempPath()) ("vc-p1a-persistent-" + [Guid]::NewGuid().ToString("N"))
+  try {
+    New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+    $outDir = Join-Path $root "out"
+    New-Item -ItemType Directory -Path $outDir -ErrorAction Stop | Out-Null
+    $psExe = Join-Path $PSHOME "powershell.exe"
+    if (-not (Test-Path -LiteralPath $psExe -PathType Leaf)) { Throw-SafeError -Code "persistent_child_selftest_failed" }
+    $compile = Invoke-PersistentChildSafeProcess -FilePath $psExe -Arguments @("-NoProfile", "-Command", "exit 0") -WorkingDirectory $root -OutputDirectory $outDir -TimeoutSeconds 10 -ToolName "p1a_compile"
+    if (-not $compile.Success -or -not ("VotoClaroPersistentChildProcess" -as [type])) { Throw-SafeError -Code "persistent_child_compile_selftest_failed" }
+    $quoteCases = @(
+      @{ Value = ""; Expected = '""' },
+      @{ Value = "space value"; Expected = '"space value"' },
+      @{ Value = 'quote"value'; Expected = '"quote\"value"' },
+      @{ Value = 'trail\'; Expected = 'trail\' }
+    )
+    foreach ($case in $quoteCases) {
+      $actual = [VotoClaroPersistentChildProcess]::QuoteForSelfTest([string]$case.Value)
+      if (-not [string]::Equals($actual, [string]$case.Expected, [System.StringComparison]::Ordinal)) { Throw-SafeError -Code "persistent_child_quote_selftest_failed" }
+    }
+    $scriptPath = Join-Path $root "args-check.ps1"
+    Write-Utf8NoBomFile -PathValue $scriptPath -Text 'foreach ($a in $args) { [Console]::Out.WriteLine("ARG=[" + $a + "]") }; [Console]::Error.WriteLine("ERR=controlled")'
+    $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath, "space value", 'quote"value', 'trail\', "")
+    $result = Invoke-PersistentChildSafeProcess -FilePath $psExe -Arguments $args -WorkingDirectory $root -OutputDirectory $outDir -TimeoutSeconds 20 -ToolName "p1a_quote"
+    if (-not $result.Success) { Throw-SafeError -Code "persistent_child_selftest_failed" }
+    foreach ($expectedLine in @("ARG=[space value]", 'ARG=[quote"value]', 'ARG=[trail\]', "ARG=[]")) {
+      if (-not $result.StdOut.Contains($expectedLine)) { Throw-SafeError -Code "persistent_child_arg_roundtrip_selftest_failed" }
+    }
+    if (-not $result.StdErr.Contains("ERR=controlled")) { Throw-SafeError -Code "persistent_child_stdio_selftest_failed" }
+    Write-Output "P1A_PERSISTENT_CHILD_COMPILE_SELF_TEST_OK"
+    Write-Output "P1A_PERSISTENT_CHILD_QUOTE_SELF_TEST_OK"
+    Write-Output "P1A_PERSISTENT_CHILD_STDIO_SELF_TEST_OK"
+  } finally {
+    if (Test-Path -LiteralPath $root) {
+      $outDir = Join-Path $root "out"
+      if (Test-Path -LiteralPath $outDir -PathType Container) {
+        foreach ($file in @(Get-ChildItem -LiteralPath $outDir -File -Force -ErrorAction SilentlyContinue)) { [System.IO.File]::Delete($file.FullName) }
+        [System.IO.Directory]::Delete($outDir, $false)
+      }
+      foreach ($file in @(Get-ChildItem -LiteralPath $root -File -Force -ErrorAction SilentlyContinue)) { [System.IO.File]::Delete($file.FullName) }
+      [System.IO.Directory]::Delete($root, $false)
+    }
+  }
+}
+
+function Assert-P1BSelfTestCondition {
+  param(
+    [Parameter(Mandatory = $true)][bool]$Condition,
+    [Parameter(Mandatory = $true)][string]$Code
+  )
+  if (-not $Condition) { Throw-SafeError -Code $Code }
+}
+
+function Test-P1BNativeWaitContractForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][bool]$Started,
+    [Parameter(Mandatory = $true)][bool]$TimedOut,
+    [Parameter(Mandatory = $true)][bool]$WaitFailed,
+    [Parameter(Mandatory = $true)][bool]$ExitConfirmed,
+    [Parameter(Mandatory = $true)][int]$ExitCode
+  )
+  $processStateUnresolved = ($WaitFailed -or ($TimedOut -and -not $ExitConfirmed))
+  $success = ($Started -and $ExitConfirmed -and -not $TimedOut -and -not $WaitFailed -and $ExitCode -eq 0)
+  $safeCode = if ($success) { "none" } elseif ($processStateUnresolved) { "p1b_wait_process_state_unresolved" } elseif ($TimedOut) { "p1b_wait_timeout" } else { "p1b_wait_failed" }
+  return [pscustomobject]@{ Success = $success; ProcessStateUnresolved = $processStateUnresolved; SafeErrorCode = $safeCode }
+}
+
+function Stop-P1BGrandchildForSelfTest {
+  param(
+    [Parameter(Mandatory = $true)][int]$ProcessId,
+    [Parameter(Mandatory = $true)][string]$ExpectedExecutable,
+    [Parameter(Mandatory = $true)][string]$MarkerPath
+  )
+  $process = $null
+  try {
+    $process = [System.Diagnostics.Process]::GetProcessById($ProcessId)
+    $pathResult = Get-ProcessExecutablePathCompatible -Process $process
+    Assert-P1BSelfTestCondition -Condition (Test-Path -LiteralPath $MarkerPath -PathType Leaf) -Code "persistent_child_selftest_failed"
+    if ($pathResult.Success) {
+      Assert-P1BSelfTestCondition -Condition ([string]::Equals((Convert-ToComparableExecutablePath -PathValue $pathResult.ExecutablePath), (Convert-ToComparableExecutablePath -PathValue $ExpectedExecutable), [System.StringComparison]::OrdinalIgnoreCase)) -Code "persistent_child_selftest_failed"
+    } else {
+      Assert-P1BSelfTestCondition -Condition ($process.ProcessName -eq "powershell") -Code "persistent_child_selftest_failed"
+    }
+    $process.Kill()
+    if (-not $process.WaitForExit(10000)) { Throw-SafeError -Code "persistent_child_selftest_failed" }
+  } catch [System.ArgumentException] {
+  } catch {
+    if ($_.Exception.Message -match "^VC_SAFE_REASON::") { throw }
+    Throw-SafeError -Code "persistent_child_selftest_failed"
+  } finally {
+    if ($null -ne $process) { $process.Dispose() }
+  }
+}
+
+function Ensure-P1DSentinelHandleType {
+  if ("VotoClaroP1DSentinelHandle" -as [type]) { return }
+  Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class VotoClaroP1DSentinelHandle {
+  [StructLayout(LayoutKind.Sequential)] public struct SECURITY_ATTRIBUTES { public int nLength; public IntPtr lpSecurityDescriptor; public bool bInheritHandle; }
+  [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern IntPtr CreateFileW(string name, UInt32 access, UInt32 share, ref SECURITY_ATTRIBUTES sa, UInt32 creation, UInt32 flags, IntPtr templateFile);
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr handle);
+  public static IntPtr OpenInheritableReadHandle(string path) { SECURITY_ATTRIBUTES sa = new SECURITY_ATTRIBUTES(); sa.nLength = Marshal.SizeOf(typeof(SECURITY_ATTRIBUTES)); sa.lpSecurityDescriptor = IntPtr.Zero; sa.bInheritHandle = true; return CreateFileW(path, 0x80000000, 0x00000001 | 0x00000002, ref sa, 3, 0x00000080, IntPtr.Zero); }
+}
+"@
+}
+
+function Invoke-RecoverStopTransitionEngine {
+  param(
+    [Parameter(Mandatory = $true)][ValidateSet("RecoverStart","Stop")][string]$Operation,
+    [Parameter(Mandatory = $true)][scriptblock]$Classify,
+    [Parameter(Mandatory = $true)][scriptblock]$Revalidate,
+    [Parameter(Mandatory = $true)][scriptblock]$WriteState,
+    [Parameter(Mandatory = $true)][scriptblock]$StartServer,
+    [Parameter(Mandatory = $true)][scriptblock]$StopServer,
+    [Parameter(Mandatory = $true)][scriptblock]$RemovePidfile,
+    [Parameter(Mandatory = $true)][scriptblock]$ResolveStartFailure
+  )
+  $ops = New-Object System.Collections.Generic.List[string]
+  $stateWrites = New-Object System.Collections.Generic.List[string]
+  $runtime = "unknown"
+  $destructive = $false
+  $startInvoked = $false
+  $stopInvoked = $false
+  $pidfileRemovalInvoked = $false
+  $pidfileRemovalSucceeded = $false
+  $classification = & $Classify
+  [void]$ops.Add("classify:" + [string]$classification.State)
+  $revalidated = & $Revalidate
+  [void]$ops.Add("revalidate:" + [string]$revalidated.State)
+
+  function New-RecoverStopEngineResult {
+    param(
+      [string]$FinalState,
+      [string]$RuntimeState,
+      [string]$SafeErrorCode,
+      [bool]$NeedsReconciliation,
+      [bool]$Reconciliable = $true
+    )
+    return [pscustomobject]@{
+      Operations=@($ops.ToArray())
+      InitialState=$classification.State
+      RevalidatedState=$revalidated.State
+      State=$FinalState
+      FinalLogicalState=$FinalState
+      Runtime=$RuntimeState
+      RuntimeState=$RuntimeState
+      SafeErrorCode=$SafeErrorCode
+      ReconciliationRequired=$NeedsReconciliation
+      StartInvoked=$startInvoked
+      StopInvoked=$stopInvoked
+      PidfileRemovalInvoked=$pidfileRemovalInvoked
+      PidfileRemovalSucceeded=$pidfileRemovalSucceeded
+      StateWrites=@($stateWrites.ToArray())
+      DestructiveOperationUsed=$destructive
+      Reconciliable=$Reconciliable
+    }
+  }
+
+  function Invoke-EngineWriteState {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    $result = & $WriteState $Name
+    [void]$stateWrites.Add($Name)
+    [void]$ops.Add("write:" + $Name + $(if (-not $result.Success) { ":failed" } else { "" }))
+    return $result
+  }
+
+  if ($classification.State -ne $revalidated.State) {
+    return (New-RecoverStopEngineResult -FinalState $classification.State -RuntimeState $runtime -SafeErrorCode "lifecycle_exact_state_invalid" -NeedsReconciliation $false -Reconciliable $false)
+  }
+  $recoverAllowedStates = @("STOPPED_CLEAN_EXACT","STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT","RECOVER_START_PREPARING_STALE_EXACT","RECOVER_START_PREPARING_STOPPED_EXACT","RECOVER_START_PIDFILE_REMOVED_EXACT","RECOVER_START_FAILED_NO_SERVER_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT","STOPPED_RUNTIME_STATE_STALE_EXACT")
+  $stopAllowedStates = @("RUNNING_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT")
+  if ($Operation -eq "RecoverStart" -and $recoverAllowedStates -notcontains $classification.State) {
+    return (New-RecoverStopEngineResult -FinalState $classification.State -RuntimeState $runtime -SafeErrorCode "recover_start_not_allowed" -NeedsReconciliation $false -Reconciliable $false)
+  }
+  if ($Operation -eq "Stop" -and $stopAllowedStates -notcontains $classification.State) {
+    return (New-RecoverStopEngineResult -FinalState $classification.State -RuntimeState $runtime -SafeErrorCode "stop_not_allowed" -NeedsReconciliation $false -Reconciliable $false)
+  }
+
+  if ($Operation -eq "RecoverStart") {
+    if ($classification.State -eq "RUNTIME_RUNNING_STATE_STALE_EXACT") {
+      $writeRunning = Invoke-EngineWriteState "running"
+      return (New-RecoverStopEngineResult -FinalState $(if ($writeRunning.Success) { "running" } else { "runtime_running_state_stale" }) -RuntimeState "running" -SafeErrorCode $(if ($writeRunning.Success) { "none" } else { "recover_start_state_write_failed" }) -NeedsReconciliation (-not $writeRunning.Success))
+    }
+    if ($classification.State -eq "STOPPED_RUNTIME_STATE_STALE_EXACT" -or $classification.State -eq "RECOVER_START_FAILED_NO_SERVER_EXACT") {
+      $writeStopped = Invoke-EngineWriteState "stopped"
+      return (New-RecoverStopEngineResult -FinalState $(if ($writeStopped.Success) { "stopped" } else { "stopped_runtime_state_stale_unwritten" }) -RuntimeState "stopped" -SafeErrorCode $(if ($writeStopped.Success) { "none" } else { "recover_start_state_write_failed" }) -NeedsReconciliation (-not $writeStopped.Success))
+    }
+    if ($classification.State -eq "STOPPED_CLEAN_EXACT" -or $classification.State -eq "STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT") {
+      $prep = Invoke-EngineWriteState "recover_start_preparing"
+      if (-not $prep.Success) { return (New-RecoverStopEngineResult -FinalState $classification.State -RuntimeState "stopped" -SafeErrorCode "recover_start_state_write_failed" -NeedsReconciliation $true) }
+    }
+    if ($classification.State -eq "STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT" -or $classification.State -eq "RECOVER_START_PREPARING_STALE_EXACT") {
+      $pidfileRemovalInvoked = $true
+      $removed = & $RemovePidfile
+      $destructive = $true
+      $pidfileRemovalSucceeded = [bool]$removed.Success
+      [void]$ops.Add("delete:postmaster.pid" + $(if (-not $removed.Success) { ":failed" } else { "" }))
+      if (-not $removed.Success) { return (New-RecoverStopEngineResult -FinalState "recover_start_preparing" -RuntimeState "stopped" -SafeErrorCode "recover_start_pidfile_remove_failed" -NeedsReconciliation $true) }
+      $pidRemoved = Invoke-EngineWriteState "recover_start_pidfile_removed"
+      if (-not $pidRemoved.Success) { return (New-RecoverStopEngineResult -FinalState "recover_start_preparing" -RuntimeState "stopped" -SafeErrorCode "recover_start_state_write_failed" -NeedsReconciliation $true) }
+    }
+    if ($classification.State -eq "RECOVER_START_PREPARING_STOPPED_EXACT") {
+      [void]$ops.Add("origin:stopped:no-pidfile-removal")
+    }
+    $startInvoked = $true
+    $destructive = $true
+    $started = & $StartServer
+    [void]$ops.Add("start:" + $(if ($started.Success) { "success" } else { "failed" }))
+    if (-not $started.Success) {
+      $resolved = & $ResolveStartFailure
+      [void]$ops.Add("resolve:" + [string]$resolved.State)
+      if ($resolved.State -eq "VERIFIED_SERVER_RUNNING") {
+        $writeRecoveredRunning = Invoke-EngineWriteState "running"
+        return (New-RecoverStopEngineResult -FinalState $(if ($writeRecoveredRunning.Success) { "running" } else { "runtime_running_state_stale_unwritten" }) -RuntimeState "running" -SafeErrorCode $(if ($writeRecoveredRunning.Success) { "none" } else { "recover_start_state_write_failed" }) -NeedsReconciliation (-not $writeRecoveredRunning.Success))
+      }
+      if ($resolved.State -eq "NO_SERVER_EVIDENCE" -or $resolved.State -eq "VERIFIED_SERVER_STOPPED") {
+        $failed = Invoke-EngineWriteState "recover_start_failed_no_server"
+        return (New-RecoverStopEngineResult -FinalState $(if ($failed.Success) { "recover_start_failed_no_server" } else { "recover_start_failed_no_server_unwritten" }) -RuntimeState "stopped" -SafeErrorCode $(if ($failed.Success) { "pg_ctl_start_failed_no_server" } else { "recover_start_state_write_failed" }) -NeedsReconciliation $true)
+      }
+      if ($resolved.State -eq "VERIFIED_SERVER_STOP_FAILED") {
+        return (New-RecoverStopEngineResult -FinalState "server_stop_failed_after_start_failure" -RuntimeState "unresolved" -SafeErrorCode "postgres_server_cleanup_failed" -NeedsReconciliation $true)
+      }
+      return (New-RecoverStopEngineResult -FinalState "server_state_unresolved_after_start_failure" -RuntimeState "unresolved" -SafeErrorCode "postgres_server_state_unresolved" -NeedsReconciliation $true)
+    }
+    $running = Invoke-EngineWriteState "running"
+    if ($running.Success) { return (New-RecoverStopEngineResult -FinalState "running" -RuntimeState "running" -SafeErrorCode "none" -NeedsReconciliation $false) }
+    $stale = Invoke-EngineWriteState "runtime_running_state_stale"
+    return (New-RecoverStopEngineResult -FinalState $(if ($stale.Success) { "runtime_running_state_stale" } else { "runtime_running_state_stale_unwritten" }) -RuntimeState "running" -SafeErrorCode "recover_start_state_write_failed" -NeedsReconciliation $true)
+  }
+
+  $stopInvoked = $true
+  $destructive = $true
+  $stopped = & $StopServer
+  [void]$ops.Add("stop:" + $(if ($stopped.Success) { "success" } else { "failed" }))
+  if (-not $stopped.Success) { return (New-RecoverStopEngineResult -FinalState "running" -RuntimeState "running" -SafeErrorCode "postgres_server_cleanup_failed" -NeedsReconciliation $true) }
+  $writeStoppedFinal = Invoke-EngineWriteState "stopped"
+  if ($writeStoppedFinal.Success) { return (New-RecoverStopEngineResult -FinalState "stopped" -RuntimeState "stopped" -SafeErrorCode "none" -NeedsReconciliation $false) }
+  $writeStoppedStale = Invoke-EngineWriteState "stopped_runtime_state_stale"
+  return (New-RecoverStopEngineResult -FinalState $(if ($writeStoppedStale.Success) { "stopped_runtime_state_stale" } else { "stopped_runtime_state_stale_unwritten" }) -RuntimeState "stopped" -SafeErrorCode "stop_state_write_failed" -NeedsReconciliation $true)
+}
+function Invoke-P1DRecoverStopHarnessCase {
+  param([Parameter(Mandatory = $true)][string]$Case)
+  $initialState = "STOPPED_CLEAN_EXACT"
+  $operation = "RecoverStart"
+  $startSuccess = $true
+  $stopSuccess = $true
+  $removeSuccess = $true
+  $resolveState = "NO_SERVER_EVIDENCE"
+  $writeFailures = @{}
+  switch ($Case) {
+    "recover_stopped_success" { $initialState = "STOPPED_CLEAN_EXACT" }
+    "recover_stale_success" { $initialState = "STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT" }
+    "recover_interrupted_after_pid_delete" { $initialState = "RECOVER_START_PREPARING_STALE_EXACT"; $startSuccess = $false; $writeFailures["recover_start_failed_no_server"] = $true }
+    "recover_start_failure_reconciled" { $initialState = "RECOVER_START_PIDFILE_REMOVED_EXACT"; $startSuccess = $false }
+    "recover_state_write_failure" { $initialState = "STOPPED_CLEAN_EXACT"; $writeFailures["running"] = $true }
+    "double_write_failure_running" { $initialState = "STOPPED_CLEAN_EXACT"; $writeFailures["running"] = $true; $writeFailures["runtime_running_state_stale"] = $true }
+    "double_write_failure_stopped" { $operation = "Stop"; $initialState = "RUNNING_EXACT"; $stopSuccess = $true; $writeFailures["stopped"] = $true; $writeFailures["stopped_runtime_state_stale"] = $true }
+    "double_write_failure_stop_runtime_stale" { $operation = "Stop"; $initialState = "RUNTIME_RUNNING_STATE_STALE_EXACT"; $stopSuccess = $true; $writeFailures["stopped"] = $true; $writeFailures["stopped_runtime_state_stale"] = $true }
+    "remove_pidfile_failure" { $initialState = "STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT"; $removeSuccess = $false }
+    "start_unresolved" { $initialState = "RECOVER_START_PIDFILE_REMOVED_EXACT"; $startSuccess = $false; $resolveState = "SERVER_STATE_UNRESOLVED" }
+    "origin_stopped_interrupted" { $initialState = "RECOVER_START_PREPARING_STOPPED_EXACT" }
+    "origin_stale_interrupted" { $initialState = "RECOVER_START_PREPARING_STALE_EXACT" }
+    "stop_success" { $operation = "Stop"; $initialState = "RUNNING_EXACT" }
+    "stop_failure" { $operation = "Stop"; $initialState = "RUNNING_EXACT"; $stopSuccess = $false }
+    "stop_state_write_failure" { $operation = "Stop"; $initialState = "RUNNING_EXACT"; $writeFailures["stopped"] = $true }
+    default { Throw-SafeError -Code "persistent_child_selftest_failed" }
+  }
+  $classify = { [pscustomobject]@{ State=$initialState } }.GetNewClosure()
+  $revalidate = { [pscustomobject]@{ State=$initialState } }.GetNewClosure()
+  $writeState = { param([string]$Name) [pscustomobject]@{ Success = (-not $writeFailures.ContainsKey($Name)) } }.GetNewClosure()
+  $startServer = { [pscustomobject]@{ Success = $startSuccess } }.GetNewClosure()
+  $stopServer = { [pscustomobject]@{ Success = $stopSuccess } }.GetNewClosure()
+  $removePidfile = { [pscustomobject]@{ Success = $removeSuccess } }.GetNewClosure()
+  $resolveStart = { [pscustomobject]@{ State = $resolveState } }.GetNewClosure()
+  $result = Invoke-RecoverStopTransitionEngine -Operation $operation -Classify $classify -Revalidate $revalidate -WriteState $writeState -StartServer $startServer -StopServer $stopServer -RemovePidfile $removePidfile -ResolveStartFailure $resolveStart
+  return [pscustomobject]@{ Case=$Case; Operations=$result.Operations; State=$result.State; Runtime=$result.Runtime; RuntimeState=$result.RuntimeState; SafeErrorCode=$result.SafeErrorCode; ReconciliationRequired=$result.ReconciliationRequired; StartInvoked=$result.StartInvoked; StopInvoked=$result.StopInvoked; PidfileRemovalInvoked=$result.PidfileRemovalInvoked; PidfileRemovalSucceeded=$result.PidfileRemovalSucceeded; StateWrites=$result.StateWrites; DestructiveOperationUsed=$result.DestructiveOperationUsed; Reconciliable=$result.Reconciliable }
+}
+function Assert-P1DHarnessCase {
+  param(
+    [Parameter(Mandatory = $true)][object]$Result,
+    [Parameter(Mandatory = $true)][string]$ExpectedState,
+    [Parameter(Mandatory = $true)][string]$ExpectedRuntime,
+    [Parameter(Mandatory = $true)][string]$RequiredOperation,
+    [bool]$ExpectedDestructive = $true
+  )
+  Assert-P1BSelfTestCondition -Condition ($Result.State -eq $ExpectedState) -Code "lifecycle_exact_state_invalid"
+  Assert-P1BSelfTestCondition -Condition ($Result.Runtime -eq $ExpectedRuntime) -Code "postgres_server_state_unresolved"
+  Assert-P1BSelfTestCondition -Condition ($Result.Operations -contains $RequiredOperation) -Code "lifecycle_exact_state_invalid"
+  Assert-P1BSelfTestCondition -Condition ([bool]$Result.DestructiveOperationUsed -eq $ExpectedDestructive) -Code "lifecycle_exact_state_invalid"
+}
+function Invoke-P1DAuthorizationMatrixSelfTest {
+  $tokens = @{
+    Create = $script:ExpectedCreateApprovalToken
+    CleanupPartialCreate = $script:ExpectedCleanupApprovalToken
+    CleanupFailedCreate = $script:ExpectedCleanupFailedCreateApprovalToken
+    RecoverStart = $script:ExpectedRecoverStartApprovalToken
+    Stop = $script:ExpectedStopApprovalToken
+  }
+  function Invoke-P1EAuthorizationTestCase {
+    param(
+      [Parameter(Mandatory = $true)][string]$Action,
+      [Parameter(Mandatory = $true)][hashtable]$Switches,
+      [Parameter(Mandatory = $true)][hashtable]$ProvidedTokens
+    )
+    if (@("Create","CleanupPartialCreate","CleanupFailedCreate") -contains $Action -and (($Switches.ContainsKey("RecoverStart") -and [bool]$Switches.RecoverStart) -or ($Switches.ContainsKey("Stop") -and [bool]$Switches.Stop) -or -not [string]::IsNullOrEmpty([string]$ProvidedTokens.RecoverStart) -or -not [string]::IsNullOrEmpty([string]$ProvidedTokens.Stop))) { return [pscustomobject]@{ Authorized = $false; Reason = "foreign_runtime_authorization_present" } }
+    switch ($Action) {
+      "Create" { return Test-CreateAuthorization -ConfirmCreate:([bool]$Switches.Create) -ProvidedCreateApprovalToken $ProvidedTokens.Create -ExpectedCreateApprovalToken $script:ExpectedCreateApprovalToken -ConfirmCleanupPartialCreate:([bool]$Switches.CleanupPartialCreate) -ProvidedCleanupApprovalToken $ProvidedTokens.CleanupPartialCreate -ConfirmCleanupFailedCreate:([bool]$Switches.CleanupFailedCreate) -ProvidedCleanupFailedCreateApprovalToken $ProvidedTokens.CleanupFailedCreate }
+      "CleanupPartialCreate" { return Test-CleanupAuthorization -ConfirmCleanupPartialCreate:([bool]$Switches.CleanupPartialCreate) -ProvidedCleanupApprovalToken $ProvidedTokens.CleanupPartialCreate -ExpectedCleanupApprovalToken $script:ExpectedCleanupApprovalToken -ConfirmCreate:([bool]$Switches.Create) -ProvidedCreateApprovalToken $ProvidedTokens.Create -ConfirmCleanupFailedCreate:([bool]$Switches.CleanupFailedCreate) -ProvidedCleanupFailedCreateApprovalToken $ProvidedTokens.CleanupFailedCreate }
+      "CleanupFailedCreate" { return Test-CleanupFailedCreateAuthorization -ConfirmCleanupFailedCreate:([bool]$Switches.CleanupFailedCreate) -ProvidedCleanupFailedCreateApprovalToken $ProvidedTokens.CleanupFailedCreate -ExpectedCleanupFailedCreateApprovalToken $script:ExpectedCleanupFailedCreateApprovalToken -ConfirmCreate:([bool]$Switches.Create) -ProvidedCreateApprovalToken $ProvidedTokens.Create -ConfirmCleanupPartialCreate:([bool]$Switches.CleanupPartialCreate) -ProvidedCleanupApprovalToken $ProvidedTokens.CleanupPartialCreate }
+      "RecoverStart" { return Test-RecoverStartAuthorization -ConfirmRecoverStart:([bool]$Switches.RecoverStart) -ProvidedRecoverStartApprovalToken $ProvidedTokens.RecoverStart -ExpectedRecoverStartApprovalToken $script:ExpectedRecoverStartApprovalToken -ConfirmCreate:([bool]$Switches.Create) -ProvidedCreateApprovalToken $ProvidedTokens.Create -ConfirmCleanupPartialCreate:([bool]$Switches.CleanupPartialCreate) -ProvidedCleanupApprovalToken $ProvidedTokens.CleanupPartialCreate -ConfirmCleanupFailedCreate:([bool]$Switches.CleanupFailedCreate) -ProvidedCleanupFailedCreateApprovalToken $ProvidedTokens.CleanupFailedCreate -ConfirmStop:([bool]$Switches.Stop) -ProvidedStopApprovalToken $ProvidedTokens.Stop }
+      "Stop" { return Test-StopAuthorization -ConfirmStop:([bool]$Switches.Stop) -ProvidedStopApprovalToken $ProvidedTokens.Stop -ExpectedStopApprovalToken $script:ExpectedStopApprovalToken -ConfirmCreate:([bool]$Switches.Create) -ProvidedCreateApprovalToken $ProvidedTokens.Create -ConfirmCleanupPartialCreate:([bool]$Switches.CleanupPartialCreate) -ProvidedCleanupApprovalToken $ProvidedTokens.CleanupPartialCreate -ConfirmCleanupFailedCreate:([bool]$Switches.CleanupFailedCreate) -ProvidedCleanupFailedCreateApprovalToken $ProvidedTokens.CleanupFailedCreate -ConfirmRecoverStart:([bool]$Switches.RecoverStart) -ProvidedRecoverStartApprovalToken $ProvidedTokens.RecoverStart }
+    }
+    Throw-SafeError -Code "action_not_approved"
+  }
+  $actions = @("Create","CleanupPartialCreate","CleanupFailedCreate","RecoverStart","Stop")
+  foreach ($actionName in $actions) {
+    $switches = @{}; $provided = @{}
+    foreach ($name in $actions) { $switches[$name] = $false; $provided[$name] = $null }
+    $switches[$actionName] = $true; $provided[$actionName] = $tokens[$actionName]
+    $own = Invoke-P1EAuthorizationTestCase -Action $actionName -Switches $switches -ProvidedTokens $provided
+    Assert-P1BSelfTestCondition -Condition $own.Authorized -Code "action_not_approved"
+    foreach ($foreignSwitch in @($actions | Where-Object { $_ -ne $actionName })) {
+      $switches2 = @{}; $provided2 = @{}
+      foreach ($name in $actions) { $switches2[$name] = $false; $provided2[$name] = $null }
+      $switches2[$actionName] = $true; $provided2[$actionName] = $tokens[$actionName]; $switches2[$foreignSwitch] = $true
+      $crossSwitch = Invoke-P1EAuthorizationTestCase -Action $actionName -Switches $switches2 -ProvidedTokens $provided2
+      Assert-P1BSelfTestCondition -Condition (-not $crossSwitch.Authorized) -Code "action_not_approved"
+    }
+    foreach ($foreignToken in @($actions | Where-Object { $_ -ne $actionName })) {
+      $switches3 = @{}; $provided3 = @{}
+      foreach ($name in $actions) { $switches3[$name] = $false; $provided3[$name] = $null }
+      $switches3[$actionName] = $true; $provided3[$actionName] = $tokens[$foreignToken]
+      $crossToken = Invoke-P1EAuthorizationTestCase -Action $actionName -Switches $switches3 -ProvidedTokens $provided3
+      Assert-P1BSelfTestCondition -Condition (-not $crossToken.Authorized) -Code "action_not_approved"
+    }
+  }
+  [void](Assert-TopLevelActionGuards -RequestedAction "Plan" -SelfTestRequested $true -KeepOnSuccessRequested $false)
+  [void](Assert-TopLevelActionGuards -RequestedAction "Create" -SelfTestRequested $false -KeepOnSuccessRequested $true)
+  $guardRejected = 0
+  foreach ($guardCase in @(@{ Action="Create"; SelfTest=$true; Keep=$false }, @{ Action="Stop"; SelfTest=$false; Keep=$true }, @{ Action="CleanupFailedCreate"; SelfTest=$true; Keep=$true })) {
+    try { [void](Assert-TopLevelActionGuards -RequestedAction $guardCase.Action -SelfTestRequested ([bool]$guardCase.SelfTest) -KeepOnSuccessRequested ([bool]$guardCase.Keep)) } catch { if ((Get-SafeReason -ErrorRecord $_) -eq "action_not_approved") { $guardRejected += 1 } else { throw } }
+  }
+  Assert-P1BSelfTestCondition -Condition ($guardRejected -eq 3) -Code "action_not_approved"
+}
+function Invoke-P1DNegativeRuntimeContractSelfTest {
+  $base = Join-Path ([System.IO.Path]::GetTempPath()) ("vc-p1d-contract-" + [Guid]::NewGuid().ToString("N"))
+  try {
+    $layout = [pscustomobject]@{
+      IsolatedRoot = $base; InstanceRoot = Join-Path $base $script:InstanceName; DataRoot = Join-Path (Join-Path $base $script:InstanceName) "data";
+      StateRoot = Join-Path (Join-Path $base $script:InstanceName) "state"; LogRoot = Join-Path (Join-Path $base $script:InstanceName) "logs"; SecretRoot = Join-Path (Join-Path $base $script:InstanceName) "secrets";
+      StatePath = Join-Path (Join-Path (Join-Path $base $script:InstanceName) "state") "cluster-state.json"; MarkerPath = Join-Path (Join-Path (Join-Path $base $script:InstanceName) "state") $script:MarkerFileName;
+      CredentialPath = Join-Path (Join-Path (Join-Path $base $script:InstanceName) "secrets") "vc_isolated_admin.dpapi"; PasswordFilePath = Join-Path (Join-Path (Join-Path $base $script:InstanceName) "secrets") "initdb-password.tmp"; ServerLog = Join-Path (Join-Path (Join-Path $base $script:InstanceName) "logs") "postgresql-server.log"
+    }
+    [System.IO.Directory]::CreateDirectory($layout.InstanceRoot) | Out-Null
+    $cases = @(
+      @{ Name="unexpected-state"; Dir=$layout.StateRoot; Path=(Join-Path $layout.StateRoot "unexpected.txt") },
+      @{ Name="persistent-incomplete"; Dir=$layout.StateRoot; Path=(Join-Path $layout.StateRoot "persistent-child.pg_ctl_start.stdout.log") },
+      @{ Name="unauthorized-prefix"; Dir=$layout.StateRoot; Path=(Join-Path $layout.StateRoot "child-output.txt") },
+      @{ Name="log-extra"; Dir=$layout.LogRoot; Path=(Join-Path $layout.LogRoot "extra.log") },
+      @{ Name="secret-extra"; Dir=$layout.SecretRoot; Path=(Join-Path $layout.SecretRoot "extra.secret") }
+    )
+    foreach ($case in $cases) {
+      [System.IO.Directory]::CreateDirectory($case.Dir) | Out-Null
+      Write-Utf8NoBomFile -PathValue $case.Path -Text "bad"
+      $rejected = $false
+      try { Assert-ControlDirectoryContractsExact -Layout $layout } catch { if (@("lifecycle_exact_state_invalid","cleanup_unexpected_content","cleanup_instance_not_empty","cleanup_enumeration_failed","cleanup_failed_exact_state_invalid") -contains (Get-SafeReason -ErrorRecord $_)) { $rejected = $true } else { throw } }
+      Assert-P1BSelfTestCondition -Condition $rejected -Code "lifecycle_exact_state_invalid"
+      [System.IO.File]::Delete($case.Path)
+      [System.IO.Directory]::Delete($case.Dir,$false)
+    }
+    [System.IO.Directory]::CreateDirectory($layout.StateRoot) | Out-Null
+    Write-Utf8NoBomFile -PathValue (Join-Path $layout.StateRoot "persistent-child.a.stdout.log") -Text "a"
+    Write-Utf8NoBomFile -PathValue (Join-Path $layout.StateRoot "persistent-child.a.stderr.log") -Text "a"
+    Write-Utf8NoBomFile -PathValue (Join-Path $layout.StateRoot "persistent-child.b.stdout.log") -Text "b"
+    Write-Utf8NoBomFile -PathValue (Join-Path $layout.StateRoot "persistent-child.b.stderr.log") -Text "b"
+    $multiRejected = $false
+    try { Assert-ControlDirectoryContractsExact -Layout $layout } catch { if (@("lifecycle_exact_state_invalid","cleanup_unexpected_content","cleanup_instance_not_empty","cleanup_enumeration_failed","cleanup_failed_exact_state_invalid") -contains (Get-SafeReason -ErrorRecord $_)) { $multiRejected = $true } else { throw } }
+    Assert-P1BSelfTestCondition -Condition $multiRejected -Code "lifecycle_exact_state_invalid"
+
+    $postmasterIdentity = [pscustomobject]@{ Pid = 101; ExecutablePath = "C:\\vc\\postgres.exe"; StartTimeUtc = [datetime]::UtcNow }
+    $authorizedEvidence = [pscustomobject]@{ Records = @([pscustomobject]@{ Classification="AUTHORIZED_PACKAGE_PROCESS"; Pid=101 }); AuthorizedCount=1; OtherCount=0; AmbiguousCount=0 }
+    $snapshotFailed = Get-PostgresProcessTreeEvidence -ProcessEvidence $authorizedEvidence -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$false; ErrorCode=5; Rows=@() })
+    Assert-P1BSelfTestCondition -Condition ((-not $snapshotFailed.QuerySucceeded) -and (-not $snapshotFailed.Exact) -and $snapshotFailed.AmbiguousCount -gt 0 -and (-not ($snapshotFailed.TreePids -contains 101))) -Code "postgres_process_unverified"
+    $snapshotMalformed = Get-PostgresProcessTreeEvidence -ProcessEvidence $authorizedEvidence -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("malformed") })
+    Assert-P1BSelfTestCondition -Condition ((-not $snapshotMalformed.QuerySucceeded) -and (-not $snapshotMalformed.Exact) -and $snapshotMalformed.AmbiguousCount -gt 0) -Code "postgres_process_unverified"
+    $outsideEvidence = [pscustomobject]@{ Records = @([pscustomobject]@{ Classification="AUTHORIZED_PACKAGE_PROCESS"; Pid=101 }, [pscustomobject]@{ Classification="AUTHORIZED_PACKAGE_PROCESS"; Pid=202 }); AuthorizedCount=2; OtherCount=0; AmbiguousCount=0 }
+    $outsideTree = Get-PostgresProcessTreeEvidence -ProcessEvidence $outsideEvidence -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("101:1","202:999") })
+    Assert-P1BSelfTestCondition -Condition ($outsideTree.QuerySucceeded -and (-not $outsideTree.Exact) -and $outsideTree.OutsideTreeCount -eq 1) -Code "postgres_process_unverified"
+    $otherEvidence = [pscustomobject]@{ Records = @([pscustomobject]@{ Classification="AUTHORIZED_PACKAGE_PROCESS"; Pid=101 }, [pscustomobject]@{ Classification="OTHER_POSTGRES_PROCESS"; Pid=303 }); AuthorizedCount=1; OtherCount=1; AmbiguousCount=0 }
+    $otherTree = Get-PostgresProcessTreeEvidence -ProcessEvidence $otherEvidence -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("101:1") })
+    Assert-P1BSelfTestCondition -Condition ($otherTree.QuerySucceeded -and (-not $otherTree.Exact) -and $otherTree.OtherCount -eq 1) -Code "postgres_process_unverified"
+    $ambiguousEvidence = [pscustomobject]@{ Records = @([pscustomobject]@{ Classification="AUTHORIZED_PACKAGE_PROCESS"; Pid=101 }, [pscustomobject]@{ Classification="AMBIGUOUS_POSTGRES_PROCESS"; Pid=404 }); AuthorizedCount=1; OtherCount=0; AmbiguousCount=1 }
+    $ambiguousTree = Get-PostgresProcessTreeEvidence -ProcessEvidence $ambiguousEvidence -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("101:1") })
+    Assert-P1BSelfTestCondition -Condition ($ambiguousTree.QuerySucceeded -and (-not $ambiguousTree.Exact) -and $ambiguousTree.AmbiguousCount -eq 1) -Code "postgres_process_unverified"
+    $missingPostmasterEvidence = [pscustomobject]@{ Records = @([pscustomobject]@{ Classification="AUTHORIZED_PACKAGE_PROCESS"; Pid=202 }); AuthorizedCount=1; OtherCount=0; AmbiguousCount=0 }
+    $missingPostmasterTree = Get-PostgresProcessTreeEvidence -ProcessEvidence $missingPostmasterEvidence -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("202:101") })
+    Assert-P1BSelfTestCondition -Condition ($missingPostmasterTree.QuerySucceeded -and (-not $missingPostmasterTree.Exact) -and (-not ($missingPostmasterTree.TreePids -contains 101))) -Code "postgres_process_unverified"
+    Write-Output "P1F_NEGATIVE_RUNTIME_CONTRACT_SELF_TEST_OK"
+  } finally {
+    if (Test-Path -LiteralPath $base) {
+      foreach ($file in @(Get-ChildItem -LiteralPath $base -Recurse -File -Force -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)) { [System.IO.File]::Delete($file.FullName) }
+      foreach ($dir in @(Get-ChildItem -LiteralPath $base -Recurse -Directory -Force -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)) { [System.IO.Directory]::Delete($dir.FullName,$false) }
+      [System.IO.Directory]::Delete($base,$false)
+    }
+  }
+}
+function Invoke-P1GProcessTreeSelfTest {
+  $createFailed = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$false; ErrorCode=5; Rows=@() })
+  Assert-P1BSelfTestCondition -Condition ((-not $createFailed.QuerySucceeded) -and $createFailed.ErrorCode -eq 5 -and $createFailed.RowCount -eq 0) -Code "postgres_process_unverified"
+  $firstFailed = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$false; ErrorCode=87; Rows=@() })
+  Assert-P1BSelfTestCondition -Condition ((-not $firstFailed.QuerySucceeded) -and $firstFailed.ErrorCode -eq 87 -and $firstFailed.RowCount -eq 0) -Code "postgres_process_unverified"
+  $nextPartialFailed = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$false; ErrorCode=123; Rows=@("101:1") })
+  Assert-P1BSelfTestCondition -Condition ((-not $nextPartialFailed.QuerySucceeded) -and $nextPartialFailed.ErrorCode -eq 123 -and $nextPartialFailed.RowCount -eq 0) -Code "postgres_process_unverified"
+  $normalEof = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("101:1","202:101") })
+  Assert-P1BSelfTestCondition -Condition ($normalEof.QuerySucceeded -and $normalEof.RowCount -eq 2 -and ($normalEof.ProcessIds -contains 101) -and ($normalEof.ProcessIds -contains 202)) -Code "postgres_process_unverified"
+  Write-Output "P1G_PROCESS32NEXT_PARTIAL_FAILURE_SELF_TEST_OK"
+
+  $postmasterIdentity = [pscustomobject]@{ Pid = 101; ExecutablePath = "C:\\vc\\postgres.exe"; StartTimeUtc = [datetime]::UtcNow }
+  $processEvidenceHasPostmaster = [pscustomobject]@{ Records = @([pscustomobject]@{ Classification="AUTHORIZED_PACKAGE_PROCESS"; Pid=101 }); AuthorizedCount=1; OtherCount=0; AmbiguousCount=0 }
+  $missingSnapshotRoot = Get-PostgresProcessTreeEvidence -ProcessEvidence $processEvidenceHasPostmaster -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("202:1") })
+  Assert-P1BSelfTestCondition -Condition ($missingSnapshotRoot.QuerySucceeded -and (-not $missingSnapshotRoot.Exact) -and (-not ($missingSnapshotRoot.TreePids -contains 101))) -Code "postgres_process_unverified"
+  $exactSnapshotRoot = Get-PostgresProcessTreeEvidence -ProcessEvidence $processEvidenceHasPostmaster -PostmasterIdentity $postmasterIdentity -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("101:1") })
+  Assert-P1BSelfTestCondition -Condition ($exactSnapshotRoot.QuerySucceeded -and $exactSnapshotRoot.Exact -and ($exactSnapshotRoot.TreePids -contains 101)) -Code "postgres_process_unverified"
+  Write-Output "P1G_POSTMASTER_SNAPSHOT_MEMBERSHIP_SELF_TEST_OK"
+}
+
+function Invoke-P1GActiveContradictoryPayloadSelfTest {
+  $common = @{
+    postgres_major = "17"
+    postgres_version = "17.10"
+    host = "127.0.0.1"
+    port = 55432
+    admin_role = $script:LocalAdminUser
+    instance_name = $script:InstanceName
+    data_directory_name = "data"
+    initdb_completed = $true
+    configuration_completed = $true
+    credential_protected = $true
+    plaintext_password_file_present = $false
+  }
+
+  function New-P1GExactPayload {
+    param(
+      [Parameter(Mandatory = $true)][string]$State,
+      [Parameter(Mandatory = $true)][string]$Stage,
+      [Parameter(Mandatory = $true)][string]$ServerState,
+      [Parameter(Mandatory = $true)][bool]$ServerStarted,
+      [Parameter(Mandatory = $true)][bool]$CleanupAttempted,
+      [Parameter(Mandatory = $true)][bool]$CleanupCompleted,
+      [AllowNull()][object]$LastErrorCode
+    )
+
+    return [pscustomobject]@{
+      state = $State
+      stage = $Stage
+      server_state = $ServerState
+      last_error_code = $LastErrorCode
+      postgres_major = $common.postgres_major
+      postgres_version = $common.postgres_version
+      host = $common.host
+      port = $common.port
+      admin_role = $common.admin_role
+      instance_name = $common.instance_name
+      data_directory_name = $common.data_directory_name
+      initdb_completed = $common.initdb_completed
+      configuration_completed = $common.configuration_completed
+      server_started = $ServerStarted
+      credential_protected = $common.credential_protected
+      plaintext_password_file_present = $common.plaintext_password_file_present
+      server_cleanup_attempted = $CleanupAttempted
+      server_cleanup_completed = $CleanupCompleted
+    }
+  }
+
+  $definitions = @(
+    [pscustomobject]@{ Expected="stopped"; Payload=(New-P1GExactPayload -State "stopped" -Stage "stopped" -ServerState "stopped" -ServerStarted $false -CleanupAttempted $true -CleanupCompleted $true -LastErrorCode $null) },
+    [pscustomobject]@{ Expected="recover_start_preparing"; Payload=(New-P1GExactPayload -State "recover_start_preparing" -Stage "recover_start_preparing" -ServerState "unresolved" -ServerStarted $false -CleanupAttempted $false -CleanupCompleted $false -LastErrorCode "recover_origin_stale") },
+    [pscustomobject]@{ Expected="recover_start_preparing"; Payload=(New-P1GExactPayload -State "recover_start_preparing" -Stage "recover_start_preparing" -ServerState "unresolved" -ServerStarted $false -CleanupAttempted $false -CleanupCompleted $false -LastErrorCode "recover_origin_stopped") },
+    [pscustomobject]@{ Expected="recover_start_pidfile_removed"; Payload=(New-P1GExactPayload -State "recover_start_pidfile_removed" -Stage "recover_start_pidfile_removed" -ServerState "unresolved" -ServerStarted $false -CleanupAttempted $false -CleanupCompleted $false -LastErrorCode "recover_origin_stale") },
+    [pscustomobject]@{ Expected="recover_start_failed_no_server"; Payload=(New-P1GExactPayload -State "recover_start_failed_no_server" -Stage "recover_start_failed_no_server" -ServerState "stopped" -ServerStarted $false -CleanupAttempted $false -CleanupCompleted $false -LastErrorCode "pg_ctl_start_failed_no_server") },
+    [pscustomobject]@{ Expected="runtime_running_state_stale"; Payload=(New-P1GExactPayload -State "runtime_running_state_stale" -Stage "runtime_running_state_stale" -ServerState "running" -ServerStarted $true -CleanupAttempted $false -CleanupCompleted $false -LastErrorCode "recover_start_state_write_failed") },
+    [pscustomobject]@{ Expected="stopped_runtime_state_stale"; Payload=(New-P1GExactPayload -State "stopped_runtime_state_stale" -Stage "stopped_runtime_state_stale" -ServerState "stopped" -ServerStarted $false -CleanupAttempted $true -CleanupCompleted $true -LastErrorCode "stop_state_write_failed") }
+  )
+
+  $mutations = @(
+    { param($o) $o.stage = "bad_stage" },
+    { param($o) $o.server_state = $(if ($o.server_state -eq "running") { "stopped" } else { "running" }) },
+    { param($o) $o.last_error_code = "bad_error" },
+    { param($o) $o.server_started = -not [bool]$o.server_started },
+    { param($o) $o.server_cleanup_attempted = -not [bool]$o.server_cleanup_attempted },
+    { param($o) $o.server_cleanup_completed = -not [bool]$o.server_cleanup_completed },
+    { param($o) $o.initdb_completed = $false },
+    { param($o) $o.configuration_completed = $false },
+    { param($o) $o.credential_protected = $false },
+    { param($o) $o.plaintext_password_file_present = $true }
+  )
+
+  foreach ($definition in $definitions) {
+    $valid = $definition.Payload | Select-Object *
+    Assert-LifecycleStatePayloadExact -StatePayload $valid -ExpectedState $definition.Expected
+
+    foreach ($mutation in $mutations) {
+      $payload = $definition.Payload | Select-Object *
+      & $mutation $payload
+
+      $rejected = $false
+      try {
+        Assert-LifecycleStatePayloadExact -StatePayload $payload -ExpectedState $definition.Expected
+      }
+      catch {
+        if ((Get-SafeReason -ErrorRecord $_) -eq "lifecycle_exact_state_invalid") {
+          $rejected = $true
+        }
+        else {
+          throw
+        }
+      }
+
+      Assert-P1BSelfTestCondition `
+        -Condition $rejected `
+        -Code "lifecycle_exact_state_invalid"
+    }
+  }
+
+  Write-Output "P1G_ACTIVE_CONTRADICTORY_PAYLOAD_SELF_TEST_OK"
+}
+
+function Invoke-P1GAclPackageReparseSelfTest {
+  $root = Join-Path ([System.IO.Path]::GetTempPath()) ("vc-p1g-neg-" + [Guid]::NewGuid().ToString("N"))
+  $junctionPath = $null
+
+  try {
+    [System.IO.Directory]::CreateDirectory($root) | Out-Null
+
+    $fakeBin = Join-Path $root "fake-bin"
+    [System.IO.Directory]::CreateDirectory($fakeBin) | Out-Null
+    $fakeTool = Join-Path $fakeBin "pg_ctl.exe"
+    Write-Utf8NoBomFile -PathValue $fakeTool -Text "tool-version-a"
+    $hash1 = Get-FileSha256ForCleanupManifest -PathValue $fakeTool
+    Write-Utf8NoBomFile -PathValue $fakeTool -Text "tool-version-b"
+    $hash2 = Get-FileSha256ForCleanupManifest -PathValue $fakeTool
+
+    Assert-P1BSelfTestCondition `
+      -Condition (-not [string]::Equals($hash1, $hash2, [System.StringComparison]::Ordinal)) `
+      -Code "lifecycle_package_unverified"
+
+    $aclTarget = Join-Path $root "acl-target.txt"
+    Write-Utf8NoBomFile -PathValue $aclTarget -Text "acl"
+
+    $aclFailed = $false
+    try {
+      [void](Get-LifecycleAclSignaturePart -PathValue $aclTarget -InjectReadFailure)
+    }
+    catch {
+      if ((Get-SafeReason -ErrorRecord $_) -eq "lifecycle_acl_unreadable") {
+        $aclFailed = $true
+      }
+      else {
+        throw
+      }
+    }
+
+    Assert-P1BSelfTestCondition `
+      -Condition $aclFailed `
+      -Code "lifecycle_acl_unreadable"
+
+    $packageFailed = $false
+    try {
+      [void](Get-LifecyclePackageIdentityPart -Layout ([pscustomobject]@{}) -InjectPackageFailure)
+    }
+    catch {
+      if ((Get-SafeReason -ErrorRecord $_) -eq "lifecycle_package_unverified") {
+        $packageFailed = $true
+      }
+      else {
+        throw
+      }
+    }
+
+    Assert-P1BSelfTestCondition `
+      -Condition $packageFailed `
+      -Code "lifecycle_package_unverified"
+
+    $junctionTarget = Join-Path $root "junction-target"
+    $junctionPath = Join-Path $root "junction-under-test"
+    [System.IO.Directory]::CreateDirectory($junctionTarget) | Out-Null
+
+    try {
+      [void](New-Item -ItemType Junction -Path $junctionPath -Target $junctionTarget -ErrorAction Stop)
+    }
+    catch {
+      Throw-SafeError -Code "persistent_child_selftest_failed"
+    }
+
+    $reparseDetected = $false
+    try {
+      $reparseDetected = [bool](Test-HasReparsePointInPath -PathValue $junctionPath -StopParent $root)
+    }
+    catch {
+      if (@("reparse_point_detected","cleanup_reparse_detected") -contains (Get-SafeReason -ErrorRecord $_)) {
+        $reparseDetected = $true
+      }
+      else {
+        throw
+      }
+    }
+
+    Assert-P1BSelfTestCondition `
+      -Condition $reparseDetected `
+      -Code "reparse_point_detected"
+
+    Write-Output "P1G_ACL_PACKAGE_REPARSE_NEGATIVE_SELF_TEST_OK"
+  }
+  finally {
+    if ($null -ne $junctionPath -and (Test-Path -LiteralPath $junctionPath)) {
+      try {
+        Remove-Item -LiteralPath $junctionPath -Force -ErrorAction Stop
+      }
+      catch {
+        Throw-SafeError -Code "persistent_child_selftest_failed"
+      }
+    }
+
+    if (Test-Path -LiteralPath $root) {
+      foreach ($file in @(
+        Get-ChildItem -LiteralPath $root -Recurse -File -Force -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending
+      )) {
+        [System.IO.File]::Delete($file.FullName)
+      }
+
+      foreach ($dir in @(
+        Get-ChildItem -LiteralPath $root -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending
+      )) {
+        [System.IO.Directory]::Delete($dir.FullName, $false)
+      }
+
+      [System.IO.Directory]::Delete($root, $false)
+    }
+  }
+}
+
+function Invoke-P1GEngineSafeReasonSelfTest {
+  $classifyBad = { [pscustomobject]@{ State="UNKNOWN_ENGINE_STATE" } }
+  $revalidateBad = { [pscustomobject]@{ State="UNKNOWN_ENGINE_STATE" } }
+  $ok = { param([string]$Name) [pscustomobject]@{ Success=$true } }
+  $start = { [pscustomobject]@{ Success=$true } }
+  $stop = { [pscustomobject]@{ Success=$true } }
+  $remove = { [pscustomobject]@{ Success=$true } }
+  $resolve = { [pscustomobject]@{ State="NO_SERVER_EVIDENCE" } }
+  $recoverBad = Invoke-RecoverStopTransitionEngine -Operation "RecoverStart" -Classify $classifyBad -Revalidate $revalidateBad -WriteState $ok -StartServer $start -StopServer $stop -RemovePidfile $remove -ResolveStartFailure $resolve
+  Assert-P1BSelfTestCondition -Condition ($recoverBad.SafeErrorCode -eq "recover_start_not_allowed") -Code "recover_start_not_allowed"
+  $stopBad = Invoke-RecoverStopTransitionEngine -Operation "Stop" -Classify $classifyBad -Revalidate $revalidateBad -WriteState $ok -StartServer $start -StopServer $stop -RemovePidfile $remove -ResolveStartFailure $resolve
+  Assert-P1BSelfTestCondition -Condition ($stopBad.SafeErrorCode -eq "stop_not_allowed") -Code "stop_not_allowed"
+  $classifyMismatch = { [pscustomobject]@{ State="RUNNING_EXACT" } }
+  $revalidateMismatch = { [pscustomobject]@{ State="STOPPED_CLEAN_EXACT" } }
+  $mismatch = Invoke-RecoverStopTransitionEngine -Operation "Stop" -Classify $classifyMismatch -Revalidate $revalidateMismatch -WriteState $ok -StartServer $start -StopServer $stop -RemovePidfile $remove -ResolveStartFailure $resolve
+  Assert-P1BSelfTestCondition -Condition ($mismatch.SafeErrorCode -eq "lifecycle_exact_state_invalid") -Code "lifecycle_exact_state_invalid"
+  Write-Output "P1G_ENGINE_SAFE_REASON_SELF_TEST_OK"
+}
+function Invoke-P1ETcpOwnerSelfTest {
+  $listener = $null
+  $port = 0
+  try {
+    for ($candidate = 40000; $candidate -lt 61000 -and $null -eq $listener; $candidate += 37) {
+      try {
+        $candidateListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), $candidate)
+        $candidateListener.Start()
+        $listener = $candidateListener
+        $port = $candidate
+      } catch {
+        if ($null -ne $candidateListener) { try { $candidateListener.Stop() } catch { } }
+      }
+    }
+    Assert-P1BSelfTestCondition -Condition ($null -ne $listener -and $port -gt 32767) -Code "listener_verification_failed"
+    $currentPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
+    $evidence = $null
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($watch.Elapsed.TotalSeconds -lt 5) {
+      $evidence = Get-LoopbackTcpListenerOwnerEvidence -ExactPort $port -AllowedPids @($currentPid)
+      if ($evidence.QuerySucceeded -and $evidence.ListenerOpen -and $evidence.ExactOwner -and [int]$evidence.OwningPid -eq $currentPid) { break }
+      Start-Sleep -Milliseconds 100
+    }
+    Assert-P1BSelfTestCondition -Condition ($evidence.QuerySucceeded -and $evidence.ListenerOpen -and $evidence.ExactOwner -and [int]$evidence.OwningPid -eq $currentPid -and $evidence.Records[0].LocalPort -eq $port) -Code "listener_verification_failed"
+    $wrongOwner = Get-LoopbackTcpListenerOwnerEvidence -ExactPort $port -AllowedPids @([int]($currentPid + 100000))
+    Assert-P1BSelfTestCondition -Condition ($wrongOwner.QuerySucceeded -and $wrongOwner.ListenerOpen -and (-not $wrongOwner.ExactOwner) -and $wrongOwner.AmbiguousCount -gt 0) -Code "listener_verification_failed"
+    $differentPort = Get-LoopbackTcpListenerOwnerEvidence -ExactPort (($port + 1) % 65535) -AllowedPids @($currentPid)
+    Assert-P1BSelfTestCondition -Condition ($differentPort.QuerySucceeded -and (-not $differentPort.ListenerOpen)) -Code "listener_verification_failed"
+    $apiFailed = Get-LoopbackTcpListenerOwnerEvidence -ExactPort $port -AllowedPids @($currentPid) -InjectedTcpSnapshot ([pscustomobject]@{ ApiSuccess=$false; ErrorCode=5; Rows=@() })
+    Assert-P1BSelfTestCondition -Condition ((-not $apiFailed.QuerySucceeded) -and $apiFailed.AmbiguousCount -gt 0) -Code "listener_verification_failed"
+    $malformed = Get-LoopbackTcpListenerOwnerEvidence -ExactPort $port -AllowedPids @($currentPid) -InjectedTcpSnapshot ([pscustomobject]@{ ApiSuccess=$true; ErrorCode=0; Rows=@("malformed-row") })
+    Assert-P1BSelfTestCondition -Condition ((-not $malformed.QuerySucceeded) -and $malformed.AmbiguousCount -gt 0) -Code "listener_verification_failed"
+    Write-Output "P1E_TCP_LISTENER_OWNER_SELF_TEST_OK"
+    Write-Output "P1E_TCP_API_FAIL_CLOSED_SELF_TEST_OK"
+  } finally {
+    if ($null -ne $listener) { $listener.Stop() }
+  }
+}
+function Invoke-P1BRealLifecycleSelfTest {
+  $root = Join-Path ([System.IO.Path]::GetTempPath()) ("vc-p1b-real-" + [Guid]::NewGuid().ToString("N"))
+  $grandchildPid = $null
+  $psExe = Join-Path $PSHOME "powershell.exe"
+  $sentinelHandle = [IntPtr]::Zero
+  try {
+    New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+    $outDir = Join-Path $root "out"
+    New-Item -ItemType Directory -Path $outDir -ErrorAction Stop | Out-Null
+    $marker = Join-Path $root "VC_P1B_SELFTEST.marker"
+    Write-Utf8NoBomFile -PathValue $marker -Text "p1b-real"
+
+    Ensure-P1DSentinelHandleType
+    $sentinel = Join-Path $root "sentinel.txt"
+    Write-Utf8NoBomFile -PathValue $sentinel -Text "sentinel-handle"
+    $sentinelHandle = [VotoClaroP1DSentinelHandle]::OpenInheritableReadHandle($sentinel)
+    Assert-P1BSelfTestCondition -Condition ($sentinelHandle -ne [IntPtr]::Zero -and $sentinelHandle.ToInt64() -ne -1) -Code "persistent_child_selftest_failed"
+    $sentinelChild = Join-Path $root "sentinel-child.ps1"
+    $sentinelProbe = @(
+      'Add-Type -TypeDefinition "using System; using System.Runtime.InteropServices; public static class VCHandleProbe { [DllImport(`"kernel32.dll`", SetLastError=true)] public static extern uint GetFileType(IntPtr h); }"',
+      '$handleValue = [Int64]$args[0]',
+      '$fileType = [VCHandleProbe]::GetFileType([IntPtr]::new($handleValue))',
+      'if ($fileType -eq 0) { [Console]::Out.WriteLine("SENTINEL_HANDLE_NOT_VALID") } else { [Console]::Out.WriteLine("SENTINEL_HANDLE_INHERITED"); exit 4 }',
+      '[Console]::Out.WriteLine("STDOUT_OK")',
+      '[Console]::Error.WriteLine("STDERR_OK")'
+    )
+    Write-Utf8NoBomFile -PathValue $sentinelChild -Text ($sentinelProbe -join "
+")
+    $sentinelResult = Invoke-PersistentChildSafeProcess -FilePath $psExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $sentinelChild, ([string]$sentinelHandle.ToInt64())) -WorkingDirectory $root -OutputDirectory $outDir -TimeoutSeconds 20 -ToolName "p1b_sentinel"
+    Assert-P1BSelfTestCondition -Condition ($sentinelResult.Success -and $sentinelResult.StdOut.Contains("SENTINEL_HANDLE_NOT_VALID") -and $sentinelResult.StdOut.Contains("STDOUT_OK") -and $sentinelResult.StdErr.Contains("STDERR_OK")) -Code "persistent_child_selftest_failed"
+    Write-Output "P1B_HANDLE_SENTINEL_NOT_INHERITED_SELF_TEST_OK"
+
+    $grandchildMarker = Join-Path $root "grandchild.marker"
+    $grandchildPidPath = Join-Path $root "grandchild.pid"
+    $grandchildScript = Join-Path $root "grandchild.ps1"
+    Write-Utf8NoBomFile -PathValue $grandchildScript -Text 'Set-Content -LiteralPath $args[0] -Value "alive" -Encoding ASCII; Start-Sleep -Seconds 120'
+    $launcherScript = Join-Path $root "launcher.ps1"
+    $launcherLines = @(
+      '$psi = [System.Diagnostics.ProcessStartInfo]::new()',
+      '$psi.FileName = $args[0]',
+      '$psi.UseShellExecute = $false',
+      '$psi.CreateNoWindow = $true',
+      '$psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"" + $args[1] + "`" `"" + $args[2] + "`""',
+      '$child = [System.Diagnostics.Process]::Start($psi)',
+      'Set-Content -LiteralPath $args[3] -Value ([string]$child.Id) -Encoding ASCII',
+      '[Console]::Out.WriteLine("DIRECT_CHILD_DONE")'
+    )
+    Write-Utf8NoBomFile -PathValue $launcherScript -Text ($launcherLines -join "
+")
+    $grand = Invoke-PersistentChildSafeProcess -FilePath $psExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launcherScript, $psExe, $grandchildScript, $grandchildMarker, $grandchildPidPath) -WorkingDirectory $root -OutputDirectory $outDir -TimeoutSeconds 20 -ToolName "p1b_grandchild"
+    Assert-P1BSelfTestCondition -Condition ($grand.Success -and $grand.StdOut.Contains("DIRECT_CHILD_DONE")) -Code "persistent_child_selftest_failed"
+    $waitGrandchild = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($waitGrandchild.Elapsed.TotalSeconds -lt 5 -and (-not (Test-Path -LiteralPath $grandchildPidPath -PathType Leaf) -or -not (Test-Path -LiteralPath $grandchildMarker -PathType Leaf))) { Start-Sleep -Milliseconds 100 }
+    $grandchildPid = [int](([System.IO.File]::ReadAllText($grandchildPidPath)).Trim())
+    Assert-P1BSelfTestCondition -Condition ((Test-ProcessIdExistsForLifecycle -ProcessId $grandchildPid) -and (Test-Path -LiteralPath $grandchildMarker -PathType Leaf)) -Code "persistent_child_selftest_failed"
+    Write-Output "P1B_OUTER_EOF_WITH_PERSISTENT_GRANDCHILD_SELF_TEST_OK"
+
+    $consoleScript = Join-Path $root "console-check.ps1"
+    $consoleLines = @(
+      'Add-Type -TypeDefinition "using System; using System.Runtime.InteropServices; public static class VCConsoleCheck { [DllImport(`"kernel32.dll`")] public static extern IntPtr GetConsoleWindow(); }"',
+      '$h = [VCConsoleCheck]::GetConsoleWindow()',
+      'if ($h -eq [IntPtr]::Zero) { [Console]::Out.WriteLine("CONSOLE_WINDOW=0"); exit 0 }',
+      '[Console]::Out.WriteLine("CONSOLE_WINDOW=NONZERO"); exit 3'
+    )
+    Write-Utf8NoBomFile -PathValue $consoleScript -Text ($consoleLines -join "
+")
+    $consoleResult = Invoke-PersistentChildSafeProcess -FilePath $psExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $consoleScript) -WorkingDirectory $root -OutputDirectory $outDir -TimeoutSeconds 20 -ToolName "p1b_console"
+    Assert-P1BSelfTestCondition -Condition ($consoleResult.Success -and $consoleResult.StdOut.Contains("CONSOLE_WINDOW=0")) -Code "persistent_child_selftest_failed"
+    Write-Output "P1B_CONSOLE_INDEPENDENCE_SELF_TEST_OK"
+
+    $waitObject = Invoke-PersistentChildSafeProcess -FilePath $psExe -Arguments @("-NoProfile", "-Command", "exit 0") -WorkingDirectory $root -OutputDirectory $outDir -TimeoutSeconds 10 -ToolName "p1b_wait_object"
+    Assert-P1BSelfTestCondition -Condition ($waitObject.Success -and $waitObject.ProcessExitConfirmed -and -not (Test-ProcessIdExistsForLifecycle -ProcessId $waitObject.ChildPid)) -Code "persistent_child_wait_selftest_failed"
+    $timeoutScript = Join-Path $root "timeout.ps1"
+    Write-Utf8NoBomFile -PathValue $timeoutScript -Text 'Start-Sleep -Seconds 10'
+    $waitTimeout = Invoke-PersistentChildSafeProcess -FilePath $psExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $timeoutScript) -WorkingDirectory $root -OutputDirectory $outDir -TimeoutSeconds 1 -ToolName "p1b_wait_timeout"
+    Assert-P1BSelfTestCondition -Condition ($waitTimeout.TimedOut -and $waitTimeout.ProcessExitConfirmed -and (-not (Test-ProcessIdExistsForLifecycle -ProcessId $waitTimeout.ChildPid))) -Code "persistent_child_wait_selftest_failed"
+    $waitFailed = Convert-PersistentChildNativeResult -Native ([int[]]@(-1,0,0,1,1,123,-1,0)) -ToolName "p1b_wait"
+    $waitUnknown = Convert-PersistentChildNativeResult -Native ([int[]]@(-1,1,0,1,1,123,258,0)) -ToolName "p1b_wait"
+    Assert-P1BSelfTestCondition -Condition ((-not $waitFailed.Success) -and $waitFailed.ProcessStateUnresolved -and (-not $waitUnknown.Success) -and $waitUnknown.ProcessStateUnresolved) -Code "persistent_child_wait_selftest_failed"
+    Invoke-P1ETcpOwnerSelfTest
+    Invoke-P1GProcessTreeSelfTest
+    Invoke-P1GActiveContradictoryPayloadSelfTest
+    Invoke-P1GAclPackageReparseSelfTest
+    Invoke-P1GEngineSafeReasonSelfTest
+    Write-Output "P1B_WAIT_STATE_RECONCILIATION_SELF_TEST_OK"
+
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "recover_stopped_success") -ExpectedState "running" -ExpectedRuntime "running" -RequiredOperation "write:recover_start_preparing"
+    Write-Output "P1B_RECOVER_STOPPED_SUCCESS_SELF_TEST_OK"
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "recover_stale_success") -ExpectedState "running" -ExpectedRuntime "running" -RequiredOperation "delete:postmaster.pid"
+    Write-Output "P1B_RECOVER_STALE_SUCCESS_SELF_TEST_OK"
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "recover_interrupted_after_pid_delete") -ExpectedState "recover_start_failed_no_server_unwritten" -ExpectedRuntime "stopped" -RequiredOperation "write:recover_start_pidfile_removed"
+    Write-Output "P1B_RECOVER_INTERRUPTED_AFTER_PID_DELETE_SELF_TEST_OK"
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "recover_start_failure_reconciled") -ExpectedState "recover_start_failed_no_server" -ExpectedRuntime "stopped" -RequiredOperation "resolve:NO_SERVER_EVIDENCE"
+    Write-Output "P1B_RECOVER_START_FAILURE_RECONCILED_SELF_TEST_OK"
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "recover_state_write_failure") -ExpectedState "runtime_running_state_stale" -ExpectedRuntime "running" -RequiredOperation "write:runtime_running_state_stale"
+    $doubleWrite = Invoke-P1DRecoverStopHarnessCase -Case "double_write_failure_running"
+    Assert-P1BSelfTestCondition -Condition ($doubleWrite.Runtime -eq "running" -and $doubleWrite.SafeErrorCode -eq "recover_start_state_write_failed") -Code "recover_start_state_write_failed"
+    Write-Output "P1B_RECOVER_STATE_WRITE_FAILURE_SELF_TEST_OK"
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "stop_success") -ExpectedState "stopped" -ExpectedRuntime "stopped" -RequiredOperation "stop:success"
+    Write-Output "P1B_STOP_SUCCESS_SELF_TEST_OK"
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "stop_failure") -ExpectedState "running" -ExpectedRuntime "running" -RequiredOperation "stop:failed"
+    Write-Output "P1B_STOP_FAILURE_SELF_TEST_OK"
+    Assert-P1DHarnessCase -Result (Invoke-P1DRecoverStopHarnessCase -Case "stop_state_write_failure") -ExpectedState "stopped_runtime_state_stale" -ExpectedRuntime "stopped" -RequiredOperation "write:stopped_runtime_state_stale"
+    Write-Output "P1B_STOP_STATE_WRITE_FAILURE_SELF_TEST_OK"
+    $removeFail = Invoke-P1DRecoverStopHarnessCase -Case "remove_pidfile_failure"
+    Assert-P1BSelfTestCondition -Condition ($removeFail.SafeErrorCode -eq "recover_start_pidfile_remove_failed" -and $removeFail.PidfileRemovalInvoked -and (-not $removeFail.PidfileRemovalSucceeded) -and (-not $removeFail.StartInvoked)) -Code "recover_start_pidfile_remove_failed"
+    $unresolvedStart = Invoke-P1DRecoverStopHarnessCase -Case "start_unresolved"
+    Assert-P1BSelfTestCondition -Condition ($unresolvedStart.SafeErrorCode -eq "postgres_server_state_unresolved" -and $unresolvedStart.Runtime -eq "unresolved") -Code "postgres_server_state_unresolved"
+    $doubleStopped = Invoke-P1DRecoverStopHarnessCase -Case "double_write_failure_stopped"
+    Assert-P1BSelfTestCondition -Condition ($doubleStopped.State -eq "stopped_runtime_state_stale_unwritten" -and $doubleStopped.Runtime -eq "stopped" -and $doubleStopped.StopInvoked -and $doubleStopped.SafeErrorCode -eq "stop_state_write_failed" -and $doubleStopped.ReconciliationRequired -and $doubleStopped.StateWrites[0] -eq "stopped" -and $doubleStopped.StateWrites[1] -eq "stopped_runtime_state_stale") -Code "stop_state_write_failed"
+    $doubleStoppedRuntime = Invoke-P1DRecoverStopHarnessCase -Case "double_write_failure_stop_runtime_stale"
+    Assert-P1BSelfTestCondition -Condition ($doubleStoppedRuntime.State -eq "stopped_runtime_state_stale_unwritten" -and $doubleStoppedRuntime.Runtime -eq "stopped" -and $doubleStoppedRuntime.StopInvoked -and $doubleStoppedRuntime.SafeErrorCode -eq "stop_state_write_failed" -and $doubleStoppedRuntime.ReconciliationRequired -and $doubleStoppedRuntime.StateWrites[0] -eq "stopped" -and $doubleStoppedRuntime.StateWrites[1] -eq "stopped_runtime_state_stale") -Code "stop_state_write_failed"
+    Write-Output "P1G_STOP_DOUBLE_WRITE_FAILURE_SELF_TEST_OK"
+    $originStopped = Invoke-P1DRecoverStopHarnessCase -Case "origin_stopped_interrupted"
+    Assert-P1BSelfTestCondition -Condition ($originStopped.StartInvoked -and (-not $originStopped.PidfileRemovalInvoked) -and $originStopped.Operations -contains "origin:stopped:no-pidfile-removal") -Code "lifecycle_exact_state_invalid"
+    $originStale = Invoke-P1DRecoverStopHarnessCase -Case "origin_stale_interrupted"
+    Assert-P1BSelfTestCondition -Condition ($originStale.StartInvoked -and $originStale.PidfileRemovalInvoked -and $originStale.PidfileRemovalSucceeded) -Code "lifecycle_exact_state_invalid"
+    Write-Output "P1F_ENGINE_NEGATIVE_CASES_SELF_TEST_OK"
+
+    Invoke-P1DAuthorizationMatrixSelfTest
+    Write-Output "P1B_AUTHORIZATION_CROSS_MATRIX_SELF_TEST_OK"
+    Invoke-P1DNegativeRuntimeContractSelfTest
+    Write-Output "P1B_NEGATIVE_RUNTIME_CONTRACT_SELF_TEST_OK"
+    Write-Output "P1B_REAL_SELF_TEST_OK"
+  } finally {
+    if ($sentinelHandle -ne [IntPtr]::Zero -and $sentinelHandle.ToInt64() -ne -1) { [void][VotoClaroP1DSentinelHandle]::CloseHandle($sentinelHandle) }
+    if ($null -ne $grandchildPid) { try { Stop-P1BGrandchildForSelfTest -ProcessId $grandchildPid -ExpectedExecutable $psExe -MarkerPath (Join-Path $root "grandchild.marker") } catch { } }
+    if (Test-Path -LiteralPath $root) {
+      $removed = $false
+      for ($cleanupAttempt = 0; $cleanupAttempt -lt 20 -and -not $removed; $cleanupAttempt += 1) {
+        try {
+          foreach ($file in @(Get-ChildItem -LiteralPath $root -Recurse -File -Force -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)) { [System.IO.File]::Delete($file.FullName) }
+          foreach ($dir in @(Get-ChildItem -LiteralPath $root -Recurse -Directory -Force -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)) { [System.IO.Directory]::Delete($dir.FullName, $false) }
+          [System.IO.Directory]::Delete($root, $false)
+          $removed = $true
+        } catch { Start-Sleep -Milliseconds 250 }
+      }
+      if (-not $removed -and (Test-Path -LiteralPath $root)) { Throw-SafeError -Code "persistent_child_selftest_failed" }
+    }
+  }
+}
 function Assert-InitializedDataRoot {
   param([Parameter(Mandatory = $true)][object]$Layout)
   $pgVersionPath = Join-Path $Layout.DataRoot "PG_VERSION"
@@ -4771,6 +5700,212 @@ function Get-OriginalPostgresProcessState {
   }
 }
 
+function Get-LoopbackTcpListenerOwnerEvidence {
+  param(
+    [Parameter(Mandatory = $true)][int]$ExactPort,
+    [int[]]$AllowedPids = @(),
+    [AllowNull()][object]$InjectedTcpSnapshot = $null
+  )
+  if ($ExactPort -lt 0 -or $ExactPort -gt 65535) { Throw-SafeError -Code "postgres_server_state_unresolved" }
+  if ($null -eq $InjectedTcpSnapshot -and -not ("VotoClaroTcpOwnerTable" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Runtime.InteropServices;
+public sealed class VotoClaroTcpOwnerSnapshot {
+  public bool ApiSuccess;
+  public int ErrorCode;
+  public string[] Rows;
+}
+public static class VotoClaroTcpOwnerTable {
+  const uint ERROR_INSUFFICIENT_BUFFER = 122;
+  [StructLayout(LayoutKind.Sequential)] public struct MIB_TCPROW_OWNER_PID { public uint state; public uint localAddr; public uint localPort; public uint remoteAddr; public uint remotePort; public uint owningPid; }
+  [DllImport("iphlpapi.dll", SetLastError=true)] public static extern uint GetExtendedTcpTable(IntPtr table, ref int length, bool sort, int ipVersion, int tableClass, uint reserved);
+  public static VotoClaroTcpOwnerSnapshot Snapshot() {
+    VotoClaroTcpOwnerSnapshot result = new VotoClaroTcpOwnerSnapshot(); result.ApiSuccess = false; result.ErrorCode = 0; result.Rows = new string[0];
+    int len = 0; uint r = GetExtendedTcpTable(IntPtr.Zero, ref len, false, 2, 5, 0);
+    if (r != ERROR_INSUFFICIENT_BUFFER) { result.ErrorCode = (int)r; return result; }
+    if (len <= 0) { result.ErrorCode = -1; return result; }
+    IntPtr ptr = Marshal.AllocHGlobal(len);
+    try {
+      r = GetExtendedTcpTable(ptr, ref len, true, 2, 5, 0);
+      if (r != 0) { result.ErrorCode = (int)r; return result; }
+      int count = Marshal.ReadInt32(ptr); IntPtr rowPtr = IntPtr.Add(ptr, 4); int rowSize = Marshal.SizeOf(typeof(MIB_TCPROW_OWNER_PID)); List<string> rows = new List<string>();
+      for (int i=0; i<count; i++) {
+        MIB_TCPROW_OWNER_PID row = (MIB_TCPROW_OWNER_PID)Marshal.PtrToStructure(rowPtr, typeof(MIB_TCPROW_OWNER_PID));
+        IPAddress ip = new IPAddress(row.localAddr);
+        int port = (int)(((row.localPort & 0x000000FFu) << 8) | ((row.localPort & 0x0000FF00u) >> 8));
+        if (port < 0 || port > 65535) { result.ErrorCode = -2; return result; }
+        rows.Add(ip.ToString() + ":" + port.ToString() + ":" + row.state.ToString() + ":" + row.owningPid.ToString());
+        rowPtr = IntPtr.Add(rowPtr, rowSize);
+      }
+      result.ApiSuccess = true; result.ErrorCode = 0; result.Rows = rows.ToArray(); return result;
+    } finally { Marshal.FreeHGlobal(ptr); }
+  }
+}
+"@
+  }
+  $matches = New-Object System.Collections.Generic.List[object]
+  try {
+    $snapshot = if ($null -ne $InjectedTcpSnapshot) { $InjectedTcpSnapshot } else { [VotoClaroTcpOwnerTable]::Snapshot() }
+    if ($null -eq $snapshot -or -not $snapshot.ApiSuccess) {
+      return [pscustomobject]@{ QuerySucceeded = $false; ApiSuccess = $false; ErrorCode = $(if ($null -ne $snapshot) { [int]$snapshot.ErrorCode } else { -99 }); ListenerOpen = $false; ExactOwner = $false; AmbiguousCount = 1; OwningPid = $null; Records = @() }
+    }
+    foreach ($line in @($snapshot.Rows)) {
+      $parts = ([string]$line).Split(':')
+      if ($parts.Count -ne 4) {
+        return [pscustomobject]@{ QuerySucceeded = $false; ApiSuccess = $true; ErrorCode = -3; ListenerOpen = $false; ExactOwner = $false; AmbiguousCount = 1; OwningPid = $null; Records = @() }
+      }
+      $parsedPort = 0; $parsedState = 0; $parsedPid = 0
+      if (-not [int]::TryParse($parts[1], [ref]$parsedPort) -or -not [int]::TryParse($parts[2], [ref]$parsedState) -or -not [int]::TryParse($parts[3], [ref]$parsedPid) -or $parsedPort -lt 0 -or $parsedPort -gt 65535) {
+        return [pscustomobject]@{ QuerySucceeded = $false; ApiSuccess = $true; ErrorCode = -4; ListenerOpen = $false; ExactOwner = $false; AmbiguousCount = 1; OwningPid = $null; Records = @() }
+      }
+      if ($parts[0] -eq "127.0.0.1" -and $parsedPort -eq $ExactPort -and $parsedState -eq 2) {
+        [void]$matches.Add([pscustomobject]@{ LocalAddress=$parts[0]; LocalPort=$parsedPort; State="LISTEN"; OwningPid=$parsedPid })
+      }
+    }
+  } catch {
+    return [pscustomobject]@{ QuerySucceeded = $false; ApiSuccess = $false; ErrorCode = -5; ListenerOpen = $false; ExactOwner = $false; AmbiguousCount = 1; OwningPid = $null; Records = @() }
+  }
+  $records = @($matches.ToArray())
+  if ($records.Count -eq 0) { return [pscustomobject]@{ QuerySucceeded = $true; ApiSuccess = $true; ErrorCode = 0; ListenerOpen = $false; ExactOwner = $false; AmbiguousCount = 0; OwningPid = $null; Records = @() } }
+  $allowed = @($AllowedPids)
+  $owned = @($records | Where-Object { $allowed -contains [int]$_.OwningPid })
+  return [pscustomobject]@{ QuerySucceeded = $true; ApiSuccess = $true; ErrorCode = 0; ListenerOpen = $true; ExactOwner = ($records.Count -eq 1 -and $owned.Count -eq 1); AmbiguousCount = $(if ($records.Count -eq 1 -and $owned.Count -eq 1) { 0 } else { $records.Count }); OwningPid = $(if ($records.Count -eq 1) { [int]$records[0].OwningPid } else { $null }); Records = $records }
+}
+function Get-ProcessParentPidSnapshotForLifecycle {
+  param([AllowNull()][object]$InjectedSnapshot)
+  if ($null -ne $InjectedSnapshot) {
+    if (-not $InjectedSnapshot.QuerySucceeded) { return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$false; ErrorCode=[int]$InjectedSnapshot.ErrorCode; ParentByPid=@{}; ProcessIds=@(); RowCount=0 } }
+    return (Convert-ProcessParentRowsForLifecycle -Rows @($InjectedSnapshot.Rows) -ApiSuccess ([bool]$InjectedSnapshot.ApiSuccess) -ErrorCode ([int]$InjectedSnapshot.ErrorCode))
+  }
+  if (-not ("VotoClaroProcessTreeSnapshot" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public sealed class VotoClaroProcessTreeSnapshotResult {
+  public bool ApiSuccess;
+  public bool QuerySucceeded;
+  public int ErrorCode;
+  public string[] Rows;
+}
+public static class VotoClaroProcessTreeSnapshot {
+  const int ERROR_NO_MORE_FILES = 18;
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct PROCESSENTRY32 {
+    public uint dwSize; public uint cntUsage; public uint th32ProcessID; public IntPtr th32DefaultHeapID; public uint th32ModuleID; public uint cntThreads; public uint th32ParentProcessID; public int pcPriClassBase; public uint dwFlags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst=260)] public string szExeFile;
+  }
+  [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool Process32FirstW(IntPtr snapshot, ref PROCESSENTRY32 entry);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool Process32NextW(IntPtr snapshot, ref PROCESSENTRY32 entry);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr handle);
+  public static VotoClaroProcessTreeSnapshotResult Snapshot() {
+    VotoClaroProcessTreeSnapshotResult result = new VotoClaroProcessTreeSnapshotResult();
+    result.ApiSuccess = false; result.QuerySucceeded = false; result.ErrorCode = 0; result.Rows = new string[0];
+    IntPtr snapshot = CreateToolhelp32Snapshot(0x00000002, 0);
+    if (snapshot == new IntPtr(-1)) { result.ErrorCode = Marshal.GetLastWin32Error(); return result; }
+    try {
+      PROCESSENTRY32 entry = new PROCESSENTRY32(); entry.dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32));
+      List<string> rows = new List<string>();
+      if (!Process32FirstW(snapshot, ref entry)) { result.ErrorCode = Marshal.GetLastWin32Error(); return result; }
+      while (true) {
+        rows.Add(entry.th32ProcessID.ToString() + ":" + entry.th32ParentProcessID.ToString());
+        if (!Process32NextW(snapshot, ref entry)) {
+          int lastError = Marshal.GetLastWin32Error();
+          if (lastError != ERROR_NO_MORE_FILES) { result.ErrorCode = lastError; result.Rows = rows.ToArray(); return result; }
+          result.ApiSuccess = true; result.QuerySucceeded = true; result.ErrorCode = 0; result.Rows = rows.ToArray(); return result;
+        }
+      }
+    } finally { CloseHandle(snapshot); }
+  }
+}
+"@
+  }
+  try {
+    $snapshot = [VotoClaroProcessTreeSnapshot]::Snapshot()
+    if (-not $snapshot.QuerySucceeded) { return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=[bool]$snapshot.ApiSuccess; ErrorCode=[int]$snapshot.ErrorCode; ParentByPid=@{}; ProcessIds=@(); RowCount=0; Rows=@($snapshot.Rows) } }
+    return (Convert-ProcessParentRowsForLifecycle -Rows @($snapshot.Rows) -ApiSuccess ([bool]$snapshot.ApiSuccess) -ErrorCode ([int]$snapshot.ErrorCode))
+  } catch {
+    return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$false; ErrorCode=-6; ParentByPid=@{}; ProcessIds=@(); RowCount=0; Rows=@() }
+  }
+}
+
+function Convert-ProcessParentRowsForLifecycle {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Rows,
+    [bool]$ApiSuccess = $true,
+    [int]$ErrorCode = 0
+  )
+  if (-not $ApiSuccess -or $ErrorCode -ne 0) { return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$ApiSuccess; ErrorCode=$ErrorCode; ParentByPid=@{}; ProcessIds=@(); RowCount=0; Rows=@($Rows) } }
+  $parents = @{}
+  foreach ($line in @($Rows)) {
+    $parts = ([string]$line).Split(':')
+    $processIdValue = 0; $parentProcessIdValue = 0
+    if ($parts.Count -ne 2 -or -not [int]::TryParse($parts[0], [ref]$processIdValue) -or -not [int]::TryParse($parts[1], [ref]$parentProcessIdValue) -or $processIdValue -le 0 -or $parentProcessIdValue -lt 0) {
+      return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$true; ErrorCode=-4; ParentByPid=@{}; ProcessIds=@(); RowCount=0; Rows=@($Rows) }
+    }
+    if ($parents.ContainsKey($processIdValue) -and [int]$parents[$processIdValue] -ne $parentProcessIdValue) {
+      return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$true; ErrorCode=-5; ParentByPid=@{}; ProcessIds=@(); RowCount=0; Rows=@($Rows) }
+    }
+    $parents[$processIdValue] = $parentProcessIdValue
+  }
+  return [pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; ParentByPid=$parents; ProcessIds=@($parents.Keys | ForEach-Object { [int]$_ }); RowCount=$parents.Count; Rows=@($Rows) }
+}
+
+function Test-ProcessBelongsToPostmasterTree {
+  param(
+    [Parameter(Mandatory = $true)][int]$ProcessId,
+    [Parameter(Mandatory = $true)][int]$PostmasterPid,
+    [Parameter(Mandatory = $true)][hashtable]$ParentByPid
+  )
+  if (-not $ParentByPid.ContainsKey($PostmasterPid)) { return $false }
+  if (-not $ParentByPid.ContainsKey($ProcessId)) { return $false }
+  if ($ProcessId -eq $PostmasterPid) { return $true }
+  $seen = @{}
+  $current = $ProcessId
+  while ($ParentByPid.ContainsKey($current)) {
+    if ($seen.ContainsKey($current)) { return $false }
+    $seen[$current] = $true
+    $parent = [int]$ParentByPid[$current]
+    if ($parent -eq $PostmasterPid) { return $true }
+    if ($parent -le 0 -or $parent -eq $current) { return $false }
+    $current = $parent
+  }
+  return $false
+}
+
+function Get-PostgresProcessTreeEvidence {
+  param(
+    [Parameter(Mandatory = $true)][object]$ProcessEvidence,
+    [AllowNull()][object]$PostmasterIdentity,
+    [AllowNull()][object]$InjectedSnapshot
+  )
+  $expectedPid = if ($null -ne $PostmasterIdentity) { [int]$PostmasterIdentity.Pid } else { 0 }
+  $authorized = @($ProcessEvidence.Records | Where-Object { $_.Classification -eq "AUTHORIZED_PACKAGE_PROCESS" })
+  if ($expectedPid -le 0) {
+    return [pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; PostmasterPid=$expectedPid; TreePids=@(); OutsideTreeCount=$authorized.Count; OtherCount=$ProcessEvidence.OtherCount; AmbiguousCount=$ProcessEvidence.AmbiguousCount; Exact=($authorized.Count -eq 0 -and $ProcessEvidence.OtherCount -eq 0 -and $ProcessEvidence.AmbiguousCount -eq 0); RowCount=0 }
+  }
+  $snapshot = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot $InjectedSnapshot
+  if (-not $snapshot.QuerySucceeded -or $snapshot.RowCount -le 0 -or -not ($snapshot.ProcessIds -contains $expectedPid)) {
+    return [pscustomobject]@{ QuerySucceeded=[bool]$snapshot.QuerySucceeded; ApiSuccess=[bool]$snapshot.ApiSuccess; ErrorCode=$snapshot.ErrorCode; PostmasterPid=$expectedPid; TreePids=@(); OutsideTreeCount=$authorized.Count; OtherCount=$ProcessEvidence.OtherCount; AmbiguousCount=($ProcessEvidence.AmbiguousCount + 1); Exact=$false; RowCount=$snapshot.RowCount }
+  }
+  $postmasterInInventory = @($authorized | Where-Object { [int]$_.Pid -eq $expectedPid }).Count -eq 1
+  $tree = New-Object System.Collections.Generic.List[int]
+  $outside = 0
+  foreach ($record in $authorized) {
+    $processIdValue = [int]$record.Pid
+    if (-not ($snapshot.ProcessIds -contains $processIdValue)) { $outside += 1; continue }
+    if (Test-ProcessBelongsToPostmasterTree -ProcessId $processIdValue -PostmasterPid $expectedPid -ParentByPid $snapshot.ParentByPid) {
+      [void]$tree.Add($processIdValue)
+    } else {
+      $outside += 1
+    }
+  }
+  $treePids = @($tree.ToArray())
+  $exact = $postmasterInInventory -and ($treePids -contains $expectedPid) -and $outside -eq 0 -and $ProcessEvidence.OtherCount -eq 0 -and $ProcessEvidence.AmbiguousCount -eq 0
+  return [pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; PostmasterPid=$expectedPid; TreePids=$treePids; OutsideTreeCount=$outside; OtherCount=$ProcessEvidence.OtherCount; AmbiguousCount=$ProcessEvidence.AmbiguousCount; Exact=$exact; RowCount=$snapshot.RowCount }
+}
 function Test-LoopbackListenerOpen {
   $client = $null
   try {
@@ -4793,7 +5928,8 @@ function Get-VerifiedServerState {
   )
   $pidPath = Join-Path $Layout.DataRoot "postmaster.pid"
   $pidExists = Test-Path -LiteralPath $pidPath -PathType Leaf
-  $listenerOpen = Test-LoopbackListenerOpen
+  $listenerEvidence = Get-LoopbackTcpListenerOwnerEvidence -ExactPort 55432 -AllowedPids @()
+    $listenerOpen = $listenerEvidence.ListenerOpen
   if (-not $pidExists) {
     if ($listenerOpen) {
       return [pscustomobject]@{ State = "SERVER_STATE_UNRESOLVED"; CleanupAttempted = $false; CleanupCompleted = $false; Pid = $null }
@@ -4924,6 +6060,734 @@ function Assert-LoopbackListener {
   }
 }
 
+
+function Test-RecoverStartAuthorization {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$ProvidedRecoverStartApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedRecoverStartApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$ProvidedStopApprovalToken
+  )
+  $authorized = $true
+  if (-not $ConfirmRecoverStart) { $authorized = $false }
+  if ([string]::IsNullOrWhiteSpace($ProvidedRecoverStartApprovalToken)) { $authorized = $false }
+  if (-not [string]::Equals($ProvidedRecoverStartApprovalToken, $ExpectedRecoverStartApprovalToken, [System.StringComparison]::Ordinal)) { $authorized = $false }
+  if ($ConfirmCreate -or $ConfirmCleanupPartialCreate -or $ConfirmCleanupFailedCreate -or $ConfirmStop) { $authorized = $false }
+  foreach ($token in @($ProvidedCreateApprovalToken, $ProvidedCleanupApprovalToken, $ProvidedCleanupFailedCreateApprovalToken, $ProvidedStopApprovalToken)) {
+    if (-not [string]::IsNullOrWhiteSpace($token)) { $authorized = $false }
+  }
+  return [pscustomobject]@{ Authorized = $authorized; SafeErrorCode = $(if ($authorized) { $null } else { "recover_start_not_authorized" }) }
+}
+
+function Assert-RecoverStartAuthorization {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$ProvidedRecoverStartApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedRecoverStartApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$ProvidedStopApprovalToken
+  )
+  $result = Test-RecoverStartAuthorization -ConfirmRecoverStart:$ConfirmRecoverStart -ProvidedRecoverStartApprovalToken $ProvidedRecoverStartApprovalToken -ExpectedRecoverStartApprovalToken $ExpectedRecoverStartApprovalToken -ConfirmCreate:$ConfirmCreate -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate -ProvidedCleanupFailedCreateApprovalToken $ProvidedCleanupFailedCreateApprovalToken -ConfirmStop:$ConfirmStop -ProvidedStopApprovalToken $ProvidedStopApprovalToken
+  if (-not $result.Authorized) { Throw-SafeError -Code $result.SafeErrorCode }
+}
+
+function Test-StopAuthorization {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$ProvidedStopApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedStopApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$ProvidedRecoverStartApprovalToken
+  )
+  $authorized = $true
+  if (-not $ConfirmStop) { $authorized = $false }
+  if ([string]::IsNullOrWhiteSpace($ProvidedStopApprovalToken)) { $authorized = $false }
+  if (-not [string]::Equals($ProvidedStopApprovalToken, $ExpectedStopApprovalToken, [System.StringComparison]::Ordinal)) { $authorized = $false }
+  if ($ConfirmCreate -or $ConfirmCleanupPartialCreate -or $ConfirmCleanupFailedCreate -or $ConfirmRecoverStart) { $authorized = $false }
+  foreach ($token in @($ProvidedCreateApprovalToken, $ProvidedCleanupApprovalToken, $ProvidedCleanupFailedCreateApprovalToken, $ProvidedRecoverStartApprovalToken)) {
+    if (-not [string]::IsNullOrWhiteSpace($token)) { $authorized = $false }
+  }
+  return [pscustomobject]@{ Authorized = $authorized; SafeErrorCode = $(if ($authorized) { $null } else { "stop_not_authorized" }) }
+}
+
+function Assert-StopAuthorization {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$ProvidedStopApprovalToken,
+    [Parameter(Mandatory = $true)][string]$ExpectedStopApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$ProvidedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$ProvidedCleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$ProvidedCleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$ProvidedRecoverStartApprovalToken
+  )
+  $result = Test-StopAuthorization -ConfirmStop:$ConfirmStop -ProvidedStopApprovalToken $ProvidedStopApprovalToken -ExpectedStopApprovalToken $ExpectedStopApprovalToken -ConfirmCreate:$ConfirmCreate -ProvidedCreateApprovalToken $ProvidedCreateApprovalToken -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate -ProvidedCleanupApprovalToken $ProvidedCleanupApprovalToken -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate -ProvidedCleanupFailedCreateApprovalToken $ProvidedCleanupFailedCreateApprovalToken -ConfirmRecoverStart:$ConfirmRecoverStart -ProvidedRecoverStartApprovalToken $ProvidedRecoverStartApprovalToken
+  if (-not $result.Authorized) { Throw-SafeError -Code $result.SafeErrorCode }
+}
+
+function Test-PostgresServiceRunningForLifecycle {
+  try {
+    $running = @(Get-Service -ErrorAction Stop | Where-Object { ($_.Name -match "postgres|postgresql" -or $_.DisplayName -match "postgres|postgresql") -and $_.Status -eq "Running" })
+    return ($running.Count -gt 0)
+  } catch {
+    return $true
+  }
+}
+
+function Test-ProcessIdExistsForLifecycle {
+  param([Parameter(Mandatory = $true)][int]$ProcessId)
+  $process = $null
+  try {
+    $process = [System.Diagnostics.Process]::GetProcessById($ProcessId)
+    return $true
+  } catch {
+    return $false
+  } finally {
+    if ($null -ne $process) { $process.Dispose() }
+  }
+}
+
+function Test-PgIsReadyOk {
+  param(
+    [Parameter(Mandatory = $true)][object]$Package,
+    [Parameter(Mandatory = $true)][int]$ExactPort
+  )
+  try {
+    $pgIsReady = Get-ToolPath -BinRoot $Package.Bin -ToolName "pg_isready"
+    $result = Invoke-SafeProcess -FilePath $pgIsReady -Arguments @("--host", "127.0.0.1", "--port", ([string]$ExactPort), "--username", $script:LocalAdminUser) -WorkingDirectory $Package.Bin -TimeoutSeconds 5 -ToolName "pg_isready"
+    return ($result.Success -and $result.ExitCode -eq 0)
+  } catch {
+    return $false
+  }
+}
+
+function Get-PgControlDataClusterState {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  try {
+    $tool = Get-ToolPath -BinRoot $Package.Bin -ToolName "pg_controldata"
+    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) { return "UNKNOWN" }
+    $result = Invoke-SafeProcess -FilePath $tool -Arguments @($Layout.DataRoot) -WorkingDirectory $Layout.InstanceRoot -TimeoutSeconds 10 -ToolName "pg_controldata"
+    if (-not $result.Success) { return "UNKNOWN" }
+    $combined = ($result.StdOut + "`n" + $result.StdErr)
+    if ($combined -match 'Database cluster state:\s*in production' -or $combined -match 'Estado del sistema de base de datos:\s*en producci') { return "IN_PRODUCTION" }
+    if ($combined -match 'Database cluster state:\s*shut down' -or $combined -match 'Estado del sistema de base de datos:\s*apagado' -or $combined -match 'Estado del sistema de base de datos:\s*cerrado') { return "SHUT_DOWN" }
+    return "UNKNOWN"
+  } catch {
+    return "UNKNOWN"
+  }
+}
+
+
+function Assert-LifecycleStatePayloadExact {
+  param(
+    [Parameter(Mandatory = $true)][object]$StatePayload,
+    [Parameter(Mandatory = $true)][ValidateSet("running","stopped","recover_start_preparing","recover_start_pidfile_removed","recover_start_failed_no_server","runtime_running_state_stale","stopped_runtime_state_stale")][string]$ExpectedState
+  )
+
+  if ($StatePayload.state -ne $ExpectedState) {
+    Throw-SafeError -Code "lifecycle_exact_state_invalid"
+  }
+
+  if ($StatePayload.postgres_major -ne "17" -or
+      $StatePayload.postgres_version -ne "17.10" -or
+      $StatePayload.host -ne "127.0.0.1" -or
+      [int]$StatePayload.port -ne 55432 -or
+      $StatePayload.admin_role -ne $script:LocalAdminUser -or
+      $StatePayload.instance_name -ne $script:InstanceName -or
+      $StatePayload.data_directory_name -ne "data") {
+    Throw-SafeError -Code "lifecycle_exact_state_invalid"
+  }
+
+  if ($ExpectedState -eq "running") {
+    if ($StatePayload.stage -ne "running" -or
+        $StatePayload.initdb_completed -ne $true -or
+        $StatePayload.configuration_completed -ne $true -or
+        $StatePayload.server_started -ne $true -or
+        $StatePayload.server_state -ne "running" -or
+        $StatePayload.credential_protected -ne $true -or
+        $StatePayload.plaintext_password_file_present -ne $false -or
+        $StatePayload.server_cleanup_attempted -ne $false -or
+        $StatePayload.server_cleanup_completed -ne $false -or
+        $null -ne $StatePayload.last_error_code) {
+      Throw-SafeError -Code "lifecycle_exact_state_invalid"
+    }
+    return
+  }
+
+  if ($ExpectedState -eq "stopped") {
+    if ($StatePayload.stage -ne "stopped" -or
+        $StatePayload.initdb_completed -ne $true -or
+        $StatePayload.configuration_completed -ne $true -or
+        $StatePayload.server_started -ne $false -or
+        $StatePayload.server_state -ne "stopped" -or
+        $StatePayload.credential_protected -ne $true -or
+        $StatePayload.plaintext_password_file_present -ne $false -or
+        $StatePayload.server_cleanup_attempted -ne $true -or
+        $StatePayload.server_cleanup_completed -ne $true -or
+        $null -ne $StatePayload.last_error_code) {
+      Throw-SafeError -Code "lifecycle_exact_state_invalid"
+    }
+    return
+  }
+
+  if ($ExpectedState -eq "recover_start_preparing") {
+    if ($StatePayload.stage -ne "recover_start_preparing" -or
+        $StatePayload.initdb_completed -ne $true -or
+        $StatePayload.configuration_completed -ne $true -or
+        $StatePayload.server_started -ne $false -or
+        $StatePayload.server_state -ne "unresolved" -or
+        $StatePayload.credential_protected -ne $true -or
+        $StatePayload.plaintext_password_file_present -ne $false -or
+        $StatePayload.server_cleanup_attempted -ne $false -or
+        $StatePayload.server_cleanup_completed -ne $false -or
+        @("recover_origin_stale","recover_origin_stopped") -notcontains $StatePayload.last_error_code) {
+      Throw-SafeError -Code "lifecycle_exact_state_invalid"
+    }
+    return
+  }
+
+  if ($ExpectedState -eq "recover_start_pidfile_removed") {
+    if ($StatePayload.stage -ne "recover_start_pidfile_removed" -or
+        $StatePayload.initdb_completed -ne $true -or
+        $StatePayload.configuration_completed -ne $true -or
+        $StatePayload.server_started -ne $false -or
+        $StatePayload.server_state -ne "unresolved" -or
+        $StatePayload.credential_protected -ne $true -or
+        $StatePayload.plaintext_password_file_present -ne $false -or
+        $StatePayload.server_cleanup_attempted -ne $false -or
+        $StatePayload.server_cleanup_completed -ne $false -or
+        $StatePayload.last_error_code -ne "recover_origin_stale") {
+      Throw-SafeError -Code "lifecycle_exact_state_invalid"
+    }
+    return
+  }
+
+  if ($ExpectedState -eq "recover_start_failed_no_server") {
+    if ($StatePayload.stage -ne "recover_start_failed_no_server" -or
+        $StatePayload.initdb_completed -ne $true -or
+        $StatePayload.configuration_completed -ne $true -or
+        $StatePayload.server_started -ne $false -or
+        $StatePayload.server_state -ne "stopped" -or
+        $StatePayload.credential_protected -ne $true -or
+        $StatePayload.plaintext_password_file_present -ne $false -or
+        $StatePayload.server_cleanup_attempted -ne $false -or
+        $StatePayload.server_cleanup_completed -ne $false -or
+        $StatePayload.last_error_code -ne "pg_ctl_start_failed_no_server") {
+      Throw-SafeError -Code "lifecycle_exact_state_invalid"
+    }
+    return
+  }
+
+  if ($ExpectedState -eq "runtime_running_state_stale") {
+    if ($StatePayload.stage -ne "runtime_running_state_stale" -or
+        $StatePayload.initdb_completed -ne $true -or
+        $StatePayload.configuration_completed -ne $true -or
+        $StatePayload.server_started -ne $true -or
+        $StatePayload.server_state -ne "running" -or
+        $StatePayload.credential_protected -ne $true -or
+        $StatePayload.plaintext_password_file_present -ne $false -or
+        $StatePayload.server_cleanup_attempted -ne $false -or
+        $StatePayload.server_cleanup_completed -ne $false -or
+        $StatePayload.last_error_code -ne "recover_start_state_write_failed") {
+      Throw-SafeError -Code "lifecycle_exact_state_invalid"
+    }
+    return
+  }
+
+  if ($ExpectedState -eq "stopped_runtime_state_stale") {
+    if ($StatePayload.stage -ne "stopped_runtime_state_stale" -or
+        $StatePayload.initdb_completed -ne $true -or
+        $StatePayload.configuration_completed -ne $true -or
+        $StatePayload.server_started -ne $false -or
+        $StatePayload.server_state -ne "stopped" -or
+        $StatePayload.credential_protected -ne $true -or
+        $StatePayload.plaintext_password_file_present -ne $false -or
+        $StatePayload.server_cleanup_attempted -ne $true -or
+        $StatePayload.server_cleanup_completed -ne $true -or
+        $StatePayload.last_error_code -ne "stop_state_write_failed") {
+      Throw-SafeError -Code "lifecycle_exact_state_invalid"
+    }
+    return
+  }
+
+  Throw-SafeError -Code "lifecycle_exact_state_invalid"
+}
+function Assert-ManagedConfigurationContentExact {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $pgVersion = Join-Path $Layout.DataRoot "PG_VERSION"
+  $postgresqlConf = Join-Path $Layout.DataRoot "postgresql.conf"
+  $pgHba = Join-Path $Layout.DataRoot "pg_hba.conf"
+  if (([System.IO.File]::ReadAllText($pgVersion)).Trim() -ne "17") { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  $confText = [System.IO.File]::ReadAllText($postgresqlConf)
+  foreach ($line in (Get-FuturePostgresqlConfTemplate -ExactPort 55432)) {
+    if (-not $confText.Contains($line)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  }
+  $expectedHba = (Get-FuturePgHbaTemplate) -join "`n"
+  $actualHba = ([System.IO.File]::ReadAllText($pgHba)).Replace("
+", "`n").TrimEnd()
+  if (-not [string]::Equals($actualHba, $expectedHba, [System.StringComparison]::Ordinal)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+}
+
+function Assert-ControlDirectoryContractsExact {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.SecretRoot -ExpectedEntries @($Layout.CredentialPath)
+  $stateEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.StateRoot
+  Assert-CleanupDirectoryEntriesResult -Result $stateEntriesResult
+  $registeredPersistentChildNames = New-Object System.Collections.Generic.List[string]
+  foreach ($entry in [string[]]$stateEntriesResult.Entries) {
+    $name = [System.IO.Path]::GetFileName($entry)
+    $isControlFile = (
+      [string]::Equals($entry, $Layout.StatePath, [System.StringComparison]::OrdinalIgnoreCase) -or
+      [string]::Equals($entry, $Layout.MarkerPath, [System.StringComparison]::OrdinalIgnoreCase)
+    )
+    $isRegisteredPersistentChild = ($name -match '^persistent-child\.([0-9a-f]{32}|[A-Za-z0-9_.-]+)\.(stdout|stderr)\.log$')
+    if ($isRegisteredPersistentChild) { [void]$registeredPersistentChildNames.Add($name) }
+    if (-not $isControlFile -and -not $isRegisteredPersistentChild) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+    Assert-CleanupEntrySafe -PathValue $entry
+  }
+  if ($registeredPersistentChildNames.Count -gt 0) {
+    if ($registeredPersistentChildNames.Count -ne 2) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+    $prefixes = @($registeredPersistentChildNames.ToArray() | ForEach-Object { $_ -replace '\.(stdout|stderr)\.log$','' } | Sort-Object -Unique)
+    if ($prefixes.Count -ne 1) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+    $suffixes = @($registeredPersistentChildNames.ToArray() | ForEach-Object { if ($_ -match '\.(stdout|stderr)\.log$') { $Matches[1] } } | Sort-Object -Unique)
+    if ($suffixes.Count -ne 2 -or $suffixes -notcontains "stdout" -or $suffixes -notcontains "stderr") { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  }
+  $logEntriesResult = Get-CleanupDirectoryEntries -PathValue $Layout.LogRoot
+  Assert-CleanupDirectoryEntriesResult -Result $logEntriesResult
+  foreach ($entry in [string[]]$logEntriesResult.Entries) {
+    if (-not [string]::Equals($entry, $Layout.ServerLog, [System.StringComparison]::OrdinalIgnoreCase)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+    Assert-CleanupEntrySafe -PathValue $entry
+  }
+}
+function Assert-ExistingClusterLifecycleCommon {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  Assert-CleanupPathFixed -Layout $Layout
+  foreach ($dir in @($Layout.IsolatedRoot, $Layout.InstanceRoot, $Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)) {
+    Assert-CleanupFailedCreateDirectorySafe -PathValue $dir
+  }
+  foreach ($file in @($Layout.StatePath, $Layout.MarkerPath)) {
+    Assert-CleanupFailedCreateFileSafe -PathValue $file
+  }
+  if (-not (Test-Path -LiteralPath $Layout.CredentialPath -PathType Leaf)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  Assert-CleanupEntrySafe -PathValue $Layout.CredentialPath
+  if (Test-Path -LiteralPath $Layout.PasswordFilePath -PathType Leaf) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.IsolatedRoot -ExpectedEntries @($Layout.InstanceRoot)
+  Assert-CleanupFailedCreateExactEntries -PathValue $Layout.InstanceRoot -ExpectedEntries @($Layout.DataRoot, $Layout.LogRoot, $Layout.SecretRoot, $Layout.StateRoot)
+  Assert-ControlDirectoryContractsExact -Layout $Layout
+  if (-not (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "PG_VERSION") -PathType Leaf)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  if (-not (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postgresql.conf") -PathType Leaf)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  if (-not (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "pg_hba.conf") -PathType Leaf)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  Assert-ManagedConfigurationContentExact -Layout $Layout
+  [void](Get-CleanupManifestTree -RootPath $Layout.DataRoot -AuthorizedRoot $Layout.InstanceRoot)
+  $marker = Read-MarkerMap -MarkerPath $Layout.MarkerPath
+  $clusterId = [string]$marker["cluster_id"]
+  Assert-MarkerStateConcordance -Layout $Layout -ClusterId $clusterId
+  $state = Read-ClusterStatePayloadForValidation -PathValue $Layout.StatePath
+  if (@("initializing","initialized","running","stopped","failed","recover_start_preparing","recover_start_pidfile_removed","recover_start_failed_no_server","runtime_running_state_stale","stopped_runtime_state_stale") -notcontains ([string]$state.state)) { Throw-SafeError -Code "lifecycle_state_invalid" }
+  if ($state.cluster_id -ne $clusterId -or $state.host -ne "127.0.0.1" -or [int]$state.port -ne 55432 -or $state.admin_role -ne $script:LocalAdminUser -or $state.instance_name -ne $script:InstanceName -or $state.data_directory_name -ne "data") { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  return [pscustomobject]@{ ClusterId = $clusterId; State = $state }
+}
+
+function Test-ActiveLifecycleEvidenceExact {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package,
+    [Parameter(Mandatory = $true)][object]$PidInfo,
+    [Parameter(Mandatory = $true)][object]$Identity
+  )
+  try {
+    $pidInfoNow = Get-PostmasterPidInfo -Layout $Layout
+    if ([int]$pidInfoNow.Pid -ne [int]$PidInfo.Pid) { return [pscustomobject]@{ Exact=$false; Reason="pid_changed" } }
+    $identityNow = Get-VerifiedPostgresProcessInfo -PidInfo $pidInfoNow -Package $Package
+    if (-not [string]::Equals($identityNow.ExecutablePath, $Identity.ExecutablePath, [System.StringComparison]::OrdinalIgnoreCase)) { return [pscustomobject]@{ Exact=$false; Reason="path_changed" } }
+    if ($identityNow.StartTimeUtc -ne $Identity.StartTimeUtc) { return [pscustomobject]@{ Exact=$false; Reason="pid_reused" } }
+    $listenerOwned = Get-LoopbackTcpListenerOwnerEvidence -ExactPort 55432 -AllowedPids @($pidInfoNow.Pid)
+    if (-not $listenerOwned.QuerySucceeded -or -not $listenerOwned.ExactOwner -or [int]$listenerOwned.OwningPid -ne [int]$pidInfoNow.Pid) { return [pscustomobject]@{ Exact=$false; Reason="listener_not_exact" } }
+    $processEvidence = Get-LocalPostgresProcessEvidence -Package $Package
+    $treeEvidence = Get-PostgresProcessTreeEvidence -ProcessEvidence $processEvidence -PostmasterIdentity $identityNow
+    if (-not $treeEvidence.QuerySucceeded -or -not $treeEvidence.Exact -or -not ($treeEvidence.TreePids -contains [int]$pidInfoNow.Pid)) { return [pscustomobject]@{ Exact=$false; Reason="tree_not_exact" } }
+    if ($treeEvidence.OutsideTreeCount -ne 0 -or $treeEvidence.OtherCount -ne 0 -or $treeEvidence.AmbiguousCount -ne 0) { return [pscustomobject]@{ Exact=$false; Reason="process_inventory_not_exact" } }
+    if (-not (Test-PgIsReadyOk -Package $Package -ExactPort 55432)) { return [pscustomobject]@{ Exact=$false; Reason="pg_isready_not_exact" } }
+    if (Test-PostgresServiceRunningForLifecycle) { return [pscustomobject]@{ Exact=$false; Reason="service_running" } }
+    if ((Get-PgControlDataClusterState -Layout $Layout -Package $Package) -ne "IN_PRODUCTION") { return [pscustomobject]@{ Exact=$false; Reason="pg_control_not_in_production" } }
+    return [pscustomobject]@{ Exact=$true; Reason="exact"; PidInfo=$pidInfoNow; Identity=$identityNow; ProcessEvidence=$processEvidence; TreeEvidence=$treeEvidence }
+  } catch {
+    return [pscustomobject]@{ Exact=$false; Reason="active_capture_failed" }
+  }
+}
+function Get-IsolatedLifecycleClassification {
+  param(
+    [Parameter(Mandatory = $true)][object]$Layout,
+    [Parameter(Mandatory = $true)][object]$Package
+  )
+  if (-not (Test-Path -LiteralPath $Layout.IsolatedRoot) -and -not (Test-Path -LiteralPath $Layout.InstanceRoot) -and -not (Test-Path -LiteralPath $Layout.StatePath) -and -not (Test-Path -LiteralPath $Layout.MarkerPath) -and -not (Test-Path -LiteralPath (Join-Path $Layout.DataRoot "postmaster.pid"))) {
+    return [pscustomobject]@{ State = "CLEAN_ABSENT"; Exact = $true; ClusterId = $null; StatePayload = $null; Pid = $null; PgControlState = "ABSENT" }
+  }
+  try {
+    $common = Assert-ExistingClusterLifecycleCommon -Layout $Layout
+    $state = $common.State
+    $pidPath = Join-Path $Layout.DataRoot "postmaster.pid"
+    $pidExists = Test-Path -LiteralPath $pidPath -PathType Leaf
+    $listenerEvidence = Get-LoopbackTcpListenerOwnerEvidence -ExactPort 55432 -AllowedPids @()
+    if (-not $listenerEvidence.QuerySucceeded) { return [pscustomobject]@{ State = "UNKNOWN_PARTIAL"; Exact = $false; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = "TCP_QUERY_FAILED" } }
+    $listenerOpen = $listenerEvidence.ListenerOpen
+    $serviceRunning = Test-PostgresServiceRunningForLifecycle
+    $processEvidence = Get-LocalPostgresProcessEvidence -Package $Package
+    $pgControlState = Get-PgControlDataClusterState -Layout $Layout -Package $Package
+    $pgReady = Test-PgIsReadyOk -Package $Package -ExactPort 55432
+    if ($state.state -eq "running" -and $state.server_state -eq "running" -and $pidExists) {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "running"
+      try {
+        $pidInfo = Get-PostmasterPidInfo -Layout $Layout
+        $identity = Get-VerifiedPostgresProcessInfo -PidInfo $pidInfo -Package $Package
+        $active1 = Test-ActiveLifecycleEvidenceExact -Layout $Layout -Package $Package -PidInfo $pidInfo -Identity $identity
+        if ($active1.Exact) {
+          $active2 = Test-ActiveLifecycleEvidenceExact -Layout $Layout -Package $Package -PidInfo $pidInfo -Identity $identity
+          if ($active2.Exact) {
+            return [pscustomobject]@{ State = "RUNNING_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $pidInfo.Pid; Identity = $active2.Identity; PgControlState = "IN_PRODUCTION" }
+          }
+        }
+      } catch {
+        $pidInfo = Get-PostmasterPidInfo -Layout $Layout
+        $pidStillExists = Test-ProcessIdExistsForLifecycle -ProcessId $pidInfo.Pid
+        if ((-not $pidStillExists) -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0 -and $pgControlState -eq "IN_PRODUCTION") {
+          return [pscustomobject]@{ State = "STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $pidInfo.Pid; PgControlState = $pgControlState }
+        }
+      }
+    }
+    if ($state.state -eq "recover_start_preparing" -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0) {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "recover_start_preparing"
+      if ($state.last_error_code -eq "recover_origin_stale" -and $pidExists -and $pgControlState -eq "IN_PRODUCTION") {
+        return [pscustomobject]@{ State = "RECOVER_START_PREPARING_STALE_EXACT"; Origin="stale"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+      }
+      if ($state.last_error_code -eq "recover_origin_stopped" -and (-not $pidExists) -and $pgControlState -eq "SHUT_DOWN") {
+        return [pscustomobject]@{ State = "RECOVER_START_PREPARING_STOPPED_EXACT"; Origin="stopped"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+      }
+    }
+    if ($state.state -eq "recover_start_pidfile_removed" -and (-not $pidExists) -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0 -and $pgControlState -eq "IN_PRODUCTION") {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "recover_start_pidfile_removed"
+      if ($state.last_error_code -eq "recover_origin_stale") {
+        return [pscustomobject]@{ State = "RECOVER_START_PIDFILE_REMOVED_EXACT"; Origin="stale"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+      }
+    }
+    if ($state.state -eq "recover_start_failed_no_server" -and (-not $pidExists) -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0 -and ($pgControlState -eq "IN_PRODUCTION" -or $pgControlState -eq "SHUT_DOWN")) {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "recover_start_failed_no_server"
+      return [pscustomobject]@{ State = "RECOVER_START_FAILED_NO_SERVER_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+    }
+    if ($state.state -eq "runtime_running_state_stale" -and $pidExists) {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "runtime_running_state_stale"
+      try {
+        $pidInfo = Get-PostmasterPidInfo -Layout $Layout
+        $identity = Get-VerifiedPostgresProcessInfo -PidInfo $pidInfo -Package $Package
+        $active1 = Test-ActiveLifecycleEvidenceExact -Layout $Layout -Package $Package -PidInfo $pidInfo -Identity $identity
+        if ($active1.Exact) {
+          $active2 = Test-ActiveLifecycleEvidenceExact -Layout $Layout -Package $Package -PidInfo $pidInfo -Identity $identity
+          if ($active2.Exact) {
+            return [pscustomobject]@{ State = "RUNTIME_RUNNING_STATE_STALE_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $pidInfo.Pid; Identity = $active2.Identity; PgControlState = "IN_PRODUCTION" }
+          }
+        }
+      } catch { }
+    }
+    if (@("stopped","recover_start_preparing","recover_start_pidfile_removed","recover_start_failed_no_server") -contains [string]$state.state -and $pidExists) {
+      try {
+        switch ([string]$state.state) {
+          "stopped" { Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "stopped" }
+          "recover_start_preparing" { Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "recover_start_preparing"; if (@("recover_origin_stale","recover_origin_stopped") -notcontains [string]$state.last_error_code) { Throw-SafeError -Code "lifecycle_exact_state_invalid" } }
+          "recover_start_pidfile_removed" { Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "recover_start_pidfile_removed"; if ([string]$state.last_error_code -ne "recover_origin_stale") { Throw-SafeError -Code "lifecycle_exact_state_invalid" } }
+          "recover_start_failed_no_server" { Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "recover_start_failed_no_server" }
+          default { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+        }
+        $pidInfo = Get-PostmasterPidInfo -Layout $Layout
+        $identity = Get-VerifiedPostgresProcessInfo -PidInfo $pidInfo -Package $Package
+        $active1 = Test-ActiveLifecycleEvidenceExact -Layout $Layout -Package $Package -PidInfo $pidInfo -Identity $identity
+        if ($active1.Exact) {
+          $active2 = Test-ActiveLifecycleEvidenceExact -Layout $Layout -Package $Package -PidInfo $pidInfo -Identity $identity
+          if ($active2.Exact) {
+            return [pscustomobject]@{ State = "RUNTIME_RUNNING_STATE_STALE_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $pidInfo.Pid; Identity = $active2.Identity; PgControlState = "IN_PRODUCTION" }
+          }
+        }
+      } catch { }
+    }
+    if ([string]$state.state -eq "running" -and (-not $pidExists) -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0 -and $pgControlState -eq "SHUT_DOWN") {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "running"
+      return [pscustomobject]@{ State = "STOPPED_RUNTIME_STATE_STALE_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+    }
+    if ([string]$state.state -eq "runtime_running_state_stale" -and (-not $pidExists) -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0 -and $pgControlState -eq "SHUT_DOWN") {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "runtime_running_state_stale"
+      return [pscustomobject]@{ State = "STOPPED_RUNTIME_STATE_STALE_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+    }
+    if ($state.state -eq "stopped_runtime_state_stale" -and (-not $pidExists) -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0 -and $pgControlState -eq "SHUT_DOWN") {
+      Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "stopped_runtime_state_stale"
+      return [pscustomobject]@{ State = "STOPPED_RUNTIME_STATE_STALE_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+    }
+    if ($state.state -eq "stopped" -and $state.server_state -eq "stopped") { Assert-LifecycleStatePayloadExact -StatePayload $state -ExpectedState "stopped" }
+    if ($state.state -eq "stopped" -and $state.server_state -eq "stopped" -and (-not $pidExists) -and (-not $listenerOpen) -and (-not $pgReady) -and (-not $serviceRunning) -and $processEvidence.AuthorizedCount -eq 0 -and $processEvidence.OtherCount -eq 0 -and $processEvidence.AmbiguousCount -eq 0 -and $pgControlState -eq "SHUT_DOWN") {
+      return [pscustomobject]@{ State = "STOPPED_CLEAN_EXACT"; Exact = $true; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+    }
+    return [pscustomobject]@{ State = "UNKNOWN_PARTIAL"; Exact = $false; ClusterId = $common.ClusterId; StatePayload = $state; Pid = $null; PgControlState = $pgControlState }
+  } catch {
+    return [pscustomobject]@{ State = "UNKNOWN_PARTIAL"; Exact = $false; ClusterId = $null; StatePayload = $null; Pid = $null; PgControlState = "UNKNOWN" }
+  }
+}
+
+function Get-LifecycleAclSignaturePart {
+  param([Parameter(Mandatory = $true)][string]$PathValue, [switch]$InjectReadFailure)
+  if ($InjectReadFailure) { Throw-SafeError -Code "lifecycle_acl_unreadable" }
+  if (-not (Test-Path -LiteralPath $PathValue)) { return "acl:absent" }
+  try {
+    $acl = Get-Acl -LiteralPath $PathValue
+    $rules = $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+    $ruleParts = @($rules | ForEach-Object { $_.IdentityReference.Value + ":" + $_.AccessControlType + ":" + ([int64]$_.FileSystemRights) + ":" + $_.InheritanceFlags + ":" + $_.PropagationFlags + ":" + $_.IsInherited } | Sort-Object)
+    return "acl:" + ([string]$acl.AreAccessRulesProtected).ToLowerInvariant() + ":" + ($ruleParts -join ";")
+  } catch {
+    Throw-SafeError -Code "lifecycle_acl_unreadable"
+  }
+}
+
+function Get-LifecyclePackageIdentityPart {
+  param([Parameter(Mandatory = $true)][object]$Layout, [switch]$InjectPackageFailure)
+  if ($InjectPackageFailure) { Throw-SafeError -Code "lifecycle_package_unverified" }
+  try {
+    $package = Assert-PostgresTools -BinRoot $PostgresBin
+    $toolParts = New-Object System.Collections.Generic.List[string]
+    foreach ($toolName in @("postgres","pg_ctl","pg_isready","pg_controldata")) {
+      $toolPath = Get-ToolPath -BinRoot $package.Bin -ToolName $toolName
+      [void]$toolParts.Add($toolName + ":" + [System.IO.Path]::GetFullPath($toolPath) + ":" + (Get-FileSha256ForCleanupManifest -PathValue $toolPath))
+    }
+    return "package:" + $package.Version + ":" + ($toolParts.ToArray() -join "|")
+  } catch {
+    Throw-SafeError -Code "lifecycle_package_unverified"
+  }
+}
+function Get-LifecycleStateSignature {
+  param([Parameter(Mandatory = $true)][object]$Layout)
+  $parts = New-Object System.Collections.Generic.List[string]
+  foreach ($path in @($Layout.MarkerPath, $Layout.StatePath, (Join-Path $Layout.DataRoot "postmaster.pid"), (Join-Path $Layout.DataRoot "PG_VERSION"), (Join-Path $Layout.DataRoot "postgresql.conf"), (Join-Path $Layout.DataRoot "pg_hba.conf"), $Layout.CredentialPath)) {
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+      $item = Get-Item -LiteralPath $path -Force
+      [void]$parts.Add(([System.IO.Path]::GetFileName($path) + ":" + $item.Length + ":" + (Get-FileSha256ForCleanupManifest -PathValue $path) + ":" + $item.Attributes))
+    } else {
+      [void]$parts.Add(([System.IO.Path]::GetFileName($path) + ":absent"))
+    }
+  }
+  foreach ($dir in @($Layout.StateRoot, $Layout.LogRoot, $Layout.SecretRoot)) {
+    if (Test-Path -LiteralPath $dir -PathType Container) {
+      $entries = @(Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop | ForEach-Object { $_.Name + ":" + $_.Length + ":" + $_.Attributes }) | Sort-Object
+      [void]$parts.Add(([System.IO.Path]::GetFileName($dir) + ":" + ($entries -join ",")))
+    } else {
+      [void]$parts.Add(([System.IO.Path]::GetFileName($dir) + ":absent"))
+    }
+  }
+  foreach ($aclPath in @($Layout.IsolatedRoot,$Layout.InstanceRoot,$Layout.DataRoot,$Layout.StateRoot,$Layout.LogRoot,$Layout.SecretRoot,$Layout.StatePath,$Layout.MarkerPath,$Layout.CredentialPath)) { [void]$parts.Add(([System.IO.Path]::GetFileName($aclPath) + ":" + (Get-LifecycleAclSignaturePart -PathValue $aclPath))) }
+  [void]$parts.Add((Get-LifecyclePackageIdentityPart -Layout $Layout))
+  return (Get-StableStringHashForCleanupManifest -Text ($parts -join "`n"))
+}
+function Invoke-RecoverStart {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$RecoverStartApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$CreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$CleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$CleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$StopApprovalToken
+  )
+  Set-Stage -Stage "recover_start_authorization"
+  Assert-RecoverStartAuthorization -ConfirmRecoverStart:$ConfirmRecoverStart -ProvidedRecoverStartApprovalToken $RecoverStartApprovalToken -ExpectedRecoverStartApprovalToken $script:ExpectedRecoverStartApprovalToken -ConfirmCreate:$ConfirmCreate -ProvidedCreateApprovalToken $CreateApprovalToken -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate -ProvidedCleanupApprovalToken $CleanupApprovalToken -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate -ProvidedCleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken -ConfirmStop:$ConfirmStop -ProvidedStopApprovalToken $StopApprovalToken
+  $layout = Get-InstanceLayout
+  Assert-GitReadyForCreate
+  $package = Assert-PostgresPackageForCreate -BinRoot $PostgresBin
+  $context = [ordered]@{ Signature=$null; Classification=$null }
+  $allowedStates = @("STOPPED_CLEAN_EXACT","STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT","RECOVER_START_PREPARING_STALE_EXACT","RECOVER_START_PREPARING_STOPPED_EXACT","RECOVER_START_PIDFILE_REMOVED_EXACT","RECOVER_START_FAILED_NO_SERVER_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT","STOPPED_RUNTIME_STATE_STALE_EXACT")
+  $classify = {
+    Set-Stage -Stage "recover_start_exact_state"
+    $script:__vc_unused = $null
+    $localClassification = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
+    if ($allowedStates -notcontains $localClassification.State) { Throw-SafeError -Code "recover_start_not_allowed" }
+    $context.Classification = $localClassification
+    $context.Signature = Get-LifecycleStateSignature -Layout $layout
+    return $localClassification
+  }.GetNewClosure()
+  $revalidate = {
+    Set-Stage -Stage "recover_start_revalidate"
+    $localRevalidated = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
+    if ($allowedStates -notcontains $localRevalidated.State -or -not [string]::Equals((Get-LifecycleStateSignature -Layout $layout), $context.Signature, [System.StringComparison]::Ordinal)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+    return $localRevalidated
+  }.GetNewClosure()
+  $writeState = {
+    param([string]$Name)
+    try {
+      switch ($Name) {
+        "running" { Set-Stage -Stage "recover_start_reconcile_running_state"; Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "running" -Stage "running" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$true -CredentialProtected:$true -ServerState "running" }
+        "stopped" { Set-Stage -Stage "recover_start_reconcile_stopped_state"; Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "stopped" -Stage "stopped" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$false -CredentialProtected:$true -ServerState "stopped" -ServerCleanupAttempted:$true -ServerCleanupCompleted:$true }
+        "recover_start_preparing" {
+          Set-Stage -Stage "recover_start_preparing"
+          $origin = if ($context.Classification.State -eq "STOPPED_CLEAN_EXACT") { "recover_origin_stopped" } else { "recover_origin_stale" }
+          Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "recover_start_preparing" -Stage "recover_start_preparing" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$false -CredentialProtected:$true -ServerState "unresolved" -ErrorCode $origin
+        }
+        "recover_start_pidfile_removed" { Set-Stage -Stage "recover_start_pidfile_removed"; Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "recover_start_pidfile_removed" -Stage "recover_start_pidfile_removed" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$false -CredentialProtected:$true -ServerState "unresolved" -ErrorCode "recover_origin_stale" }
+        "recover_start_failed_no_server" { Set-Stage -Stage "recover_start_failed_no_server"; Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "recover_start_failed_no_server" -Stage "recover_start_failed_no_server" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$false -CredentialProtected:$true -ServerState "stopped" -ErrorCode "pg_ctl_start_failed_no_server" }
+        "runtime_running_state_stale" { Set-Stage -Stage "runtime_running_state_stale"; Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "runtime_running_state_stale" -Stage "runtime_running_state_stale" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$true -CredentialProtected:$true -ServerState "running" -ErrorCode "recover_start_state_write_failed" }
+        default { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+      }
+      return [pscustomobject]@{ Success=$true }
+    } catch {
+      return [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_state_write_failed" }
+    }
+  }.GetNewClosure()
+  $removePidfile = {
+    try {
+      $pidPath = Join-Path $layout.DataRoot "postmaster.pid"
+      if (-not (Test-Path -LiteralPath $pidPath -PathType Leaf)) { return [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_pidfile_remove_failed" } }
+      $pidBefore = Get-FileSha256ForCleanupManifest -PathValue $pidPath
+      $staleCheck = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
+      if (@("RECOVER_START_PREPARING_STALE_EXACT","STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT") -notcontains $staleCheck.State -or -not [string]::Equals((Get-FileSha256ForCleanupManifest -PathValue $pidPath), $pidBefore, [System.StringComparison]::Ordinal)) { return [pscustomobject]@{ Success=$false; SafeErrorCode="lifecycle_exact_state_invalid" } }
+      Set-Stage -Stage "recover_start_stale_pidfile"
+      [System.IO.File]::Delete($pidPath)
+      if (Test-Path -LiteralPath $pidPath -PathType Leaf) { return [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_pidfile_remove_failed" } }
+      return [pscustomobject]@{ Success=$true }
+    } catch {
+      return [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_pidfile_remove_failed" }
+    }
+  }.GetNewClosure()
+  $startServer = {
+    Set-Stage -Stage "recover_start_pg_ctl"
+    $pgCtl = Get-ToolPath -BinRoot $package.Bin -ToolName "pg_ctl"
+    $startArgs = @("start", "-D", $layout.DataRoot, "-l", $layout.ServerLog, "-w", "-t", "60")
+    $result = Invoke-PersistentChildSafeProcess -FilePath $pgCtl -Arguments $startArgs -WorkingDirectory $layout.InstanceRoot -OutputDirectory $layout.StateRoot -TimeoutSeconds 75 -ToolName "pg_ctl_start"
+    if ($result.TimedOut -or -not $result.Success) { return [pscustomobject]@{ Success=$false; SafeErrorCode="pg_ctl_start_failed" } }
+    Set-Stage -Stage "recover_start_runtime_verify"
+    $server = Get-VerifiedServerState -Layout $layout -Package $package
+    if ($server.State -ne "VERIFIED_SERVER_RUNNING" -or -not (Test-PgIsReadyOk -Package $package -ExactPort 55432)) { return [pscustomobject]@{ Success=$false; SafeErrorCode="postgres_server_state_unresolved" } }
+    return [pscustomobject]@{ Success=$true }
+  }.GetNewClosure()
+  $stopServer = { [pscustomobject]@{ Success=$false; SafeErrorCode="recover_start_stop_not_applicable" } }
+  $resolveStart = { Resolve-VerifiedPgCtlStartFailure -Layout $layout -Package $package }.GetNewClosure()
+
+  $engineResult = Invoke-RecoverStopTransitionEngine -Operation "RecoverStart" -Classify $classify -Revalidate $revalidate -WriteState $writeState -StartServer $startServer -StopServer $stopServer -RemovePidfile $removePidfile -ResolveStartFailure $resolveStart
+  if ($engineResult.SafeErrorCode -eq "none" -and $engineResult.FinalLogicalState -eq "running") {
+    $running = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
+    if ($running.State -ne "RUNNING_EXACT") { Throw-SafeError -Code "postgres_server_state_unresolved" }
+    Write-Output "RECOVER_START_OK"
+    Write-Output "state=running"
+    Write-Output "sql_executed=false"
+    Write-Output "production_connection_used=false"
+    return
+  }
+  if ($engineResult.SafeErrorCode -eq "none" -and $engineResult.FinalLogicalState -eq "stopped") {
+    Write-Output "RECOVER_START_RECONCILED_STOPPED"
+    Write-Output "state=stopped"
+    Write-Output "sql_executed=false"
+    Write-Output "production_connection_used=false"
+    return
+  }
+  if ($engineResult.SafeErrorCode -eq "pg_ctl_start_failed_no_server") { Throw-SafeError -Code "pg_ctl_start_failed" }
+  if ($engineResult.SafeErrorCode -eq "lifecycle_exact_state_invalid") { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+  if ($engineResult.SafeErrorCode -eq "recover_start_not_allowed") { Throw-SafeError -Code "recover_start_not_allowed" }
+  if ($engineResult.SafeErrorCode -eq "recover_start_state_write_failed") { Throw-SafeError -Code "recover_start_state_write_failed" }
+  if ($engineResult.SafeErrorCode -eq "recover_start_pidfile_remove_failed") { Throw-SafeError -Code "recover_start_pidfile_remove_failed" }
+  if ($engineResult.SafeErrorCode -eq "postgres_server_cleanup_failed") { Throw-SafeError -Code "postgres_server_cleanup_failed" }
+  if ($engineResult.SafeErrorCode -eq "postgres_server_state_unresolved") { Throw-SafeError -Code "postgres_server_state_unresolved" }
+  Throw-SafeError -Code "pg_ctl_start_failed"
+}
+
+function Invoke-StopExisting {
+  param(
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$StopApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCreate,
+    [AllowNull()][string]$CreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
+    [AllowNull()][string]$CleanupApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
+    [AllowNull()][string]$CleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$RecoverStartApprovalToken
+  )
+  Set-Stage -Stage "stop_authorization"
+  Assert-StopAuthorization -ConfirmStop:$ConfirmStop -ProvidedStopApprovalToken $StopApprovalToken -ExpectedStopApprovalToken $script:ExpectedStopApprovalToken -ConfirmCreate:$ConfirmCreate -ProvidedCreateApprovalToken $CreateApprovalToken -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate -ProvidedCleanupApprovalToken $CleanupApprovalToken -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate -ProvidedCleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken -ConfirmRecoverStart:$ConfirmRecoverStart -ProvidedRecoverStartApprovalToken $RecoverStartApprovalToken
+  $layout = Get-InstanceLayout
+  Assert-GitReadyForCreate
+  $package = Assert-PostgresPackageForCreate -BinRoot $PostgresBin
+  $context = [ordered]@{ Signature=$null; Classification=$null }
+  $classify = {
+    Set-Stage -Stage "stop_exact_state"
+    $localClassification = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
+    if (@("RUNNING_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT") -notcontains $localClassification.State) { Throw-SafeError -Code "stop_not_allowed" }
+    $context.Classification = $localClassification
+    $context.Signature = Get-LifecycleStateSignature -Layout $layout
+    return $localClassification
+  }.GetNewClosure()
+  $revalidate = {
+    Set-Stage -Stage "stop_revalidate"
+    $localRevalidated = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
+    if (@("RUNNING_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT") -notcontains $localRevalidated.State -or -not [string]::Equals((Get-LifecycleStateSignature -Layout $layout), $context.Signature, [System.StringComparison]::Ordinal)) { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+    return $localRevalidated
+  }.GetNewClosure()
+  $writeState = {
+    param([string]$Name)
+    try {
+      switch ($Name) {
+        "stopped" { Set-Stage -Stage "stopped"; Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "stopped" -Stage "stopped" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$false -CredentialProtected:$true -ServerState "stopped" -ServerCleanupAttempted:$true -ServerCleanupCompleted:$true }
+        "stopped_runtime_state_stale" { Set-Stage -Stage "stopped_runtime_state_stale"; Write-ClusterState -Layout $layout -ClusterId $context.Classification.ClusterId -State "stopped_runtime_state_stale" -Stage "stopped_runtime_state_stale" -InitdbCompleted:$true -ConfigurationCompleted:$true -ServerStarted:$false -CredentialProtected:$true -ServerState "stopped" -ServerCleanupAttempted:$true -ServerCleanupCompleted:$true -ErrorCode "stop_state_write_failed" }
+        default { Throw-SafeError -Code "lifecycle_exact_state_invalid" }
+      }
+      return [pscustomobject]@{ Success=$true }
+    } catch {
+      return [pscustomobject]@{ Success=$false; SafeErrorCode="stop_state_write_failed" }
+    }
+  }.GetNewClosure()
+  $stopServer = {
+    Set-Stage -Stage "stop_pg_ctl"
+    $stopped = Invoke-VerifiedPgCtlStop -Layout $layout -Package $package
+    return [pscustomobject]@{ Success=($stopped.State -eq "VERIFIED_SERVER_STOPPED"); State=$stopped.State }
+  }.GetNewClosure()
+  $noopStart = { [pscustomobject]@{ Success=$false } }
+  $noopRemove = { [pscustomobject]@{ Success=$false } }
+  $noopResolve = { [pscustomobject]@{ State="SERVER_STATE_UNRESOLVED" } }
+  $engineResult = Invoke-RecoverStopTransitionEngine -Operation "Stop" -Classify $classify -Revalidate $revalidate -WriteState $writeState -StartServer $noopStart -StopServer $stopServer -RemovePidfile $noopRemove -ResolveStartFailure $noopResolve
+  if ($engineResult.SafeErrorCode -eq "none" -and $engineResult.FinalLogicalState -eq "stopped") {
+    $final = Get-IsolatedLifecycleClassification -Layout $layout -Package $package
+    if ($final.State -ne "STOPPED_CLEAN_EXACT") { Throw-SafeError -Code "postgres_server_state_unresolved" }
+    Write-Output "STOP_EXISTING_OK"
+    Write-Output "state=stopped"
+    Write-Output "sql_executed=false"
+    Write-Output "production_connection_used=false"
+    return
+  }
+  if ($engineResult.SafeErrorCode -eq "lifecycle_exact_state_invalid") { Throw-SafeError -Code "lifecycle_exact_state_invalid" }   if ($engineResult.SafeErrorCode -eq "stop_not_allowed") { Throw-SafeError -Code "stop_not_allowed" }
+  if ($engineResult.SafeErrorCode -eq "stop_state_write_failed") { Throw-SafeError -Code "stop_state_write_failed" }
+  if ($engineResult.SafeErrorCode -eq "postgres_server_cleanup_failed") { Throw-SafeError -Code "postgres_server_cleanup_failed" }
+  Throw-SafeError -Code "postgres_server_state_unresolved"
+}
 function Invoke-Create {
   param(
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCreate,
@@ -4931,9 +6795,14 @@ function Invoke-Create {
     [Parameter(Mandatory = $true)][System.Management.Automation.SwitchParameter]$ConfirmCleanupPartialCreate,
     [AllowNull()][string]$CleanupApprovalToken,
     [System.Management.Automation.SwitchParameter]$ConfirmCleanupFailedCreate,
-    [AllowNull()][string]$CleanupFailedCreateApprovalToken
+    [AllowNull()][string]$CleanupFailedCreateApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmRecoverStart,
+    [AllowNull()][string]$RecoverStartApprovalToken,
+    [System.Management.Automation.SwitchParameter]$ConfirmStop,
+    [AllowNull()][string]$StopApprovalToken
   )
   Set-Stage -Stage "create_authorization"
+  if ($ConfirmRecoverStart -or -not [string]::IsNullOrWhiteSpace($RecoverStartApprovalToken) -or $ConfirmStop -or -not [string]::IsNullOrWhiteSpace($StopApprovalToken)) { Throw-SafeError -Code "create_not_authorized" }
   Assert-CreateAuthorization `
     -ConfirmCreate:$ConfirmCreate `
     -ProvidedCreateApprovalToken $CreateApprovalToken `
@@ -5109,24 +6978,33 @@ function Invoke-Plan {
   Assert-DatabaseName -Value $DatabaseName
   $usingDefaultDataRoot = [string]::IsNullOrWhiteSpace($DataRoot)
   $resolvedDataRoot = if ($usingDefaultDataRoot) { $layout.DataRoot } else { $DataRoot }
+  $lifecycle = Get-IsolatedLifecycleClassification -Layout $layout -Package $postgresPackage
+  $lifecycleExact = $lifecycle.Exact
   $cleanupPartialCreateExactStateValid = Test-CleanupPartialCreateStateReplaceResidual -Layout $layout
   $cleanupFailedPgCtlStartExactStateValid = Test-CleanupFailedPgCtlStartResidual -Layout $layout
   $cleanupFailedPgCtlStartManifestValid = $false
   if ($cleanupFailedPgCtlStartExactStateValid) {
     try { [void](New-CleanupFailedPgCtlStartManifest -Layout $layout); $cleanupFailedPgCtlStartManifestValid = $true } catch { $cleanupFailedPgCtlStartManifestValid = $false }
   }
-  if ((-not $cleanupPartialCreateExactStateValid) -and (-not $cleanupFailedPgCtlStartExactStateValid) -or -not $usingDefaultDataRoot) {
+  if ((-not $lifecycleExact) -and (-not $cleanupPartialCreateExactStateValid) -and (-not $cleanupFailedPgCtlStartExactStateValid) -or -not $usingDefaultDataRoot) {
     [void](Assert-DataRoot -Root $resolvedDataRoot -RepoRoot $repoRoot -ExpectedClusterName $ClusterName -RequireMarker:$false)
   }
   $baselineValid = Invoke-BaselineValidator -RepoRoot $repoRoot
   $portAvailable = Test-PortAvailable -Value $Port
   $dependencies = Get-DependencyScan -RepoRoot $repoRoot
   $localCompat = Invoke-LocalCompatPreflightValidator -RepoRoot $repoRoot
-  $partialInstanceCleanupRequired = Test-Path -LiteralPath $layout.InstanceRoot -PathType Container
+  $instanceRootExists = Test-Path -LiteralPath $layout.InstanceRoot -PathType Container
+  $partialInstanceCleanupRequired = $instanceRootExists -and (-not $lifecycleExact)
   $cleanupPartialCreateRequired = $partialInstanceCleanupRequired -and $cleanupPartialCreateExactStateValid
   $cleanupFailedCreateRequired = $partialInstanceCleanupRequired -and $cleanupFailedPgCtlStartExactStateValid
   $cleanupFailedCreateMode = if ($cleanupFailedPgCtlStartExactStateValid) { "PG_CTL_START_INITIALIZED_RESIDUAL" } else { "NONE" }
-  $readyForCreate = $baselineValid -and $portAvailable -and $localCompat.Valid -and (-not $partialInstanceCleanupRequired)
+  $recoverStartAccepts = @("STOPPED_CLEAN_EXACT","STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT","RECOVER_START_PREPARING_STALE_EXACT","RECOVER_START_PREPARING_STOPPED_EXACT","RECOVER_START_PIDFILE_REMOVED_EXACT","RECOVER_START_FAILED_NO_SERVER_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT","STOPPED_RUNTIME_STATE_STALE_EXACT")
+  $stopAccepts = @("RUNNING_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT")
+  $recoverStartRequired = $recoverStartAccepts -contains $lifecycle.State
+  $recoveryReconciliationRequired = @("RECOVER_START_PREPARING_STALE_EXACT","RECOVER_START_PREPARING_STOPPED_EXACT","RECOVER_START_PIDFILE_REMOVED_EXACT","RECOVER_START_FAILED_NO_SERVER_EXACT","RUNTIME_RUNNING_STATE_STALE_EXACT","STOPPED_RUNTIME_STATE_STALE_EXACT") -contains $lifecycle.State
+  $startRequired = @("STOPPED_CLEAN_EXACT","STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT","RECOVER_START_PREPARING_STALE_EXACT","RECOVER_START_PREPARING_STOPPED_EXACT","RECOVER_START_PIDFILE_REMOVED_EXACT") -contains $lifecycle.State
+  $stopRequired = $stopAccepts -contains $lifecycle.State
+  $readyForCreate = $baselineValid -and $portAvailable -and $localCompat.Valid -and ($lifecycle.State -eq "CLEAN_ABSENT")
   $readyForApply = $false
   $readyForVerify = $false
   $readyForDestroy = Test-ReadyForDestroy -ResolvedDataRoot $resolvedDataRoot -RepoRoot $repoRoot
@@ -5148,6 +7026,9 @@ function Invoke-Plan {
   Write-Output "create_implementation_present=true"
   Write-Output "git_ancestry_strategy=MERGE_BASE_IS_ANCESTOR"
   Write-Output "process_output_strategy=ASYNC_DUAL_STREAM_DRAIN"
+  Write-Output "persistent_child_process_strategy=STARTUPINFOEX_HANDLE_LIST_NO_WINDOW"
+  Write-Output "persistent_child_handle_inheritance=PROC_THREAD_ATTRIBUTE_HANDLE_LIST"
+  Write-Output "persistent_child_console_strategy=CREATE_NO_WINDOW_NEW_PROCESS_GROUP"
   Write-Output "windows_argument_empty_value_safe=true"
   Write-Output "pg_hba_ipv6_reject=::/0"
   Write-Output "file_acl_inheritance=NONE"
@@ -5162,8 +7043,17 @@ function Invoke-Plan {
   Write-Output "acl_validation_semantic_set=true"
   Write-Output "acl_rule_order_dependency=false"
   Write-Output "acl_fullcontrol_bitmask_validation=true"
+  Write-Output "isolated_lifecycle_state=$($lifecycle.State)"
+  Write-Output "isolated_lifecycle_exact=$(([string]$lifecycleExact).ToLowerInvariant())"
+  Write-Output "recover_start_required=$(([string]$recoverStartRequired).ToLowerInvariant())"
+  Write-Output "recovery_reconciliation_required=$(([string]$recoveryReconciliationRequired).ToLowerInvariant())"
+  Write-Output "start_required=$(([string]$startRequired).ToLowerInvariant())"
+  Write-Output "recover_start_accepts=STOPPED_CLEAN_EXACT,STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT,RECOVER_START_PREPARING_STALE_EXACT,RECOVER_START_PREPARING_STOPPED_EXACT,RECOVER_START_PIDFILE_REMOVED_EXACT,RECOVER_START_FAILED_NO_SERVER_EXACT,RUNTIME_RUNNING_STATE_STALE_EXACT,STOPPED_RUNTIME_STATE_STALE_EXACT"
+  Write-Output "stop_accepts=RUNNING_EXACT,RUNTIME_RUNNING_STATE_STALE_EXACT"
+  Write-Output "stop_required=$(([string]$stopRequired).ToLowerInvariant())"
   Write-Output "partial_instance_cleanup_required=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
-  Write-Output "create_retry_blocked_until_cleanup=$(([string]$partialInstanceCleanupRequired).ToLowerInvariant())"
+  Write-Output "create_blocked_existing_cluster=$(([string]($lifecycleExact -and $lifecycle.State -ne "CLEAN_ABSENT")).ToLowerInvariant())"
+  Write-Output "create_retry_blocked_until_cleanup=$(([string]($partialInstanceCleanupRequired -or $cleanupFailedCreateRequired)).ToLowerInvariant())"
   Write-Output "cleanup_partial_create_required=$(([string]$cleanupPartialCreateRequired).ToLowerInvariant())"
   Write-Output "cleanup_partial_create_exact_state_valid=$(([string]$cleanupPartialCreateExactStateValid).ToLowerInvariant())"
   Write-Output "cleanup_partial_create_state_replace_residual_supported=true"
@@ -5187,7 +7077,7 @@ function Invoke-Plan {
   Write-Output "git_working_directory_enforced=true"
   Write-Output "process_output_drain_verified=true"
   Write-Output "process_output_drain_failure_code=process_output_drain_failed"
-  Write-Output "pg_ctl_start_process_strategy=FILE_REDIRECT_NO_PIPE_INHERITANCE"
+  Write-Output "pg_ctl_start_process_strategy=STARTUPINFOEX_HANDLE_LIST_NO_WINDOW"
   Write-Output "pg_ctl_start_output_capture=CONTROLLED_FILES_SANITIZED_TAIL"
   Write-Output "process_incomplete_task_dispose_safe=true"
   Write-Output "no_pidfile_process_inventory=DOTNET_LOCAL_PROCESS_ENUMERATION"
@@ -5196,7 +7086,13 @@ function Invoke-Plan {
   Write-Output "process_path_property_used=false"
   Write-Output "process_access_failure_strategy=AMBIGUOUS_FAIL_CLOSED"
   Write-Output "process_identity_strategy=PID_MAINMODULE_STARTTIME"
-  Write-Output "real_process_enumeration_in_plan=false"
+  Write-Output "real_process_enumeration_in_plan=true"
+  Write-Output "listener_owner_strategy=GET_EXTENDED_TCP_TABLE_OWNINGPID"
+  Write-Output "process_tree_strategy=POSTMASTER_PID_TREE_EXACT"
+  Write-Output "lifecycle_signature_includes_acl=true"
+  Write-Output "lifecycle_signature_includes_package_hashes=true"
+  Write-Output "lifecycle_signature_acl=true"
+  Write-Output "lifecycle_signature_package_hashes=postgres,pg_ctl,pg_isready,pg_controldata"
   Write-Output "pg_ctl_start_failure_recovery=VERIFIED_PID_DATAROOT_EXECUTABLE_LISTENER"
   Write-Output "pg_ctl_stop_strategy=FAST_WAIT_30_VERIFIED"
   Write-Output "pg_ctl_stop_recheck_always=true"
@@ -5212,7 +7108,7 @@ function Invoke-Plan {
   Write-Output "data_root_outside_repository=true"
   Write-Output "baseline_candidate_valid=true"
   Write-Output "port_available=$(([string]$portAvailable).ToLowerInvariant())"
-  Write-Output "local_server_detected=not_checked_by_plan"
+  Write-Output "local_server_detected=checked_by_plan"
   Write-Output "required_dependencies_count=$($dependencies.RequiredDependenciesCount)"
   Write-Output "dependency_names=$($dependencies.DependencyNames)"
   Write-Output "missing_dependency_categories=$($dependencies.MissingDependencyCategories)"
@@ -5229,6 +7125,12 @@ function Invoke-Plan {
   Write-Output "create_authorized=false"
   Write-Output "create_execution_blocked=true"
   Write-Output "create_execution_requires_exact_approval=true"
+  Write-Output "recover_start_action_present=true"
+  Write-Output "recover_start_authorized=false"
+  Write-Output "recover_start_execution_blocked=true"
+  Write-Output "stop_action_present=true"
+  Write-Output "stop_authorized=false"
+  Write-Output "stop_execution_blocked=true"
   Write-Output "authorization_parameter_scope=EXPLICIT"
   Write-Output "authorization_token_name_collision=false"
   Write-Output "create_expected_token_variable=EXPECTED_CREATE_APPROVAL_TOKEN"
@@ -5336,7 +7238,10 @@ function Invoke-BlockedFutureAction {
 }
 
 try {
+  [void](Assert-TopLevelActionGuards -RequestedAction $Action -SelfTestRequested ([bool]$SelfTest) -KeepOnSuccessRequested ([bool]$KeepOnSuccess))
   if ($SelfTest) {
+    Invoke-P1APersistentChildDynamicSelfTest
+    Invoke-P1BRealLifecycleSelfTest
     Invoke-CleanupFailedPgCtlStartRealFilesystemSelfTest
     Invoke-CleanupPartialRealFilesystemSelfTest
     exit 0
@@ -5351,7 +7256,11 @@ try {
         -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
         -CleanupApprovalToken $CleanupApprovalToken `
         -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
-        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
+        -ConfirmRecoverStart:$ConfirmRecoverStart `
+        -RecoverStartApprovalToken $RecoverStartApprovalToken `
+        -ConfirmStop:$ConfirmStop `
+        -StopApprovalToken $StopApprovalToken
     }
     "CleanupPartialCreate" {
       Invoke-CleanupPartialCreate `
@@ -5360,7 +7269,11 @@ try {
         -ConfirmCreate:$ConfirmCreate `
         -CreateApprovalToken $CreateApprovalToken `
         -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
-        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
+        -ConfirmRecoverStart:$ConfirmRecoverStart `
+        -RecoverStartApprovalToken $RecoverStartApprovalToken `
+        -ConfirmStop:$ConfirmStop `
+        -StopApprovalToken $StopApprovalToken
     }
     "CleanupFailedCreate" {
       Invoke-CleanupFailedCreate `
@@ -5369,7 +7282,50 @@ try {
         -ConfirmCreate:$ConfirmCreate `
         -CreateApprovalToken $CreateApprovalToken `
         -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
-        -CleanupApprovalToken $CleanupApprovalToken
+        -CleanupApprovalToken $CleanupApprovalToken `
+        -ConfirmRecoverStart:$ConfirmRecoverStart `
+        -RecoverStartApprovalToken $RecoverStartApprovalToken `
+        -ConfirmStop:$ConfirmStop `
+        -StopApprovalToken $StopApprovalToken
+    }
+    "RecoverStart" {
+      Invoke-RecoverStart `
+        -ConfirmRecoverStart:$ConfirmRecoverStart `
+        -RecoverStartApprovalToken $RecoverStartApprovalToken `
+        -ConfirmCreate:$ConfirmCreate `
+        -CreateApprovalToken $CreateApprovalToken `
+        -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+        -CleanupApprovalToken $CleanupApprovalToken `
+        -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
+        -ConfirmStop:$ConfirmStop `
+        -StopApprovalToken $StopApprovalToken
+    }
+    "StartExisting" {
+      Invoke-RecoverStart `
+        -ConfirmRecoverStart:$ConfirmRecoverStart `
+        -RecoverStartApprovalToken $RecoverStartApprovalToken `
+        -ConfirmCreate:$ConfirmCreate `
+        -CreateApprovalToken $CreateApprovalToken `
+        -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+        -CleanupApprovalToken $CleanupApprovalToken `
+        -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
+        -ConfirmStop:$ConfirmStop `
+        -StopApprovalToken $StopApprovalToken
+    }
+    "Stop" {
+      Invoke-StopExisting `
+        -ConfirmStop:$ConfirmStop `
+        -StopApprovalToken $StopApprovalToken `
+        -ConfirmCreate:$ConfirmCreate `
+        -CreateApprovalToken $CreateApprovalToken `
+        -ConfirmCleanupPartialCreate:$ConfirmCleanupPartialCreate `
+        -CleanupApprovalToken $CleanupApprovalToken `
+        -ConfirmCleanupFailedCreate:$ConfirmCleanupFailedCreate `
+        -CleanupFailedCreateApprovalToken $CleanupFailedCreateApprovalToken `
+        -ConfirmRecoverStart:$ConfirmRecoverStart `
+        -RecoverStartApprovalToken $RecoverStartApprovalToken
     }
     "Apply" { Invoke-BlockedFutureAction -RequestedAction "Apply" }
     "Verify" { Invoke-BlockedFutureAction -RequestedAction "Verify" }

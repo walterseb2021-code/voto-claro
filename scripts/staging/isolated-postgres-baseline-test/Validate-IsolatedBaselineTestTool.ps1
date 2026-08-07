@@ -157,11 +157,14 @@ foreach ($command in $commands) {
   }
 }
 
-Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","CleanupPartialCreate","CleanupFailedCreate","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
+Assert-Contains -Text $text -Pattern '\[ValidateSet\("Plan","Create","CleanupPartialCreate","CleanupFailedCreate","RecoverStart","StartExisting","Stop","Apply","Verify","Destroy","FullTest"\)\]' -Code "actions_missing"
 Assert-Contains -Text $text -Pattern 'switch \(\$Action\)' -Code "switch_dispatch_missing"
 Assert-Contains -Text $text -Pattern '"Plan" \{ Invoke-Plan \}' -Code "plan_branch_missing"
 Assert-Contains -Text $text -Pattern '"Create" \{[\s\S]+Invoke-Create[\s\S]+-ConfirmCreate:\$ConfirmCreate[\s\S]+-CreateApprovalToken \$CreateApprovalToken' -Code "create_branch_missing"
 Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{[\s\S]+Invoke-CleanupPartialCreate[\s\S]+-ConfirmCleanupPartialCreate:\$ConfirmCleanupPartialCreate[\s\S]+-CleanupApprovalToken \$CleanupApprovalToken' -Code "cleanup_branch_missing"
+Assert-Contains -Text $text -Pattern '"RecoverStart" \{[\s\S]+Invoke-RecoverStart[\s\S]+-ConfirmRecoverStart:\$ConfirmRecoverStart[\s\S]+-RecoverStartApprovalToken \$RecoverStartApprovalToken' -Code "recover_start_branch_missing"
+Assert-Contains -Text $text -Pattern '"StartExisting" \{[\s\S]+Invoke-RecoverStart[\s\S]+-ConfirmRecoverStart:\$ConfirmRecoverStart[\s\S]+-RecoverStartApprovalToken \$RecoverStartApprovalToken' -Code "start_existing_branch_missing"
+Assert-Contains -Text $text -Pattern '"Stop" \{[\s\S]+Invoke-StopExisting[\s\S]+-ConfirmStop:\$ConfirmStop[\s\S]+-StopApprovalToken \$StopApprovalToken' -Code "stop_branch_missing"
 Assert-Contains -Text $text -Pattern '"CleanupFailedCreate" \{[\s\S]+Invoke-CleanupFailedCreate[\s\S]+-ConfirmCleanupFailedCreate:\$ConfirmCleanupFailedCreate[\s\S]+-CleanupFailedCreateApprovalToken \$CleanupFailedCreateApprovalToken' -Code "cleanup_failed_branch_missing"
 Assert-Contains -Text $text -Pattern '"Apply" \{ Invoke-BlockedFutureAction -RequestedAction "Apply" \}' -Code "apply_branch_not_blocked"
 Assert-Contains -Text $text -Pattern '"Verify" \{ Invoke-BlockedFutureAction -RequestedAction "Verify" \}' -Code "verify_branch_not_blocked"
@@ -178,6 +181,13 @@ $cleanupAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupAuthor
 $cleanupFailedFunctionText = Get-FunctionText -Name "Invoke-CleanupFailedCreate"
 $cleanupFailedAuthorizationTestFunctionText = Get-FunctionText -Name "Test-CleanupFailedCreateAuthorization"
 $cleanupFailedAuthorizationFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateAuthorization"
+$recoverStartFunctionText = Get-FunctionText -Name "Invoke-RecoverStart"
+$recoverStartAuthorizationFunctionText = Get-FunctionText -Name "Assert-RecoverStartAuthorization"
+$recoverStartAuthorizationTestFunctionText = Get-FunctionText -Name "Test-RecoverStartAuthorization"
+$stopFunctionText = Get-FunctionText -Name "Invoke-StopExisting"
+$stopAuthorizationFunctionText = Get-FunctionText -Name "Assert-StopAuthorization"
+$stopAuthorizationTestFunctionText = Get-FunctionText -Name "Test-StopAuthorization"
+$lifecycleFunctionText = Get-FunctionText -Name "Get-IsolatedLifecycleClassification"
 $cleanupFailedStateFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateExactState"
 $cleanupFailedStateFileSizeFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStateFileSize"
 $cleanupFailedPayloadFunctionText = Get-FunctionText -Name "Assert-CleanupFailedCreateStatePayload"
@@ -233,6 +243,15 @@ $serverStateFunctionText = Get-FunctionText -Name "Get-VerifiedServerState"
 $pgCtlStopFunctionText = Get-FunctionText -Name "Invoke-VerifiedPgCtlStop"
 $pgCtlFailureFunctionText = Get-FunctionText -Name "Resolve-VerifiedPgCtlStartFailure"
 $postStopWaitFunctionText = Get-FunctionText -Name "Wait-ForVerifiedServerStopState"
+$listenerOwnerFunctionText = Get-FunctionText -Name "Get-LoopbackTcpListenerOwnerEvidence"
+$processTreeFunctionText = Get-FunctionText -Name "Get-PostgresProcessTreeEvidence"
+$parentPidSnapshotFunctionText = Get-FunctionText -Name "Get-ProcessParentPidSnapshotForLifecycle"
+$lifecycleSignatureFunctionText = Get-FunctionText -Name "Get-LifecycleStateSignature"
+$p1bLifecycleSelfTestFunctionText = Get-FunctionText -Name "Invoke-P1BRealLifecycleSelfTest"
+$p1dHarnessFunctionText = Get-FunctionText -Name "Invoke-P1DRecoverStopHarnessCase"
+$recoverStopEngineFunctionText = Get-FunctionText -Name "Invoke-RecoverStopTransitionEngine"
+$negativeRuntimeFunctionText = Get-FunctionText -Name "Invoke-P1DNegativeRuntimeContractSelfTest"
+$activeLifecycleEvidenceFunctionText = Get-FunctionText -Name "Test-ActiveLifecycleEvidenceExact"
 $strictJsonFunctionText = Get-FunctionText -Name "Assert-StrictFlatStateJson"
 Assert-NotContains -Text ($createFunctionText + "`n" + $cleanupFunctionText + "`n" + $cleanupFailedFunctionText) -Pattern 'finally[^\r\n]*(Remove-Item|\[System\.IO\.Directory\]::Delete)[^\r\n]*(DataRoot|InstanceRoot)' -Code "finally_dataroot_cleanup_detected"
 Assert-NotContains -Text $planFunctionText -Pattern "Invoke-SafeProcess|Invoke-GitCommand|Remove-Item|New-Item|Read-Host|TcpListener|RandomNumberGenerator|ConvertFrom-SecureString|Set-Acl|Start-Process|&\s*" -Code "plan_contains_forbidden_operation"
@@ -250,12 +269,20 @@ Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCleanupPartialCreate' -
 Assert-Contains -Text $text -Pattern '\[string\]\$CleanupApprovalToken' -Code "cleanup_token_param_missing"
 Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmCleanupFailedCreate' -Code "confirm_cleanup_failed_missing"
 Assert-Contains -Text $text -Pattern '\[string\]\$CleanupFailedCreateApprovalToken' -Code "cleanup_failed_token_param_missing"
+Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmRecoverStart' -Code "confirm_recover_start_missing"
+Assert-Contains -Text $text -Pattern '\[string\]\$RecoverStartApprovalToken' -Code "recover_start_token_param_missing"
+Assert-Contains -Text $text -Pattern '\[switch\]\$ConfirmStop' -Code "confirm_stop_missing"
+Assert-Contains -Text $text -Pattern '\[string\]\$StopApprovalToken' -Code "stop_token_param_missing"
 Assert-Contains -Text $text -Pattern 'CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_create_token_missing"
 Assert-Contains -Text $text -Pattern 'CLEANUP_PARTIAL_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_cleanup_token_missing"
 Assert-Contains -Text $text -Pattern 'CLEANUP_FAILED_CREATE_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_cleanup_failed_token_missing"
+Assert-Contains -Text $text -Pattern 'RECOVER_START_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_recover_start_token_missing"
+Assert-Contains -Text $text -Pattern 'STOP_VOTO_CLARO_ISOLATED_PG17_127001_55432' -Code "exact_stop_token_missing"
 Assert-Contains -Text $text -Pattern '\$script:ExpectedCreateApprovalToken\s*=' -Code "expected_create_token_missing"
 Assert-Contains -Text $text -Pattern '\$script:ExpectedCleanupApprovalToken\s*=' -Code "expected_cleanup_token_missing"
 Assert-Contains -Text $text -Pattern '\$script:ExpectedCleanupFailedCreateApprovalToken\s*=' -Code "expected_cleanup_failed_token_missing"
+Assert-Contains -Text $text -Pattern '\$script:ExpectedRecoverStartApprovalToken\s*=' -Code "expected_recover_start_token_missing"
+Assert-Contains -Text $text -Pattern '\$script:ExpectedStopApprovalToken\s*=' -Code "expected_stop_token_missing"
 Assert-NotContains -Text $text -Pattern '\$script:CreateApprovalToken\s*=' -Code "homonymous_create_token_constant_detected"
 Assert-NotContains -Text $text -Pattern '\$script:CleanupApprovalToken\s*=' -Code "homonymous_cleanup_token_constant_detected"
 Assert-NotContains -Text $text -Pattern '(?m)^\s*\$(CreateApprovalToken|CleanupApprovalToken|CleanupFailedCreateApprovalToken|ConfirmCreate|ConfirmCleanupPartialCreate|ConfirmCleanupFailedCreate)\s*=' -Code "authorization_input_parameter_reassignment_detected"
@@ -268,6 +295,57 @@ Assert-Contains -Text $createFunctionText -Pattern 'param\([\s\S]+ConfirmCreate[
 Assert-Contains -Text $cleanupFunctionText -Pattern 'param\([\s\S]+ConfirmCleanupPartialCreate[\s\S]+CleanupApprovalToken[\s\S]+ConfirmCreate[\s\S]+CreateApprovalToken[\s\S]+Assert-CleanupAuthorization' -Code "invoke_cleanup_explicit_authorization_missing"
 Assert-Contains -Text $text -Pattern '"Create" \{[\s\S]+Invoke-Create[\s\S]+-ConfirmCreate:\$ConfirmCreate[\s\S]+-CreateApprovalToken \$CreateApprovalToken[\s\S]+-ConfirmCleanupPartialCreate:\$ConfirmCleanupPartialCreate[\s\S]+-CleanupApprovalToken \$CleanupApprovalToken' -Code "dispatcher_create_forwarding_missing"
 Assert-Contains -Text $text -Pattern '"CleanupPartialCreate" \{[\s\S]+Invoke-CleanupPartialCreate[\s\S]+-ConfirmCleanupPartialCreate:\$ConfirmCleanupPartialCreate[\s\S]+-CleanupApprovalToken \$CleanupApprovalToken[\s\S]+-ConfirmCreate:\$ConfirmCreate[\s\S]+-CreateApprovalToken \$CreateApprovalToken' -Code "dispatcher_cleanup_forwarding_missing"
+
+Assert-Contains -Text $recoverStartAuthorizationTestFunctionText -Pattern 'ExpectedRecoverStartApprovalToken[\s\S]+ConfirmStop[\s\S]+ProvidedStopApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "pure_recover_start_authorization_missing"
+Assert-Contains -Text $stopAuthorizationTestFunctionText -Pattern 'ExpectedStopApprovalToken[\s\S]+ConfirmRecoverStart[\s\S]+ProvidedRecoverStartApprovalToken[\s\S]+StringComparison\]::Ordinal' -Code "pure_stop_authorization_missing"
+Assert-Contains -Text $lifecycleFunctionText -Pattern '(?s)(?=.*CLEAN_ABSENT)(?=.*RUNNING_EXACT)(?=.*STOPPED_CLEAN_EXACT)(?=.*STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT)(?=.*UNKNOWN_PARTIAL)' -Code "lifecycle_classifications_missing"
+Assert-Contains -Text $recoverStartFunctionText -Pattern 'STOPPED_CLEAN_EXACT[\s\S]+STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT[\s\S]+Get-LifecycleStateSignature[\s\S]+Invoke-RecoverStopTransitionEngine' -Code "recover_start_flow_missing"
+Assert-Contains -Text $stopFunctionText -Pattern 'RUNNING_EXACT[\s\S]+Get-LifecycleStateSignature[\s\S]+Invoke-RecoverStopTransitionEngine' -Code "stop_flow_missing"
+Assert-Contains -Text $text -Pattern '(?s)(?=.*GetExtendedTcpTable)(?=.*OwningPid)(?=.*127\.0\.0\.1)(?=.*55432)' -Code "listener_owner_evidence_missing"
+Assert-Contains -Text $parentPidSnapshotFunctionText -Pattern 'CreateToolhelp32Snapshot[\s\S]+th32ParentProcessID' -Code "process_parent_snapshot_missing"
+Assert-Contains -Text $processTreeFunctionText -Pattern 'Test-ProcessBelongsToPostmasterTree[\s\S]+OutsideTreeCount[\s\S]+OtherCount[\s\S]+AmbiguousCount' -Code "process_tree_exact_check_missing"
+Assert-NotContains -Text $text -Pattern 'NetworkToHostOrder\(\(short\)|\[int16\]|\[short\]' -Code "signed_tcp_port_conversion_detected"
+Assert-Contains -Text $text -Pattern '(?s)(?=.*ApiSuccess)(?=.*ErrorCode)(?=.*Rows)(?=.*ERROR_INSUFFICIENT_BUFFER)(?=.*QuerySucceeded)' -Code "tcp_structured_fail_closed_missing"
+Assert-Contains -Text $text -Pattern 'P1E_TCP_LISTENER_OWNER_SELF_TEST_OK[\s\S]+P1E_TCP_API_FAIL_CLOSED_SELF_TEST_OK' -Code "p1e_tcp_selftests_missing"
+Assert-Contains -Text $text -Pattern 'function Invoke-RecoverStopTransitionEngine[\s\S]+function Invoke-P1DRecoverStopHarnessCase[\s\S]+Invoke-RecoverStopTransitionEngine' -Code "recover_stop_shared_engine_missing"
+Assert-Contains -Text $recoverStartFunctionText -Pattern 'Invoke-RecoverStopTransitionEngine' -Code "recover_start_shared_engine_not_called"
+Assert-Contains -Text $stopFunctionText -Pattern 'Invoke-RecoverStopTransitionEngine' -Code "stop_shared_engine_not_called"
+Assert-NotContains -Text ($recoverStartFunctionText + "`n" + $stopFunctionText) -Pattern '-ProbeOnly' -Code "recover_stop_probe_only_decorative_detected"
+Assert-NotContains -Text $recoverStopEngineFunctionText -Pattern 'ProbeOnly|recover_stop_engine_probe_only_forbidden' -Code "recover_stop_engine_probe_only_residual_detected"
+Assert-Contains -Text $recoverStopEngineFunctionText -Pattern 'InitialState[\s\S]+RevalidatedState[\s\S]+FinalLogicalState[\s\S]+RuntimeState[\s\S]+SafeErrorCode[\s\S]+ReconciliationRequired[\s\S]+StartInvoked[\s\S]+StopInvoked[\s\S]+PidfileRemovalInvoked[\s\S]+PidfileRemovalSucceeded[\s\S]+StateWrites' -Code "recover_stop_structured_result_missing"
+Assert-Contains -Text $recoverStopEngineFunctionText -Pattern 'RemovePidfile[\s\S]+if \(-not \$removed\.Success\)[\s\S]+recover_start_pidfile_remove_failed[\s\S]+StartServer' -Code "recover_stop_pidfile_failure_not_closed"
+Assert-Contains -Text $recoverStopEngineFunctionText -Pattern 'VERIFIED_SERVER_RUNNING[\s\S]+NO_SERVER_EVIDENCE[\s\S]+VERIFIED_SERVER_STOPPED[\s\S]+VERIFIED_SERVER_STOP_FAILED[\s\S]+SERVER_STATE_UNRESOLVED' -Code "recover_stop_start_failure_mapping_missing"
+Assert-Contains -Text $recoverStartFunctionText -Pattern '\$writeState = \{[\s\S]+Write-ClusterState[\s\S]+\$removePidfile = \{[\s\S]+\[System\.IO\.File\]::Delete\(\$pidPath\)[\s\S]+\$startServer = \{[\s\S]+Invoke-PersistentChildSafeProcess[\s\S]+Invoke-RecoverStopTransitionEngine' -Code "recover_start_real_callbacks_missing"
+Assert-Contains -Text $stopFunctionText -Pattern '\$writeState = \{[\s\S]+Write-ClusterState[\s\S]+\$stopServer = \{[\s\S]+Invoke-VerifiedPgCtlStop[\s\S]+Invoke-RecoverStopTransitionEngine' -Code "stop_real_callbacks_missing"
+Assert-Contains -Text $parentPidSnapshotFunctionText -Pattern 'ERROR_NO_MORE_FILES[\s\S]+Process32NextW[\s\S]+Marshal\.GetLastWin32Error\(\)[\s\S]+QuerySucceeded[\s\S]+ApiSuccess[\s\S]+ErrorCode[\s\S]+Rows' -Code "process_snapshot_structured_fail_closed_missing"
+Assert-NotContains -Text $parentPidSnapshotFunctionText -Pattern 'return\s+\$parents\b|return\s+new string\[0\]|ERR:' -Code "process_snapshot_empty_error_detected"
+Assert-Contains -Text $lifecycleFunctionText -Pattern 'recover_origin_stale[\s\S]+RECOVER_START_PREPARING_STALE_EXACT[\s\S]+recover_origin_stopped[\s\S]+RECOVER_START_PREPARING_STOPPED_EXACT' -Code "recover_start_origin_classification_missing"
+Assert-Contains -Text $activeLifecycleEvidenceFunctionText -Pattern 'Get-PostmasterPidInfo[\s\S]+Get-VerifiedPostgresProcessInfo[\s\S]+StartTimeUtc[\s\S]+Get-LoopbackTcpListenerOwnerEvidence[\s\S]+Get-LocalPostgresProcessEvidence[\s\S]+Get-PostgresProcessTreeEvidence[\s\S]+Test-PgIsReadyOk[\s\S]+Test-PostgresServiceRunningForLifecycle[\s\S]+Get-PgControlDataClusterState' -Code "second_active_capture_complete_missing"
+Assert-Contains -Text $negativeRuntimeFunctionText -Pattern 'snapshotFailed[\s\S]+snapshotMalformed[\s\S]+outsideTree[\s\S]+OTHER_POSTGRES_PROCESS[\s\S]+AMBIGUOUS_POSTGRES_PROCESS[\s\S]+missingPostmasterTree[\s\S]+P1F_NEGATIVE_RUNTIME_CONTRACT_SELF_TEST_OK' -Code "p1f_negative_runtime_cases_missing"
+Assert-Contains -Text $p1dHarnessFunctionText -Pattern '(?s)(?=.*remove_pidfile_failure)(?=.*start_unresolved)(?=.*double_write_failure_stopped)(?=.*origin_stopped_interrupted)(?=.*origin_stale_interrupted)' -Code "p1f_engine_cases_missing"
+Assert-Contains -Text $p1dHarnessFunctionText -Pattern '(?s)(?=.*double_write_failure_stopped)(?=.*double_write_failure_stop_runtime_stale)(?=.*\$operation = "Stop")(?=.*stopped_runtime_state_stale)' -Code "p1g_static_cases_missing"
+Assert-Contains -Text $text -Pattern '(?s)(?=.*P1G_PROCESS32NEXT_PARTIAL_FAILURE_SELF_TEST_OK)(?=.*P1G_POSTMASTER_SNAPSHOT_MEMBERSHIP_SELF_TEST_OK)(?=.*P1G_ACTIVE_CONTRADICTORY_PAYLOAD_SELF_TEST_OK)(?=.*P1G_STOP_DOUBLE_WRITE_FAILURE_SELF_TEST_OK)(?=.*P1G_ACL_PACKAGE_REPARSE_NEGATIVE_SELF_TEST_OK)(?=.*P1G_ENGINE_SAFE_REASON_SELF_TEST_OK)' -Code "p1g_selftests_missing"
+Assert-Contains -Text $lifecycleFunctionText -Pattern 'runtime_running_state_stale[\s\S]+SHUT_DOWN[\s\S]+STOPPED_RUNTIME_STATE_STALE_EXACT' -Code "runtime_running_state_stale_stopped_recovery_missing"
+Assert-Contains -Text $recoverStopEngineFunctionText -Pattern 'recoverAllowedStates[\s\S]+stopAllowedStates[\s\S]+recover_start_not_allowed[\s\S]+stop_not_allowed' -Code "engine_state_allowlist_missing"
+Assert-Contains -Text $recoverStartFunctionText -Pattern 'lifecycle_exact_state_invalid[\s\S]+recover_start_not_allowed[\s\S]+recover_start_pidfile_remove_failed' -Code "recover_start_safe_reason_mapping_missing"
+Assert-Contains -Text $stopFunctionText -Pattern 'stop_not_allowed[\s\S]+stop_state_write_failed[\s\S]+postgres_server_cleanup_failed' -Code "stop_safe_reason_mapping_missing"
+Assert-Contains -Text $text -Pattern 'function Assert-TopLevelActionGuards[\s\S]+Assert-TopLevelActionGuards -RequestedAction \$Action' -Code "top_level_guard_shared_missing"
+Assert-Contains -Text $text -Pattern 'lifecycle_acl_unreadable[\s\S]+lifecycle_package_unverified' -Code "lifecycle_signature_fail_closed_missing"
+Assert-NotContains -Text $text -Pattern 'acl:unreadable|package:unverified' -Code "lifecycle_signature_stable_failure_sentinel_detected"
+Assert-Contains -Text $lifecycleFunctionText -Pattern 'RUNTIME_RUNNING_STATE_STALE_EXACT[\s\S]+STOPPED_RUNTIME_STATE_STALE_EXACT' -Code "double_write_recoverable_classification_missing"
+Assert-Contains -Text $processTreeFunctionText -Pattern 'ProcessIds -contains \$expectedPid[\s\S]+postmasterInInventory[\s\S]+TreePids[\s\S]+Exact' -Code "postmaster_treepid_required_missing"
+Assert-Contains -Text $text -Pattern 'recover_origin_stale[\s\S]+recover_origin_stopped' -Code "recover_start_origin_missing"
+Assert-Contains -Text ($lifecycleFunctionText + "`n" + $activeLifecycleEvidenceFunctionText) -Pattern '(?s)(?=.*RUNTIME_RUNNING_STATE_STALE_EXACT)(?=.*Get-LoopbackTcpListenerOwnerEvidence)(?=.*Get-PostgresProcessTreeEvidence)(?=.*IN_PRODUCTION)' -Code "runtime_running_stale_contract_missing"
+Assert-Contains -Text $lifecycleFunctionText -Pattern 'STOPPED_RUNTIME_STATE_STALE_EXACT[\s\S]+SHUT_DOWN' -Code "stopped_runtime_stale_contract_missing"
+Assert-Contains -Text $recoverStartFunctionText -Pattern 'RUNTIME_RUNNING_STATE_STALE_EXACT[\s\S]+recover_start_reconcile_running_state[\s\S]+return[\s\S]+recover_start_pg_ctl' -Code "recover_start_running_stale_reconcile_missing"
+Assert-Contains -Text $stopFunctionText -Pattern 'RUNTIME_RUNNING_STATE_STALE_EXACT[\s\S]+Invoke-VerifiedPgCtlStop' -Code "stop_runtime_stale_acceptance_missing"
+Assert-Contains -Text $lifecycleSignatureFunctionText -Pattern 'Get-LifecycleAclSignaturePart[\s\S]+Get-LifecyclePackageIdentityPart' -Code "lifecycle_signature_acl_package_missing"
+Assert-Contains -Text $text -Pattern 'postgres"\,"pg_ctl"\,"pg_isready"\,"pg_controldata|postgres","pg_ctl","pg_isready","pg_controldata' -Code "package_hash_tool_set_missing"
+Assert-Contains -Text $p1bLifecycleSelfTestFunctionText -Pattern 'OpenInheritableReadHandle[\s\S]+SENTINEL_HANDLE_NOT_VALID[\s\S]+STDOUT_OK[\s\S]+STDERR_OK' -Code "p1b_handle_sentinel_real_missing"
+Assert-Contains -Text $p1bLifecycleSelfTestFunctionText -Pattern 'Invoke-PersistentChildSafeProcess[\s\S]+TimeoutSeconds 1[\s\S]+Convert-PersistentChildNativeResult' -Code "p1b_wait_real_runner_missing"
+Assert-Contains -Text $p1dHarnessFunctionText -Pattern 'recover_stopped_success[\s\S]+recover_stale_success[\s\S]+recover_interrupted_after_pid_delete[\s\S]+recover_start_failure_reconciled[\s\S]+recover_state_write_failure[\s\S]+stop_success[\s\S]+stop_failure[\s\S]+stop_state_write_failure' -Code "p1b_recover_stop_harness_cases_missing"
+Assert-NotContains -Text $p1bLifecycleSelfTestFunctionText -Pattern 'Assert-LifecycleStatePayloadExact[\s\S]{0,900}P1B_RECOVER_STOPPED_SUCCESS_SELF_TEST_OK[\s\S]{0,1600}P1B_STOP_STATE_WRITE_FAILURE_SELF_TEST_OK' -Code "p1b_recover_stop_grouped_signal_detected"
+Assert-NotContains -Text ($recoverStartFunctionText + "`n" + $stopFunctionText) -Pattern '\bpsql\b|Remove-Item|Directory\]::Delete\([^\r\n]+,\s*\$true\)|Stop-Process|taskkill|Ctrl\+C|icacls|takeown' -Code "recover_stop_forbidden_operation_detected"
 Assert-Contains -Text $cleanupPathFunctionText -Pattern 'IsolatedRootRelativePath[\s\S]+InstanceName[\s\S]+PostgresPackageRelativePath|Get-PostgresRoot' -Code "cleanup_fixed_paths_missing"
 Assert-Contains -Text $cleanupPathFunctionText -Pattern 'OrdinalIgnoreCase[\s\S]+Test-IsInsideDirectory[\s\S]+cleanup_path_validation_failed' -Code "cleanup_path_validation_missing"
 Assert-Contains -Text $cleanupStateFunctionText -Pattern 'DataRoot[\s\S]+LogRoot[\s\S]+StateRoot[\s\S]+SecretRoot[\s\S]+MarkerPath[\s\S]+StatePath[\s\S]+CredentialPath[\s\S]+PasswordFilePath[\s\S]+postmaster\.pid[\s\S]+PG_VERSION[\s\S]+postgresql\.conf[\s\S]+pg_hba\.conf' -Code "cleanup_exact_state_missing"
@@ -528,10 +606,12 @@ Assert-Contains -Text $runnerFunctionText -Pattern 'OutputDrainCompleted' -Code 
 Assert-Contains -Text $runnerFunctionText -Pattern 'ProcessKilled' -Code "process_killed_flag_missing"
 Assert-Contains -Text $runnerFunctionText -Pattern '\$stdoutTask\.IsCompleted' -Code "stdout_task_completed_guard_missing"
 Assert-Contains -Text $runnerFunctionText -Pattern '\$stderrTask\.IsCompleted' -Code "stderr_task_completed_guard_missing"
-Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'FILE_REDIRECT_NATIVE' -Code "persistent_child_file_redirect_missing"
-Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'persistent-child\.[\s\S]+\.stdout\.log[\s\S]+persistent-child\.[\s\S]+\.stderr\.log' -Code "persistent_child_output_files_missing"
-Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'CreateProcessW' -Code "persistent_child_wrapper_missing"
-Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'DuplicateHandle[\s\S]+SafeFileHandle\.DangerousGetHandle' -Code "persistent_child_file_redirection_missing"
+Assert-NotContains -Text $text -Pattern 'Invoke-P1BSimulatedLifecycleSelfTest|vc-p1b-sim|foreach \(\$case in \$waitCases\)[\s\S]+Write-Output "P1B_HANDLE_SENTINEL_NOT_INHERITED_SELF_TEST_OK"' -Code "p1b_simulated_selftest_detected"
+Assert-Contains -Text $text -Pattern '(?s)(?=.*function Invoke-P1BRealLifecycleSelfTest)(?=.*Invoke-PersistentChildSafeProcess)(?=.*Convert-PersistentChildNativeResult)(?=.*Invoke-P1DRecoverStopHarnessCase)(?=.*Test-CreateAuthorization)(?=.*Test-RecoverStartAuthorization)' -Code "p1b_real_selftest_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'STARTUPINFOEX_HANDLE_LIST_NO_WINDOW' -Code "persistent_child_file_redirect_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'safeToolName[\s\S]+persistent-child\.[\s\S]+\.stdout\.log[\s\S]+persistent-child\.[\s\S]+\.stderr\.log[\s\S]+Delete\(\$completedOutput\)' -Code "persistent_child_output_files_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern '(?s)(?=.*CreateProcessW)(?=.*STARTUPINFOEX)(?=.*PROC_THREAD_ATTRIBUTE_HANDLE_LIST)(?=.*UpdateProcThreadAttribute)(?=.*CREATE_NO_WINDOW)(?=.*CREATE_NEW_PROCESS_GROUP)(?=.*EXTENDED_STARTUPINFO_PRESENT)(?=.*CreateFileW)(?=.*"NUL")' -Code "persistent_child_wrapper_missing"
+Assert-Contains -Text $persistentRunnerFunctionText -Pattern 'DuplicateHandle[\s\S]+SafeFileHandle\.DangerousGetHandle[\s\S]+allowedHandles' -Code "persistent_child_file_redirection_missing"
 Assert-NotContains -Text $persistentRunnerFunctionText -Pattern 'ReadToEndAsync\(|RedirectStandardOutput = \$true|RedirectStandardError = \$true' -Code "persistent_child_pipe_strategy_detected"
 Assert-Contains -Text $persistentOutputFunctionText -Pattern 'FileShare\]::ReadWrite' -Code "persistent_output_retained_file_read_missing"
 Assert-Contains -Text $createFunctionText -Pattern 'Invoke-PersistentChildSafeProcess[\s\S]+-OutputDirectory \$layout\.StateRoot[\s\S]+-ToolName "pg_ctl_start"' -Code "pg_ctl_start_persistent_runner_missing"
@@ -927,6 +1007,9 @@ foreach ($line in @(
     "cleanup_package_directory_in_scope=false",
     "git_ancestry_strategy=MERGE_BASE_IS_ANCESTOR",
     "process_output_strategy=ASYNC_DUAL_STREAM_DRAIN",
+    "persistent_child_process_strategy=STARTUPINFOEX_HANDLE_LIST_NO_WINDOW",
+    "persistent_child_handle_inheritance=PROC_THREAD_ATTRIBUTE_HANDLE_LIST",
+    "persistent_child_console_strategy=CREATE_NO_WINDOW_NEW_PROCESS_GROUP",
     "windows_argument_empty_value_safe=true",
     "pg_hba_ipv6_reject=::/0",
     "file_acl_inheritance=NONE",
@@ -941,7 +1024,12 @@ foreach ($line in @(
     "acl_validation_semantic_set=true",
     "acl_rule_order_dependency=false",
     "acl_fullcontrol_bitmask_validation=true",
+    "isolated_lifecycle_state=",
+    "isolated_lifecycle_exact=",
+    "recover_start_required=",
+    "stop_required=",
     "partial_instance_cleanup_required=",
+    "create_blocked_existing_cluster=",
     "create_retry_blocked_until_cleanup=",
     "marker_state_concordance_required=true",
     "created_utc_stable=true",
@@ -958,7 +1046,7 @@ foreach ($line in @(
     "git_working_directory_enforced=true",
     "process_output_drain_verified=true",
     "process_output_drain_failure_code=process_output_drain_failed",
-    "pg_ctl_start_process_strategy=FILE_REDIRECT_NO_PIPE_INHERITANCE",
+    "pg_ctl_start_process_strategy=STARTUPINFOEX_HANDLE_LIST_NO_WINDOW",
     "pg_ctl_start_output_capture=CONTROLLED_FILES_SANITIZED_TAIL",
     "process_incomplete_task_dispose_safe=true",
     "no_pidfile_process_inventory=DOTNET_LOCAL_PROCESS_ENUMERATION",
@@ -967,7 +1055,11 @@ foreach ($line in @(
     "process_path_property_used=false",
     "process_access_failure_strategy=AMBIGUOUS_FAIL_CLOSED",
     "process_identity_strategy=PID_MAINMODULE_STARTTIME",
-    "real_process_enumeration_in_plan=false",
+    "real_process_enumeration_in_plan=true",
+    "listener_owner_strategy=GET_EXTENDED_TCP_TABLE_OWNINGPID",
+    "process_tree_strategy=POSTMASTER_PID_TREE_EXACT",
+    "lifecycle_signature_includes_acl=true",
+    "lifecycle_signature_includes_package_hashes=true",
     "pg_ctl_start_failure_recovery=VERIFIED_PID_DATAROOT_EXECUTABLE_LISTENER",
     "pg_ctl_stop_strategy=FAST_WAIT_30_VERIFIED",
     "pg_ctl_stop_recheck_always=true",
@@ -986,6 +1078,16 @@ foreach ($line in @(
     "create_authorized=false",
     "create_execution_blocked=true",
     "create_execution_requires_exact_approval=true",
+    "recover_start_action_present=true",
+    "recover_start_authorized=false",
+    "recover_start_execution_blocked=true",
+    "recovery_reconciliation_required=",
+    "start_required=",
+    "recover_start_accepts=STOPPED_CLEAN_EXACT,STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT,RECOVER_START_PREPARING_STALE_EXACT,RECOVER_START_PREPARING_STOPPED_EXACT,RECOVER_START_PIDFILE_REMOVED_EXACT,RECOVER_START_FAILED_NO_SERVER_EXACT,RUNTIME_RUNNING_STATE_STALE_EXACT,STOPPED_RUNTIME_STATE_STALE_EXACT",
+    "stop_action_present=true",
+    "stop_authorized=false",
+    "stop_execution_blocked=true",
+    "stop_accepts=RUNNING_EXACT,RUNTIME_RUNNING_STATE_STALE_EXACT",
     "cleanup_action_present=true",
     "cleanup_authorized=false",
     "cleanup_execution_blocked=true",
@@ -2117,6 +2219,7 @@ function Test-PlanRuntimeStateContractForSelfTest {
   param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines)
   $signalNames = @(
     "partial_instance_cleanup_required",
+    "create_blocked_existing_cluster",
     "create_retry_blocked_until_cleanup",
     "cleanup_partial_create_required",
     "cleanup_partial_create_exact_state_valid",
@@ -2124,6 +2227,9 @@ function Test-PlanRuntimeStateContractForSelfTest {
     "cleanup_failed_create_required",
     "cleanup_failed_create_exact_state_valid",
     "cleanup_failed_create_manifest_valid",
+    "isolated_lifecycle_exact",
+    "recover_start_required",
+    "stop_required",
     "ready_for_create"
   )
   $values = @{}
@@ -2135,8 +2241,15 @@ function Test-PlanRuntimeStateContractForSelfTest {
   $modeSignal = Get-PlanRuntimeStringSignalForSelfTest -Lines $Lines -Name "cleanup_failed_create_mode"
   if (-not $modeSignal.Ok) { return $modeSignal.Reason }
   $modeValue = [string]$modeSignal.Value
+  $lifecycleSignal = Get-PlanRuntimeStringSignalForSelfTest -Lines $Lines -Name "isolated_lifecycle_state"
+  if (-not $lifecycleSignal.Ok) { return $lifecycleSignal.Reason }
+  $lifecycleValue = [string]$lifecycleSignal.Value
+  $allowedLifecycle = @("CLEAN_ABSENT", "RUNNING_EXACT", "STOPPED_CLEAN_EXACT", "STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT", "UNKNOWN_PARTIAL")
+  if ($allowedLifecycle -notcontains $lifecycleValue) { return "plan_runtime_state_combination_invalid" }
+
   $isPartial = (
     [string]::Equals($values["partial_instance_cleanup_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_blocked_existing_cluster"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["create_retry_blocked_until_cleanup"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_required"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "true", [System.StringComparison]::Ordinal) -and
@@ -2144,12 +2257,18 @@ function Test-PlanRuntimeStateContractForSelfTest {
     [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["isolated_lifecycle_exact"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["recover_start_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["stop_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($lifecycleValue, "UNKNOWN_PARTIAL", [System.StringComparison]::Ordinal) -and
     [string]::Equals($modeValue, "NONE", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
   )
   if ($isPartial) { return "OK" }
+
   $isFailedPgCtlStart = (
     [string]::Equals($values["partial_instance_cleanup_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_blocked_existing_cluster"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["create_retry_blocked_until_cleanup"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
@@ -2157,12 +2276,18 @@ function Test-PlanRuntimeStateContractForSelfTest {
     [string]::Equals($values["cleanup_failed_create_required"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "true", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_manifest_valid"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["isolated_lifecycle_exact"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["recover_start_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["stop_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($lifecycleValue, "UNKNOWN_PARTIAL", [System.StringComparison]::Ordinal) -and
     [string]::Equals($modeValue, "PG_CTL_START_INITIALIZED_RESIDUAL", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
   )
   if ($isFailedPgCtlStart) { return "OK" }
+
   $isClean = (
     [string]::Equals($values["partial_instance_cleanup_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_blocked_existing_cluster"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["create_retry_blocked_until_cleanup"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
@@ -2170,10 +2295,53 @@ function Test-PlanRuntimeStateContractForSelfTest {
     [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["isolated_lifecycle_exact"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["recover_start_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["stop_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($lifecycleValue, "CLEAN_ABSENT", [System.StringComparison]::Ordinal) -and
     [string]::Equals($modeValue, "NONE", [System.StringComparison]::Ordinal) -and
     [string]::Equals($values["ready_for_create"], "true", [System.StringComparison]::Ordinal)
   )
   if ($isClean) { return "OK" }
+
+  $isRecoverable = (
+    [string]::Equals($values["partial_instance_cleanup_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_blocked_existing_cluster"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_retry_blocked_until_cleanup"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["isolated_lifecycle_exact"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["recover_start_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["stop_required"], "false", [System.StringComparison]::Ordinal) -and
+    ($lifecycleValue -eq "STOPPED_CLEAN_EXACT" -or $lifecycleValue -eq "STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT") -and
+    [string]::Equals($modeValue, "NONE", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
+  )
+  if ($isRecoverable) { return "OK" }
+
+  $isRunning = (
+    [string]::Equals($values["partial_instance_cleanup_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_blocked_existing_cluster"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["create_retry_blocked_until_cleanup"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_partial_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_exact_state_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["cleanup_failed_create_manifest_valid"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["isolated_lifecycle_exact"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["recover_start_required"], "false", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["stop_required"], "true", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($lifecycleValue, "RUNNING_EXACT", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($modeValue, "NONE", [System.StringComparison]::Ordinal) -and
+    [string]::Equals($values["ready_for_create"], "false", [System.StringComparison]::Ordinal)
+  )
+  if ($isRunning) { return "OK" }
+
   return "plan_runtime_state_combination_invalid"
 }
 
@@ -2197,6 +2365,7 @@ function Assert-PlanRuntimeContractCaseForSelfTest {
 
 $planRuntimePartial = @(
   "partial_instance_cleanup_required=true",
+  "create_blocked_existing_cluster=false",
   "create_retry_blocked_until_cleanup=true",
   "cleanup_partial_create_required=true",
   "cleanup_partial_create_exact_state_valid=true",
@@ -2205,10 +2374,15 @@ $planRuntimePartial = @(
   "cleanup_failed_create_exact_state_valid=false",
   "cleanup_failed_create_mode=NONE",
   "cleanup_failed_create_manifest_valid=false",
+  "isolated_lifecycle_state=UNKNOWN_PARTIAL",
+  "isolated_lifecycle_exact=false",
+  "recover_start_required=false",
+  "stop_required=false",
   "ready_for_create=false"
 )
 $planRuntimeFailedPgCtlStart = @(
   "partial_instance_cleanup_required=true",
+  "create_blocked_existing_cluster=false",
   "create_retry_blocked_until_cleanup=true",
   "cleanup_partial_create_required=false",
   "cleanup_partial_create_exact_state_valid=false",
@@ -2217,10 +2391,15 @@ $planRuntimeFailedPgCtlStart = @(
   "cleanup_failed_create_exact_state_valid=true",
   "cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL",
   "cleanup_failed_create_manifest_valid=true",
+  "isolated_lifecycle_state=UNKNOWN_PARTIAL",
+  "isolated_lifecycle_exact=false",
+  "recover_start_required=false",
+  "stop_required=false",
   "ready_for_create=false"
 )
 $planRuntimeClean = @(
   "partial_instance_cleanup_required=false",
+  "create_blocked_existing_cluster=false",
   "create_retry_blocked_until_cleanup=false",
   "cleanup_partial_create_required=false",
   "cleanup_partial_create_exact_state_valid=false",
@@ -2229,16 +2408,76 @@ $planRuntimeClean = @(
   "cleanup_failed_create_exact_state_valid=false",
   "cleanup_failed_create_mode=NONE",
   "cleanup_failed_create_manifest_valid=false",
+  "isolated_lifecycle_state=CLEAN_ABSENT",
+  "isolated_lifecycle_exact=true",
+  "recover_start_required=false",
+  "stop_required=false",
   "ready_for_create=true"
+)
+$planRuntimeStale = @(
+  "partial_instance_cleanup_required=false",
+  "create_blocked_existing_cluster=true",
+  "create_retry_blocked_until_cleanup=false",
+  "cleanup_partial_create_required=false",
+  "cleanup_partial_create_exact_state_valid=false",
+  "cleanup_partial_create_manifest_valid=false",
+  "cleanup_failed_create_required=false",
+  "cleanup_failed_create_exact_state_valid=false",
+  "cleanup_failed_create_mode=NONE",
+  "cleanup_failed_create_manifest_valid=false",
+  "isolated_lifecycle_state=STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT",
+  "isolated_lifecycle_exact=true",
+  "recover_start_required=true",
+  "stop_required=false",
+  "ready_for_create=false"
+)
+$planRuntimeStopped = @(
+  "partial_instance_cleanup_required=false",
+  "create_blocked_existing_cluster=true",
+  "create_retry_blocked_until_cleanup=false",
+  "cleanup_partial_create_required=false",
+  "cleanup_partial_create_exact_state_valid=false",
+  "cleanup_partial_create_manifest_valid=false",
+  "cleanup_failed_create_required=false",
+  "cleanup_failed_create_exact_state_valid=false",
+  "cleanup_failed_create_mode=NONE",
+  "cleanup_failed_create_manifest_valid=false",
+  "isolated_lifecycle_state=STOPPED_CLEAN_EXACT",
+  "isolated_lifecycle_exact=true",
+  "recover_start_required=true",
+  "stop_required=false",
+  "ready_for_create=false"
+)
+$planRuntimeRunning = @(
+  "partial_instance_cleanup_required=false",
+  "create_blocked_existing_cluster=true",
+  "create_retry_blocked_until_cleanup=false",
+  "cleanup_partial_create_required=false",
+  "cleanup_partial_create_exact_state_valid=false",
+  "cleanup_partial_create_manifest_valid=false",
+  "cleanup_failed_create_required=false",
+  "cleanup_failed_create_exact_state_valid=false",
+  "cleanup_failed_create_mode=NONE",
+  "cleanup_failed_create_manifest_valid=false",
+  "isolated_lifecycle_state=RUNNING_EXACT",
+  "isolated_lifecycle_exact=true",
+  "recover_start_required=false",
+  "stop_required=true",
+  "ready_for_create=false"
 )
 Assert-PlanRuntimeContractCaseForSelfTest -Name "partial_accept" -Lines $planRuntimePartial -ExpectedResult "OK"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "failed_pg_ctl_start_accept" -Lines $planRuntimeFailedPgCtlStart -ExpectedResult "OK"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_accept" -Lines $planRuntimeClean -ExpectedResult "OK"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "stale_accept" -Lines $planRuntimeStale -ExpectedResult "OK"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "stopped_accept" -Lines $planRuntimeStopped -ExpectedResult "OK"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "running_accept" -Lines $planRuntimeRunning -ExpectedResult "OK"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_cleanup_required" -Lines @($planRuntimePartial | Where-Object { $_ -notlike "cleanup_partial_create_required=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_exact_state" -Lines @($planRuntimePartial | Where-Object { $_ -notlike "cleanup_partial_create_exact_state_valid=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_lifecycle_state" -Lines @($planRuntimeStale | Where-Object { $_ -notlike "isolated_lifecycle_state=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_recover_required" -Lines @($planRuntimeStale | Where-Object { $_ -notlike "recover_start_required=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_stop_required" -Lines @($planRuntimeRunning | Where-Object { $_ -notlike "stop_required=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "missing_failed_mode" -Lines @($planRuntimeFailedPgCtlStart | Where-Object { $_ -notlike "cleanup_failed_create_mode=*" }) -ExpectedResult "plan_runtime_state_signal_missing"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_cleanup_required" -Lines @($planRuntimePartial + "cleanup_partial_create_required=true") -ExpectedResult "plan_runtime_state_signal_duplicate"
-Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_exact_state" -Lines @($planRuntimePartial + "cleanup_partial_create_exact_state_valid=true") -ExpectedResult "plan_runtime_state_signal_duplicate"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_lifecycle_state" -Lines @($planRuntimeStale + "isolated_lifecycle_state=STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT") -ExpectedResult "plan_runtime_state_signal_duplicate"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "duplicate_failed_mode" -Lines @($planRuntimeFailedPgCtlStart + "cleanup_failed_create_mode=PG_CTL_START_INITIALIZED_RESIDUAL") -ExpectedResult "plan_runtime_state_signal_duplicate"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "uppercase" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "partial_instance_cleanup_required=*") { "partial_instance_cleanup_required=TRUE" } else { $_ } }) -ExpectedResult "plan_runtime_state_value_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "one" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "partial_instance_cleanup_required=*") { "partial_instance_cleanup_required=1" } else { $_ } }) -ExpectedResult "plan_runtime_state_value_invalid"
@@ -2252,6 +2491,10 @@ Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_with_failed_cleanup_requi
 Assert-PlanRuntimeContractCaseForSelfTest -Name "clean_ready_false" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_true_in_clean" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "cleanup_partial_create_required=*") { "cleanup_partial_create_required=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_true_in_clean" -Lines @($planRuntimeClean | ForEach-Object { if ($_ -like "cleanup_partial_create_exact_state_valid=*") { "cleanup_partial_create_exact_state_valid=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "stale_ready_true" -Lines @($planRuntimeStale | ForEach-Object { if ($_ -like "ready_for_create=*") { "ready_for_create=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "stale_recover_false" -Lines @($planRuntimeStale | ForEach-Object { if ($_ -like "recover_start_required=*") { "recover_start_required=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "running_stop_false" -Lines @($planRuntimeRunning | ForEach-Object { if ($_ -like "stop_required=*") { "stop_required=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
+Assert-PlanRuntimeContractCaseForSelfTest -Name "running_recover_true" -Lines @($planRuntimeRunning | ForEach-Object { if ($_ -like "recover_start_required=*") { "recover_start_required=true" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "cleanup_required_false_in_partial" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "cleanup_partial_create_required=*") { "cleanup_partial_create_required=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "exact_state_false_in_partial" -Lines @($planRuntimePartial | ForEach-Object { if ($_ -like "cleanup_partial_create_exact_state_valid=*") { "cleanup_partial_create_exact_state_valid=false" } else { $_ } }) -ExpectedResult "plan_runtime_state_combination_invalid"
 Assert-PlanRuntimeContractCaseForSelfTest -Name "zero_lines" -Lines @() -ExpectedResult "plan_runtime_state_signal_missing"
@@ -2319,7 +2562,11 @@ foreach ($expectedLine in @(
     "process_path_property_used=false",
     "process_access_failure_strategy=AMBIGUOUS_FAIL_CLOSED",
     "process_identity_strategy=PID_MAINMODULE_STARTTIME",
-    "real_process_enumeration_in_plan=false",
+    "real_process_enumeration_in_plan=true",
+    "listener_owner_strategy=GET_EXTENDED_TCP_TABLE_OWNINGPID",
+    "process_tree_strategy=POSTMASTER_PID_TREE_EXACT",
+    "lifecycle_signature_includes_acl=true",
+    "lifecycle_signature_includes_package_hashes=true",
     "pg_ctl_start_failure_recovery=VERIFIED_PID_DATAROOT_EXECUTABLE_LISTENER",
     "pg_ctl_stop_strategy=FAST_WAIT_30_VERIFIED",
     "pg_ctl_stop_recheck_always=true",
@@ -2379,6 +2626,10 @@ foreach ($expectedLine in @(
     "cleanup_second_delete_reachable_only_when_parent_empty=true",
     "cleanup_parent_stage_reason_validator_complete=true",
     "cleanup_real_execution_tested=false",
+    "isolated_lifecycle_state=STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT",
+    "isolated_lifecycle_exact=true",
+    "recover_start_required=true",
+    "stop_required=false",
     "cleanup_failed_create_action_present=true",
     "cleanup_failed_create_authorized=false",
     "cleanup_failed_create_execution_blocked=true",
@@ -2435,6 +2686,16 @@ if (-not (($planOutput | Where-Object { $_ -like "local_compat_preflight_depende
 }
 Assert-ToolFailure -Arguments @("-Action","Create") -ExpectedReason "create_not_authorized" -Code "create_not_authorized_missing"
 Assert-ToolFailure -Arguments @("-Action","CleanupPartialCreate") -ExpectedReason "cleanup_not_authorized" -Code "cleanup_not_authorized_missing"
+Assert-ToolFailure -Arguments @("-Action","RecoverStart") -ExpectedReason "recover_start_not_authorized" -Code "recover_start_not_authorized_missing"
+Assert-ToolFailure -Arguments @("-Action","StartExisting") -ExpectedReason "recover_start_not_authorized" -Code "start_existing_not_authorized_missing"
+Assert-ToolFailure -Arguments @("-Action","Stop") -ExpectedReason "stop_not_authorized" -Code "stop_not_authorized_missing"
+Assert-ToolFailure -Arguments @("-Action","Create","-ConfirmRecoverStart") -ExpectedReason "create_not_authorized" -Code "create_recover_cross_not_rejected"
+Assert-ToolFailure -Arguments @("-Action","Create","-ConfirmStop") -ExpectedReason "create_not_authorized" -Code "create_stop_cross_not_rejected"
+Assert-ToolFailure -Arguments @("-Action","CleanupPartialCreate","-ConfirmRecoverStart") -ExpectedReason "cleanup_not_authorized" -Code "cleanup_recover_cross_not_rejected"
+Assert-ToolFailure -Arguments @("-Action","CleanupPartialCreate","-ConfirmStop") -ExpectedReason "cleanup_not_authorized" -Code "cleanup_stop_cross_not_rejected"
+Assert-ToolFailure -Arguments @("-Action","CleanupFailedCreate","-ConfirmRecoverStart") -ExpectedReason "cleanup_failed_not_authorized" -Code "cleanup_failed_recover_cross_not_rejected"
+Assert-ToolFailure -Arguments @("-Action","CleanupFailedCreate","-ConfirmStop") -ExpectedReason "cleanup_failed_not_authorized" -Code "cleanup_failed_stop_cross_not_rejected"
+
 Assert-ToolFailure -Arguments @("-Action","Apply") -ExpectedReason "action_not_approved" -Code "apply_not_blocked"
 Assert-ToolFailure -Arguments @("-Action","Verify") -ExpectedReason "action_not_approved" -Code "verify_not_blocked"
 Assert-ToolFailure -Arguments @("-Action","FullTest") -ExpectedReason "action_not_approved" -Code "fulltest_not_blocked"
@@ -2892,6 +3153,90 @@ function Invoke-BSec23LPersistentProcessSelfTest {
 
 Invoke-BSec23LPersistentProcessSelfTest
 $cleanupPartialFilesystemSelfTestOutput = Invoke-Tool -Arguments @("-SelfTest")
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1A_PERSISTENT_CHILD_COMPILE_SELF_TEST_OK") {
+  Fail -Code "p1a_persistent_child_compile_selftest_failed"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1A_PERSISTENT_CHILD_QUOTE_SELF_TEST_OK") {
+  Fail -Code "p1a_persistent_child_quote_selftest_failed"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1A_PERSISTENT_CHILD_STDIO_SELF_TEST_OK") {
+  Fail -Code "p1a_persistent_child_stdio_selftest_failed"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_HANDLE_SENTINEL_NOT_INHERITED_SELF_TEST_OK") {
+  Fail -Code "p1b_handle_sentinel_not_inherited_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_OUTER_EOF_WITH_PERSISTENT_GRANDCHILD_SELF_TEST_OK") {
+  Fail -Code "p1b_outer_eof_with_persistent_grandchild_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_CONSOLE_INDEPENDENCE_SELF_TEST_OK") {
+  Fail -Code "p1b_console_independence_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1E_TCP_LISTENER_OWNER_SELF_TEST_OK") {
+  Fail -Code "p1e_tcp_listener_owner_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1E_TCP_API_FAIL_CLOSED_SELF_TEST_OK") {
+  Fail -Code "p1e_tcp_api_fail_closed_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_WAIT_STATE_RECONCILIATION_SELF_TEST_OK") {
+  Fail -Code "p1b_wait_state_reconciliation_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_RECOVER_STOPPED_SUCCESS_SELF_TEST_OK") {
+  Fail -Code "p1b_recover_stopped_success_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_RECOVER_STALE_SUCCESS_SELF_TEST_OK") {
+  Fail -Code "p1b_recover_stale_success_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_RECOVER_INTERRUPTED_AFTER_PID_DELETE_SELF_TEST_OK") {
+  Fail -Code "p1b_recover_interrupted_after_pid_delete_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_RECOVER_START_FAILURE_RECONCILED_SELF_TEST_OK") {
+  Fail -Code "p1b_recover_start_failure_reconciled_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_RECOVER_STATE_WRITE_FAILURE_SELF_TEST_OK") {
+  Fail -Code "p1b_recover_state_write_failure_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_STOP_SUCCESS_SELF_TEST_OK") {
+  Fail -Code "p1b_stop_success_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_STOP_FAILURE_SELF_TEST_OK") {
+  Fail -Code "p1b_stop_failure_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_STOP_STATE_WRITE_FAILURE_SELF_TEST_OK") {
+  Fail -Code "p1b_stop_state_write_failure_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_AUTHORIZATION_CROSS_MATRIX_SELF_TEST_OK") {
+  Fail -Code "p1b_authorization_cross_matrix_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_NEGATIVE_RUNTIME_CONTRACT_SELF_TEST_OK") {
+  Fail -Code "p1b_negative_runtime_contract_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1F_ENGINE_NEGATIVE_CASES_SELF_TEST_OK") {
+  Fail -Code "p1f_engine_negative_cases_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1F_NEGATIVE_RUNTIME_CONTRACT_SELF_TEST_OK") {
+  Fail -Code "p1f_negative_runtime_contract_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1G_PROCESS32NEXT_PARTIAL_FAILURE_SELF_TEST_OK") {
+  Fail -Code "p1g_process32next_partial_failure_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1G_POSTMASTER_SNAPSHOT_MEMBERSHIP_SELF_TEST_OK") {
+  Fail -Code "p1g_postmaster_snapshot_membership_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1G_ACTIVE_CONTRADICTORY_PAYLOAD_SELF_TEST_OK") {
+  Fail -Code "p1g_active_contradictory_payload_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1G_STOP_DOUBLE_WRITE_FAILURE_SELF_TEST_OK") {
+  Fail -Code "p1g_stop_double_write_failure_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1G_ACL_PACKAGE_REPARSE_NEGATIVE_SELF_TEST_OK") {
+  Fail -Code "p1g_acl_package_reparse_negative_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1G_ENGINE_SAFE_REASON_SELF_TEST_OK") {
+  Fail -Code "p1g_engine_safe_reason_self_test_ok_missing"
+}
+if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "P1B_REAL_SELF_TEST_OK") {
+  Fail -Code "p1b_real_self_test_ok_missing"
+}
 if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK") {
   Fail -Code "cleanup_partial_file_added_after_manifest_selftest_runtime_failed"
 }
@@ -2907,11 +3252,49 @@ if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains
 if ($LASTEXITCODE -ne 0 -or $cleanupPartialFilesystemSelfTestOutput -notcontains "CLEANUP_FAILED_PG_CTL_START_PLAN_SELF_TEST_OK") {
   Fail -Code "cleanup_failed_pg_ctl_start_plan_selftest_runtime_failed"
 }
+Write-Output "P1A_PERSISTENT_CHILD_COMPILE_SELF_TEST_OK"
+Write-Output "P1A_PERSISTENT_CHILD_QUOTE_SELF_TEST_OK"
+Write-Output "P1A_PERSISTENT_CHILD_STDIO_SELF_TEST_OK"
 Write-Output "CLEANUP_FAILED_PG_CTL_START_RESIDUAL_SELF_TEST_OK"
 Write-Output "CLEANUP_FAILED_PG_CTL_START_MUTATION_SELF_TEST_OK"
 Write-Output "CLEANUP_FAILED_PG_CTL_START_PLAN_SELF_TEST_OK"
+Write-Output "P1E_TCP_LISTENER_OWNER_SELF_TEST_OK"
+Write-Output "P1E_TCP_API_FAIL_CLOSED_SELF_TEST_OK"
+Write-Output "P1F_ENGINE_NEGATIVE_CASES_SELF_TEST_OK"
+Write-Output "P1F_NEGATIVE_RUNTIME_CONTRACT_SELF_TEST_OK"
+Write-Output "P1G_PROCESS32NEXT_PARTIAL_FAILURE_SELF_TEST_OK"
+Write-Output "P1G_POSTMASTER_SNAPSHOT_MEMBERSHIP_SELF_TEST_OK"
+Write-Output "P1G_ACTIVE_CONTRADICTORY_PAYLOAD_SELF_TEST_OK"
+Write-Output "P1G_STOP_DOUBLE_WRITE_FAILURE_SELF_TEST_OK"
+Write-Output "P1G_ACL_PACKAGE_REPARSE_NEGATIVE_SELF_TEST_OK"
+Write-Output "P1G_ENGINE_SAFE_REASON_SELF_TEST_OK"
+Write-Output "P1B_REAL_SELF_TEST_OK"
 Write-Output "CLEANUP_PARTIAL_FILE_ADDED_AFTER_MANIFEST_SELF_TEST_OK"
 Write-Output "CLEANUP_PARTIAL_REAL_FILESYSTEM_SELF_TEST_OK"
 Invoke-StateReplaceRealFilesystemSelfTest
 Write-Output "CLEAN_PLAN_RUNTIME_VALIDATION_SELF_TEST_OK"
+# B-SEC-23P1H_CHATGPT_STATIC_GUARDS_BEGIN
+$p1hInvokePath = Join-Path $PSScriptRoot "Invoke-IsolatedBaselineTest.ps1"
+$p1hInvokeText = [System.IO.File]::ReadAllText($p1hInvokePath)
+
+Assert-Contains `
+  -Text $p1hInvokeText `
+  -Pattern '(?s)function Assert-LifecycleStatePayloadExact \{.*?recover_start_failed_no_server.*?server_started -ne \$false.*?server_cleanup_attempted -ne \$false.*?server_cleanup_completed -ne \$false.*?runtime_running_state_stale.*?server_started -ne \$true.*?server_cleanup_attempted -ne \$false.*?server_cleanup_completed -ne \$false.*?stopped_runtime_state_stale.*?server_cleanup_attempted -ne \$true.*?server_cleanup_completed -ne \$true' `
+  -Code "p1h_payload_exact_flags_missing"
+
+Assert-Contains `
+  -Text $p1hInvokeText `
+  -Pattern '(?s)function Invoke-StopExisting \{.*?\$engineResult = Invoke-RecoverStopTransitionEngine.*?SafeErrorCode -eq "lifecycle_exact_state_invalid".*?SafeErrorCode -eq "stop_not_allowed".*?SafeErrorCode -eq "stop_state_write_failed"' `
+  -Code "p1h_stop_safe_reason_mapping_missing"
+
+Assert-Contains `
+  -Text $p1hInvokeText `
+  -Pattern '(?s)function Invoke-P1GActiveContradictoryPayloadSelfTest \{(?=.*recover_start_preparing)(?=.*recover_start_pidfile_removed)(?=.*recover_start_failed_no_server)(?=.*runtime_running_state_stale)(?=.*stopped_runtime_state_stale)(?=.*server_cleanup_completed)(?=.*plaintext_password_file_present)' `
+  -Code "p1h_payload_mutation_matrix_missing"
+
+Assert-Contains `
+  -Text $p1hInvokeText `
+  -Pattern '(?s)function Invoke-P1GAclPackageReparseSelfTest \{.*?-ItemType Junction.*?Test-HasReparsePointInPath.*?P1G_ACL_PACKAGE_REPARSE_NEGATIVE_SELF_TEST_OK' `
+  -Code "p1h_real_reparse_selftest_missing"
+# B-SEC-23P1H_CHATGPT_STATIC_GUARDS_END
 Write-Output "SELF_TEST_OK"
