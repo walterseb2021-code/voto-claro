@@ -2626,7 +2626,7 @@ foreach ($expectedLine in @(
     "cleanup_second_delete_reachable_only_when_parent_empty=true",
     "cleanup_parent_stage_reason_validator_complete=true",
     "cleanup_real_execution_tested=false",
-    "isolated_lifecycle_state=STALE_RUNNING_AFTER_CONSOLE_INTERRUPT_EXACT",
+    "isolated_lifecycle_state=STOPPED_CLEAN_EXACT",
     "isolated_lifecycle_exact=true",
     "recover_start_required=true",
     "stop_required=false",
