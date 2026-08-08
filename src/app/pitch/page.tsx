@@ -307,8 +307,51 @@ export default function PitchPage() {
         setActiveParty(nextParty);
 
         if (!isValidTransientPitchToken(token)) {
-          if (canApplyResult()) setAccess("MISSING_TOKEN");
-          transientPitchTokenRef.current = undefined;
+          timeoutId = window.setTimeout(async () => {
+            try {
+              const resumeRes = await fetch("/api/gate/pitch", {
+                method: "GET",
+                cache: "no-store",
+                credentials: "same-origin",
+                signal: controller.signal,
+              });
+
+              if (!canApplyResult()) return;
+
+              const resumeData = await resumeRes.json().catch(() => null);
+              const resumedGroup =
+                resumeData &&
+                typeof resumeData === "object" &&
+                typeof (resumeData as { group?: unknown }).group === "string"
+                  ? (resumeData as { group: string }).group.trim()
+                  : "";
+
+              if (!resumeRes.ok || !/^GRUPO[A-Z]$/.test(resumedGroup)) {
+                setAccess(resumeRes.status === 401 ? "MISSING_TOKEN" : "DENIED");
+                transientPitchTokenRef.current = undefined;
+                return;
+              }
+
+              const resumedParty =
+                resumedGroup === "GRUPOB" || resumedGroup === "GRUPOC"
+                  ? "app"
+                  : "perufederal";
+
+              setParty(resumedParty);
+              setActiveParty(resumedParty);
+              sessionStorage.setItem("votoclaro_pitch_done_v1", "1");
+              sessionStorage.setItem(PITCH_DONE_KEY, "1");
+              setAccess("GRANTED");
+              transientPitchTokenRef.current = undefined;
+            } catch (error) {
+              if (isAbortError(error)) return;
+              if (canApplyResult()) {
+                setAccess("DENIED");
+                transientPitchTokenRef.current = undefined;
+              }
+            }
+          }, 0);
+
           return;
         }
 

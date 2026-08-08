@@ -1,8 +1,8 @@
-﻿{
+{
   "name": "Voto Claro",
   "short_name": "VotoClaro",
   "description": "Plataforma cívica digital para comentar temas públicos y participar en foros ciudadanos",
-  "start_url": "/pitch?t=GRUPOB-2026-01",
+  "start_url": "/pitch",
   "display": "standalone",
   "background_color": "#0537A8",
   "theme_color": "#0537A8",

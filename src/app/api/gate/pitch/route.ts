@@ -49,6 +49,23 @@ function tokenToGroup(token: string) {
   return m ? m[1] : null;
 }
 
+function readCookieValue(cookieHeader: string | null, name: string) {
+  if (!cookieHeader) return null;
+
+  for (const part of cookieHeader.split(";")) {
+    const [rawName, ...rawValueParts] = part.trim().split("=");
+    if (rawName !== name) continue;
+
+    const rawValue = rawValueParts.join("=");
+    try {
+      return decodeURIComponent(rawValue);
+    } catch {
+      return rawValue;
+    }
+  }
+
+  return null;
+}
 function getSupabaseAdmin() {
   // ✅ IMPORTANTÍSIMO: en tu .env.local tienes NEXT_PUBLIC_SUPABASE_URL, NO SUPABASE_URL
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -100,6 +117,49 @@ function isJsonContentType(req: Request) {
   return contentType.toLowerCase().split(";")[0].trim() === "application/json";
 }
 
+export async function GET(req: Request) {
+  try {
+    const cookieHeader = req.headers.get("cookie");
+    const token = (readCookieValue(cookieHeader, VC_PITCH_COOKIE) ?? "").trim();
+    const group = (readCookieValue(cookieHeader, VC_GROUP_COOKIE) ?? "").trim();
+
+    if (!token || !group || tokenToGroup(token) !== group) {
+      return clearPitchCookies(invalidAccess());
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    const { data, error } = await supabase
+      .from("votoclaro_public_links")
+      .select("expires_at")
+      .eq("token", token)
+      .eq("route", "/pitch")
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[pitch-gate] access validation failed");
+      return unavailable();
+    }
+
+    if (!data) {
+      return clearPitchCookies(invalidAccess());
+    }
+
+    if (data.expires_at) {
+      const exp = new Date(String(data.expires_at)).getTime();
+      if (Number.isFinite(exp) && Date.now() > exp) {
+        return clearPitchCookies(invalidAccess());
+      }
+    }
+
+    return jsonNoStore({ ok: true, group }, 200);
+  } catch {
+    console.error("[pitch-gate] access validation failed");
+    return unavailable();
+  }
+}
 export async function POST(req: Request) {
   let shouldClearPitchCookies = false;
 
