@@ -4968,6 +4968,27 @@ function Invoke-P1GProcessTreeSelfTest {
   Assert-P1BSelfTestCondition -Condition ((-not $nextPartialFailed.QuerySucceeded) -and $nextPartialFailed.ErrorCode -eq 123 -and $nextPartialFailed.RowCount -eq 0) -Code "postgres_process_unverified"
   $normalEof = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("101:1","202:101") })
   Assert-P1BSelfTestCondition -Condition ($normalEof.QuerySucceeded -and $normalEof.RowCount -eq 2 -and ($normalEof.ProcessIds -contains 101) -and ($normalEof.ProcessIds -contains 202)) -Code "postgres_process_unverified"
+  $pidZeroSystemRow = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("0:0","101:1","202:101") })
+  Assert-P1BSelfTestCondition -Condition (
+    $pidZeroSystemRow.QuerySucceeded -and
+    $pidZeroSystemRow.ApiSuccess -and
+    $pidZeroSystemRow.ErrorCode -eq 0 -and
+    $pidZeroSystemRow.RowCount -eq 2 -and
+    (-not ($pidZeroSystemRow.ProcessIds -contains 0)) -and
+    ($pidZeroSystemRow.ProcessIds -contains 101) -and
+    ($pidZeroSystemRow.ProcessIds -contains 202) -and
+    (-not $pidZeroSystemRow.ParentByPid.ContainsKey(0))
+  ) -Code "postgres_process_unverified"
+
+  $pidZeroInvalidParent = Get-ProcessParentPidSnapshotForLifecycle -InjectedSnapshot ([pscustomobject]@{ QuerySucceeded=$true; ApiSuccess=$true; ErrorCode=0; Rows=@("0:1","101:1") })
+  Assert-P1BSelfTestCondition -Condition (
+    (-not $pidZeroInvalidParent.QuerySucceeded) -and
+    $pidZeroInvalidParent.ApiSuccess -and
+    $pidZeroInvalidParent.ErrorCode -eq -4 -and
+    $pidZeroInvalidParent.RowCount -eq 0
+  ) -Code "postgres_process_unverified"
+
+  Write-Output "P1AC_PID_ZERO_PROCESS_ROW_SELF_TEST_OK"
   Write-Output "P1G_PROCESS32NEXT_PARTIAL_FAILURE_SELF_TEST_OK"
 
   $postmasterIdentity = [pscustomobject]@{ Pid = 101; ExecutablePath = "C:\\vc\\postgres.exe"; StartTimeUtc = [datetime]::UtcNow }
@@ -5842,9 +5863,13 @@ function Convert-ProcessParentRowsForLifecycle {
   foreach ($line in @($Rows)) {
     $parts = ([string]$line).Split(':')
     $processIdValue = 0; $parentProcessIdValue = 0
-    if ($parts.Count -ne 2 -or -not [int]::TryParse($parts[0], [ref]$processIdValue) -or -not [int]::TryParse($parts[1], [ref]$parentProcessIdValue) -or $processIdValue -le 0 -or $parentProcessIdValue -lt 0) {
+    if ($parts.Count -ne 2 -or -not [int]::TryParse($parts[0], [ref]$processIdValue) -or -not [int]::TryParse($parts[1], [ref]$parentProcessIdValue) -or $processIdValue -lt 0 -or $parentProcessIdValue -lt 0 -or ($processIdValue -eq 0 -and $parentProcessIdValue -ne 0)) {
       return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$true; ErrorCode=-4; ParentByPid=@{}; ProcessIds=@(); RowCount=0; Rows=@($Rows) }
     }
+    if ($processIdValue -eq 0) {
+      continue
+    }
+
     if ($parents.ContainsKey($processIdValue) -and [int]$parents[$processIdValue] -ne $parentProcessIdValue) {
       return [pscustomobject]@{ QuerySucceeded=$false; ApiSuccess=$true; ErrorCode=-5; ParentByPid=@{}; ProcessIds=@(); RowCount=0; Rows=@($Rows) }
     }
