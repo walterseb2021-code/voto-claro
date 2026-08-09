@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Función para obtener o crear device_id
@@ -87,47 +86,23 @@ export default function ProyectoCiudadanoPage() {
     }
   };
 
-  // Cargar ganadores del ciclo anterior
+  // Cargar ganadores del ciclo anterior desde el servidor.
   const loadWinners = async () => {
     setWinnersLoading(true);
-    try {
-      const { data: previousCycle } = await supabase
-        .from('project_cycles')
-        .select('id')
-        .eq('is_active', false)
-        .order('ends_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
 
-      if (!previousCycle) {
-        setWinners([]);
-        return;
+    try {
+      const response = await fetch('/api/proyecto-ciudadano/winners', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !Array.isArray(result.winners)) {
+        throw new Error('No se pudieron cargar los proyectos destacados.');
       }
 
-      const { data } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          name,
-          category,
-          district,
-          department,
-          beneficiary_count,
-          leader:project_participants!leader_id (
-            alias
-          )
-        `)
-        .eq('cycle_id', previousCycle.id)
-        .eq('status', 'active')
-        .order('beneficiary_count', { ascending: false })
-        .limit(3);
-
-      const transformed = (data || []).map((item: any) => ({
-        ...item,
-        leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
-      }));
-
-      setWinners(transformed);
+      setWinners(result.winners);
     } catch (err) {
       console.error('Error cargando ganadores:', err);
       setWinners([]);
