@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
@@ -37,12 +37,6 @@ const EVALUATION_CRITERIA = [
 
 const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
 const OFFICIAL_TEMPLATE_PDF = '/docs/proyecto-ciudadano/ejemplo_proyecto_ciudadano_lleno.pdf';
-function maskAccessCode(code: string) {
-  const clean = String(code || '').trim();
-  if (!clean) return '';
-  return `••••-${clean.slice(-4)}`;
-}
-
 export default function ProyectoCiudadanoPage() {
   const router = useRouter();
   const { setPageContext, clearPageContext } = useAssistantRuntime();
@@ -62,28 +56,30 @@ export default function ProyectoCiudadanoPage() {
     loadWinners();
   }, []);
 
-  // Función para cargar el participante por device_id
+  // Cargar la identidad del participante desde la sesion segura server-side.
   const loadParticipant = async () => {
-    const currentDeviceId = getOrCreateDeviceId();
-
-    if (!currentDeviceId) {
-      setParticipant(null);
-      setLoading(false);
-      return;
-    }
-
     setChecking(true);
-    try {
-      const { data, error } = await supabase
-        .from('project_participants')
-        .select('*')
-        .eq('device_id', currentDeviceId)
-        .maybeSingle();
 
-      if (error) throw error;
-      setParticipant(data || null);
+    try {
+      const response = await fetch('/api/participant/session', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error('No se pudo verificar la sesión del participante.');
+      }
+
+      setParticipant(
+        result.authenticated && result.participant
+          ? result.participant
+          : null
+      );
     } catch (err) {
-      console.error('Error cargando participante:', err);
+      console.error('Error verificando sesión de participante:', err);
       setParticipant(null);
     } finally {
       setChecking(false);
@@ -140,7 +136,7 @@ export default function ProyectoCiudadanoPage() {
     }
   };
 
-  // Función para iniciar sesión con código de acceso
+  // Iniciar sesión con código mediante el endpoint server-side.
   const handleLoginConCodigo = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginCodigoLoading(true);
@@ -154,36 +150,48 @@ export default function ProyectoCiudadanoPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('project_participants')
-        .select('*')
-        .eq('codigo_acceso', codigo)
-        .maybeSingle();
+      // Compatibilidad temporal: algunas pantallas aun usan vc_device_id.
+      // La actualización, si corresponde, la realiza el servidor después
+      // de validar correctamente el código.
+      const currentDeviceId = getOrCreateDeviceId();
 
-      console.log('🔍 Buscando código:', codigo);
-      console.log('📦 Resultado:', data);
+      const response = await fetch('/api/participant/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        cache: 'no-store',
+        body: JSON.stringify({
+          codigo_acceso: codigo,
+          device_id: currentDeviceId || undefined,
+        }),
+      });
 
-      if (error) throw error;
+      const result = await response.json().catch(() => null);
 
-      if (!data) {
-        setLoginCodigoError('Código de acceso no válido');
-        setLoginCodigoLoading(false);
+      if (!response.ok || !result?.ok || !result?.authenticated) {
+        if (response.status === 429) {
+          setLoginCodigoError(
+            'Demasiados intentos. Espera unos minutos antes de volver a intentar.'
+          );
+        } else if (response.status === 401) {
+          setLoginCodigoError('Código de acceso no válido');
+        } else {
+          setLoginCodigoError(
+            'No se pudo iniciar sesión en este momento. Inténtalo nuevamente.'
+          );
+        }
         return;
       }
 
-      const currentDeviceId = getOrCreateDeviceId();
-      const { error: updateError } = await supabase
-        .from('project_participants')
-        .update({ device_id: currentDeviceId })
-        .eq('id', data.id);
-
-      if (updateError) throw updateError;
-
       await loadParticipant();
       setCodigoAcceso('');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error al iniciar sesión con código:', err);
-      setLoginCodigoError(err.message || 'Error al iniciar sesión');
+      setLoginCodigoError(
+        'No se pudo iniciar sesión en este momento. Inténtalo nuevamente.'
+      );
     } finally {
       setLoginCodigoLoading(false);
     }
@@ -204,10 +212,10 @@ export default function ProyectoCiudadanoPage() {
 
   useEffect(() => {
     const participantReady = !!participant;
-    const participantName = participant?.full_name || '';
+    const participantName =
+      participant?.full_name || participant?.display_name || '';
     const participantAlias = participant?.alias || '';
-    const participantCode = participant?.codigo_acceso || '';
-    const maskedParticipantCode = maskAccessCode(participantCode);
+    const participantHasAccessCode = participant?.has_access_code === true;
     const hasLoginCodeText = codigoAcceso.trim().length > 0;
 
 const participantHomeViewMode =
@@ -264,7 +272,7 @@ const hasWinners = winnersVisible.length > 0;
       if (participantAlias) {
         visibleParts.push(`Alias visible: ${participantAlias}.`);
       }
-       if (participantCode) {
+       if (participantHasAccessCode) {
        visibleParts.push('Existe un código de acceso asociado al participante, pero no se muestra completo ni parcialmente en el panel.');
        }
       visibleParts.push('Se ven acciones para presentar proyecto y para ver proyectos activos.');
@@ -418,8 +426,8 @@ const speakableSummary =
         participantVisible: participantReady,
         participantNameVisible: !!participantName,
         participantAliasVisible: !!participantAlias,
-        participantCodeVisible: !!participantCode,
-        participantCodeProtected: !!participantCode,
+        participantCodeVisible: participantHasAccessCode,
+        participantCodeProtected: participantHasAccessCode,
         loginCodeTyped: hasLoginCodeText,
         loginCodigoLoading,
         loginCodigoError: loginCodigoError || null,
@@ -656,8 +664,12 @@ const speakableSummary =
               <div>
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Bienvenido, {participant.full_name}</h2>
                 <p className="text-sm text-slate-600">Alias: {participant.alias}</p>
-                <p className="text-xs text-slate-500 mt-1">Registrado el {new Date(participant.created_at).toLocaleDateString()}</p>
-                  {participant.codigo_acceso && (
+                {participant.created_at && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Registrado el {new Date(participant.created_at).toLocaleDateString()}
+                  </p>
+                )}
+                  {participant.has_access_code && (
                  <p className="text-xs text-blue-600 mt-1 font-semibold">
                  Código de acceso: registrado y protegido. Consérvalo privado.
                 </p>

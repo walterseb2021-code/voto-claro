@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     const { data: participant, error: participantError } = await supabase
       .from("project_participants")
-      .select("id,alias,full_name")
+      .select("id,alias,full_name,created_at,codigo_acceso")
       .eq("id", session!.participant_id)
       .limit(1)
       .maybeSingle();
@@ -89,10 +89,30 @@ export async function GET(req: NextRequest) {
       return clearParticipantSessionCookie(response);
     }
 
+    const fullName =
+      typeof participant?.full_name === "string"
+        ? participant.full_name.trim().replace(/\s+/g, " ").slice(0, 120) || null
+        : null;
+
+    const createdAt =
+      typeof participant?.created_at === "string" &&
+      Number.isFinite(new Date(participant.created_at).getTime())
+        ? participant.created_at
+        : null;
+
+    const hasAccessCode =
+      typeof participant?.codigo_acceso === "string" &&
+      participant.codigo_acceso.trim().length > 0;
+
     return participantJson(200, {
       ok: true,
       authenticated: true,
-      participant: safeParticipant,
+      participant: {
+        ...safeParticipant,
+        full_name: fullName,
+        created_at: createdAt,
+        has_access_code: hasAccessCode,
+      },
     });
   } catch {
     console.error("[participant-session] unexpected failure");
