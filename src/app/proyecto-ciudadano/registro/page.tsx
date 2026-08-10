@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Función para obtener o crear device_id
@@ -16,13 +15,6 @@ function getOrCreateDeviceId(): string {
   const newId = crypto.randomUUID();
   localStorage.setItem(KEY, newId);
   return newId;
-}
-
-// Función para generar código de acceso
-async function generarCodigoAcceso(): Promise<string> {
-  const { data, error } = await supabase.rpc('generar_codigo_acceso');
-  if (error) throw error;
-  return data;
 }
 
 // Funciones para proteger datos sensibles frente al asistente
@@ -198,39 +190,62 @@ function RegistroForm() {
     }
 
     try {
-      const codigo = await generarCodigoAcceso();
-
-      const { error } = await supabase
-        .from('project_participants')
-        .insert({
-          full_name: form.full_name.trim(),
-          dni: form.dni.trim(),
-          email: form.email.trim().toLowerCase(),
-          phone: form.phone.trim(),
-          address: form.address.trim(),
-          district: form.district.trim(),
-          alias: form.alias.trim(),
+      const response = await fetch('/api/participant/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        cache: 'no-store',
+        body: JSON.stringify({
+          full_name: form.full_name,
+          dni: form.dni,
+          email: form.email,
+          phone: form.phone,
+          address: form.address,
+          district: form.district,
+          alias: form.alias,
           device_id: deviceId,
-          codigo_acceso: codigo,
-        })
-        .select()
-        .single();
+          consent_accepted: true,
+        }),
+      });
 
-      if (error) throw error;
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        if (response.status === 409) {
+          setError('Ya existe un participante con este DNI. Si ya te registraste, intenta iniciar sesión con tu código de acceso.');
+        } else if (response.status === 429) {
+          setError('Se realizaron demasiados intentos de registro. Espera unos minutos antes de volver a intentar.');
+        } else if (response.status === 400) {
+          setError('Revisa los datos ingresados y vuelve a intentar.');
+        } else {
+          setError('El registro no está disponible en este momento. Intenta nuevamente más tarde.');
+        }
+
+        setLoading(false);
+        return;
+      }
+
+      const codigo =
+        typeof result.codigo_acceso === 'string'
+          ? result.codigo_acceso.trim()
+          : '';
+
+      if (!codigo) {
+        setError('El registro se completó, pero no se pudo mostrar el código de acceso. Vuelve a la pantalla principal e inicia sesión si ya conservas un código.');
+        setLoading(false);
+        return;
+      }
 
       setCodigoAcceso(codigo);
       setSuccess(true);
       setLoading(false);
-    } catch (err: any) {
-      if (err.message?.includes('duplicate key') || err.code === '23505') {
-        setError('Ya existe un participante con este DNI o correo. Si ya te registraste, intenta iniciar sesión con tu código de acceso.');
-      } else {
-        setError(err.message || 'Error al registrar. Intenta nuevamente.');
-      }
+    } catch {
+      setError('No se pudo completar el registro. Revisa tu conexión e intenta nuevamente.');
       setLoading(false);
     }
   };
-
   useEffect(() => {
     const destinationLabel = getDestinationLabel();
 
