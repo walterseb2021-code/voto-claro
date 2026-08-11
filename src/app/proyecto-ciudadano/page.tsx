@@ -15,7 +15,6 @@ function getOrCreateDeviceId(): string {
   return newId;
 }
 
-const MIN_SUPPORTS_REQUIRED = 100;
 const BUDGET_CATEGORIES = [
   { id: 'hasta_10000', label: 'Hasta S/10,000' },
   { id: 'hasta_20000', label: 'Hasta S/20,000' },
@@ -48,10 +47,17 @@ export default function ProyectoCiudadanoPage() {
   const [loginCodigoError, setLoginCodigoError] = useState('');
   const [winners, setWinners] = useState<any[]>([]);
   const [winnersLoading, setWinnersLoading] = useState(true);
+  const [programRules, setProgramRules] = useState<{ minimum_supports: number; submission_open: boolean } | null>(null);
+  const [rulesLoading, setRulesLoading] = useState(true);
+  const minimumSupportsRequired =
+    typeof programRules?.minimum_supports === 'number' && programRules.minimum_supports > 0
+      ? programRules.minimum_supports
+      : null;
 
   useEffect(() => {
     getOrCreateDeviceId();
     loadParticipant();
+    loadRules();
     loadWinners();
   }, []);
 
@@ -86,6 +92,38 @@ export default function ProyectoCiudadanoPage() {
     }
   };
 
+  // Cargar reglas publicas del ciclo desde el servidor, sin exponer datos sensibles.
+  const loadRules = async () => {
+    setRulesLoading(true);
+
+    try {
+      const response = await fetch('/api/proyecto-ciudadano/rules', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (
+        !response.ok ||
+        !result?.ok ||
+        !Number.isInteger(result.minimum_supports) ||
+        result.minimum_supports < 1
+      ) {
+        throw new Error('No se pudieron cargar las reglas de la convocatoria.');
+      }
+
+      setProgramRules({
+        minimum_supports: result.minimum_supports,
+        submission_open: result.submission_open === true,
+      });
+    } catch (err) {
+      console.error('Error cargando reglas de Proyecto Ciudadano:', err);
+      setProgramRules(null);
+    } finally {
+      setRulesLoading(false);
+    }
+  };
   // Cargar ganadores del ciclo anterior desde el servidor.
   const loadWinners = async () => {
     setWinnersLoading(true);
@@ -275,7 +313,15 @@ const hasWinners = winnersVisible.length > 0;
       visibleParts.push(`Ganadores visibles del ciclo anterior: ${winnersTitles.join(', ')}.`);
     }
 
-    visibleParts.push(`Regla visible del programa: se requieren al menos ${MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos para entrar a evaluación final.`);
+    if (minimumSupportsRequired != null) {
+      visibleParts.push(
+        `Regla visible del programa: se requieren al menos ${minimumSupportsRequired} apoyos vecinales válidos para entrar a evaluación final.`
+      );
+    } else if (!rulesLoading) {
+      visibleParts.push(
+        'El mínimo de apoyos de la convocatoria no pudo confirmarse en este momento.'
+      );
+    }
     visibleParts.push(`Categorías presupuestales visibles: ${BUDGET_CATEGORIES.map((item) => item.label).join(', ')}.`);
     visibleParts.push(`Ponderación visible de evaluación: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto.`);
     visibleParts.push(`Criterios visibles de calidad del proyecto: ${EVALUATION_CRITERIA.join(', ')}.`);
@@ -416,7 +462,9 @@ const speakableSummary =
         officialTemplateAvailable: true,
         officialTemplateDocxUrl: OFFICIAL_TEMPLATE_DOCX,
         officialTemplatePdfUrl: OFFICIAL_TEMPLATE_PDF,
-        minimumSupportsRequired: MIN_SUPPORTS_REQUIRED,
+        minimumSupportsRequired: minimumSupportsRequired,
+        rulesLoading,
+        submissionOpen: programRules?.submission_open === true,
         budgetCategories: BUDGET_CATEGORIES,
         evaluationWeights: EVALUATION_WEIGHTS,
         evaluationCriteria: EVALUATION_CRITERIA,
@@ -436,6 +484,9 @@ const speakableSummary =
     loginCodigoError,
     winners,
     winnersLoading,
+    minimumSupportsRequired,
+    rulesLoading,
+    programRules?.submission_open,
   ]);
 
   useEffect(() => {
@@ -500,7 +551,11 @@ const speakableSummary =
 
           <div className="space-y-3 text-sm text-slate-700">
             <p>
-              Para entrar a evaluación final, un proyecto debe reunir <strong>al menos 100 apoyos vecinales válidos</strong>.
+              Para entrar a evaluación final, un proyecto debe reunir <strong>
+                {minimumSupportsRequired != null
+                  ? `al menos ${minimumSupportsRequired} apoyos vecinales válidos`
+                  : 'el mínimo de apoyos definido por la convocatoria'}
+              </strong>.
             </p>
             <p>
               Los proyectos compiten en <strong>tres categorías presupuestales</strong>: hasta S/10,000, hasta S/20,000 y hasta S/30,000.
