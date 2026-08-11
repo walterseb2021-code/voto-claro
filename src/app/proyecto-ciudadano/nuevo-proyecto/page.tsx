@@ -18,7 +18,6 @@ const CATEGORIAS = [
   'Otros',
 ];
 
-const MIN_SUPPORTS_REQUIRED = 100;
 const MAX_PROJECT_BUDGET = 30000;
 const MAX_PDF_SIZE_MB = 10;
 const OFFICIAL_TEMPLATE_DOCX = '/docs/proyecto-ciudadano/formato_oficial_proyecto_ciudadano.docx';
@@ -88,6 +87,7 @@ export default function NuevoProyectoPage() {
 
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [cycle, setCycle] = useState<any>(null);
+  const [submissionOpen, setSubmissionOpen] = useState(false);
 
   const requestedBudgetNumber =
     form.requested_budget.trim() === ''
@@ -101,48 +101,56 @@ export default function NuevoProyectoPage() {
   );
 
   const derivedBudgetCategoryLabel = getBudgetCategoryLabel(derivedBudgetCategory);
+  const minimumSupportsRequired =
+    typeof cycle?.min_supports === 'number' && cycle.min_supports > 0
+      ? cycle.min_supports
+      : 100;
 
-  // Cargar datos del participante y ciclo activo
+  // Cargar sesión segura del participante y estado server-side del ciclo
   useEffect(() => {
     async function loadData() {
-      const deviceId = localStorage.getItem('vc_device_id');
+      try {
+        const response = await fetch('/api/proyecto-ciudadano/submission', {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+        });
 
-      if (!deviceId) {
-        router.push('/proyecto-ciudadano/registro');
-        return;
+        const result = await response.json().catch(() => null);
+
+        if (response.status === 401) {
+          router.push('/proyecto-ciudadano');
+          return;
+        }
+
+        if (!response.ok || !result?.ok) {
+          setError('No se pudo verificar el estado de la convocatoria. Intenta nuevamente más tarde.');
+          setLoading(false);
+          return;
+        }
+
+        setParticipant(result.participant || null);
+        setCycle(result.cycle || null);
+        setSubmissionOpen(Boolean(result.submission_open));
+
+        if (result.existing_project) {
+          setError(
+            'Ya tienes un proyecto registrado en el ciclo actual. No puedes presentar otro hasta que termine este ciclo de evaluación.'
+          );
+        } else if (!result.submission_open) {
+          setError(
+            'No hay un ciclo abierto para recibir nuevos proyectos en este momento.'
+          );
+        }
+      } catch {
+        setError('No se pudo verificar el estado de la convocatoria. Revisa tu conexión e intenta nuevamente.');
+      } finally {
+        setLoading(false);
       }
-
-      const { data: participantData, error: participantError } = await supabase
-        .from('project_participants')
-        .select('*')
-        .eq('device_id', deviceId)
-        .maybeSingle();
-
-      if (participantError || !participantData) {
-        router.push('/proyecto-ciudadano/registro');
-        return;
-      }
-
-      setParticipant(participantData);
-
-      const { data: cycleData, error: cycleError } = await supabase
-        .from('project_cycles')
-        .select('*')
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (cycleError) {
-        console.error('Error cargando ciclo:', cycleError);
-      } else {
-        setCycle(cycleData);
-      }
-
-      setLoading(false);
     }
 
     loadData();
   }, [router]);
-
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -248,6 +256,12 @@ export default function NuevoProyectoPage() {
       return;
     }
 
+    if (!submissionOpen) {
+      setError('No hay un ciclo abierto para recibir nuevos proyectos en este momento.');
+      setSubmitting(false);
+      return;
+    }
+
     if (!pdfFile) {
       setError('Debes subir el archivo PDF del proyecto.');
       setSubmitting(false);
@@ -267,82 +281,136 @@ export default function NuevoProyectoPage() {
     }
 
     try {
-      if (!cycle?.id) {
-        setError('No hay un ciclo activo disponible para presentar proyectos en este momento.');
+      const uploadInitResponse = await fetch(
+        '/api/proyecto-ciudadano/submission/upload',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          cache: 'no-store',
+          body: JSON.stringify({
+            file_name: pdfFile.name,
+            file_type: pdfFile.type,
+            file_size: pdfFile.size,
+          }),
+        }
+      );
+
+      const uploadInit = await uploadInitResponse.json().catch(() => null);
+
+      if (!uploadInitResponse.ok || !uploadInit?.ok) {
+        if (uploadInitResponse.status === 401) {
+          router.push('/proyecto-ciudadano');
+          return;
+        }
+
+        if (uploadInitResponse.status === 409) {
+          setError(
+            uploadInit?.error === 'participant_has_open_project'
+              ? 'Ya tienes un proyecto registrado en el ciclo actual.'
+              : 'La convocatoria no está abierta para recibir proyectos en este momento.'
+          );
+        } else if (uploadInitResponse.status === 429) {
+          setError('Se realizaron demasiados intentos de carga. Espera antes de volver a intentar.');
+        } else if (uploadInitResponse.status === 400) {
+          setError('El archivo PDF no cumple los requisitos de carga.');
+        } else {
+          setError('No se pudo preparar la carga segura del PDF. Intenta nuevamente.');
+        }
+
         setSubmitting(false);
         return;
       }
 
-      const { data: existingLeaderProject, error: existingLeaderError } = await supabase
-        .from('projects')
-        .select('id, name, status')
-        .eq('cycle_id', cycle.id)
-        .eq('leader_id', participant.id)
-        .in('status', ['pending', 'active'])
-        .maybeSingle();
+      const uploadPath =
+        typeof uploadInit.path === 'string' ? uploadInit.path : '';
+      const uploadToken =
+        typeof uploadInit.token === 'string' ? uploadInit.token : '';
+      const uploadGrantId =
+        typeof uploadInit.upload_grant_id === 'string'
+          ? uploadInit.upload_grant_id
+          : '';
 
-      if (existingLeaderError) {
-        console.error('Error verificando proyecto existente del líder:', existingLeaderError);
-      }
-
-      if (existingLeaderProject) {
-        setError(
-          'Ya tienes un proyecto registrado en el ciclo actual. No puedes presentar otro hasta que termine este ciclo de evaluación.'
-        );
+      if (!uploadPath || !uploadToken || !uploadGrantId) {
+        setError('No se pudo preparar la carga segura del PDF.');
         setSubmitting(false);
         return;
       }
-
-      const fileExt = pdfFile.name.split('.').pop()?.toLowerCase() || 'pdf';
-      const fileName = `${participant.id}/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('project_pdfs')
-        .upload(fileName, pdfFile);
+        .uploadToSignedUrl(uploadPath, uploadToken, pdfFile, {
+          contentType: 'application/pdf',
+          cacheControl: '3600',
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        setError('No se pudo subir el PDF. Intenta nuevamente.');
+        setSubmitting(false);
+        return;
+      }
 
-      const { data: urlData } = supabase.storage
-        .from('project_pdfs')
-        .getPublicUrl(fileName);
+      const finalizeResponse = await fetch(
+        '/api/proyecto-ciudadano/submission/finalize',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          cache: 'no-store',
+          body: JSON.stringify({
+            upload_grant_id: uploadGrantId,
+            name: cleanName,
+            category: cleanCategory,
+            objective: cleanObjective,
+            description: cleanDescription,
+            district: cleanDistrict,
+            department: cleanDepartment,
+            requested_budget: requestedBudgetNumber,
+            data_truth_confirmed: true,
+          }),
+        }
+      );
 
-      const pdfUrl = urlData.publicUrl;
+      const finalizeResult = await finalizeResponse.json().catch(() => null);
 
-      const { error: insertError } = await supabase
-        .from('projects')
-        .insert({
-          cycle_id: cycle.id,
-          leader_id: participant.id,
-          name: cleanName,
-          category: cleanCategory,
-          objective: cleanObjective,
-          description: cleanDescription,
-          district: cleanDistrict,
-          department: cleanDepartment,
-          requested_budget: requestedBudgetNumber,
-          budget_category: derivedBudgetCategory,
-          minimum_supports_required: MIN_SUPPORTS_REQUIRED,
-          eligible_for_final_review: false,
-          pdf_url: pdfUrl,
-          status: 'pending',
-        })
-        .select()
-        .single();
+      if (!finalizeResponse.ok || !finalizeResult?.ok) {
+        if (finalizeResponse.status === 401) {
+          router.push('/proyecto-ciudadano');
+          return;
+        }
 
-      if (insertError) throw insertError;
+        if (finalizeResponse.status === 409) {
+          setError(
+            finalizeResult?.error === 'participant_has_open_project'
+              ? 'Ya tienes un proyecto registrado en el ciclo actual.'
+              : finalizeResult?.error === 'submission_closed'
+                ? 'La convocatoria dejó de estar abierta antes de completar el envío.'
+                : 'No se pudo validar de forma segura el PDF o la postulación.'
+          );
+        } else if (finalizeResponse.status === 400) {
+          setError('Revisa los datos del proyecto y vuelve a intentar.');
+        } else {
+          setError('No se pudo finalizar el registro del proyecto. Intenta nuevamente.');
+        }
+
+        setSubmitting(false);
+        return;
+      }
 
       setSuccess(true);
       setTimeout(() => {
         router.push('/proyecto-ciudadano');
       }, 3000);
-    } catch (err: any) {
-      console.error('Error al guardar proyecto:', err);
-      setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
+    } catch {
+      setError('No se pudo completar el envío. Revisa tu conexión e intenta nuevamente.');
     } finally {
       setSubmitting(false);
     }
   };
-
   useEffect(() => {
     const filledFields = [
       form.name ? 'nombre del proyecto' : null,
@@ -404,9 +472,13 @@ export default function NuevoProyectoPage() {
     }
 
     if (cycle?.id) {
-      visibleParts.push('Hay un ciclo activo disponible para registrar el proyecto.');
+      visibleParts.push(
+        submissionOpen
+          ? 'Hay un ciclo abierto disponible para registrar el proyecto.'
+          : 'Hay un ciclo configurado, pero actualmente está fuera de su ventana de recepción.'
+      );
     } else if (!loading) {
-      visibleParts.push('No se muestra un ciclo activo confirmado en esta pantalla.');
+      visibleParts.push('No se muestra un ciclo configurado para esta pantalla.');
     }
 
     if (!success && !loading) {
@@ -452,7 +524,7 @@ export default function NuevoProyectoPage() {
     }
 
     visibleParts.push(
-      `Regla visible del programa: el proyecto necesita al menos ${MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos para entrar a evaluación final.`
+      `Regla visible del programa: el proyecto necesita al menos ${minimumSupportsRequired} apoyos vecinales válidos para entrar a evaluación final.`
     );
     visibleParts.push(
       `Ponderación referencial visible de evaluación: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto, sujeta a validación.`
@@ -567,7 +639,7 @@ export default function NuevoProyectoPage() {
       dynamicData: {
         participantVisible: !!participant,
         participantDataProtected: true,
-        cycleActive: !!cycle?.id,
+        cycleActive: submissionOpen,
         cycleIdVisible: !!cycle?.id,
         loading,
         submitting,
@@ -581,7 +653,7 @@ export default function NuevoProyectoPage() {
         officialTemplateAvailable: true,
         officialTemplateDocxUrl: OFFICIAL_TEMPLATE_DOCX,
         officialTemplatePdfUrl: OFFICIAL_TEMPLATE_PDF,
-        minimumSupportsRequired: MIN_SUPPORTS_REQUIRED,
+        minimumSupportsRequired: minimumSupportsRequired,
         requestedBudget: requestedBudgetNumber,
         budgetCategory: derivedBudgetCategory,
         budgetCategoryLabel: derivedBudgetCategoryLabel,
@@ -613,6 +685,8 @@ export default function NuevoProyectoPage() {
     form,
     pdfFile,
     cycle,
+    submissionOpen,
+    minimumSupportsRequired,
     requestedBudgetNumber,
     derivedBudgetCategory,
     derivedBudgetCategoryLabel,
@@ -696,7 +770,7 @@ export default function NuevoProyectoPage() {
           <h2 className="text-lg font-bold text-slate-900 mb-2">📋 Reglas de participación</h2>
           <div className="space-y-2 text-sm text-slate-700">
             <p>
-              Tu proyecto necesita <strong>al menos {MIN_SUPPORTS_REQUIRED} apoyos vecinales válidos</strong> para entrar a evaluación final.
+              Tu proyecto necesita <strong>al menos {minimumSupportsRequired} apoyos vecinales válidos</strong> para entrar a evaluación final.
             </p>
             <p>
               Las categorías presupuestales son: <strong>hasta S/10,000</strong>, <strong>hasta S/20,000</strong> y <strong>hasta S/30,000</strong>.
@@ -906,7 +980,7 @@ export default function NuevoProyectoPage() {
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={submitting || !form.data_truth_confirmed}
+                disabled={submitting || !form.data_truth_confirmed || !submissionOpen}
                 className="w-full bg-green-700 text-white py-3 rounded-xl font-semibold hover:bg-green-800 transition disabled:opacity-50"
               >
                 {submitting ? 'Enviando...' : 'Enviar proyecto'}
