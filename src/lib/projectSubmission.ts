@@ -207,28 +207,42 @@ export async function verifyStoredPdfSignature(
   supabase: ReturnType<typeof getParticipantSupabaseAdmin>,
   objectPath: string
 ) {
-  const { data: signedData, error: signedError } = await supabase.storage
+  const publicUrl = supabase.storage
     .from(PROJECT_PDF_BUCKET)
-    .createSignedUrl(objectPath, 60);
+    .getPublicUrl(objectPath).data.publicUrl;
 
-  if (signedError || !signedData?.signedUrl) {
-    console.error("[project-submission] PDF verification URL creation failed");
+  if (!publicUrl) {
+    console.error("[project-submission] PDF public verification URL unavailable");
     return { ok: false as const, reason: "unavailable" as const };
   }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   let response: Response;
 
   try {
-    response = await fetch(signedData.signedUrl, {
+    response = await fetch(publicUrl, {
       method: "GET",
       headers: {
         Range: "bytes=0-7",
       },
       cache: "no-store",
+      signal: controller.signal,
     });
-  } catch {
-    console.error("[project-submission] PDF verification fetch failed");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || controller.signal.aborted)
+    ) {
+      console.error("[project-submission] PDF verification timed out");
+    } else {
+      console.error("[project-submission] PDF verification fetch failed");
+    }
+
     return { ok: false as const, reason: "unavailable" as const };
+  } finally {
+    clearTimeout(timeout);
   }
 
   if (!response.ok || !response.body) {
