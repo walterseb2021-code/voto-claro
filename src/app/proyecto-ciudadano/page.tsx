@@ -719,7 +719,9 @@ const speakableSummary =
             </div>
 
             <p className="text-slate-600 mb-4">
-              Puedes presentar un nuevo proyecto o apoyar iniciativas existentes.
+              {submissionOpen
+              ? 'Puedes presentar un nuevo proyecto o apoyar iniciativas existentes.'
+              : 'La convocatoria está cerrada para nuevos proyectos. Puedes seguir consultando y participando en las iniciativas disponibles.'}
             </p>
 
               <div className="flex flex-wrap gap-4 relative z-10">

@@ -88,6 +88,7 @@ export default function NuevoProyectoPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [cycle, setCycle] = useState<any>(null);
   const [submissionOpen, setSubmissionOpen] = useState(false);
+  const [hasExistingProject, setHasExistingProject] = useState(false);
 
   const requestedBudgetNumber =
     form.requested_budget.trim() === ''
@@ -132,14 +133,15 @@ export default function NuevoProyectoPage() {
         setParticipant(result.participant || null);
         setCycle(result.cycle || null);
         setSubmissionOpen(Boolean(result.submission_open));
+        setHasExistingProject(Boolean(result.existing_project));
 
-        if (result.existing_project) {
+        if (!result.submission_open) {
           setError(
-            'Ya tienes un proyecto registrado en el ciclo actual. No puedes presentar otro hasta que termine este ciclo de evaluación.'
+            'La convocatoria está cerrada. No se reciben nuevos proyectos en este momento.'
           );
-        } else if (!result.submission_open) {
+        } else if (result.existing_project) {
           setError(
-            'No hay un ciclo abierto para recibir nuevos proyectos en este momento.'
+            'Ya tienes un proyecto registrado en el ciclo actual. No puedes presentar otro mientras siga vigente este ciclo.'
           );
         }
       } catch {
@@ -482,7 +484,13 @@ export default function NuevoProyectoPage() {
     }
 
     if (!success && !loading) {
-      visibleParts.push('Está visible el formulario para presentar un nuevo proyecto.');
+      visibleParts.push(
+        submissionOpen && !hasExistingProject
+          ? 'Está visible el formulario para presentar un nuevo proyecto.'
+          : !submissionOpen
+            ? 'La convocatoria está cerrada y el formulario de postulación no está disponible.'
+            : 'El participante ya tiene un proyecto registrado en el ciclo actual y no puede presentar otro.'
+      );
 
       if (filledFields.length) {
         visibleParts.push(`Campos con contenido: ${filledFields.join(', ')}.`);
@@ -554,9 +562,9 @@ export default function NuevoProyectoPage() {
           'Volver',
           'Descargar formato oficial en DOCX',
           'Ver formato modelo en PDF',
-          'Aceptar declaración obligatoria',
-          'Enviar proyecto',
-        ];
+          submissionOpen && !hasExistingProject ? 'Aceptar declaración obligatoria' : null,
+          submissionOpen && !hasExistingProject ? 'Enviar proyecto' : null,
+        ].filter(Boolean) as string[];
 
     const suggestedPrompts = success
       ? [
@@ -642,6 +650,8 @@ export default function NuevoProyectoPage() {
         participantVisible: !!participant,
         participantDataProtected: true,
         cycleActive: submissionOpen,
+        hasExistingProject,
+        canSubmitProject: submissionOpen && !hasExistingProject,
         cycleIdVisible: !!cycle?.id,
         loading,
         submitting,
@@ -688,6 +698,7 @@ export default function NuevoProyectoPage() {
     pdfFile,
     cycle,
     submissionOpen,
+    hasExistingProject,
     minimumSupportsRequired,
     requestedBudgetNumber,
     derivedBudgetCategory,
@@ -800,6 +811,7 @@ export default function NuevoProyectoPage() {
             </div>
           )}
 
+          {submissionOpen && !hasExistingProject ? (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre del proyecto *</label>
@@ -993,6 +1005,28 @@ export default function NuevoProyectoPage() {
               </button>
             </div>
           </form>
+        ) : (
+          <div className="bg-white rounded-2xl border-2 border-amber-500 p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-900 mb-3">
+              {submissionOpen ? 'Postulación no disponible' : 'Convocatoria cerrada'}
+            </h2>
+            <p className="text-slate-700 mb-4">
+              {error ||
+                (submissionOpen
+                  ? 'Ya tienes un proyecto registrado en el ciclo actual.'
+                  : 'Actualmente no se reciben nuevos proyectos.')}
+            </p>
+            <p className="text-sm text-slate-600 mb-4">
+              Puedes descargar y revisar el formato oficial, pero el formulario de envío permanecerá bloqueado hasta que exista una convocatoria habilitada y tu sesión cumpla las reglas de participación.
+            </p>
+            <Link
+              href="/proyecto-ciudadano/proyectos"
+              className="inline-block bg-slate-200 text-slate-800 px-5 py-2 rounded-xl font-semibold hover:bg-slate-300"
+            >
+              Ver proyectos activos
+            </Link>
+          </div>
+        )}
 
           <p className="text-xs text-slate-500 mt-4 text-center leading-relaxed">
             El proyecto será revisado por el administrador antes de ser publicado. Solo se aceptan proyectos que beneficien a la comunidad.
