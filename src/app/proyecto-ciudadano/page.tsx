@@ -53,6 +53,7 @@ export default function ProyectoCiudadanoPage() {
     typeof programRules?.minimum_supports === 'number' && programRules.minimum_supports > 0
       ? programRules.minimum_supports
       : null;
+  const submissionOpen = programRules?.submission_open === true;
 
   useEffect(() => {
     getOrCreateDeviceId();
@@ -288,7 +289,11 @@ const hasWinners = winnersVisible.length > 0;
        if (participantHasAccessCode) {
        visibleParts.push('Existe un código de acceso asociado al participante, pero no se muestra completo ni parcialmente en el panel.');
        }
-      visibleParts.push('Se ven acciones para presentar proyecto y para ver proyectos activos.');
+      visibleParts.push(
+        submissionOpen
+          ? 'Se ven acciones para presentar proyecto y para ver proyectos activos.'
+          : 'La convocatoria no está abierta para presentar nuevos proyectos; se mantiene disponible la consulta de proyectos activos.'
+      );
     }
 
     if (hasLoginCodeText) {
@@ -332,7 +337,7 @@ const hasWinners = winnersVisible.length > 0;
       'Volver al inicio',
       !participantReady ? 'Registrarme ahora' : null,
       !participantReady ? 'Iniciar sesión con código' : null,
-      participantReady ? 'Presentar proyecto' : null,
+      participantReady && submissionOpen ? 'Presentar proyecto' : null,
       'Ver proyectos activos',
       'Descargar formato oficial en DOCX',
       'Ver formato modelo en PDF',
@@ -457,14 +462,14 @@ const speakableSummary =
         visibleWinnerTitles: winnersTitles,
         canRegister: !participantReady,
         canLoginWithCode: !participantReady,
-        canCreateProject: participantReady,
+        canCreateProject: participantReady && submissionOpen,
         canViewProjects: true,
         officialTemplateAvailable: true,
         officialTemplateDocxUrl: OFFICIAL_TEMPLATE_DOCX,
         officialTemplatePdfUrl: OFFICIAL_TEMPLATE_PDF,
         minimumSupportsRequired: minimumSupportsRequired,
         rulesLoading,
-        submissionOpen: programRules?.submission_open === true,
+        submissionOpen,
         budgetCategories: BUDGET_CATEGORIES,
         evaluationWeights: EVALUATION_WEIGHTS,
         evaluationCriteria: EVALUATION_CRITERIA,
@@ -720,10 +725,19 @@ const speakableSummary =
               <div className="flex flex-wrap gap-4 relative z-10">
   <button
     type="button"
-    onClick={() => router.push('/proyecto-ciudadano/nuevo-proyecto')}
-    className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 inline-block vc-btn-wave vc-btn-pulse cursor-pointer"
+    onClick={() => {
+      if (submissionOpen) {
+        router.push('/proyecto-ciudadano/nuevo-proyecto');
+      }
+    }}
+    disabled={!submissionOpen}
+    className={`px-6 py-2 rounded-xl font-semibold inline-block vc-btn-wave ${
+      submissionOpen
+        ? 'bg-green-700 text-white hover:bg-green-800 vc-btn-pulse cursor-pointer'
+        : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+    }`}
   >
-    📝 Presentar proyecto
+    {submissionOpen ? '📝 Presentar proyecto' : 'Convocatoria cerrada'}
   </button>
 
   <button

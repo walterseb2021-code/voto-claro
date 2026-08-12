@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Project = {
@@ -10,23 +9,19 @@ type Project = {
   name: string;
   category: string;
   objective: string;
-  description: string;
   district: string;
   department: string;
-  pdf_url: string;
-  leader_id: string;
   beneficiary_count: number;
-  created_at: string;
+  created_at: string | null;
+  status: string;
   requested_budget?: number | null;
   budget_category?: string | null;
   minimum_supports_required?: number | null;
   eligible_for_final_review?: boolean | null;
   leader: {
-    alias: string;
+    alias: string | null;
   } | null;
 };
-
-const DEFAULT_MIN_SUPPORTS_REQUIRED = 100;
 
 function getBudgetCategoryLabel(category: string | null | undefined): string {
   if (category === 'hasta_10000') return 'Hasta S/10,000';
@@ -49,12 +44,27 @@ function getLeaderPublicName(project: Project): string {
   return alias || 'No publicado';
 }
 
+function getProjectMinimumSupports(project: Project): number | null {
+  const value = Number(project.minimum_supports_required);
+  return Number.isInteger(value) && value >= 1 ? value : null;
+}
+
+function getProjectEligibility(project: Project) {
+  if (typeof project.eligible_for_final_review === 'boolean') {
+    return project.eligible_for_final_review;
+  }
+
+  const minimum = getProjectMinimumSupports(project);
+  return minimum != null && (project.beneficiary_count || 0) >= minimum;
+}
+
 export default function ProyectosActivosPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [submissionOpen, setSubmissionOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -96,42 +106,38 @@ export default function ProyectosActivosPage() {
     setError(null);
 
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          name,
-          category,
-          objective,
-          description,
-          district,
-          department,
-          pdf_url,
-          leader_id,
-          beneficiary_count,
-          created_at,
-          requested_budget,
-          budget_category,
-          minimum_supports_required,
-          eligible_for_final_review,
-          leader:project_participants!leader_id (
-            alias
-          )
-        `)
-        .eq('status', 'active')
-        .order('beneficiary_count', { ascending: false });
+      const [projectsResponse, rulesResponse] = await Promise.all([
+        fetch('/api/proyecto-ciudadano/projects', {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+        }),
+        fetch('/api/proyecto-ciudadano/rules', {
+          method: 'GET',
+          cache: 'no-store',
+        }),
+      ]);
 
-      if (error) throw error;
+      const projectsResult = await projectsResponse.json().catch(() => null);
+      const rulesResult = await rulesResponse.json().catch(() => null);
 
-      const transformedProjects: Project[] = (data || []).map((item: any) => ({
-        ...item,
-        leader: item.leader && item.leader.length > 0 ? item.leader[0] : null,
-      }));
+      if (
+        !projectsResponse.ok ||
+        !projectsResult?.ok ||
+        !Array.isArray(projectsResult.projects)
+      ) {
+        throw new Error('No se pudieron cargar los proyectos.');
+      }
 
-      setProjects(transformedProjects);
-    } catch (err: any) {
+      setProjects(projectsResult.projects as Project[]);
+      setSubmissionOpen(
+        Boolean(rulesResponse.ok && rulesResult?.ok && rulesResult.submission_open === true)
+      );
+    } catch (err) {
       console.error('Error cargando proyectos:', err);
-      setError(err.message || 'Error al cargar los proyectos');
+      setProjects([]);
+      setSubmissionOpen(false);
+      setError('No se pudieron cargar los proyectos en este momento.');
     } finally {
       setLoading(false);
     }
@@ -210,16 +216,11 @@ export default function ProyectosActivosPage() {
     visibleParts.push(`Cantidad de proyectos visibles con los filtros actuales: ${filteredProjects.length}.`);
 
     if (highlightedProject) {
-      const minSupports =
-        highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
-
+      const minSupports = getProjectMinimumSupports(highlightedProject);
       const currentSupports = highlightedProject.beneficiary_count || 0;
-      const supportsRemaining = Math.max(minSupports - currentSupports, 0);
-
-      const eligible =
-        highlightedProject.eligible_for_final_review != null
-          ? Boolean(highlightedProject.eligible_for_final_review)
-          : currentSupports >= minSupports;
+      const supportsRemaining =
+        minSupports != null ? Math.max(minSupports - currentSupports, 0) : null;
+      const eligible = getProjectEligibility(highlightedProject);
 
       visibleParts.push('Hay un primer proyecto visible en la lista, sin exponer su descripción completa al asistente.');
       visibleParts.push(`Categoría temática visible del primer proyecto: ${highlightedProject.category}.`);
@@ -232,12 +233,18 @@ export default function ProyectosActivosPage() {
         `Categoría presupuestal visible del primer proyecto: ${getBudgetCategoryLabel(highlightedProject.budget_category)}.`
       );
       visibleParts.push(`Apoyos visibles del primer proyecto: ${currentSupports}.`);
-      visibleParts.push(`Apoyos faltantes del primer proyecto para evaluación final: ${supportsRemaining}.`);
-      visibleParts.push(
-        eligible
-          ? 'El primer proyecto visible alcanza el umbral referencial para evaluación final, sujeto a validación.'
-          : 'El primer proyecto visible todavía no alcanza el umbral referencial de apoyos para evaluación final.'
-      );
+
+      if (minSupports != null) {
+        visibleParts.push(`Umbral propio del primer proyecto: ${minSupports} apoyos.`);
+        visibleParts.push(`Apoyos faltantes del primer proyecto para evaluación final: ${supportsRemaining}.`);
+        visibleParts.push(
+          eligible
+            ? 'El primer proyecto visible alcanza el umbral referencial para evaluación final, sujeto a validación.'
+            : 'El primer proyecto visible todavía no alcanza el umbral referencial de apoyos para evaluación final.'
+        );
+      } else {
+        visibleParts.push('El umbral de apoyos del primer proyecto no está disponible.');
+      }
     }
 
     if (visibleTitles.length) {
@@ -245,7 +252,13 @@ export default function ProyectosActivosPage() {
     }
 
     visibleParts.push(
-      `Regla visible del programa: cada proyecto necesita al menos ${DEFAULT_MIN_SUPPORTS_REQUIRED} apoyos válidos para entrar a evaluación final.`
+      'Cada proyecto conserva y muestra su propio umbral de apoyos definido para su postulación; no se usa un valor fijo del navegador.'
+    );
+
+    visibleParts.push(
+      submissionOpen
+        ? 'La convocatoria está abierta para presentar nuevos proyectos.'
+        : 'La convocatoria no está abierta para presentar nuevos proyectos en este momento.'
     );
 
     visibleParts.push(
@@ -268,7 +281,7 @@ export default function ProyectosActivosPage() {
       'Volver',
       'Cambiar departamento',
       'Buscar proyecto',
-      filteredProjects.length === 0 ? 'Presentar proyecto' : null,
+      filteredProjects.length === 0 && submissionOpen ? 'Presentar proyecto' : null,
       filteredProjects.length > 0 ? 'Ver detalles' : null,
     ].filter(Boolean) as string[];
 
@@ -312,8 +325,8 @@ export default function ProyectosActivosPage() {
           },
           {
             id: 'pc-proyectos-4',
-            label: '¿Dónde presento uno?',
-            question: '¿Dónde puedo presentar un proyecto desde esta pantalla?',
+            label: '¿Puedo presentar uno?',
+            question: '¿La convocatoria está abierta para presentar un nuevo proyecto?',
           },
         ]
       : [
@@ -340,7 +353,7 @@ export default function ProyectosActivosPage() {
           {
             id: 'pc-proyectos-5',
             label: 'Evaluación final',
-            question: '¿El primer proyecto visible ya alcanza el umbral para evaluación final?',
+            question: '¿El primer proyecto visible ya alcanza su umbral para evaluación final?',
           },
         ];
 
@@ -350,7 +363,10 @@ export default function ProyectosActivosPage() {
       ? 'Pantalla de proyectos ciudadanos con error visible al cargar la lista.'
       : filteredProjects.length === 0
       ? 'Pantalla de proyectos ciudadanos sin resultados visibles con los filtros actuales.'
-      : 'Pantalla de proyectos ciudadanos con filtros, búsqueda, apoyos internos visibles, categoría presupuestal y umbral referencial para evaluación final.';
+      : 'Pantalla de proyectos ciudadanos con filtros, búsqueda, apoyos internos visibles, categoría presupuestal y umbral propio de cada proyecto.';
+
+    const highlightedMinimum =
+      highlightedProject ? getProjectMinimumSupports(highlightedProject) : null;
 
     setPageContext({
       pageId: 'proyecto-ciudadano-proyectos',
@@ -394,7 +410,9 @@ export default function ProyectosActivosPage() {
         selectedDepartmentLabel,
         searchActive: hasSearch,
         searchTermProtected: hasSearch,
-        minimumSupportsRequired: DEFAULT_MIN_SUPPORTS_REQUIRED,
+        submissionOpen,
+        minimumSupportsRequired: highlightedMinimum,
+        minimumSupportsRule: 'El umbral se toma del valor guardado en cada proyecto.',
         visibleProjectTitles: visibleTitles,
         highlightedProject: highlightedProject
           ? {
@@ -407,21 +425,25 @@ export default function ProyectosActivosPage() {
               requested_budget: highlightedProject.requested_budget ?? null,
               budget_category: highlightedProject.budget_category || null,
               budget_category_label: getBudgetCategoryLabel(highlightedProject.budget_category),
-              minimum_supports_required:
-                highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED,
-              eligible_for_final_review:
-                highlightedProject.eligible_for_final_review != null
-                  ? Boolean(highlightedProject.eligible_for_final_review)
-                  : (highlightedProject.beneficiary_count || 0) >=
-                    (highlightedProject.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED),
+              minimum_supports_required: highlightedMinimum,
+              eligible_for_final_review: getProjectEligibility(highlightedProject),
               eligibilityRule:
                 'Alcanzar el umbral de apoyos no garantiza premio ni aprobación automática; queda sujeto a validación.',
             }
           : null,
       },
-      contextVersion: 'pc-proyectos-v3',
+      contextVersion: 'pc-proyectos-v4',
     });
-  }, [setPageContext, projects, filteredProjects, loading, error, selectedDepartment, searchTerm]);
+  }, [
+    setPageContext,
+    projects,
+    filteredProjects,
+    loading,
+    error,
+    selectedDepartment,
+    searchTerm,
+    submissionOpen,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -452,8 +474,7 @@ export default function ProyectosActivosPage() {
 
         <div className="bg-white rounded-2xl border-2 border-red-600 p-6 mb-6 shadow-sm">
           <p className="text-slate-700">
-            Estos son los proyectos ciudadanos que han sido aprobados para publicación y están recibiendo apoyo vecinal interno dentro de la plataforma.
-            Cada proyecto necesita al menos <strong>{DEFAULT_MIN_SUPPORTS_REQUIRED} apoyos válidos</strong> para entrar a evaluación final, sujeto a revisión y validación de la organización.
+            Estos son los proyectos ciudadanos aprobados para publicación. Cada proyecto muestra el umbral de apoyos que quedó registrado para su postulación y puede diferir de otras convocatorias.
           </p>
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-xl p-3 mt-3">
             ⚠️ Los apoyos ciudadanos no son votos oficiales, no representan resultados electorales y no garantizan premio, financiamiento ni aprobación automática.
@@ -506,29 +527,35 @@ export default function ProyectosActivosPage() {
             <p className="text-slate-500 text-sm mt-2">
               {selectedDepartment !== 'todos'
                 ? `No hay proyectos para el departamento de ${selectedDepartment}.`
-                : 'Puedes presentar un proyecto ciudadano para revisión.'}
+                : submissionOpen
+                ? 'La convocatoria está abierta para recibir nuevos proyectos.'
+                : 'La convocatoria no está abierta para recibir nuevos proyectos en este momento.'}
             </p>
 
-            <Link
-              href="/proyecto-ciudadano/nuevo-proyecto"
-              className="inline-block mt-4 bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
-            >
-              Presentar proyecto
-            </Link>
+            {submissionOpen ? (
+              <Link
+                href="/proyecto-ciudadano/nuevo-proyecto"
+                className="inline-block mt-4 bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800"
+              >
+                Presentar proyecto
+              </Link>
+            ) : (
+              <Link
+                href="/proyecto-ciudadano"
+                className="inline-block mt-4 bg-slate-200 text-slate-800 px-6 py-2 rounded-xl font-semibold hover:bg-slate-300"
+              >
+                Revisar convocatoria
+              </Link>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => {
-              const minSupports =
-                project.minimum_supports_required || DEFAULT_MIN_SUPPORTS_REQUIRED;
-
+              const minSupports = getProjectMinimumSupports(project);
               const currentSupports = project.beneficiary_count || 0;
-              const supportsRemaining = Math.max(minSupports - currentSupports, 0);
-
-              const eligible =
-                project.eligible_for_final_review != null
-                  ? Boolean(project.eligible_for_final_review)
-                  : currentSupports >= minSupports;
+              const supportsRemaining =
+                minSupports != null ? Math.max(minSupports - currentSupports, 0) : null;
+              const eligible = getProjectEligibility(project);
 
               return (
                 <div
@@ -569,22 +596,29 @@ export default function ProyectosActivosPage() {
                     </div>
 
                     <div className="text-xs text-slate-500 mb-3">
-                      🤝 {currentSupports} / {minSupports} apoyos internos
+                      🤝 {currentSupports}
+                      {minSupports != null
+                        ? ` / ${minSupports} apoyos internos`
+                        : ' apoyos internos · umbral no disponible'}
                     </div>
 
                     <div
                       className={`text-xs font-semibold rounded-lg px-3 py-2 mb-4 ${
-                        eligible
+                        minSupports == null
+                          ? 'bg-slate-100 text-slate-700'
+                          : eligible
                           ? 'bg-green-100 text-green-800'
                           : 'bg-amber-100 text-amber-800'
                       }`}
                     >
-                      {eligible
+                      {minSupports == null
+                        ? 'Umbral de evaluación no disponible'
+                        : eligible
                         ? '✅ Alcanza umbral para evaluación final'
                         : `⏳ Faltan ${supportsRemaining} apoyos`}
                     </div>
 
-                    {eligible && (
+                    {eligible && minSupports != null && (
                       <p className="text-[11px] text-slate-500 mb-3">
                         Sujeto a validación final. No implica premio ni aprobación automática.
                       </p>

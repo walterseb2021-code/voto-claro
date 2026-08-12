@@ -104,7 +104,7 @@ export default function NuevoProyectoPage() {
   const minimumSupportsRequired =
     typeof cycle?.min_supports === 'number' && cycle.min_supports > 0
       ? cycle.min_supports
-      : 100;
+      : null;
 
   // Cargar sesión segura del participante y estado server-side del ciclo
   useEffect(() => {
@@ -524,7 +524,9 @@ export default function NuevoProyectoPage() {
     }
 
     visibleParts.push(
-      `Regla visible del programa: el proyecto necesita al menos ${minimumSupportsRequired} apoyos vecinales válidos para entrar a evaluación final.`
+      minimumSupportsRequired != null
+        ? `Regla visible del programa: el proyecto necesita al menos ${minimumSupportsRequired} apoyos vecinales válidos para entrar a evaluación final.`
+        : 'El mínimo de apoyos de la convocatoria no pudo confirmarse en este momento.'
     );
     visibleParts.push(
       `Ponderación referencial visible de evaluación: ${EVALUATION_WEIGHTS.citizenSupport} puntos por respaldo ciudadano y ${EVALUATION_WEIGHTS.projectQuality} puntos por calidad del proyecto, sujeta a validación.`
@@ -770,7 +772,11 @@ export default function NuevoProyectoPage() {
           <h2 className="text-lg font-bold text-slate-900 mb-2">📋 Reglas de participación</h2>
           <div className="space-y-2 text-sm text-slate-700">
             <p>
-              Tu proyecto necesita <strong>al menos {minimumSupportsRequired} apoyos vecinales válidos</strong> para entrar a evaluación final.
+              Tu proyecto necesita <strong>
+                {minimumSupportsRequired != null
+                  ? `al menos ${minimumSupportsRequired} apoyos vecinales válidos`
+                  : 'el mínimo de apoyos definido por la convocatoria'}
+              </strong> para entrar a evaluación final.
             </p>
             <p>
               Las categorías presupuestales son: <strong>hasta S/10,000</strong>, <strong>hasta S/20,000</strong> y <strong>hasta S/30,000</strong>.
