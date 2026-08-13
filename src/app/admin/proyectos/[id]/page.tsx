@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 
 type Leader = {
   full_name: string | null;
@@ -37,7 +36,7 @@ function getBudgetCategoryLabel(category: string | null | undefined) {
     hasta_30000: 'Hasta S/30,000',
   };
 
-  return category ? labels[category] || category : 'Sin categoria';
+  return category ? labels[category] || category : 'Sin categoría';
 }
 
 function getRequestedBudgetLabel(amount: number | null | undefined) {
@@ -58,9 +57,14 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-function normalizeLeader(leader: Leader | Leader[] | null | undefined) {
-  if (Array.isArray(leader)) return leader[0] ?? null;
-  return leader ?? null;
+function getMinimumSupports(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
+}
+
+function getSupportCount(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 export default function AdminProyectoDetallePage() {
@@ -81,57 +85,48 @@ export default function AdminProyectoDetallePage() {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          name,
-          category,
-          objective,
-          description,
-          district,
-          department,
-          pdf_url,
-          status,
-          created_at,
-          beneficiary_count,
-          requested_budget,
-          budget_category,
-          minimum_supports_required,
-          eligible_for_final_review,
-          leader:project_participants!leader_id (
-            full_name,
-            alias,
-            email
-          )
-        `)
-        .eq('id', projectId)
-        .maybeSingle();
+      try {
+        const response = await fetch(
+          `/api/admin/proyectos/${encodeURIComponent(projectId)}`,
+          {
+            method: 'GET',
+            credentials: 'include',
+            cache: 'no-store',
+          }
+        );
 
-      if (fetchError) {
-        setError(fetchError.message);
+        const result = await response.json().catch(() => null);
+
+        if (response.status === 401 || response.status === 403) {
+          window.location.assign('/admin/login');
+          return;
+        }
+
+        if (response.status === 404) {
+          setError('Proyecto no encontrado.');
+          setProject(null);
+          return;
+        }
+
+        if (!response.ok || !result?.ok || !result.project) {
+          throw new Error('No se pudo cargar el proyecto.');
+        }
+
+        setProject(result.project as Project);
+      } catch (err) {
+        console.error('Error cargando proyecto admin:', err);
+        setError('No se pudo cargar el proyecto.');
         setProject(null);
-      } else if (!data) {
-        setError('Proyecto no encontrado.');
-        setProject(null);
-      } else {
-        const row = data as Omit<Project, 'leader'> & {
-          leader?: Leader | Leader[] | null;
-        };
-        setProject({
-          ...row,
-          leader: normalizeLeader(row.leader),
-        });
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     loadProject();
   }, [projectId]);
 
-  const supportGoal = project?.minimum_supports_required || 100;
-  const currentSupports = project?.beneficiary_count || 0;
+  const supportGoal = getMinimumSupports(project?.minimum_supports_required);
+  const currentSupports = getSupportCount(project?.beneficiary_count);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -169,7 +164,8 @@ export default function AdminProyectoDetallePage() {
                     {project.name}
                   </h1>
                   <p className="mt-2 text-slate-600">
-                    {project.department || 'Sin departamento'} / {project.district || 'Sin distrito'}
+                    {project.department || 'Sin departamento'} /{' '}
+                    {project.district || 'Sin distrito'}
                   </p>
                 </div>
 
@@ -181,56 +177,78 @@ export default function AdminProyectoDetallePage() {
 
             <section className="grid gap-4 md:grid-cols-2">
               <div className="rounded-lg border border-slate-200 bg-white p-5">
-                <h2 className="text-lg font-semibold text-slate-900">Datos principales</h2>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Datos principales
+                </h2>
                 <dl className="mt-4 space-y-3 text-sm">
                   <div className="flex justify-between gap-4">
-                    <dt className="text-slate-500">Categoria</dt>
-                    <dd className="text-right font-medium text-slate-900">{project.category || 'Sin categoria'}</dd>
+                    <dt className="text-slate-500">Categoría</dt>
+                    <dd className="text-right font-medium text-slate-900">
+                      {project.category || 'Sin categoría'}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-slate-500">Monto solicitado</dt>
-                    <dd className="text-right font-medium text-slate-900">{getRequestedBudgetLabel(project.requested_budget)}</dd>
+                    <dd className="text-right font-medium text-slate-900">
+                      {getRequestedBudgetLabel(project.requested_budget)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-slate-500">Rango</dt>
-                    <dd className="text-right font-medium text-slate-900">{getBudgetCategoryLabel(project.budget_category)}</dd>
+                    <dd className="text-right font-medium text-slate-900">
+                      {getBudgetCategoryLabel(project.budget_category)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-slate-500">Apoyos</dt>
-                    <dd className="text-right font-medium text-slate-900">{currentSupports} / {supportGoal}</dd>
+                    <dd className="text-right font-medium text-slate-900">
+                      {currentSupports} / {supportGoal ?? 'No configurado'}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-slate-500">Creado</dt>
-                    <dd className="text-right font-medium text-slate-900">{formatDate(project.created_at)}</dd>
+                    <dd className="text-right font-medium text-slate-900">
+                      {formatDate(project.created_at)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt className="text-slate-500">Revision final</dt>
+                    <dt className="text-slate-500">Revisión final</dt>
                     <dd className="text-right font-medium text-slate-900">
-                      {project.eligible_for_final_review ? 'Elegible' : 'No elegible'}
+                      {supportGoal != null && currentSupports >= supportGoal
+                        ? 'Elegible'
+                        : 'No elegible'}
                     </dd>
                   </div>
                 </dl>
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-white p-5">
-                <h2 className="text-lg font-semibold text-slate-900">Lider</h2>
+                <h2 className="text-lg font-semibold text-slate-900">Líder</h2>
                 {project.leader ? (
                   <dl className="mt-4 space-y-3 text-sm">
                     <div>
                       <dt className="text-slate-500">Nombre</dt>
-                      <dd className="font-medium text-slate-900">{project.leader.full_name || 'Sin nombre'}</dd>
+                      <dd className="font-medium text-slate-900">
+                        {project.leader.full_name || 'Sin nombre'}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-slate-500">Alias</dt>
-                      <dd className="font-medium text-slate-900">{project.leader.alias || 'Sin alias'}</dd>
+                      <dd className="font-medium text-slate-900">
+                        {project.leader.alias || 'Sin alias'}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-slate-500">Email</dt>
-                      <dd className="break-all font-medium text-slate-900">{project.leader.email || 'Sin email'}</dd>
+                      <dd className="break-all font-medium text-slate-900">
+                        {project.leader.email || 'Sin email'}
+                      </dd>
                     </div>
                   </dl>
                 ) : (
-                  <p className="mt-4 text-sm text-slate-600">No hay lider asociado.</p>
+                  <p className="mt-4 text-sm text-slate-600">
+                    No hay líder asociado.
+                  </p>
                 )}
               </div>
             </section>
@@ -238,12 +256,14 @@ export default function AdminProyectoDetallePage() {
             <section className="rounded-lg border border-slate-200 bg-white p-6">
               <h2 className="text-lg font-semibold text-slate-900">Objetivo</h2>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                {project.objective || 'No especificada.'}
+                {project.objective || 'No especificado.'}
               </p>
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white p-6">
-              <h2 className="text-lg font-semibold text-slate-900">Descripcion</h2>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Descripción
+              </h2>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                 {project.description || 'No especificada.'}
               </p>
@@ -251,7 +271,9 @@ export default function AdminProyectoDetallePage() {
 
             {project.pdf_url && (
               <section className="rounded-lg border border-slate-200 bg-white p-6">
-                <h2 className="text-lg font-semibold text-slate-900">Documento PDF</h2>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Documento PDF
+                </h2>
                 <a
                   href={project.pdf_url}
                   target="_blank"
