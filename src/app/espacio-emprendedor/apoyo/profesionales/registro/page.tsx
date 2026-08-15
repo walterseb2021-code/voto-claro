@@ -374,19 +374,18 @@ export default function RegistroProfesionalPage() {
       setError(null);
 
       try {
-        const deviceId = getDeviceId();
+        const res = await fetch(
+          '/api/espacio-emprendedor/profesionales/me',
+          {
+            cache: 'no-store',
+            credentials: 'include',
+          }
+        );
 
-        if (!deviceId) {
+        if (res.status === 401) {
           router.push('/proyecto-ciudadano/registro?returnTo=profesional-asesor');
           return;
         }
-
-        const res = await fetch(
-          `/api/espacio-emprendedor/profesionales/me?device_id=${encodeURIComponent(deviceId)}`,
-          {
-            cache: 'no-store',
-          }
-        );
 
         const data = await res.json();
 
@@ -868,7 +867,7 @@ export default function RegistroProfesionalPage() {
   };
 
   const uploadPdfIfNeeded = async () => {
-    if (!pdfFile) return form.document_url;
+    if (!pdfFile) return null;
 
     if (!participant?.id) {
       throw new Error('No se pudo identificar al participante.');
@@ -877,27 +876,50 @@ export default function RegistroProfesionalPage() {
     setUploadingPdf(true);
 
     try {
-      const fileExt = pdfFile.name.split('.').pop() || 'pdf';
-      const fileName = `profesionales/${participant.id}/${Date.now()}.${fileExt}`;
+      const initResponse = await fetch(
+        '/api/espacio-emprendedor/profesionales/upload',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          cache: 'no-store',
+          body: JSON.stringify({
+            file_name: pdfFile.name,
+            file_type: pdfFile.type,
+            file_size: pdfFile.size,
+          }),
+        }
+      );
+
+      const initData = await initResponse.json();
+
+      if (!initResponse.ok) {
+        throw new Error(
+          initData?.error || 'No se pudo preparar la carga segura del PDF.'
+        );
+      }
+
+      const uploadPath =
+        typeof initData?.path === 'string' ? initData.path : '';
+      const uploadToken =
+        typeof initData?.token === 'string' ? initData.token : '';
+
+      if (!uploadPath || !uploadToken) {
+        throw new Error('No se pudo preparar la carga segura del PDF.');
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('project_pdfs')
-        .upload(fileName, pdfFile, {
-          upsert: false,
+        .uploadToSignedUrl(uploadPath, uploadToken, pdfFile, {
           contentType: 'application/pdf',
+          cacheControl: '3600',
         });
 
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('project_pdfs')
-        .getPublicUrl(fileName);
-
-      if (!urlData.publicUrl) {
-        throw new Error('No se pudo obtener la URL pública del documento.');
+      if (uploadError) {
+        throw new Error('No se pudo subir el PDF. Intenta nuevamente.');
       }
 
-      return urlData.publicUrl;
+      return uploadPath;
     } finally {
       setUploadingPdf(false);
     }
@@ -1107,13 +1129,14 @@ export default function RegistroProfesionalPage() {
     setSaving(true);
 
     try {
-      const documentUrl = await uploadPdfIfNeeded();
+      const documentPath = await uploadPdfIfNeeded();
 
       const res = await fetch('/api/espacio-emprendedor/profesionales/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        cache: 'no-store',
         body: JSON.stringify({
-          participant_id: participant.id,
           public_name: form.public_name,
           professional_type: form.professional_type,
           specialties: form.specialties,
@@ -1128,7 +1151,7 @@ export default function RegistroProfesionalPage() {
           training_categories: form.training_categories,
           experience_summary: form.experience_summary,
           public_message: form.public_message,
-          document_url: documentUrl,
+          document_path: documentPath,
           data_truth_confirmed: form.data_truth_confirmed,
           terms_accepted: form.terms_accepted,
         }),
@@ -1139,6 +1162,11 @@ export default function RegistroProfesionalPage() {
       if (!res.ok) {
         throw new Error(data?.error || 'No se pudo guardar la ficha profesional.');
       }
+
+      const documentUrl =
+        typeof data?.document_url === 'string'
+          ? data.document_url
+          : form.document_url;
 
       setForm((prev) => ({
         ...prev,

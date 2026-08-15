@@ -1,58 +1,29 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { type NextRequest } from "next/server";
+import { participantJson } from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const auth = await resolveParticipantSession(req);
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
+    if (!auth.ok) {
+      return participantJson(
+        auth.reason === "unauthenticated" ? 401 : 503,
         {
+          ok: false,
           error:
-            'Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.',
-        },
-        { status: 500 }
+            auth.reason === "unauthenticated"
+              ? "Debes iniciar sesión nuevamente."
+              : "No se pudo validar tu sesión en este momento.",
+        }
       );
     }
 
-    const { searchParams } = new URL(req.url);
-    const deviceId = String(searchParams.get('device_id') || '').trim();
-
-    if (!deviceId) {
-      return NextResponse.json(
-        { error: 'No se recibió device_id para identificar al participante.' },
-        { status: 400 }
-      );
-    }
-
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
-    const { data: participant, error: participantError } = await admin
-      .from('project_participants')
-      .select('id, alias, codigo_acceso, device_id')
-      .eq('device_id', deviceId)
-      .maybeSingle();
-
-    if (participantError) throw participantError;
-
-    if (!participant) {
-      return NextResponse.json({
-        ok: true,
-        participant: null,
-        profile: null,
-      });
-    }
-
-    const { data: profile, error: profileError } = await admin
-      .from('espacio_profesionales')
+    const { data: profile, error: profileError } = await auth.supabase
+      .from("espacio_profesionales")
       .select(
         `
         id,
@@ -81,24 +52,28 @@ export async function GET(req: Request) {
         updated_at
       `
       )
-      .eq('participant_id', participant.id)
+      .eq("participant_id", auth.participant.id)
       .maybeSingle();
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      console.error("[professional-me] profile lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo cargar tu ficha profesional.",
+      });
+    }
 
-    return NextResponse.json({
+    return participantJson(200, {
       ok: true,
-      participant,
+      participant: auth.participant,
       profile: profile || null,
     });
-  } catch (err: any) {
-    console.error('Error cargando ficha profesional propia:', err);
+  } catch {
+    console.error("[professional-me] unexpected failure");
 
-    return NextResponse.json(
-      {
-        error: 'No se pudo cargar tu ficha profesional.',
-      },
-      { status: 500 }
-    );
+    return participantJson(500, {
+      ok: false,
+      error: "No se pudo cargar tu ficha profesional.",
+    });
   }
 }
