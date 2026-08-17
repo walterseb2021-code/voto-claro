@@ -23,10 +23,6 @@ type ProfessionalConversation = {
   messages: ConversationMessage[];
 };
 
-function getDeviceId(): string {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem('vc_device_id') || '';
-}
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-PE', {
@@ -46,27 +42,20 @@ export default function MisMensajesProfesionalesPage() {
   const [replySuccess, setReplySuccess] = useState<Record<string, string>>({});
 
   const loadConversations = async (options?: { silent?: boolean }) => {
-  const silent = options?.silent === true;
-  const deviceId = getDeviceId();
-
-    if (!deviceId) {
-  if (!silent) {
-    setError('Debes registrarte o iniciar sesión para ver tus conversaciones.');
-    setLoading(false);
-  }
-  return;
-}
+    const silent = options?.silent === true;
 
     if (!silent) {
-    setLoading(true);
+      setLoading(true);
     }
+
     setError(null);
 
     try {
       const res = await fetch(
-        `/api/espacio-emprendedor/profesionales/mis-mensajes?device_id=${encodeURIComponent(deviceId)}`,
+        '/api/espacio-emprendedor/profesionales/mis-mensajes',
         {
           cache: 'no-store',
+          credentials: 'include',
         }
       );
 
@@ -78,16 +67,16 @@ export default function MisMensajesProfesionalesPage() {
 
       setConversations(data.conversations || []);
     } catch (err: any) {
-  console.error('Error cargando conversaciones:', err);
+      console.error('Error cargando conversaciones:', err);
 
-  if (!silent) {
-    setError(err.message || 'No se pudieron cargar tus conversaciones.');
-  }
-} finally {
-  if (!silent) {
-    setLoading(false);
-  }
-}
+      if (!silent) {
+        setError(err.message || 'No se pudieron cargar tus conversaciones.');
+      }
+    } finally {
+      if (!silent) {
+        setLoading(false);
+      }
+    }
   };
 
   useEffect(() => {
@@ -123,24 +112,14 @@ export default function MisMensajesProfesionalesPage() {
       return;
     }
 
-    const deviceId = getDeviceId();
-
-    if (!deviceId) {
-      setReplyError((prev) => ({
-        ...prev,
-        [conversation.thread_key]: 'No se pudo identificar tu sesión. Inicia sesión nuevamente.',
-      }));
-      return;
-    }
-
     setReplyLoadingKey(conversation.thread_key);
 
     try {
       const res = await fetch('/api/espacio-emprendedor/profesionales/mis-mensajes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          device_id: deviceId,
           thread_key: conversation.thread_key,
           professional_id: conversation.professional_id,
           content: reply,

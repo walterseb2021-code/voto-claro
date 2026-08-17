@@ -1,80 +1,55 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { type NextRequest } from "next/server";
+import { participantJson } from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-function cleanText(value: unknown, max = 500) {
-  return String(value || '').trim().slice(0, max);
-}
-
-function createAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error(
-      'Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.'
-    );
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-}
-
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const deviceId = cleanText(searchParams.get('device_id'), 120);
+    const auth = await resolveParticipantSession(req);
 
-    if (!deviceId) {
-      return NextResponse.json(
-        { error: 'No se pudo identificar tu sesión. Inicia sesión nuevamente.' },
-        { status: 400 }
+    if (!auth.ok) {
+      return participantJson(
+        auth.reason === "unauthenticated" ? 401 : 503,
+        {
+          ok: false,
+          error:
+            auth.reason === "unauthenticated"
+              ? "Debes iniciar sesión nuevamente."
+              : "No se pudo validar tu sesión en este momento.",
+        }
       );
     }
 
-    const admin = createAdminClient();
+    const participantId = auth.participant.id;
 
-    const { data: participant, error: participantError } = await admin
-      .from('project_participants')
-      .select('id')
-      .eq('device_id', deviceId)
-      .maybeSingle();
+    const { data: professional, error: professionalError } =
+      await auth.supabase
+        .from("espacio_profesionales")
+        .select("id, codigo_profesional, public_name")
+        .eq("participant_id", participantId)
+        .eq("is_active", true)
+        .maybeSingle();
 
-    if (participantError) throw participantError;
-
-    if (!participant) {
-      return NextResponse.json(
-        { error: 'No se encontró tu registro de participante.' },
-        { status: 404 }
-      );
+    if (professionalError) {
+      console.error("[training-mine] professional lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo validar tu ficha profesional.",
+      });
     }
-
-    const { data: professional, error: professionalError } = await admin
-      .from('espacio_profesionales')
-      .select('id, codigo_profesional, public_name')
-      .eq('participant_id', participant.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (professionalError) throw professionalError;
 
     if (!professional) {
-      return NextResponse.json(
-        {
-          error:
-            'Para administrar capacitaciones primero debes tener una ficha profesional activa.',
-        },
-        { status: 403 }
-      );
+      return participantJson(403, {
+        ok: false,
+        error:
+          "Para administrar capacitaciones primero debes tener una ficha profesional activa.",
+      });
     }
 
-    const { data: capacitaciones, error } = await admin
-      .from('espacio_capacitaciones')
+    const { data: capacitaciones, error } = await auth.supabase
+      .from("espacio_capacitaciones")
       .select(
         `
         id,
@@ -95,27 +70,29 @@ export async function GET(req: Request) {
         updated_by_admin
       `
       )
-      .eq('participant_id', participant.id)
-      .eq('professional_id', professional.id)
-      .order('updated_at', { ascending: false });
+      .eq("participant_id", participantId)
+      .eq("professional_id", professional.id)
+      .order("updated_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error("[training-mine] list failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudieron cargar tus capacitaciones publicadas.",
+      });
+    }
 
-    return NextResponse.json({
+    return participantJson(200, {
       ok: true,
       professional,
       count: capacitaciones?.length || 0,
       capacitaciones: capacitaciones || [],
     });
-  } catch (err: any) {
-    console.error('Error cargando mis capacitaciones:', err);
-
-    return NextResponse.json(
-      {
-        error:
-          err?.message || 'No se pudieron cargar tus capacitaciones publicadas.',
-      },
-      { status: 500 }
-    );
+  } catch {
+    console.error("[training-mine] unexpected failure");
+    return participantJson(500, {
+      ok: false,
+      error: "No se pudieron cargar tus capacitaciones publicadas.",
+    });
   }
 }

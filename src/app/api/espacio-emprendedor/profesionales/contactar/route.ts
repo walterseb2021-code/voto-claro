@@ -1,10 +1,18 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { type NextRequest } from "next/server";
+import {
+  isAllowedParticipantMutationOrigin,
+  participantJson,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const MAX_BODY_BYTES = 8 * 1024;
 
 function cleanText(value: unknown, max = 1000) {
-  return String(value || '').trim().slice(0, max);
+  return String(value || "").trim().slice(0, max);
 }
 
 function buildThreadKey(
@@ -12,144 +20,143 @@ function buildThreadKey(
   senderParticipantId: string,
   receiverParticipantId: string
 ) {
-  const a = String(senderParticipantId);
-  const b = String(receiverParticipantId);
-  const ordered = [a, b].sort();
+  const ordered = [
+    String(senderParticipantId),
+    String(receiverParticipantId),
+  ].sort();
 
   return `${professionalId}:${ordered[0]}:${ordered[1]}`;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return participantJson(403, {
+        ok: false,
+        error: "Origen de solicitud no autorizado.",
+      });
+    }
 
-    const device_id = cleanText(body.device_id, 120);
-    const professional_id = cleanText(body.professional_id, 120);
-    const content = cleanText(body.content, 1200);
+    const auth = await resolveParticipantSession(req);
 
-    if (!device_id) {
-      return NextResponse.json(
-        { error: 'Debes iniciar sesión o registrarte para contactar a un profesional.' },
-        { status: 400 }
+    if (!auth.ok) {
+      return participantJson(
+        auth.reason === "unauthenticated" ? 401 : 503,
+        {
+          ok: false,
+          error:
+            auth.reason === "unauthenticated"
+              ? "Debes iniciar sesión o registrarte para contactar a un profesional."
+              : "No se pudo validar tu sesión en este momento.",
+        }
       );
     }
 
-    if (!professional_id) {
-      return NextResponse.json(
-        { error: 'No se pudo identificar al profesional.' },
-        { status: 400 }
-      );
+    const body = await readBoundedJsonObject(req, MAX_BODY_BYTES);
+
+    if (!body) {
+      return participantJson(400, {
+        ok: false,
+        error: "Solicitud inválida.",
+      });
+    }
+
+    const professionalId = cleanText(body.professional_id, 120);
+    const content = cleanText(body.content, 1200);
+
+    if (!professionalId) {
+      return participantJson(400, {
+        ok: false,
+        error: "No se pudo identificar al profesional.",
+      });
     }
 
     if (!content || content.length < 10) {
-      return NextResponse.json(
-        { error: 'El mensaje debe tener al menos 10 caracteres.' },
-        { status: 400 }
-      );
+      return participantJson(400, {
+        ok: false,
+        error: "El mensaje debe tener al menos 10 caracteres.",
+      });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const senderParticipantId = auth.participant.id;
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        {
-          error:
-            'Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.',
-        },
-        { status: 500 }
-      );
+    const { data: professional, error: professionalError } =
+      await auth.supabase
+        .from("espacio_profesionales")
+        .select("id, participant_id, public_name, is_active, status")
+        .eq("id", professionalId)
+        .eq("is_active", true)
+        .eq("status", "active")
+        .maybeSingle();
+
+    if (professionalError) {
+      console.error("[professional-contact] professional lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo validar al profesional.",
+      });
     }
-
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
-    const { data: sender, error: senderError } = await admin
-      .from('project_participants')
-      .select('id')
-      .eq('device_id', device_id)
-      .maybeSingle();
-
-    if (senderError) throw senderError;
-
-    if (!sender) {
-      return NextResponse.json(
-        { error: 'Debes registrarte como participante para enviar mensajes.' },
-        { status: 401 }
-      );
-    }
-
-    const { data: professional, error: professionalError } = await admin
-      .from('espacio_profesionales')
-      .select('id, participant_id, public_name, is_active, status')
-      .eq('id', professional_id)
-      .eq('is_active', true)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (professionalError) throw professionalError;
 
     if (!professional) {
-      return NextResponse.json(
-        { error: 'El profesional no está disponible para recibir mensajes.' },
-        { status: 404 }
-      );
+      return participantJson(404, {
+        ok: false,
+        error: "El profesional no está disponible para recibir mensajes.",
+      });
     }
 
-    const receiverParticipantId = String(professional.participant_id || '');
+    const receiverParticipantId = String(professional.participant_id || "");
 
     if (!receiverParticipantId) {
-      return NextResponse.json(
-        { error: 'No se pudo identificar al destinatario profesional.' },
-        { status: 400 }
-      );
+      return participantJson(400, {
+        ok: false,
+        error: "No se pudo identificar al destinatario profesional.",
+      });
     }
 
-    if (String(receiverParticipantId) === String(sender.id)) {
-      return NextResponse.json(
-        { error: 'No puedes enviarte un mensaje a tu propia ficha profesional.' },
-        { status: 400 }
-      );
+    if (receiverParticipantId === senderParticipantId) {
+      return participantJson(400, {
+        ok: false,
+        error: "No puedes enviarte un mensaje a tu propia ficha profesional.",
+      });
     }
 
     const threadKey = buildThreadKey(
-      professional_id,
-      String(sender.id),
+      professionalId,
+      senderParticipantId,
       receiverParticipantId
     );
 
-    const { error: insertError } = await admin
-      .from('espacio_profesional_mensajes')
+    const { error: insertError } = await auth.supabase
+      .from("espacio_profesional_mensajes")
       .insert({
-        professional_id,
-        sender_participant_id: sender.id,
+        professional_id: professionalId,
+        sender_participant_id: senderParticipantId,
         receiver_participant_id: receiverParticipantId,
         thread_key: threadKey,
         content,
         is_read: false,
-        status: 'active',
+        status: "active",
       });
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("[professional-contact] message insert failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo enviar el mensaje al profesional.",
+      });
+    }
 
-    return NextResponse.json({
+    return participantJson(200, {
       ok: true,
       thread_key: threadKey,
       message:
-        'Mensaje enviado correctamente. El profesional podrá responderte dentro de la plataforma.',
+        "Mensaje enviado correctamente. El profesional podrá responderte dentro de la plataforma.",
     });
-  } catch (err: any) {
-    console.error('Error contactando profesional:', err);
-
-    return NextResponse.json(
-      {
-        error: 'No se pudo enviar el mensaje al profesional. Intenta nuevamente.',
-      },
-      { status: 500 }
-    );
+  } catch {
+    console.error("[professional-contact] unexpected failure");
+    return participantJson(500, {
+      ok: false,
+      error: "No se pudo enviar el mensaje al profesional. Intenta nuevamente.",
+    });
   }
 }

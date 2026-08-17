@@ -168,10 +168,6 @@ function toggleValue(list: string[], value: string) {
     : [...list, value];
 }
 
-function getDeviceId(): string {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem('vc_device_id') || '';
-}
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-PE', {
@@ -266,18 +262,15 @@ export default function RegistroProfesionalPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   const loadProfessionalMessages = async () => {
-    const deviceId = getDeviceId();
-
-    if (!deviceId) return;
-
     setLoadingMessages(true);
     setMessagesError(null);
 
     try {
       const res = await fetch(
-        `/api/espacio-emprendedor/profesionales/mensajes?device_id=${encodeURIComponent(deviceId)}`,
+        '/api/espacio-emprendedor/profesionales/mensajes',
         {
           cache: 'no-store',
+          credentials: 'include',
         }
       );
 
@@ -297,18 +290,15 @@ export default function RegistroProfesionalPage() {
   };
 
   const loadMyTrainings = async () => {
-    const deviceId = getDeviceId();
-
-    if (!deviceId) return;
-
     setLoadingMyTrainings(true);
     setMyTrainingsError(null);
 
     try {
       const res = await fetch(
-        `/api/espacio-emprendedor/capacitaciones/mine?device_id=${encodeURIComponent(deviceId)}`,
+        '/api/espacio-emprendedor/capacitaciones/mine',
         {
           cache: 'no-store',
+          credentials: 'include',
         }
       );
 
@@ -751,21 +741,14 @@ export default function RegistroProfesionalPage() {
       return;
     }
 
-    const deviceId = getDeviceId();
-
-    if (!deviceId) {
-      setMyTrainingsError('No se pudo identificar tu sesión. Inicia sesión nuevamente.');
-      return;
-    }
-
     setUpdatingTraining(true);
 
     try {
       const res = await fetch('/api/espacio-emprendedor/capacitaciones/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          device_id: deviceId,
           capacitacion_id: editingTrainingId,
           title: editTrainingForm.title,
           description: editTrainingForm.description,
@@ -799,13 +782,6 @@ export default function RegistroProfesionalPage() {
 
     if (!confirmed) return;
 
-    const deviceId = getDeviceId();
-
-    if (!deviceId) {
-      setMyTrainingsError('No se pudo identificar tu sesión. Inicia sesión nuevamente.');
-      return;
-    }
-
     setMyTrainingsError(null);
     setTrainingActionMessage(null);
     setDeactivatingTrainingId(training.id);
@@ -814,8 +790,8 @@ export default function RegistroProfesionalPage() {
       const res = await fetch('/api/espacio-emprendedor/capacitaciones/deactivate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          device_id: deviceId,
           capacitacion_id: training.id,
         }),
       });
@@ -942,27 +918,16 @@ export default function RegistroProfesionalPage() {
       return;
     }
 
-    const deviceId = getDeviceId();
-
-    if (!deviceId) {
-      setReplyError((prev) => ({
-        ...prev,
-        [conversation.thread_key]:
-          'No se pudo identificar tu sesión. Inicia sesión nuevamente.',
-      }));
-      return;
-    }
-
     setReplyLoadingKey(conversation.thread_key);
 
     try {
       const res = await fetch('/api/espacio-emprendedor/profesionales/mensajes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          device_id: deviceId,
           thread_key: conversation.thread_key,
-          receiver_participant_id: conversation.other_participant_id,
+          professional_id: conversation.professional_id,
           content: reply,
         }),
       });
@@ -1029,21 +994,14 @@ export default function RegistroProfesionalPage() {
       return;
     }
 
-    const deviceId = getDeviceId();
-
-    if (!deviceId) {
-      setTrainingError('No se pudo identificar tu sesión. Inicia sesión nuevamente.');
-      return;
-    }
-
     setPublishingTraining(true);
 
     try {
       const res = await fetch('/api/espacio-emprendedor/capacitaciones/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          device_id: deviceId,
           title: trainingForm.title,
           description: trainingForm.description,
           category: trainingForm.category,

@@ -207,20 +207,13 @@ export default function ProfesionalesApoyoPage() {
       setProfessionalsError(null);
 
       try {
-        const deviceId =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('vc_device_id') || ''
-            : '';
-
-        const url = deviceId
-          ? `/api/espacio-emprendedor/profesionales/list?device_id=${encodeURIComponent(
-              deviceId
-            )}`
-          : '/api/espacio-emprendedor/profesionales/list';
-
-        const res = await fetch(url, {
-          cache: 'no-store',
-        });
+        const res = await fetch(
+          '/api/espacio-emprendedor/profesionales/list',
+          {
+            cache: 'no-store',
+            credentials: 'include',
+          }
+        );
 
         const data = await res.json();
 
@@ -316,30 +309,25 @@ export default function ProfesionalesApoyoPage() {
       return;
     }
 
-    const deviceId =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('vc_device_id') || ''
-        : '';
-
-    if (!deviceId) {
-      router.push('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor');
-      return;
-    }
-
     setContactLoadingId(professionalId);
 
     try {
       const res = await fetch('/api/espacio-emprendedor/profesionales/contactar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          device_id: deviceId,
           professional_id: professionalId,
           content: message,
         }),
       });
 
       const data = await res.json();
+
+      if (res.status === 401) {
+        router.push('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor');
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(data?.error || 'No se pudo enviar el mensaje.');

@@ -1,51 +1,28 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { type NextRequest } from "next/server";
+import {
+  getParticipantSupabaseAdmin,
+  participantJson,
+} from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const auth = await resolveParticipantSession(req);
+    const admin = auth.ok
+      ? auth.supabase
+      : getParticipantSupabaseAdmin();
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        {
-          error:
-            'Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.',
-        },
-        { status: 500 }
-      );
+    if (!auth.ok && auth.reason === "unavailable") {
+      console.error("[professional-list] optional session lookup unavailable");
     }
 
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
-    const { searchParams } = new URL(req.url);
-    const deviceId = String(searchParams.get('device_id') || '').trim();
-
-    let currentParticipantId: string | null = null;
-
-    if (deviceId) {
-      const { data: participantData, error: participantError } = await admin
-        .from('project_participants')
-        .select('id')
-        .eq('device_id', deviceId)
-        .maybeSingle();
-
-      if (participantError) {
-        console.error('Error ubicando participante actual:', participantError);
-      }
-
-      currentParticipantId = participantData?.id || null;
-    }
+    const currentParticipantId = auth.ok ? auth.participant.id : null;
 
     const { data, error } = await admin
-      .from('espacio_profesionales')
+      .from("espacio_profesionales")
       .select(
         `
         id,
@@ -71,11 +48,17 @@ export async function GET(req: Request) {
         created_at
       `
       )
-      .eq('is_active', true)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
+      .eq("is_active", true)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error("[professional-list] directory lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo cargar el directorio de profesionales.",
+      });
+    }
 
     const professionals = (data || []).map((item) => ({
       id: item.id,
@@ -88,7 +71,7 @@ export async function GET(req: Request) {
       province: item.province,
       district: item.district,
       attention_mode: item.attention_mode,
-      service_mode: item.service_mode || 'No especificado',
+      service_mode: item.service_mode || "No especificado",
       service_mode_note: item.service_mode_note || null,
       educational_activities: item.educational_activities || [],
       training_categories: item.training_categories || [],
@@ -97,23 +80,20 @@ export async function GET(req: Request) {
       document_url: item.document_url,
       created_at: item.created_at,
       is_mine:
-        !!currentParticipantId &&
-        String(item.participant_id || '') === String(currentParticipantId),
+        Boolean(currentParticipantId) &&
+        String(item.participant_id || "") === String(currentParticipantId),
     }));
 
-    return NextResponse.json({
+    return participantJson(200, {
       ok: true,
-      currentParticipantDetected: !!currentParticipantId,
+      currentParticipantDetected: Boolean(currentParticipantId),
       professionals,
     });
-  } catch (err: any) {
-    console.error('Error listando profesionales:', err);
-
-    return NextResponse.json(
-      {
-        error: 'No se pudo cargar el directorio de profesionales.',
-      },
-      { status: 500 }
-    );
+  } catch {
+    console.error("[professional-list] unexpected failure");
+    return participantJson(500, {
+      ok: false,
+      error: "No se pudo cargar el directorio de profesionales.",
+    });
   }
 }

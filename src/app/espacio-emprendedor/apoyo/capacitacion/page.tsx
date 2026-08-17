@@ -304,26 +304,12 @@ export default function CapacitacionPage() {
         setLoading(true);
         setNotice('');
 
-        const deviceId =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('vc_device_id') || ''
-            : '';
-
-        const professionalParams = new URLSearchParams();
-
-        if (deviceId) {
-          professionalParams.set('device_id', deviceId);
-        }
-
         const [professionalsRes, trainingsRes] = await Promise.all([
           fetch(
-            `/api/espacio-emprendedor/profesionales/list${
-              professionalParams.toString()
-                ? `?${professionalParams.toString()}`
-                : ''
-            }`,
+            '/api/espacio-emprendedor/profesionales/list',
             {
               cache: 'no-store',
+              credentials: 'include',
             }
           ),
           fetch('/api/espacio-emprendedor/capacitaciones/list', {

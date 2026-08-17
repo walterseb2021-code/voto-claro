@@ -1,10 +1,18 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { type NextRequest } from "next/server";
+import {
+  isAllowedParticipantMutationOrigin,
+  participantJson,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const MAX_BODY_BYTES = 8 * 1024;
 
 function cleanText(value: unknown, max = 1000) {
-  return String(value || '').trim().slice(0, max);
+  return String(value || "").trim().slice(0, max);
 }
 
 function buildThreadKey(
@@ -17,74 +25,53 @@ function buildThreadKey(
 }
 
 function getSafeSenderName(sender: any) {
-  return sender?.alias || sender?.full_name?.split(' ')[0] || 'Participante';
+  return sender?.alias || sender?.full_name?.split(" ")[0] || "Participante";
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const auth = await resolveParticipantSession(req);
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
+    if (!auth.ok) {
+      return participantJson(
+        auth.reason === "unauthenticated" ? 401 : 503,
         {
+          ok: false,
           error:
-            'Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.',
-        },
-        { status: 500 }
+            auth.reason === "unauthenticated"
+              ? "Debes iniciar sesión para ver tus mensajes profesionales."
+              : "No se pudo validar tu sesión en este momento.",
+        }
       );
     }
 
-    const { searchParams } = new URL(req.url);
-    const deviceId = String(searchParams.get('device_id') || '').trim();
+    const participantId = auth.participant.id;
 
-    if (!deviceId) {
-      return NextResponse.json(
-        { error: 'No se recibió device_id para identificar al profesional.' },
-        { status: 400 }
-      );
+    const { data: professional, error: professionalError } =
+      await auth.supabase
+        .from("espacio_profesionales")
+        .select("id, codigo_profesional, public_name, participant_id")
+        .eq("participant_id", participantId)
+        .maybeSingle();
+
+    if (professionalError) {
+      console.error("[professional-messages] professional lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo cargar tu ficha profesional.",
+      });
     }
-
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
-    const { data: participant, error: participantError } = await admin
-      .from('project_participants')
-      .select('id, alias, full_name')
-      .eq('device_id', deviceId)
-      .maybeSingle();
-
-    if (participantError) throw participantError;
-
-    if (!participant) {
-      return NextResponse.json(
-        { error: 'Debes iniciar sesión para ver tus mensajes profesionales.' },
-        { status: 401 }
-      );
-    }
-
-    const { data: professional, error: professionalError } = await admin
-      .from('espacio_profesionales')
-      .select('id, codigo_profesional, public_name, participant_id')
-      .eq('participant_id', participant.id)
-      .maybeSingle();
-
-    if (professionalError) throw professionalError;
 
     if (!professional) {
-      return NextResponse.json({
+      return participantJson(200, {
         ok: true,
         professional: null,
         conversations: [],
       });
     }
 
-    const { data: messages, error: messagesError } = await admin
-      .from('espacio_profesional_mensajes')
+    const { data: messages, error: messagesError } = await auth.supabase
+      .from("espacio_profesional_mensajes")
       .select(`
         id,
         professional_id,
@@ -96,11 +83,17 @@ export async function GET(req: Request) {
         status,
         created_at
       `)
-      .eq('professional_id', professional.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: true });
+      .eq("professional_id", professional.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: true });
 
-    if (messagesError) throw messagesError;
+    if (messagesError) {
+      console.error("[professional-messages] message lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudieron cargar los mensajes recibidos.",
+      });
+    }
 
     const participantIds = Array.from(
       new Set(
@@ -113,12 +106,21 @@ export async function GET(req: Request) {
       )
     );
 
-    const { data: participants } = participantIds.length
-      ? await admin
-          .from('project_participants')
-          .select('id, alias, full_name')
-          .in('id', participantIds)
-      : { data: [] as any[] };
+    const { data: participants, error: participantsError } =
+      participantIds.length
+        ? await auth.supabase
+            .from("project_participants")
+            .select("id, alias, full_name")
+            .in("id", participantIds)
+        : { data: [] as any[], error: null };
+
+    if (participantsError) {
+      console.error("[professional-messages] participant lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudieron cargar los participantes de las conversaciones.",
+      });
+    }
 
     const participantMap = new Map<string, any>();
 
@@ -138,7 +140,8 @@ export async function GET(req: Request) {
         );
 
       const otherParticipantId =
-        String(msg.sender_participant_id) === String(professional.participant_id)
+        String(msg.sender_participant_id) ===
+        String(professional.participant_id)
           ? msg.receiver_participant_id
           : msg.sender_participant_id;
 
@@ -164,9 +167,12 @@ export async function GET(req: Request) {
         created_at: msg.created_at,
         sender_participant_id: msg.sender_participant_id,
         receiver_participant_id: msg.receiver_participant_id,
-        sender_alias: getSafeSenderName(participantMap.get(msg.sender_participant_id)),
+        sender_alias: getSafeSenderName(
+          participantMap.get(msg.sender_participant_id)
+        ),
         is_from_me:
-          String(msg.sender_participant_id) === String(professional.participant_id),
+          String(msg.sender_participant_id) ===
+          String(professional.participant_id),
       });
 
       conversation.last_message_at = msg.created_at;
@@ -178,7 +184,7 @@ export async function GET(req: Request) {
         new Date(a.last_message_at).getTime()
     );
 
-    return NextResponse.json({
+    return participantJson(200, {
       ok: true,
       professional: {
         id: professional.id,
@@ -187,117 +193,114 @@ export async function GET(req: Request) {
       },
       conversations,
     });
-  } catch (err: any) {
-    console.error('Error cargando conversaciones del profesional:', err);
-
-    return NextResponse.json(
-      {
-        error: 'No se pudieron cargar los mensajes recibidos.',
-      },
-      { status: 500 }
-    );
+  } catch {
+    console.error("[professional-messages] unexpected GET failure");
+    return participantJson(500, {
+      ok: false,
+      error: "No se pudieron cargar los mensajes recibidos.",
+    });
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return participantJson(403, {
+        ok: false,
+        error: "Origen de solicitud no autorizado.",
+      });
+    }
 
-    const device_id = cleanText(body.device_id, 120);
-    const thread_key = cleanText(body.thread_key, 300);
-    const professional_id = cleanText(body.professional_id, 120);
-    const content = cleanText(body.content, 1200);
+    const auth = await resolveParticipantSession(req);
 
-    if (!device_id) {
-      return NextResponse.json(
-        { error: 'Debes iniciar sesión para responder.' },
-        { status: 400 }
+    if (!auth.ok) {
+      return participantJson(
+        auth.reason === "unauthenticated" ? 401 : 503,
+        {
+          ok: false,
+          error:
+            auth.reason === "unauthenticated"
+              ? "Debes iniciar sesión para responder."
+              : "No se pudo validar tu sesión en este momento.",
+        }
       );
     }
 
-    if (!thread_key || !professional_id) {
-      return NextResponse.json(
-        { error: 'No se pudo identificar la conversación.' },
-        { status: 400 }
-      );
+    const body = await readBoundedJsonObject(req, MAX_BODY_BYTES);
+
+    if (!body) {
+      return participantJson(400, {
+        ok: false,
+        error: "Solicitud inválida.",
+      });
+    }
+
+    const threadKey = cleanText(body.thread_key, 300);
+    const professionalId = cleanText(body.professional_id, 120);
+    const content = cleanText(body.content, 1200);
+
+    if (!threadKey || !professionalId) {
+      return participantJson(400, {
+        ok: false,
+        error: "No se pudo identificar la conversación.",
+      });
     }
 
     if (!content || content.length < 10) {
-      return NextResponse.json(
-        { error: 'La respuesta debe tener al menos 10 caracteres.' },
-        { status: 400 }
-      );
+      return participantJson(400, {
+        ok: false,
+        error: "La respuesta debe tener al menos 10 caracteres.",
+      });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const currentParticipantId = auth.participant.id;
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        {
-          error:
-            'Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.',
-        },
-        { status: 500 }
-      );
+    const { data: professional, error: professionalError } =
+      await auth.supabase
+        .from("espacio_profesionales")
+        .select("id, participant_id, is_active, status")
+        .eq("id", professionalId)
+        .eq("participant_id", currentParticipantId)
+        .eq("is_active", true)
+        .eq("status", "active")
+        .maybeSingle();
+
+    if (professionalError) {
+      console.error("[professional-messages] professional owner lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo validar tu ficha profesional.",
+      });
     }
-
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
-    const { data: participant, error: participantError } = await admin
-      .from('project_participants')
-      .select('id')
-      .eq('device_id', device_id)
-      .maybeSingle();
-
-    if (participantError) throw participantError;
-
-    if (!participant) {
-      return NextResponse.json(
-        { error: 'Debes iniciar sesión para responder.' },
-        { status: 401 }
-      );
-    }
-
-    const { data: professional, error: professionalError } = await admin
-      .from('espacio_profesionales')
-      .select('id, participant_id, is_active, status')
-      .eq('id', professional_id)
-      .eq('is_active', true)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (professionalError) throw professionalError;
 
     if (!professional) {
-      return NextResponse.json(
-        { error: 'No se encontró el profesional asociado a esta conversación.' },
-        { status: 404 }
-      );
+      return participantJson(403, {
+        ok: false,
+        error: "No tienes permiso para responder como este profesional.",
+      });
     }
 
-    const { data: threadMessages, error: threadError } = await admin
-      .from('espacio_profesional_mensajes')
-      .select('id, sender_participant_id, receiver_participant_id')
-      .eq('professional_id', professional_id)
-      .eq('thread_key', thread_key)
-      .eq('status', 'active');
+    const { data: threadMessages, error: threadError } = await auth.supabase
+      .from("espacio_profesional_mensajes")
+      .select("id, sender_participant_id, receiver_participant_id")
+      .eq("professional_id", professionalId)
+      .eq("thread_key", threadKey)
+      .eq("status", "active");
 
-    if (threadError) throw threadError;
+    if (threadError) {
+      console.error("[professional-messages] thread lookup failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo validar la conversación.",
+      });
+    }
 
     if (!threadMessages?.length) {
-      return NextResponse.json(
-        { error: 'No se encontró una conversación válida para responder.' },
-        { status: 404 }
-      );
+      return participantJson(404, {
+        ok: false,
+        error: "No se encontró una conversación válida para responder.",
+      });
     }
-
-    const currentParticipantId = String(participant.id);
 
     const isPartOfThread = threadMessages.some((msg: any) => {
       return (
@@ -307,10 +310,10 @@ export async function POST(req: Request) {
     });
 
     if (!isPartOfThread) {
-      return NextResponse.json(
-        { error: 'No tienes permiso para responder esta conversación.' },
-        { status: 403 }
-      );
+      return participantJson(403, {
+        ok: false,
+        error: "No tienes permiso para responder esta conversación.",
+      });
     }
 
     const participantIds = new Set<string>();
@@ -330,41 +333,44 @@ export async function POST(req: Request) {
     );
 
     if (!receiverParticipantId) {
-      return NextResponse.json(
-        { error: 'No se pudo identificar al destinatario de la respuesta.' },
-        { status: 400 }
-      );
+      return participantJson(400, {
+        ok: false,
+        error: "No se pudo identificar al destinatario de la respuesta.",
+      });
     }
 
-    const { data: inserted, error: insertError } = await admin
-      .from('espacio_profesional_mensajes')
+    const { data: inserted, error: insertError } = await auth.supabase
+      .from("espacio_profesional_mensajes")
       .insert({
-        professional_id,
+        professional_id: professionalId,
         sender_participant_id: currentParticipantId,
         receiver_participant_id: receiverParticipantId,
-        thread_key,
+        thread_key: threadKey,
         content,
         is_read: false,
-        status: 'active',
+        status: "active",
       })
-      .select('id, created_at')
+      .select("id, created_at")
       .single();
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("[professional-messages] reply insert failed");
+      return participantJson(503, {
+        ok: false,
+        error: "No se pudo enviar la respuesta.",
+      });
+    }
 
-    return NextResponse.json({
+    return participantJson(200, {
       ok: true,
       inserted,
-      message: 'Respuesta enviada correctamente.',
+      message: "Respuesta enviada correctamente.",
     });
-  } catch (err: any) {
-    console.error('Error respondiendo conversación:', err);
-
-    return NextResponse.json(
-      {
-        error: err?.message || 'No se pudo enviar la respuesta. Intenta nuevamente.',
-      },
-      { status: 500 }
-    );
+  } catch {
+    console.error("[professional-messages] unexpected POST failure");
+    return participantJson(500, {
+      ok: false,
+      error: "No se pudo enviar la respuesta. Intenta nuevamente.",
+    });
   }
 }
