@@ -1664,6 +1664,153 @@ export default function RegistroProfesionalPage() {
           </button>
         </form>
 
+        <section className="mt-6 bg-white rounded-2xl border-2 border-emerald-600 p-6 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
+                💬 Mensajes recibidos y conversaciones
+              </h2>
+
+              <p className="text-sm text-slate-600">
+                Revisa los mensajes que otros participantes enviaron a tu ficha profesional
+                y responde dentro de Voto Claro.
+              </p>
+            </div>
+
+            {existingProfile && (
+              <button
+                type="button"
+                onClick={loadProfessionalMessages}
+                disabled={loadingMessages}
+                className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 transition disabled:opacity-50"
+              >
+                {loadingMessages ? 'Actualizando...' : 'Actualizar mensajes'}
+              </button>
+            )}
+          </div>
+
+          {!existingProfile ? (
+            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              Primero guarda tu ficha profesional. Después podrás recibir y responder
+              mensajes enviados a tu perfil profesional.
+            </div>
+          ) : (
+            <div className="mt-5 space-y-4">
+              {messagesError && (
+                <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                  {messagesError}
+                </div>
+              )}
+
+              {loadingMessages ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  Cargando tus conversaciones profesionales...
+                </div>
+              ) : conversations.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  Todavía no tienes mensajes recibidos en tu ficha profesional.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {conversations.map((conversation) => (
+                    <article
+                      key={conversation.thread_key}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                        <div>
+                          <h3 className="font-bold text-slate-900">
+                            {conversation.other_participant_alias || 'Participante'}
+                          </h3>
+
+                          <p className="text-xs text-slate-500 mt-1">
+                            Conversación privada dentro de Voto Claro.
+                          </p>
+                        </div>
+
+                        <p className="text-xs text-slate-500">
+                          Último movimiento: {formatDate(conversation.last_message_at)}
+                        </p>
+                      </div>
+
+                      <div className="mt-4 space-y-2">
+                        {conversation.messages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`rounded-xl border p-3 ${
+                              message.is_from_me
+                                ? 'border-green-200 bg-green-50'
+                                : 'border-blue-200 bg-blue-50'
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                              <strong className="text-sm text-slate-900">
+                                {message.is_from_me ? 'Tú' : message.sender_alias || 'Participante'}
+                              </strong>
+
+                              <span className="text-xs text-slate-500">
+                                {formatDate(message.created_at)}
+                              </span>
+                            </div>
+
+                            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">
+                              {message.content}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4">
+                        <textarea
+                          value={replyDrafts[conversation.thread_key] || ''}
+                          onChange={(e) =>
+                            setReplyDrafts((prev) => ({
+                              ...prev,
+                              [conversation.thread_key]: e.target.value,
+                            }))
+                          }
+                          rows={3}
+                          maxLength={1200}
+                          className="w-full border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-emerald-500 focus:outline-none"
+                          placeholder="Escribe tu respuesta..."
+                        />
+
+                        {replyError[conversation.thread_key] && (
+                          <div className="mt-2 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                            {replyError[conversation.thread_key]}
+                          </div>
+                        )}
+
+                        {replySuccess[conversation.thread_key] && (
+                          <div className="mt-2 rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+                            {replySuccess[conversation.thread_key]}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleReplyConversation(conversation)}
+                          disabled={replyLoadingKey === conversation.thread_key}
+                          className="mt-3 w-full rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 transition disabled:opacity-50"
+                        >
+                          {replyLoadingKey === conversation.thread_key
+                            ? 'Enviando respuesta...'
+                            : 'Responder'}
+                        </button>
+                      </div>
+
+                      <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                        Esta conversación es interna entre las partes. Evalúa la información
+                        antes de compartir datos personales, firmar documentos, realizar pagos
+                        o asumir compromisos.
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
         <section className="mt-6 bg-white rounded-2xl border-2 border-indigo-600 p-6 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
             <div>
