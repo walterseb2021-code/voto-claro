@@ -89,43 +89,88 @@ export default function NuevoProyectoEmprendedorPage() {
   const investmentMaxNumber = parseInvestmentAmount(form.investment_max);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadData() {
-      const deviceId = localStorage.getItem('vc_device_id');
+      try {
+        const response = await fetch('/api/espacio-emprendedor/me', {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+        });
 
-      if (!deviceId) {
-        router.push('/proyecto-ciudadano/registro');
-        return;
+        const data = await response.json().catch(() => null);
+
+        if (cancelled) return;
+
+        if (response.status === 401) {
+          router.push('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor');
+          return;
+        }
+
+        if (!response.ok || !data?.participant) {
+          setError('No se pudo verificar tu sesión para publicar proyectos. Intenta nuevamente.');
+          setLoading(false);
+          return;
+        }
+
+        setParticipant(data.participant);
+
+        let affiliateData = data.affiliate ?? null;
+
+        if (!affiliateData) {
+          const claimResponse = await fetch('/api/espacio-emprendedor/afiliacion', {
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+          });
+
+          const claimData = await claimResponse.json().catch(() => null);
+
+          if (cancelled) return;
+
+          if (claimResponse.status === 401) {
+            router.push('/proyecto-ciudadano/registro?returnTo=espacio-emprendedor');
+            return;
+          }
+
+          if (claimResponse.status === 404) {
+            router.push('/espacio-emprendedor');
+            return;
+          }
+
+          if (!claimResponse.ok || !claimData?.affiliate) {
+            setError('No se pudo confirmar tu afiliación para publicar proyectos.');
+            setLoading(false);
+            return;
+          }
+
+          affiliateData = claimData.affiliate;
+        }
+
+        if (affiliateData?.is_active !== true) {
+          setError('Tu afiliación no está activa para publicar proyectos.');
+          setLoading(false);
+          return;
+        }
+
+        setAfiliado(affiliateData);
+        setLoading(false);
+      } catch (loadError) {
+        console.error('Error cargando sesión segura de Espacio Emprendedor:', loadError);
+
+        if (!cancelled) {
+          setError('No se pudo verificar tu sesión para publicar proyectos. Intenta nuevamente.');
+          setLoading(false);
+        }
       }
-
-      const { data: participantData, error: participantError } = await supabase
-        .from('project_participants')
-        .select('id, alias, device_id')
-        .eq('device_id', deviceId)
-        .maybeSingle();
-
-      if (participantError || !participantData) {
-        router.push('/proyecto-ciudadano/registro');
-        return;
-      }
-
-      setParticipant(participantData);
-
-      const { data: afiliadoData, error: afiliadoError } = await supabase
-        .from('espacio_afiliados')
-        .select('*')
-        .eq('participant_id', participantData.id)
-        .maybeSingle();
-
-      if (afiliadoError || !afiliadoData) {
-        router.push('/espacio-emprendedor');
-        return;
-      }
-
-      setAfiliado(afiliadoData);
-      setLoading(false);
     }
 
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const handleChange = (
@@ -230,55 +275,125 @@ export default function NuevoProyectoEmprendedorPage() {
     }
 
     try {
-      const fileExt = pdfFile.name.split('.').pop();
-      const fileName = `espacio-emprendedor/${afiliado.id}/${Date.now()}.${fileExt}`;
+      const uploadResponse = await fetch(
+        '/api/espacio-emprendedor/proyectos/upload',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          cache: 'no-store',
+          body: JSON.stringify({
+            file_name: pdfFile.name,
+            file_type: pdfFile.type,
+            file_size: pdfFile.size,
+          }),
+        }
+      );
+
+      const uploadInit = await uploadResponse.json().catch(() => null);
+
+      if (!uploadResponse.ok) {
+        const code = typeof uploadInit?.error === 'string' ? uploadInit.error : '';
+
+        if (uploadResponse.status === 401) {
+          throw new Error('Tu sesión venció. Inicia sesión nuevamente.');
+        }
+
+        if (uploadResponse.status === 429) {
+          throw new Error('Has realizado demasiados intentos de carga. Espera antes de volver a intentarlo.');
+        }
+
+        if (code === 'affiliate_required' || code === 'affiliate_inactive') {
+          throw new Error('No se pudo confirmar una afiliación activa para publicar el proyecto.');
+        }
+
+        if (code === 'pdf_invalid') {
+          throw new Error('El PDF no cumple los requisitos de tipo o tamaño permitidos.');
+        }
+
+        throw new Error('No se pudo preparar la carga segura del PDF. Intenta nuevamente.');
+      }
+
+      const uploadPath = typeof uploadInit?.path === 'string' ? uploadInit.path : '';
+      const uploadToken = typeof uploadInit?.token === 'string' ? uploadInit.token : '';
+      const uploadGrantId =
+        typeof uploadInit?.upload_grant_id === 'string'
+          ? uploadInit.upload_grant_id
+          : '';
+
+      if (!uploadPath || !uploadToken || !uploadGrantId) {
+        throw new Error('No se pudo preparar la carga segura del PDF. Intenta nuevamente.');
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('project_pdfs')
-        .upload(fileName, pdfFile);
+        .uploadToSignedUrl(uploadPath, uploadToken, pdfFile, {
+          contentType: 'application/pdf',
+          cacheControl: '3600',
+        });
 
       if (uploadError) {
-        throw new Error(`Error al subir PDF: ${uploadError.message}`);
+        throw new Error('No se pudo subir el PDF. Intenta nuevamente.');
       }
 
-      const { data: urlData } = supabase.storage.from('project_pdfs').getPublicUrl(fileName);
-      const pdfUrl = urlData.publicUrl;
-
-      const { error: insertError } = await supabase
-        .from('espacio_proyectos')
-        .insert({
-          owner_id: afiliado.id,
-          title: titleValue,
-          category: form.category,
-          department: form.department,
-          province: provinceValue || null,
-          district: districtValue,
-          summary: summaryValue,
-          investment_min: investmentMinNumber,
-          investment_max: investmentMaxNumber,
-          pdf_url: pdfUrl,
-          status: 'active',
-        })
-        .select();
-
-      if (insertError) {
-        throw new Error(`Error al guardar: ${insertError.message} (Código: ${insertError.code})`);
-      }
-
-      try {
-        await fetch('/api/espacio-emprendedor/notificar', {
+      const finalizeResponse = await fetch(
+        '/api/espacio-emprendedor/proyectos/finalize',
+        {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          cache: 'no-store',
           body: JSON.stringify({
-            projectTitle: titleValue,
+            upload_grant_id: uploadGrantId,
+            title: titleValue,
             category: form.category,
             department: form.department,
+            province: provinceValue || null,
+            district: districtValue,
+            summary: summaryValue,
             investment_min: investmentMinNumber,
             investment_max: investmentMaxNumber,
+            data_truth_confirmed: form.data_truth_confirmed,
           }),
-        });
-      } catch (notifyErr) {
-        console.error('Error enviando notificaciones:', notifyErr);
+        }
+      );
+
+      const finalizeData = await finalizeResponse.json().catch(() => null);
+
+      if (!finalizeResponse.ok) {
+        const code =
+          typeof finalizeData?.error === 'string' ? finalizeData.error : '';
+
+        if (finalizeResponse.status === 401) {
+          throw new Error('Tu sesión venció. Inicia sesión nuevamente.');
+        }
+
+        if (code === 'uploaded_pdf_invalid') {
+          throw new Error('El archivo cargado no pudo validarse como un PDF seguro. Selecciona nuevamente el PDF.');
+        }
+
+        if (code === 'upload_grant_invalid' || code === 'finalize_conflict') {
+          throw new Error('La autorización de carga ya no es válida. Intenta publicar nuevamente.');
+        }
+
+        if (code === 'affiliate_required') {
+          throw new Error('No se pudo confirmar una afiliación activa para publicar el proyecto.');
+        }
+
+        if (code === 'request_invalid') {
+          throw new Error('Los datos del proyecto no pasaron la validación de seguridad. Revisa el formulario.');
+        }
+
+        throw new Error('No se pudo finalizar la publicación segura del proyecto. Intenta nuevamente.');
+      }
+
+      const projectId =
+        typeof finalizeData?.project_id === 'string'
+          ? finalizeData.project_id
+          : '';
+
+      if (!projectId) {
+        throw new Error('El proyecto fue procesado, pero no se recibió una confirmación válida.');
       }
 
       setSuccess(true);
@@ -286,9 +401,15 @@ export default function NuevoProyectoEmprendedorPage() {
       setTimeout(() => {
         router.push('/espacio-emprendedor');
       }, 3000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error al guardar proyecto emprendedor:', err);
-      setError(err.message || 'Error al guardar el proyecto. Intenta nuevamente.');
+
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Error al guardar el proyecto. Intenta nuevamente.';
+
+      setError(message);
     } finally {
       setSubmitting(false);
     }
