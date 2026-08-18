@@ -116,6 +116,27 @@ export default function NuevoProyectoEmprendedorPage() {
 
         setParticipant(data.participant);
 
+        const affiliateStatus =
+          typeof data?.affiliate_status === 'string'
+            ? data.affiliate_status
+            : data?.can_publish
+            ? 'verified'
+            : 'missing';
+
+        if (affiliateStatus === 'identity_mismatch') {
+          setError(
+            'La afiliación asociada no coincide con la identidad registrada en tu perfil. Debe revisarse antes de publicar.'
+          );
+          setLoading(false);
+          return;
+        }
+
+        if (affiliateStatus === 'inactive') {
+          setError('Tu afiliación no está activa para publicar proyectos.');
+          setLoading(false);
+          return;
+        }
+
         let affiliateData = data.affiliate ?? null;
 
         if (!affiliateData) {
@@ -303,6 +324,12 @@ export default function NuevoProyectoEmprendedorPage() {
           throw new Error('Has realizado demasiados intentos de carga. Espera antes de volver a intentarlo.');
         }
 
+        if (code === 'affiliate_inconsistent') {
+          throw new Error(
+            'La afiliación asociada no coincide con la identidad registrada en tu perfil.'
+          );
+        }
+
         if (code === 'affiliate_required' || code === 'affiliate_inactive') {
           throw new Error('No se pudo confirmar una afiliación activa para publicar el proyecto.');
         }
@@ -376,7 +403,13 @@ export default function NuevoProyectoEmprendedorPage() {
           throw new Error('La autorización de carga ya no es válida. Intenta publicar nuevamente.');
         }
 
-        if (code === 'affiliate_required') {
+        if (code === 'affiliate_inconsistent') {
+          throw new Error(
+            'La afiliación asociada no coincide con la identidad registrada en tu perfil.'
+          );
+        }
+
+        if (code === 'affiliate_required' || code === 'affiliate_inactive') {
           throw new Error('No se pudo confirmar una afiliación activa para publicar el proyecto.');
         }
 

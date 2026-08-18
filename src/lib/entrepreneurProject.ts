@@ -91,6 +91,109 @@ export function isEntrepreneurUuid(value: unknown) {
   return UUID_RE.test(String(value ?? "").trim());
 }
 
+export type EntrepreneurAffiliateStatus =
+  | "missing"
+  | "verified"
+  | "inactive"
+  | "identity_mismatch";
+
+function normalizeEntrepreneurDni(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+export async function resolveEntrepreneurAffiliate(
+  supabase: ParticipantAdminClient,
+  participantId: string
+) {
+  const cleanParticipantId = String(participantId ?? "").trim();
+
+  if (!UUID_RE.test(cleanParticipantId)) {
+    return { ok: false as const, reason: "unavailable" as const };
+  }
+
+  const { data: participant, error: participantError } = await supabase
+    .from("project_participants")
+    .select("id,dni")
+    .eq("id", cleanParticipantId)
+    .limit(1)
+    .maybeSingle();
+
+  if (participantError || !participant?.id) {
+    console.error("[entrepreneur-project] participant identity lookup failed");
+    return { ok: false as const, reason: "unavailable" as const };
+  }
+
+  const participantDni = normalizeEntrepreneurDni(participant.dni);
+
+  if (!/^\d{8}$/.test(participantDni)) {
+    console.error("[entrepreneur-project] participant DNI is invalid");
+    return {
+      ok: true as const,
+      status: "identity_mismatch" as const,
+      affiliate: null,
+    };
+  }
+
+  const { data: affiliates, error: affiliateError } = await supabase
+    .from("espacio_afiliados")
+    .select("id,dni,is_active,verified_at,created_at")
+    .eq("participant_id", cleanParticipantId)
+    .order("created_at", { ascending: true })
+    .limit(2);
+
+  if (affiliateError) {
+    console.error("[entrepreneur-project] affiliate identity lookup failed");
+    return { ok: false as const, reason: "unavailable" as const };
+  }
+
+  if ((affiliates?.length ?? 0) > 1) {
+    console.error("[entrepreneur-project] duplicate participant affiliations");
+    return { ok: false as const, reason: "unavailable" as const };
+  }
+
+  const affiliate = affiliates?.[0] ?? null;
+
+  if (!affiliate) {
+    return {
+      ok: true as const,
+      status: "missing" as const,
+      affiliate: null,
+    };
+  }
+
+  if (affiliate.is_active !== true) {
+    return {
+      ok: true as const,
+      status: "inactive" as const,
+      affiliate: null,
+    };
+  }
+
+  const affiliateDni = normalizeEntrepreneurDni(affiliate.dni);
+
+  if (!/^\d{8}$/.test(affiliateDni) || affiliateDni !== participantDni) {
+    console.error("[entrepreneur-project] participant/affiliate DNI mismatch");
+    return {
+      ok: true as const,
+      status: "identity_mismatch" as const,
+      affiliate: null,
+    };
+  }
+
+  return {
+    ok: true as const,
+    status: "verified" as const,
+    affiliate: {
+      id: String(affiliate.id),
+      is_active: true as const,
+      verified_at:
+        typeof affiliate.verified_at === "string"
+          ? affiliate.verified_at
+          : null,
+    },
+  };
+}
+
 export function validateEntrepreneurPdfMetadata(
   fileNameValue: unknown,
   fileTypeValue: unknown,

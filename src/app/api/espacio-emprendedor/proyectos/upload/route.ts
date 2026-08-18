@@ -12,6 +12,7 @@ import {
   ENTREPRENEUR_PROJECT_PDF_BUCKET,
   ENTREPRENEUR_UPLOAD_GRANT_MAX_PER_HOUR,
   ENTREPRENEUR_UPLOAD_GRANT_TTL_MS,
+  resolveEntrepreneurAffiliate,
   validateEntrepreneurPdfMetadata,
 } from "@/lib/entrepreneurProject";
 
@@ -53,33 +54,31 @@ export async function POST(req: NextRequest) {
       return participantError(400, "pdf_invalid");
     }
 
-    const { data: affiliates, error: affiliateError } = await auth.supabase
-      .from("espacio_afiliados")
-      .select("id,is_active")
-      .eq("participant_id", auth.participant.id)
-      .order("created_at", { ascending: true })
-      .limit(2);
+    const affiliateResult = await resolveEntrepreneurAffiliate(
+      auth.supabase,
+      auth.participant.id
+    );
 
-    if (affiliateError) {
-      console.error("[entrepreneur-project-upload] affiliate lookup failed");
+    if (!affiliateResult.ok) {
       return participantError(503, "upload_unavailable");
     }
 
-    if ((affiliates?.length ?? 0) > 1) {
-      console.error(
-        "[entrepreneur-project-upload] duplicate participant affiliations"
-      );
-      return participantError(503, "upload_unavailable");
-    }
-
-    const affiliate = affiliates?.[0] ?? null;
-
-    if (!affiliate) {
+    if (affiliateResult.status === "missing") {
       return participantError(403, "affiliate_required");
     }
 
-    if (affiliate.is_active !== true) {
+    if (affiliateResult.status === "inactive") {
       return participantError(403, "affiliate_inactive");
+    }
+
+    if (affiliateResult.status === "identity_mismatch") {
+      return participantError(403, "affiliate_inconsistent");
+    }
+
+    const affiliate = affiliateResult.affiliate;
+
+    if (!affiliate) {
+      return participantError(503, "upload_unavailable");
     }
 
     const oneHourAgo = new Date(

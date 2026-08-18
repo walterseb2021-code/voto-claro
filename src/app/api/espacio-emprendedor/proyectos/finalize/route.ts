@@ -12,6 +12,7 @@ import {
   getEntrepreneurPdfPublicUrl,
   isEntrepreneurUuid,
   parseOwnedEntrepreneurPdfPath,
+  resolveEntrepreneurAffiliate,
   validateEntrepreneurProjectFields,
   verifyEntrepreneurPdfObject,
 } from "@/lib/entrepreneurProject";
@@ -137,23 +138,35 @@ export async function POST(req: NextRequest) {
       return participantError(503, "finalize_unavailable");
     }
 
-    const { data: affiliate, error: affiliateError } = await auth.supabase
-      .from("espacio_afiliados")
-      .select("id,is_active")
-      .eq("id", grant!.affiliate_id)
-      .eq("participant_id", auth.participant.id)
-      .limit(1)
-      .maybeSingle();
+    const affiliateResult = await resolveEntrepreneurAffiliate(
+      auth.supabase,
+      auth.participant.id
+    );
 
-    if (affiliateError) {
-      console.error(
-        "[entrepreneur-project-finalize] affiliate lookup failed"
-      );
+    if (!affiliateResult.ok) {
       return participantError(503, "finalize_unavailable");
     }
 
-    if (!affiliate || affiliate.is_active !== true) {
+    if (affiliateResult.status === "missing") {
       return participantError(403, "affiliate_required");
+    }
+
+    if (affiliateResult.status === "inactive") {
+      return participantError(403, "affiliate_inactive");
+    }
+
+    if (affiliateResult.status === "identity_mismatch") {
+      return participantError(403, "affiliate_inconsistent");
+    }
+
+    const affiliate = affiliateResult.affiliate;
+
+    if (!affiliate) {
+      return participantError(503, "finalize_unavailable");
+    }
+
+    if (String(grant!.affiliate_id ?? "") !== String(affiliate.id)) {
+      return participantError(409, "upload_grant_invalid");
     }
 
     const verified = await verifyEntrepreneurPdfObject(

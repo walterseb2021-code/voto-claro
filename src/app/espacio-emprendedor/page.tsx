@@ -19,9 +19,6 @@ function getDeviceId(): string {
   return newId;
 }
 
-function sanitizeDni(value: string) {
-  return value.replace(/\D/g, '').slice(0, 8);
-}
 
 function getPublicAlias(value: string | null | undefined, fallback = 'No publicado') {
   const clean = String(value || '').trim();
@@ -35,7 +32,7 @@ export default function EspacioEmprendedorPage() {
   const [participant, setParticipant] = useState<any>(null);
   const [afiliado, setAfiliado] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [dni, setDni] = useState('');
+  const [affiliateStatus, setAffiliateStatus] = useState<string>('missing');
   const [verificando, setVerificando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -107,39 +104,45 @@ export default function EspacioEmprendedorPage() {
   }, []);
 
   const cargarParticipante = async () => {
-    const deviceId = getDeviceId();
-
-    if (!deviceId) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from('project_participants')
-        .select('id, alias, codigo_acceso, device_id')
-        .eq('device_id', deviceId)
-        .maybeSingle();
+      const response = await fetch('/api/espacio-emprendedor/me', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      });
 
-      if (error) throw error;
+      const data = await response.json().catch(() => null);
 
-      setParticipant(data || null);
-
-      if (data) {
-        const { data: afiliadoData } = await supabase
-          .from('espacio_afiliados')
-          .select('*')
-          .eq('participant_id', data.id)
-          .maybeSingle();
-
-        setAfiliado(afiliadoData || null);
-      } else {
+      if (response.status === 401) {
+        setParticipant(null);
         setAfiliado(null);
+        setAffiliateStatus('missing');
+        return;
       }
+
+      if (!response.ok || !data?.participant) {
+        throw new Error('No se pudo validar la sesión del participante.');
+      }
+
+      setParticipant(data.participant);
+      setAfiliado(data.affiliate ?? null);
+
+      const status =
+        typeof data.affiliate_status === 'string'
+          ? data.affiliate_status
+          : data.can_publish
+          ? 'verified'
+          : 'missing';
+
+      setAffiliateStatus(status);
     } catch (err) {
-      console.error('Error cargando participante:', err);
+      console.error('Error cargando sesión segura del participante:', err);
+      setParticipant(null);
+      setAfiliado(null);
+      setAffiliateStatus('missing');
+      setError('No se pudo validar tu sesión en este momento.');
     } finally {
       setLoading(false);
     }
@@ -325,52 +328,51 @@ export default function EspacioEmprendedorPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('project_participants')
-        .select('id, alias, codigo_acceso')
-        .eq('codigo_acceso', codigo)
-        .maybeSingle();
+      const response = await fetch('/api/participant/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        cache: 'no-store',
+        body: JSON.stringify({
+          codigo_acceso: codigo,
+          device_id: getDeviceId(),
+        }),
+      });
 
-      if (error) throw error;
+      const result = await response.json().catch(() => null);
 
-      if (!data) {
-        setLoginCodigoError('Código de acceso no válido');
-        setLoginCodigoLoading(false);
+      if (!response.ok || !result?.authenticated) {
+        if (response.status === 429) {
+          setLoginCodigoError(
+            'Demasiados intentos. Espera unos minutos antes de volver a intentar.'
+          );
+        } else if (response.status === 401) {
+          setLoginCodigoError('Código de acceso no válido');
+        } else {
+          setLoginCodigoError('No se pudo iniciar sesión en este momento.');
+        }
+
         return;
       }
-
-      const currentDeviceId = getDeviceId();
-
-      const { error: updateError } = await supabase
-        .from('project_participants')
-        .update({ device_id: currentDeviceId })
-        .eq('id', data.id);
-
-      if (updateError) throw updateError;
 
       await cargarParticipante();
       setCodigoAcceso('');
       setLoginCodigoError('✅ Sesión iniciada correctamente');
-
       setTimeout(() => setLoginCodigoError(''), 3000);
-    } catch (err: any) {
-      console.error('Error al iniciar sesión con código:', err);
-      setLoginCodigoError(err.message || 'Error al iniciar sesión');
+    } catch {
+      setLoginCodigoError(
+        'No se pudo iniciar sesión. Revisa tu conexión e intenta nuevamente.'
+      );
     } finally {
       setLoginCodigoLoading(false);
     }
   };
 
-  const handleVerificarDNI = async () => {
-    const cleanDni = sanitizeDni(dni);
-
-    if (!cleanDni || cleanDni.length !== 8) {
-      setError('Ingresa un DNI válido de 8 dígitos.');
-      return;
-    }
-
+  const handleVerificarAfiliacion = async () => {
     if (!participant) {
-      setError('Primero debes registrarte como participante.');
+      setError('Primero debes iniciar sesión como participante.');
       return;
     }
 
@@ -378,62 +380,76 @@ export default function EspacioEmprendedorPage() {
     setError(null);
 
     try {
-      const { data: afiliadoExistente, error: afiliadoError } = await supabase
-        .from('espacio_afiliados')
-        .select('*')
-        .eq('dni', cleanDni)
-        .eq('is_active', true)
-        .maybeSingle();
+      const response = await fetch('/api/espacio-emprendedor/afiliacion', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+      });
 
-      if (afiliadoError) throw afiliadoError;
+      const result = await response.json().catch(() => null);
 
-      if (!afiliadoExistente) {
-        setError(
-          'No se encontró afiliación habilitada para este DNI. Para publicar un proyecto, primero debes verificar tu afiliación en el canal oficial correspondiente.'
-        );
-        setVerificando(false);
+      if (!response.ok || !result?.affiliate) {
+        if (response.status === 404) {
+          setAffiliateStatus('missing');
+          setError(
+            'No se encontró una afiliación habilitada que coincida con el DNI registrado en tu perfil de participante.'
+          );
+        } else if (
+          response.status === 403 &&
+          result?.error === 'affiliate_claim_not_allowed'
+        ) {
+          setAffiliateStatus('identity_mismatch');
+          setError(
+            'La afiliación asociada no coincide con la identidad registrada en tu perfil. Requiere revisión antes de publicar.'
+          );
+        } else if (response.status === 401) {
+          setParticipant(null);
+          setAfiliado(null);
+          setAffiliateStatus('missing');
+          setError('Tu sesión venció. Inicia sesión nuevamente.');
+        } else {
+          setError('No se pudo verificar tu afiliación en este momento.');
+        }
+
         return;
       }
 
-      const { data: existing, error: existingError } = await supabase
-        .from('espacio_afiliados')
-        .select('*')
-        .eq('participant_id', participant.id)
-        .maybeSingle();
-
-      if (existingError) throw existingError;
-
-      if (existing) {
-        setAfiliado(existing);
-        await cargarParticipante();
-        setSuccessMsg('✅ Ya estás verificado como afiliado. Bienvenido al Espacio Emprendedor.');
-        setTimeout(() => setSuccessMsg(null), 3000);
-        setVerificando(false);
-        return;
-      }
-
-      const { data: updatedAfiliado, error: updateError } = await supabase
-        .from('espacio_afiliados')
-        .update({
-          participant_id: participant.id,
-          verified_at: new Date().toISOString(),
-        })
-        .eq('id', afiliadoExistente.id)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-
-      setAfiliado(updatedAfiliado);
-      await cargarParticipante();
-      setSuccessMsg('✅ DNI verificado correctamente. Bienvenido al Espacio Emprendedor.');
+      setAfiliado(result.affiliate);
+      setAffiliateStatus('verified');
+      setSuccessMsg(
+        '✅ Afiliación verificada. Bienvenido al Espacio Emprendedor.'
+      );
       setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (err: any) {
-      console.error('Error verificando DNI:', err);
-      setError(err.message || 'Error al verificar afiliación');
+    } catch {
+      setError(
+        'No se pudo verificar tu afiliación. Revisa tu conexión e intenta nuevamente.'
+      );
     } finally {
       setVerificando(false);
     }
+  };
+
+  const handleLogout = async () => {
+    setError(null);
+    setSuccessMsg(null);
+
+    try {
+      await fetch('/api/participant/logout', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+      });
+    } catch {
+      // El estado local se limpia aunque la solicitud no pueda completarse.
+    }
+
+    setParticipant(null);
+    setAfiliado(null);
+    setAffiliateStatus('missing');
+    setMisProyectos([]);
+    setMensajesRecibidos([]);
+    setCodigoAcceso('');
+    setLoginCodigoError('');
   };
 
   useEffect(() => {
@@ -522,7 +538,7 @@ export default function EspacioEmprendedorPage() {
     ]
   : !afiliado
   ? [
-      'Verificar DNI',
+      'Verificar afiliación',
       'Explorar proyectos',
       'Configurar mi perfil',
       'Abrir Centro de Apoyo al Emprendedor',
@@ -590,8 +606,8 @@ visibleParts.push('Voto Claro muestra información orientativa y espacios de con
     }
 
     if (participant && !afiliado) {
-      visibleParts.push('El usuario ya es participante, pero todavía no está verificado como afiliado.');
-      visibleParts.push('Se muestra el formulario para verificar DNI, sin exponer el DNI al asistente.');
+      visibleParts.push('El usuario ya inició sesión como participante, pero todavía no tiene una afiliación segura verificada.');
+      visibleParts.push('Se muestra una verificación server-side de afiliación que no solicita ni expone el DNI en esta pantalla.');
     }
 
     if (participant && afiliado) {
@@ -677,7 +693,7 @@ visibleParts.push('Voto Claro muestra información orientativa y espacios de con
             },
             {
               id: 'ee-main-6',
-              label: '¿Debo verificar DNI?',
+              label: '¿Debo verificar mi afiliación?',
               question: '¿Debo verificar mi afiliación en esta pantalla para continuar?',
             },
             {
@@ -727,7 +743,7 @@ visibleParts.push('Voto Claro muestra información orientativa y espacios de con
         participantLogueado: !!participant,
         participantDataProtected: true,
         afiliadoVerificado: !!afiliado,
-        dniProtected: !!dni,
+        affiliateStatus,
         codigoAccesoProtected: !!codigoAcceso,
         accessMode: activeViewId,
         investorBlockVisible: true,
@@ -742,7 +758,7 @@ visibleParts.push('Voto Claro muestra información orientativa y espacios de con
         mensajesContenidoProtegido: true,
         cargandoMensajes,
         loginCodigoLoading,
-        verificandoDni: verificando,
+        verificandoAfiliacion: verificando,
         lastMessageProjectTitleProtected: !!latestReceived?.proyecto_titulo,
         lastMessageSenderProtected: !!latestReceived?.remitente,
         lastMessageAtIso: latestReceived?.created_at || '',
@@ -752,8 +768,8 @@ visibleParts.push('Voto Claro muestra información orientativa y espacios de con
         latestInvestorThreadKeyProtected: !!latestReceived?.thread_key,
         canExploreProjects: true,
 canOpenInvestorProfile: true,
-canPublishProject: !!participant && !!afiliado,
-canVerifyDni: !!participant && !afiliado,
+canPublishProject: !!participant && !!afiliado && affiliateStatus === 'verified',
+canVerifyAffiliation: !!participant && affiliateStatus === 'missing',
 supportCenterVisible: true,
 canOpenSupportCenter: true,
 canOpenInstitutionsSupport: true,
@@ -779,7 +795,7 @@ investmentDisclaimer:
     error,
     successMsg,
     loginCodigoError,
-    dni,
+    affiliateStatus,
     codigoAcceso,
   ]);
 
@@ -1024,35 +1040,49 @@ investmentDisclaimer:
                 <h2 className="text-xl font-bold text-slate-900">Como Emprendedor</h2>
               </div>
 
+              <div className="mb-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="text-xs font-semibold text-slate-600 hover:text-red-700 hover:underline"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+
               {!afiliado ? (
                 <div>
-                  <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded-lg mb-3">
-                    Para publicar proyectos, debes verificar tu afiliación habilitada para este espacio.
-                  </p>
+                  {affiliateStatus === 'identity_mismatch' ? (
+                    <p className="text-sm text-red-700 bg-red-50 border border-red-300 p-3 rounded-lg mb-3">
+                      La afiliación asociada no coincide con la identidad registrada en tu perfil de participante.
+                      Por seguridad, no puedes publicar hasta que esta asociación sea revisada.
+                    </p>
+                  ) : affiliateStatus === 'inactive' ? (
+                    <p className="text-sm text-amber-700 bg-amber-50 border border-amber-300 p-3 rounded-lg mb-3">
+                      Tu afiliación está inactiva. Debe ser habilitada antes de publicar proyectos.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded-lg mb-3">
+                      Para publicar proyectos, verifica la afiliación que corresponde al DNI ya registrado en tu perfil de participante.
+                    </p>
+                  )}
 
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="DNI (8 dígitos)"
-                      value={dni}
-                      onChange={(e) => setDni(sanitizeDni(e.target.value))}
-                      className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
-                      maxLength={8}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={handleVerificarDNI}
-                      disabled={verificando}
-                      className="w-full rounded-xl bg-green-700 text-white text-sm font-semibold hover:bg-green-800 disabled:opacity-50 vc-btn-wave vc-btn-pulse px-4 py-3"
-                    >
-                      {verificando ? 'Verificando DNI...' : 'Verificar DNI'}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleVerificarAfiliacion}
+                    disabled={
+                      verificando ||
+                      affiliateStatus === 'identity_mismatch' ||
+                      affiliateStatus === 'inactive'
+                    }
+                    className="w-full rounded-xl bg-green-700 text-white text-sm font-semibold hover:bg-green-800 disabled:opacity-50 vc-btn-wave vc-btn-pulse px-4 py-3"
+                  >
+                    {verificando ? 'Verificando afiliación...' : 'Verificar mi afiliación'}
+                  </button>
 
                   <p className="text-xs text-slate-500 mt-2">
-                    La verificación depende de la información registrada previamente en la base habilitada para este espacio.
+                    La verificación se realiza en el servidor usando la identidad de tu sesión y el DNI guardado en tu registro.
+                    Esta pantalla no permite introducir otro DNI para asociar una afiliación diferente.
                   </p>
                 </div>
               ) : (

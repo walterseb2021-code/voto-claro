@@ -5,6 +5,7 @@ import {
   participantJson,
 } from "@/lib/participantApi";
 import { resolveParticipantSession } from "@/lib/participantSessionAuth";
+import { resolveEntrepreneurAffiliate } from "@/lib/entrepreneurProject";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,34 +73,38 @@ export async function POST(req: NextRequest) {
       return participantError(404, "affiliate_not_found");
     }
 
-    const { data: affiliate, error: affiliateError } = await auth.supabase
-      .from("espacio_afiliados")
-      .select("id,is_active,verified_at")
-      .eq("id", affiliateId)
-      .eq("participant_id", auth.participant.id)
-      .limit(1)
-      .maybeSingle();
+    const affiliateResult = await resolveEntrepreneurAffiliate(
+      auth.supabase,
+      auth.participant.id
+    );
 
-    if (affiliateError) {
-      console.error("[entrepreneur-affiliate-claim] result lookup failed");
+    if (!affiliateResult.ok) {
+      console.error("[entrepreneur-affiliate-claim] result verification failed");
       return participantError(503, "affiliate_claim_unavailable");
     }
 
-    if (!affiliate || affiliate.is_active !== true) {
-      console.error("[entrepreneur-affiliate-claim] invalid RPC result");
-      return participantError(503, "affiliate_claim_unavailable");
+    if (affiliateResult.status === "missing") {
+      return participantError(404, "affiliate_not_found");
+    }
+
+    if (affiliateResult.status === "inactive") {
+      return participantError(403, "affiliate_claim_not_allowed");
+    }
+
+    if (affiliateResult.status === "identity_mismatch") {
+      return participantError(403, "affiliate_claim_not_allowed");
+    }
+
+    const affiliate = affiliateResult.affiliate;
+
+    if (!affiliate || affiliate.id !== affiliateId) {
+      console.error("[entrepreneur-affiliate-claim] RPC result mismatch");
+      return participantError(409, "affiliate_claim_conflict");
     }
 
     return participantJson(200, {
       ok: true,
-      affiliate: {
-        id: affiliate.id,
-        is_active: true,
-        verified_at:
-          typeof affiliate.verified_at === "string"
-            ? affiliate.verified_at
-            : null,
-      },
+      affiliate,
     });
   } catch {
     console.error("[entrepreneur-affiliate-claim] unexpected failure");
