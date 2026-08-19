@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 // Función para obtener o crear device_id
@@ -19,11 +18,6 @@ function getDeviceId(): string {
   return newId;
 }
 
-
-function getPublicAlias(value: string | null | undefined, fallback = 'No publicado') {
-  const clean = String(value || '').trim();
-  return clean || fallback;
-}
 
 export default function EspacioEmprendedorPage() {
   const router = useRouter();
@@ -52,55 +46,6 @@ export default function EspacioEmprendedorPage() {
 
   useEffect(() => {
     cargarParticipante();
-  }, []);
-
-  useEffect(() => {
-    if (afiliado) {
-      cargarMisProyectos();
-      cargarMensajesRecibidos();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [afiliado]);
-
-  const loadTopProjects = async () => {
-    try {
-      const { data: proyectos } = await supabase
-        .from('espacio_proyectos')
-        .select('id, title, category, department')
-        .eq('status', 'active');
-
-      const { data: mensajes } = await supabase
-        .from('espacio_mensajes')
-        .select('proyecto_id, sender_participant_id, sender_type, thread_key')
-        .neq('thread_key', 'legacy-no-thread');
-
-      const contactosPorProyecto = new Map<string, Set<string>>();
-
-      (mensajes || []).forEach((m: any) => {
-        if (m.sender_type !== 'inversionista') return;
-        if (!m.sender_participant_id) return;
-
-        if (!contactosPorProyecto.has(m.proyecto_id)) {
-          contactosPorProyecto.set(m.proyecto_id, new Set<string>());
-        }
-
-        contactosPorProyecto.get(m.proyecto_id)!.add(m.sender_participant_id);
-      });
-
-      const proyectosConContactos = (proyectos || []).map((p) => ({
-        ...p,
-        contactos: contactosPorProyecto.get(p.id)?.size || 0,
-      }));
-
-      proyectosConContactos.sort((a, b) => b.contactos - a.contactos);
-      setTopProjects(proyectosConContactos.slice(0, 3));
-    } catch (err) {
-      console.error('Error cargando proyectos destacados:', err);
-    }
-  };
-
-  useEffect(() => {
-    loadTopProjects();
   }, []);
 
   const cargarParticipante = async () => {
@@ -137,8 +82,8 @@ export default function EspacioEmprendedorPage() {
           : 'missing';
 
       setAffiliateStatus(status);
-    } catch (err) {
-      console.error('Error cargando sesión segura del participante:', err);
+    } catch (sessionError) {
+      console.error('Error cargando sesión segura del participante:', sessionError);
       setParticipant(null);
       setAfiliado(null);
       setAffiliateStatus('missing');
@@ -147,168 +92,78 @@ export default function EspacioEmprendedorPage() {
       setLoading(false);
     }
   };
-
-  const cargarMisProyectos = async () => {
-    if (!afiliado) return;
-
-    try {
-      const { data } = await supabase
-        .from('espacio_proyectos')
-        .select('id, title, category, department, district, views, status, created_at')
-        .eq('owner_id', afiliado.id)
-        .order('created_at', { ascending: false });
-
-      const { data: mensajes } = await supabase
-        .from('espacio_mensajes')
-        .select('proyecto_id, sender_participant_id, sender_type');
-
-      const uniqueInvestorContacts = new Map<string, Set<string>>();
-
-      (mensajes || []).forEach((m: any) => {
-        if (m.sender_type !== 'inversionista') return;
-        if (!m.sender_participant_id) return;
-
-        if (!uniqueInvestorContacts.has(m.proyecto_id)) {
-          uniqueInvestorContacts.set(m.proyecto_id, new Set<string>());
-        }
-
-        uniqueInvestorContacts.get(m.proyecto_id)!.add(m.sender_participant_id);
-      });
-
-      const proyectosConContactos = (data || []).map((p) => ({
-        ...p,
-        contactos: uniqueInvestorContacts.get(p.id)?.size || 0,
-      }));
-
-      setMisProyectos(proyectosConContactos);
-    } catch (err) {
-      console.error('Error cargando mis proyectos:', err);
+  const cargarDashboard = async () => {
+    if (afiliado) {
+      setCargandoMensajes(true);
     }
-  };
-
-  const cargarMensajesRecibidos = async () => {
-    if (!participant || !afiliado) return;
-
-    setCargandoMensajes(true);
 
     try {
-      const { data: proyectosDelEmprendedor } = await supabase
-        .from('espacio_proyectos')
-        .select('id, title')
-        .eq('owner_id', afiliado.id);
+      const response = await fetch('/api/espacio-emprendedor/dashboard', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      });
 
-      if (!proyectosDelEmprendedor?.length) {
-        setMensajesRecibidos([]);
-        setCargandoMensajes(false);
-        return;
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.ok) {
+        throw new Error('No se pudo cargar el panel del Espacio Emprendedor.');
       }
 
-      const projectIds = proyectosDelEmprendedor.map((p) => p.id);
+      setTopProjects(Array.isArray(data.top_projects) ? data.top_projects : []);
 
-      const { data: mensajes } = await supabase
-        .from('espacio_mensajes')
-        .select('*')
-        .in('proyecto_id', projectIds)
-        .neq('thread_key', 'legacy-no-thread')
-        .order('created_at', { ascending: false });
-
-      if (!mensajes?.length) {
+      if (!data.authenticated) {
+        setMisProyectos([]);
         setMensajesRecibidos([]);
         return;
       }
 
-      const latestByThread = new Map<string, any>();
+      setMisProyectos(Array.isArray(data.my_projects) ? data.my_projects : []);
 
-      for (const msg of mensajes) {
-        if (!msg.thread_key) continue;
-        if (!latestByThread.has(msg.thread_key)) {
-          latestByThread.set(msg.thread_key, msg);
-        }
-      }
+      const latestThreads = Array.isArray(data.latest_threads)
+        ? data.latest_threads
+        : [];
 
-      const latestMsgs = Array.from(latestByThread.values());
-
-      const investorIds = Array.from(
-        new Set(
-          latestMsgs
-            .map((msg: any) =>
-              msg.sender_type === 'inversionista'
-                ? msg.sender_participant_id
-                : msg.destinatario_participant_id
-            )
-            .filter(Boolean)
-        )
+      setMensajesRecibidos(
+        latestThreads.map((thread: any) => ({
+          id: thread.id,
+          mensaje: thread.content,
+          remitente: thread.investor_alias || 'Inversionista',
+          remitente_id: thread.investor_id,
+          proyecto_titulo: thread.proyecto_titulo || 'Proyecto',
+          proyecto_id: thread.proyecto_id,
+          created_at: thread.created_at,
+          sender_type: thread.sender_type,
+          thread_key: thread.thread_key,
+          unread_count: Number(thread.unread_count || 0),
+        }))
       );
-
-      const { data: participantes } = investorIds.length
-        ? await supabase
-            .from('project_participants')
-            .select('id, alias')
-            .in('id', investorIds)
-        : { data: [] as any[] };
-
-      const aliasMap = new Map<string, string>();
-
-      (participantes || []).forEach((p: any) => {
-        aliasMap.set(p.id, getPublicAlias(p.alias, 'Inversionista'));
-      });
-
-      const mensajesConNombres = latestMsgs.map((msg: any) => {
-        const proyecto = proyectosDelEmprendedor.find((p) => p.id === msg.proyecto_id);
-        const investorId =
-          msg.sender_type === 'inversionista'
-            ? msg.sender_participant_id
-            : msg.destinatario_participant_id;
-
-        return {
-          id: msg.id,
-          mensaje: msg.content,
-          remitente: investorId ? aliasMap.get(investorId) || 'Inversionista' : 'Inversionista',
-          remitente_id: investorId,
-          proyecto_titulo: proyecto?.title || 'Proyecto',
-          proyecto_id: msg.proyecto_id,
-          created_at: msg.created_at,
-          sender_type: msg.sender_type,
-          thread_key: msg.thread_key,
-        };
-      });
-
-      setMensajesRecibidos(mensajesConNombres);
-    } catch (err) {
-      console.error('Error cargando mensajes recibidos:', err);
+    } catch (dashboardError) {
+      console.error('Error cargando dashboard seguro:', dashboardError);
     } finally {
       setCargandoMensajes(false);
     }
   };
 
   useEffect(() => {
-    if (!afiliado || misProyectos.length === 0) return;
+    void cargarDashboard();
+    // Se recarga cuando cambia la identidad o afiliacion segura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participant?.id, afiliado?.id]);
 
-    const projectIds = misProyectos.map((p) => p.id);
-    if (projectIds.length === 0) return;
+  useEffect(() => {
+    if (!afiliado) return;
 
-    const channel = supabase
-      .channel('mensajes-emprendedor')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'espacio_mensajes',
-          filter: `proyecto_id=in.(${projectIds.join(',')})`,
-        },
-        () => {
-          cargarMensajesRecibidos();
-        }
-      )
-      .subscribe();
+    const intervalId = window.setInterval(() => {
+      void cargarDashboard();
+    }, 15000);
 
     return () => {
-      supabase.removeChannel(channel);
+      window.clearInterval(intervalId);
     };
+    // Polling por API; no hay suscripcion Realtime directa a la tabla privada.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [afiliado, misProyectos]);
-
+  }, [participant?.id, afiliado?.id]);
   const responderMensaje = (proyectoId: string, remitenteId: string) => {
     if (!proyectoId || !remitenteId) return;
     router.push(`/espacio-emprendedor/proyectos/${proyectoId}?destinatario=${remitenteId}`);
