@@ -566,27 +566,17 @@ export default function EspacioEmprendedorProjectDetailPage() {
         : 'thread-detail';
 
     const seenKey =
-      `votoclaro_autoguide_seen:ee-project-detail:` +
+      `votoclaro_autoguide_seen:ee-project-detail:v2:` +
       `${projectId}:${viewMode}`;
 
     if (autoGuideSeenRef.current.has(seenKey)) {
       return;
     }
 
-    try {
-      if (sessionStorage.getItem(seenKey) === '1') {
-        autoGuideSeenRef.current.add(seenKey);
-        return;
-      }
-    } catch {}
-
-    // Marcar antes del temporizador evita que el polling de 5 s reprograme
-    // la misma narracion cuando project se refresca con un nuevo objeto.
+    // El guard local impide que el polling de 5 s vuelva a programar
+    // la misma narracion. No escribimos sessionStorage aqui porque el
+    // runtime central del asistente gestiona seenKey al procesar la guia.
     autoGuideSeenRef.current.add(seenKey);
-
-    try {
-      sessionStorage.setItem(seenKey, '1');
-    } catch {}
 
     const text =
       viewMode === 'public-only'
