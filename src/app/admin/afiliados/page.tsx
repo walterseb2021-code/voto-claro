@@ -1,96 +1,153 @@
-// src/app/admin/afiliados/page.tsx
-'use client';
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 type Afiliado = {
   id: string;
-  participant_id: string;
+  participant_id: string | null;
   dni: string;
-  verified_at: string;
+  verified_at: string | null;
   is_active: boolean;
-  created_at: string;
-  participante?: {
-    full_name: string;
-    email: string;
-  };
+  created_at: string | null;
+  participant_name: string | null;
+  participant_email: string | null;
+  participant_linked: boolean;
 };
+
+type ApiPayload = {
+  ok?: boolean;
+  error?: string;
+  action?: string;
+  afiliados?: Afiliado[];
+};
+
+const ERROR_MESSAGES: Record<string, string> = {
+  DNI_INVALIDO: "Ingresa un DNI válido de 8 dígitos.",
+  DNI_DE_BUSQUEDA_INVALIDO:
+    "La búsqueda debe contener solamente entre 1 y 8 dígitos.",
+  PARTICIPANTE_NO_ENCONTRADO:
+    "No existe un participante registrado con ese DNI.",
+  IDENTIDAD_INCONSISTENTE:
+    "La identidad del participante no coincide con la afiliación.",
+  AFILIACION_AMBIGUA:
+    "Se detectó una afiliación ambigua. Requiere revisión administrativa.",
+  AFILIACION_LEGACY_REQUIERE_REVISION:
+    "Esta afiliación antigua no tiene participante vinculado y requiere revisión antes de reactivarse.",
+  DNI_ASOCIADO_A_OTRA_AFILIACION:
+    "El DNI ya está asociado a otra afiliación.",
+  AFILIADO_YA_ACTIVO:
+    "Ese participante ya figura como afiliado activo.",
+  AFILIADO_NO_ENCONTRADO:
+    "No se encontró la afiliación indicada.",
+  ORIGIN_NO_AUTORIZADO:
+    "La operación fue bloqueada por seguridad.",
+  SOLICITUD_INVALIDA:
+    "La solicitud no es válida.",
+  NO_DISPONIBLE:
+    "El servicio administrativo no está disponible en este momento.",
+};
+
+function apiMessage(code: unknown, fallback: string) {
+  const key = String(code ?? "").trim();
+  return ERROR_MESSAGES[key] ?? fallback;
+}
 
 export default function AdminAfiliadosPage() {
   const [afiliados, setAfiliados] = useState<Afiliado[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [nuevoDni, setNuevoDni] = useState('');
-  const [buscarDni, setBuscarDni] = useState('');
+  const [nuevoDni, setNuevoDni] = useState("");
+  const [buscarDni, setBuscarDni] = useState("");
   const [agregando, setAgregando] = useState(false);
-  const [participantes, setParticipantes] = useState<any[]>([]);
+  const [mutandoId, setMutandoId] = useState<string | null>(null);
 
-  useEffect(() => {
-    cargarAfiliados();
-    cargarParticipantes();
-  }, []);
+  async function readPayload(response: Response) {
+    return response
+      .json()
+      .catch(() => ({})) as Promise<ApiPayload>;
+  }
 
-  const cargarAfiliados = async () => {
+  function handleUnauthorized(response: Response) {
+    if (response.status === 401 || response.status === 403) {
+      window.location.assign("/admin/login");
+      return true;
+    }
+
+    return false;
+  }
+
+  async function cargarAfiliados(searchValue = buscarDni) {
     setLoading(true);
     setError(null);
 
     try {
-      let query = supabase
-        .from('espacio_afiliados')
-        .select(`
-          id,
-          participant_id,
-          dni,
-          verified_at,
-          is_active,
-          created_at,
-          participante:project_participants!participant_id (
-            full_name,
-            email
-          )
-        `)
-        .order('created_at', { ascending: false });
+      const search = searchValue.trim();
 
-      if (buscarDni) {
-        query = query.ilike('dni', `%${buscarDni}%`);
+      if (search && !/^\d{1,8}$/.test(search)) {
+        setError(
+          "La búsqueda debe contener solamente entre 1 y 8 dígitos."
+        );
+        return;
       }
 
-      const { data, error } = await query;
+      const params = new URLSearchParams();
+      if (search) params.set("dni", search);
 
-      if (error) throw error;
+      const url =
+        params.size > 0
+          ? `/api/admin/afiliados?${params.toString()}`
+          : "/api/admin/afiliados";
 
-      const transformed = (data || []).map((item: any) => ({
-        ...item,
-        participante: item.participante?.[0] || null,
-      }));
+      const response = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+        },
+      });
 
-      setAfiliados(transformed);
-    } catch (err: any) {
-      console.error('Error cargando afiliados:', err);
-      setError(err.message);
+      if (handleUnauthorized(response)) return;
+
+      const payload = await readPayload(response);
+
+      if (!response.ok || payload.ok !== true) {
+        throw new Error(
+          apiMessage(
+            payload.error,
+            "No se pudo cargar la lista de afiliados."
+          )
+        );
+      }
+
+      setAfiliados(
+        Array.isArray(payload.afiliados)
+          ? payload.afiliados
+          : []
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo cargar la lista de afiliados."
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const cargarParticipantes = async () => {
-    try {
-      const { data } = await supabase
-        .from('project_participants')
-        .select('id, full_name, dni, email')
-        .order('full_name');
-      setParticipantes(data || []);
-    } catch (err) {
-      console.error('Error cargando participantes:', err);
-    }
-  };
+  useEffect(() => {
+    void cargarAfiliados("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const agregarAfiliado = async () => {
-    if (!nuevoDni.trim() || nuevoDni.length !== 8) {
-      setMessage('❌ Ingresa un DNI válido de 8 dígitos.');
-      setTimeout(() => setMessage(null), 3000);
+  async function agregarAfiliado() {
+    const dni = nuevoDni.trim();
+
+    if (!/^\d{8}$/.test(dni)) {
+      setMessage("❌ Ingresa un DNI válido de 8 dígitos.");
       return;
     }
 
@@ -98,166 +155,241 @@ export default function AdminAfiliadosPage() {
     setMessage(null);
 
     try {
-      // Buscar participante con ese DNI
-      const { data: participante } = await supabase
-        .from('project_participants')
-        .select('id, full_name')
-        .eq('dni', nuevoDni)
-        .maybeSingle();
+      const response = await fetch("/api/admin/afiliados", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ dni }),
+      });
 
-      if (!participante) {
-        setMessage(`❌ No existe un participante con DNI ${nuevoDni}. Primero debe registrarse.`);
-        setAgregando(false);
+      if (handleUnauthorized(response)) return;
+
+      const payload = await readPayload(response);
+
+      if (!response.ok || payload.ok !== true) {
+        setMessage(
+          `❌ ${apiMessage(
+            payload.error,
+            "No se pudo registrar la afiliación."
+          )}`
+        );
         return;
       }
 
-      // Verificar si ya está afiliado
-      const { data: existing } = await supabase
-        .from('espacio_afiliados')
-        .select('id')
-        .eq('participant_id', participante.id)
-        .maybeSingle();
+      const wasReactivated =
+        payload.action === "reactivated";
 
-      if (existing) {
-        setMessage(`⚠️ El DNI ${nuevoDni} ya está registrado como afiliado.`);
-        setAgregando(false);
-        return;
-      }
+      setMessage(
+        wasReactivated
+          ? `✅ Afiliación reactivada correctamente para el DNI ${dni}.`
+          : `✅ Afiliación creada correctamente para el DNI ${dni}.`
+      );
 
-      // Insertar afiliado
-      const { error } = await supabase
-        .from('espacio_afiliados')
-        .insert({
-          participant_id: participante.id,
-          dni: nuevoDni,
-          verified_at: new Date().toISOString(),
-          is_active: true,
-        });
-
-      if (error) throw error;
-
-      setMessage(`✅ Afiliado agregado correctamente: ${participante.full_name} (DNI: ${nuevoDni})`);
-      setNuevoDni('');
-      cargarAfiliados();
-    } catch (err: any) {
-      console.error('Error agregando afiliado:', err);
-      setMessage(`❌ Error: ${err.message}`);
+      setNuevoDni("");
+      await cargarAfiliados("");
+    } catch {
+      setMessage(
+        "❌ No se pudo completar la operación administrativa."
+      );
     } finally {
       setAgregando(false);
-      setTimeout(() => setMessage(null), 3000);
     }
-  };
+  }
 
-  const eliminarAfiliado = async (id: string, dni: string) => {
-    if (!confirm(`¿Eliminar afiliado con DNI ${dni}?`)) return;
+  async function cambiarEstado(afiliado: Afiliado) {
+    const targetActive = !afiliado.is_active;
+
+    if (
+      !targetActive &&
+      !window.confirm(
+        `¿Desactivar la afiliación con DNI ${afiliado.dni}? ` +
+          "No se borrará el registro ni su historial."
+      )
+    ) {
+      return;
+    }
+
+    setMutandoId(afiliado.id);
+    setMessage(null);
 
     try {
-      const { error } = await supabase
-        .from('espacio_afiliados')
-        .delete()
-        .eq('id', id);
+      const response = await fetch("/api/admin/afiliados", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          id: afiliado.id,
+          is_active: targetActive,
+        }),
+      });
 
-      if (error) throw error;
+      if (handleUnauthorized(response)) return;
 
-      setMessage(`✅ Afiliado con DNI ${dni} eliminado.`);
-      cargarAfiliados();
-    } catch (err: any) {
-      console.error('Error eliminando afiliado:', err);
-      setMessage(`❌ Error: ${err.message}`);
+      const payload = await readPayload(response);
+
+      if (!response.ok || payload.ok !== true) {
+        setMessage(
+          `❌ ${apiMessage(
+            payload.error,
+            "No se pudo actualizar la afiliación."
+          )}`
+        );
+        return;
+      }
+
+      setMessage(
+        targetActive
+          ? `✅ Afiliación con DNI ${afiliado.dni} reactivada.`
+          : `✅ Afiliación con DNI ${afiliado.dni} desactivada sin borrar su historial.`
+      );
+
+      await cargarAfiliados(buscarDni);
+    } catch {
+      setMessage(
+        "❌ No se pudo completar la operación administrativa."
+      );
     } finally {
-      setTimeout(() => setMessage(null), 3000);
+      setMutandoId(null);
     }
-  };
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Admin - Gestión de Afiliados APP</h1>
-          <Link href="/admin" className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold text-slate-900">
+            Admin - Gestión de Afiliados APP
+          </h1>
+
+          <Link
+            href="/admin"
+            className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+          >
             ← Volver al Admin
           </Link>
         </div>
 
-        {/* Mensajes */}
         {message && (
-          <div className={`mb-4 p-3 rounded-xl text-sm ${
-            message.includes('✅') ? 'bg-green-100 text-green-800 border border-green-300' : 
-            message.includes('⚠️') ? 'bg-yellow-100 text-yellow-800 border border-yellow-300' :
-            'bg-red-100 text-red-800 border border-red-300'
-          }`}>
+          <div
+            className={`mb-4 rounded-xl border p-3 text-sm ${
+              message.includes("✅")
+                ? "border-green-300 bg-green-100 text-green-800"
+                : message.includes("⚠️")
+                  ? "border-yellow-300 bg-yellow-100 text-yellow-800"
+                  : "border-red-300 bg-red-100 text-red-800"
+            }`}
+          >
             {message}
           </div>
         )}
 
-        {/* Panel de simulación */}
-        <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 mb-6 shadow-sm">
-          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-            <span className="text-2xl">🔧</span> Modo Simulación
+        <div className="mb-6 rounded-2xl border-2 border-blue-600 bg-white p-6 shadow-sm">
+          <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-slate-900">
+            <span className="text-2xl">🛡️</span>
+            Gestión administrativa segura
           </h2>
-          <p className="text-slate-600 mb-3">
-            Actualmente, cualquier DNI ingresado en el bloque "Emprendedor" será aceptado automáticamente.
-            Esto permite probar la funcionalidad mientras esperamos la API oficial del JNE.
+
+          <p className="text-slate-600">
+            Las afiliaciones se gestionan mediante una API administrativa
+            protegida. Las altas se validan contra participantes registrados.
+            Al retirar una afiliación se desactiva el registro en lugar de
+            borrarlo, preservando proyectos, mensajes y demás referencias
+            históricas.
           </p>
-          <div className="bg-blue-50 p-3 rounded-xl text-sm text-blue-800">
-            <strong>ℹ️ Información:</strong> La verificación real con el JNE estará disponible cuando se habilite su API oficial (prevista para abril 2026).
-          </div>
         </div>
 
-        {/* Agregar afiliado manualmente */}
-        <div className="bg-white rounded-2xl border-2 border-green-600 p-6 mb-6 shadow-sm">
-          <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-            <span className="text-2xl">➕</span> Agregar afiliado manualmente
+        <div className="mb-6 rounded-2xl border-2 border-green-600 bg-white p-6 shadow-sm">
+          <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-slate-900">
+            <span className="text-2xl">➕</span>
+            Agregar o reactivar afiliado
           </h2>
-          <p className="text-slate-600 mb-4">
-            Ingresa el DNI de un participante registrado para marcarlo como afiliado a APP.
+
+          <p className="mb-4 text-slate-600">
+            Ingresa el DNI de un participante previamente registrado.
           </p>
-          <div className="flex gap-3">
+
+          <div className="flex flex-col gap-3 sm:flex-row">
             <input
               type="text"
+              inputMode="numeric"
+              autoComplete="off"
               placeholder="DNI (8 dígitos)"
               value={nuevoDni}
-              onChange={(e) => setNuevoDni(e.target.value)}
-              className="flex-1 border-2 border-slate-300 rounded-xl px-4 py-2 focus:border-green-500 focus:outline-none"
+              onChange={(event) =>
+                setNuevoDni(
+                  event.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 8)
+                )
+              }
+              className="flex-1 rounded-xl border-2 border-slate-300 px-4 py-2 focus:border-green-500 focus:outline-none"
               maxLength={8}
             />
+
             <button
-              onClick={agregarAfiliado}
+              type="button"
+              onClick={() => void agregarAfiliado()}
               disabled={agregando}
-              className="bg-green-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-green-800 disabled:opacity-50"
+              className="rounded-xl bg-green-700 px-6 py-2 font-semibold text-white hover:bg-green-800 disabled:opacity-50"
             >
-              {agregando ? 'Agregando...' : 'Agregar afiliado'}
+              {agregando ? "Procesando..." : "Agregar / Reactivar"}
             </button>
           </div>
         </div>
 
-        {/* Buscador y lista de afiliados */}
-        <div className="bg-white rounded-2xl border-2 border-red-600 p-6 shadow-sm">
-          <div className="flex justify-between items-center flex-wrap gap-3 mb-4">
-            <h2 className="text-xl font-bold text-slate-900">Lista de afiliados</h2>
+        <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold text-slate-900">
+              Lista de afiliados
+            </h2>
+
             <div className="flex gap-2">
               <input
                 type="text"
+                inputMode="numeric"
+                autoComplete="off"
                 placeholder="Buscar por DNI..."
                 value={buscarDni}
-                onChange={(e) => setBuscarDni(e.target.value)}
-                className="border-2 border-slate-300 rounded-xl px-4 py-2 text-sm focus:border-green-500 focus:outline-none"
+                onChange={(event) =>
+                  setBuscarDni(
+                    event.target.value
+                      .replace(/\D/g, "")
+                      .slice(0, 8)
+                  )
+                }
+                className="rounded-xl border-2 border-slate-300 px-4 py-2 text-sm focus:border-green-500 focus:outline-none"
               />
+
               <button
-                onClick={cargarAfiliados}
-                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-300"
+                type="button"
+                onClick={() => void cargarAfiliados(buscarDni)}
+                className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
               >
                 Buscar
               </button>
             </div>
           </div>
 
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              {error}
+            </div>
+          )}
+
           {loading ? (
-            <p className="text-slate-600">Cargando...</p>
-          ) : error ? (
-            <div className="bg-red-100 border border-red-400 text-red-700 rounded-xl p-4">{error}</div>
+            <div className="py-8 text-center text-slate-500">
+              Cargando afiliados...
+            </div>
           ) : afiliados.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">No hay afiliados registrados.</p>
+            <div className="py-8 text-center text-slate-500">
+              No se encontraron afiliados.
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -267,22 +399,77 @@ export default function AdminAfiliadosPage() {
                     <th className="p-3 text-left">Nombre</th>
                     <th className="p-3 text-left">Email</th>
                     <th className="p-3 text-left">Verificado</th>
+                    <th className="p-3 text-left">Estado</th>
                     <th className="p-3 text-center">Acciones</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {afiliados.map((a) => (
-                    <tr key={a.id} className="border-t hover:bg-slate-50">
-                      <td className="p-3 font-mono">{a.dni}</td>
-                      <td className="p-3">{a.participante?.full_name || '-'}</td>
-                      <td className="p-3">{a.participante?.email || '-'}</td>
-                      <td className="p-3">{new Date(a.verified_at).toLocaleDateString()}</td>
+                  {afiliados.map((afiliado) => (
+                    <tr
+                      key={afiliado.id}
+                      className="border-t hover:bg-slate-50"
+                    >
+                      <td className="p-3 font-mono">
+                        {afiliado.dni}
+                      </td>
+
+                      <td className="p-3">
+                        <div>
+                          {afiliado.participant_name || "-"}
+                        </div>
+
+                        {!afiliado.participant_linked && (
+                          <div className="mt-1 text-xs font-semibold text-amber-700">
+                            Registro legacy sin participante vinculado
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="p-3">
+                        {afiliado.participant_email || "-"}
+                      </td>
+
+                      <td className="p-3">
+                        {afiliado.verified_at
+                          ? new Date(
+                              afiliado.verified_at
+                            ).toLocaleDateString("es-PE")
+                          : "-"}
+                      </td>
+
+                      <td className="p-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            afiliado.is_active
+                              ? "bg-green-100 text-green-800"
+                              : "bg-slate-200 text-slate-700"
+                          }`}
+                        >
+                          {afiliado.is_active
+                            ? "Activo"
+                            : "Inactivo"}
+                        </span>
+                      </td>
+
                       <td className="p-3 text-center">
                         <button
-                          onClick={() => eliminarAfiliado(a.id, a.dni)}
-                          className="bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-semibold hover:bg-red-700"
+                          type="button"
+                          onClick={() =>
+                            void cambiarEstado(afiliado)
+                          }
+                          disabled={mutandoId === afiliado.id}
+                          className={`rounded-lg px-3 py-1 text-xs font-semibold text-white disabled:opacity-50 ${
+                            afiliado.is_active
+                              ? "bg-amber-600 hover:bg-amber-700"
+                              : "bg-green-700 hover:bg-green-800"
+                          }`}
                         >
-                          Eliminar
+                          {mutandoId === afiliado.id
+                            ? "Procesando..."
+                            : afiliado.is_active
+                              ? "Desactivar"
+                              : "Reactivar"}
                         </button>
                       </td>
                     </tr>
