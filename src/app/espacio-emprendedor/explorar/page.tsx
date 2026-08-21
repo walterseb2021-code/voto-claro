@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 type Project = {
@@ -83,56 +82,39 @@ export default function ExplorarProyectosPage() {
   const [participant, setParticipant] = useState<any>(null);
 
   useEffect(() => {
-    cargarParticipante();
-    cargarProyectos();
+    cargarExploracion();
   }, []);
 
-  const cargarParticipante = async () => {
-    const deviceId = localStorage.getItem('vc_device_id');
-
-    if (!deviceId) {
-      setParticipant(null);
-      return;
-    }
-
-    const { data } = await supabase
-      .from('project_participants')
-      .select('id, alias')
-      .eq('device_id', deviceId)
-      .maybeSingle();
-
-    setParticipant(data || null);
-  };
-
-  const cargarProyectos = async () => {
+  const cargarExploracion = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const { data, error } = await supabase
-        .from('espacio_proyectos')
-        .select(`
-          id,
-          title,
-          category,
-          department,
-          district,
-          summary,
-          investment_min,
-          investment_max,
-          pdf_url,
-          views,
-          created_at
-        `)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
+      const response = await fetch(
+        '/api/espacio-emprendedor/proyectos',
+        {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin',
+        }
+      );
 
-      if (error) throw error;
+      const result = await response.json().catch(() => null);
 
-      setProjects(data || []);
+      if (!response.ok || !result?.ok || !Array.isArray(result?.projects)) {
+        throw new Error(
+          typeof result?.error === 'string'
+            ? result.error
+            : 'Error al cargar proyectos'
+        );
+      }
+
+      setParticipant(result.authenticated === true ? { authenticated: true } : null);
+      setProjects(result.projects);
     } catch (err: any) {
       console.error('Error cargando proyectos:', err);
-      setError(err.message || 'Error al cargar proyectos');
+      setParticipant(null);
+      setError(err?.message || 'Error al cargar proyectos');
     } finally {
       setLoading(false);
     }
