@@ -176,7 +176,7 @@ function buildAutoguideIdentity(
   ].join("::");
 }
 
-   function buildAutoguideSeenKey(
+function buildAutoguideSeenKey(
   pathname: string,
   pageContext: {
     pageId?: string;
@@ -189,12 +189,21 @@ function buildAutoguideIdentity(
   const activeViewId = String(pageContext?.activeViewId || "").trim();
   const data = (pageContext?.dynamicData || {}) as Record<string, unknown>;
 
+  const selectedThreadKey = String(data.selectedThreadKey || "").trim();
+  const selectedInvestorId = String(data.selectedInvestorId || "").trim();
   const returnTo = String(data.returnTo || data.normalizedReturnTo || "").trim();
   const destinationLabel = String(data.destinationLabel || "").trim();
 
-  return `votoclaro_autoguide_seen:${[p, pageId, activeViewId, returnTo, destinationLabel].join("::")}`;
+  return `votoclaro_autoguide_seen:${[
+    p,
+    pageId,
+    activeViewId,
+    selectedThreadKey,
+    selectedInvestorId,
+    returnTo,
+    destinationLabel,
+  ].join("::")}`;
 }
-
  function stringifyContextValue(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v.trim();
@@ -4399,6 +4408,7 @@ function safeResetFabPos() {
   const pendingGuideSeenKeyRef = useRef<string | null>(null);
   const autoGuideTimerRef = useRef<number | null>(null);
   const autoGuidePendingKeyRef = useRef<string>("");
+  const activeAutoguideKeyRef = useRef<string>("");
   const lastAssistantScopeRef = useRef<string>("");
   const lastGuideSpokenKeyRef = useRef<string>("");
   const lastGuideDispatchRef = useRef<string>("");
@@ -4744,9 +4754,6 @@ useEffect(() => {
     const spoken = await speakTextChunked(text, voiceLang);
 
     if (spoken?.ok && seenKey) {
-      try {
-        sessionStorage.setItem(seenKey, "1");
-      } catch {}
       lastGuideSpokenKeyRef.current = seenKey;
     }
 
@@ -4785,9 +4792,6 @@ useEffect(() => {
     const spoken = await speakTextChunked(pending, voiceLang);
 
     if (spoken?.ok && pendingSeenKey) {
-      try {
-        sessionStorage.setItem(pendingSeenKey, "1");
-      } catch {}
       lastGuideSpokenKeyRef.current = pendingSeenKey;
     }
 
@@ -4802,26 +4806,52 @@ useEffect(() => {
 
  // ✅ MENSAJE AUTOMÁTICO AL ENTRAR A CADA VENTANA (sin abrir panel)
 // Regla PRO:
-// - Se lee 1 vez por sesión por cada ruta
-// - Inicio (/) NO vuelve a narrar al regresar
+// - Narrar una vez al entrar en cada ventana o vista.
+// - No repetir mientras la misma vista siga activa, aunque cambie contenido por polling.
+// - Si el usuario sale de la vista y luego regresa, narrar nuevamente una vez.
     useEffect(() => {
   if (!autoguideReady) return;
 
-  const p = String(pathname || "");
   const key = String(autoguideKey || "").trim();
   const text = String(autoguideText || "").trim();
 
-  if (!key || !text) return;
+  if (!key) return;
+
+  // La deduplicacion existe solo mientras la misma vista permanece activa.
+  // Un cambio real de ruta, subvista o conversacion libera la vista anterior.
+  if (activeAutoguideKeyRef.current !== key) {
+    activeAutoguideKeyRef.current = key;
+
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
+
+    if (
+      pendingGuideSeenKeyRef.current &&
+      pendingGuideSeenKeyRef.current !== key
+    ) {
+      pendingGuideSpeakRef.current = null;
+      pendingGuidePathRef.current = null;
+      pendingGuideSeenKeyRef.current = null;
+    }
+
+    if (autoGuideTimerRef.current) {
+      window.clearTimeout(autoGuideTimerRef.current);
+      autoGuideTimerRef.current = null;
+    }
+
+    autoGuidePendingKeyRef.current = "";
+    lastGuideSpokenKeyRef.current = "";
+    lastGuideDispatchRef.current = "";
+    lastGuideDispatchAtRef.current = 0;
+  }
+
+  if (!text) return;
 
   if (autoGuidePendingKeyRef.current === key) return;
   if (lastGuideSpokenKeyRef.current === key) return;
 
-  try {
-    if (sessionStorage.getItem(key) === "1") {
-      lastGuideSpokenKeyRef.current = key;
-      return;
-    }
-  } catch {}
+
 
   autoGuidePendingKeyRef.current = key;
 

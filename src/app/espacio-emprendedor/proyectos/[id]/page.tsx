@@ -4,7 +4,6 @@ import Link from 'next/link';
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import {
@@ -123,7 +122,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const autoGuideSeenRef = useRef<Set<string>>(new Set());
 
   const canUseConversation = useMemo(() => {
     if (!participant) return false;
@@ -555,61 +553,6 @@ export default function EspacioEmprendedorProjectDetailPage() {
     syncStatus,
   ]);
 
-  useEffect(() => {
-    if (loading || error || !project) return;
-
-    const viewMode =
-      !participant
-        ? 'public-only'
-        : esPropietario && !selectedInvestorId
-        ? 'thread-list'
-        : 'thread-detail';
-
-    const seenKey =
-      `votoclaro_autoguide_seen:ee-project-detail:v2:` +
-      `${projectId}:${viewMode}`;
-
-    if (autoGuideSeenRef.current.has(seenKey)) {
-      return;
-    }
-
-    // El guard local impide que el polling de 5 s vuelva a programar
-    // la misma narracion. No escribimos sessionStorage aqui porque el
-    // runtime central del asistente gestiona seenKey al procesar la guia.
-    autoGuideSeenRef.current.add(seenKey);
-
-    const text =
-      viewMode === 'public-only'
-        ? `Estamos en el detalle del proyecto ${project.title}. La conversación privada está protegida.`
-        : viewMode === 'thread-list'
-        ? `Estamos en el detalle del proyecto ${project.title}. Aquí puedes elegir uno de tus hilos privados autorizados.`
-        : `Estamos en el detalle del proyecto ${project.title}, dentro de un hilo privado autorizado.`;
-
-    const timer = window.setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent('votoclaro:guide', {
-          detail: {
-            action: 'SAY',
-            text,
-            speak: true,
-            seenKey,
-          },
-        })
-      );
-    }, 700);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [
-    loading,
-    error,
-    project,
-    projectId,
-    participant,
-    esPropietario,
-    selectedInvestorId,
-  ]);
 
   useEffect(() => {
     return () => {
