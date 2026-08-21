@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { useAssistantRuntime } from '@/components/assistant/AssistantRuntimeContext';
 
 const CATEGORIAS = [
@@ -155,61 +154,45 @@ export default function PerfilInversionistaPage() {
   }, []);
 
   const cargarDatos = async () => {
-    const deviceId = localStorage.getItem('vc_device_id');
-
-    if (!deviceId) {
-      router.push('/proyecto-ciudadano/registro');
-      return;
-    }
-
     try {
-      const { data: participantData, error: participantError } = await supabase
-        .from('project_participants')
-        .select('id, alias, device_id')
-        .eq('device_id', deviceId)
-        .maybeSingle();
+      const response = await fetch(
+        '/api/espacio-emprendedor/perfil-inversionista',
+        {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin',
+        }
+      );
 
-      if (participantError || !participantData) {
+      const result = await response.json().catch(() => null);
+
+      if (response.status === 401) {
         router.push('/proyecto-ciudadano/registro');
         return;
       }
 
-      setParticipant(participantData);
-
-      const { data: perfilData, error: perfilError } = await supabase
-        .from('espacio_inversionistas')
-        .select(`
-          id,
-          participant_id,
-          company,
-          investment_range_min,
-          investment_range_max,
-          categories,
-          departments,
-          notify_email,
-          investor_type,
-          support_types,
-          project_stages,
-          participation_style,
-          investment_horizon,
-          risk_level,
-          public_message
-        `)
-        .eq('participant_id', participantData.id)
-        .maybeSingle();
-
-      if (perfilError) {
-        throw perfilError;
+      if (!response.ok || !result?.ok || !result?.participant?.id) {
+        throw new Error(
+          typeof result?.error === 'string'
+            ? result.error
+            : 'No se pudo validar tu sesión.'
+        );
       }
+
+      setParticipant(result.participant);
+
+      const perfilData = result.profile;
 
       if (perfilData) {
         setExistingProfileId(perfilData.id);
 
         setPerfil({
           company: perfilData.company || '',
-          investment_range_min: perfilData.investment_range_min?.toString() || '',
+          investment_range_min:
+            perfilData.investment_range_min?.toString() || '',
           investment_range_max:
-            perfilData.investment_range_max && perfilData.investment_range_max <= 100000
+            perfilData.investment_range_max &&
+            perfilData.investment_range_max <= 100000
               ? perfilData.investment_range_max.toString()
               : '',
           categories: perfilData.categories || [],
@@ -225,10 +208,14 @@ export default function PerfilInversionistaPage() {
           risk_level: perfilData.risk_level || '',
           public_message: perfilData.public_message || '',
         });
+      } else {
+        setExistingProfileId(null);
       }
     } catch (err) {
       console.error('Error cargando perfil inversionista:', err);
-      setError('No se pudo cargar tu perfil inversionista. Intenta nuevamente.');
+      setError(
+        'No se pudo cargar tu perfil inversionista. Intenta nuevamente.'
+      );
     } finally {
       setLoading(false);
     }
@@ -292,7 +279,9 @@ export default function PerfilInversionistaPage() {
     setMessage(null);
 
     if (!participant?.id) {
-      setError('No se pudo identificar tu sesión. Vuelve a iniciar sesión con tu código de acceso.');
+      setError(
+        'No se pudo identificar tu sesión. Vuelve a iniciar sesión con tu código de acceso.'
+      );
       setSaving(false);
       return;
     }
@@ -308,19 +297,29 @@ export default function PerfilInversionistaPage() {
     }
 
     if (perfil.investment_range_min.trim() && minValue == null) {
-      setError('La inversión mínima debe ser un número válido mayor que cero.');
+      setError(
+        'La inversión mínima debe ser un número válido mayor que cero.'
+      );
       setSaving(false);
       return;
     }
 
-    if (!perfil.monto_mayor && perfil.investment_range_max.trim() && maxValue == null) {
-      setError('La inversión máxima debe ser un número válido mayor que cero.');
+    if (
+      !perfil.monto_mayor &&
+      perfil.investment_range_max.trim() &&
+      maxValue == null
+    ) {
+      setError(
+        'La inversión máxima debe ser un número válido mayor que cero.'
+      );
       setSaving(false);
       return;
     }
 
     if (minValue != null && maxValue != null && maxValue < minValue) {
-      setError('La inversión máxima no puede ser menor que la inversión mínima.');
+      setError(
+        'La inversión máxima no puede ser menor que la inversión mínima.'
+      );
       setSaving(false);
       return;
     }
@@ -332,13 +331,17 @@ export default function PerfilInversionistaPage() {
     }
 
     if (perfil.support_types.length === 0) {
-      setError('Selecciona al menos un tipo de apoyo que podrías ofrecer.');
+      setError(
+        'Selecciona al menos un tipo de apoyo que podrías ofrecer.'
+      );
       setSaving(false);
       return;
     }
 
     if (perfil.project_stages.length === 0) {
-      setError('Selecciona al menos una etapa de proyecto de tu interés.');
+      setError(
+        'Selecciona al menos una etapa de proyecto de tu interés.'
+      );
       setSaving(false);
       return;
     }
@@ -362,14 +365,15 @@ export default function PerfilInversionistaPage() {
     }
 
     if (perfil.public_message.trim().length > 300) {
-      setError('El mensaje público no debe superar los 300 caracteres.');
+      setError(
+        'El mensaje público no debe superar los 300 caracteres.'
+      );
       setSaving(false);
       return;
     }
 
     try {
       const payload = {
-        participant_id: participant.id,
         company: perfil.company.trim() || null,
         investment_range_min: minValue,
         investment_range_max: maxValue,
@@ -384,55 +388,49 @@ export default function PerfilInversionistaPage() {
         investment_horizon: perfil.investment_horizon || null,
         risk_level: perfil.risk_level || null,
         public_message: perfil.public_message.trim() || null,
-        updated_at: new Date().toISOString(),
       };
 
-      const { data: currentProfile, error: currentError } = await supabase
-        .from('espacio_inversionistas')
-        .select('id')
-        .eq('participant_id', participant.id)
-        .maybeSingle();
+      const response = await fetch(
+        '/api/espacio-emprendedor/perfil-inversionista',
+        {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
-      if (currentError) throw currentError;
+      const result = await response.json().catch(() => null);
 
-      if (currentProfile?.id) {
-        const { error: updateError } = await supabase
-          .from('espacio_inversionistas')
-          .update(payload)
-          .eq('id', currentProfile.id);
-
-        if (updateError) throw updateError;
-
-        setExistingProfileId(currentProfile.id);
-      } else {
-        const { data: inserted, error: insertError } = await supabase
-          .from('espacio_inversionistas')
-          .insert(payload)
-          .select('id')
-          .single();
-
-        if (insertError) throw insertError;
-
-        setExistingProfileId(inserted.id);
+      if (response.status === 401) {
+        router.push('/proyecto-ciudadano/registro');
+        return;
       }
 
-      setMessage('✅ Perfil guardado correctamente. Tus preferencias fueron actualizadas.');
+      if (!response.ok || !result?.ok || !result?.profile_id) {
+        throw new Error(
+          typeof result?.error === 'string'
+            ? result.error
+            : 'No se pudo guardar el perfil.'
+        );
+      }
+
+      setExistingProfileId(result.profile_id);
+      setMessage(
+        '✅ Perfil guardado correctamente. Tus preferencias fueron actualizadas.'
+      );
       setTimeout(() => setMessage(null), 5000);
     } catch (err: any) {
       console.error('Error guardando perfil inversionista:', err);
 
-      const rawMessage = String(err?.message || '');
+      const rawMessage = String(err?.message || '').trim();
 
-      if (
-        rawMessage.includes('duplicate key') ||
-        rawMessage.includes('unique_participant_investor')
-      ) {
-        setError(
-          'Ya tienes un perfil inversionista registrado. Recarga la página y vuelve a guardar tus preferencias.'
-        );
-      } else {
-        setError('No se pudo guardar el perfil. Revisa los datos e intenta nuevamente.');
-      }
+      setError(
+        rawMessage ||
+          'No se pudo guardar el perfil. Revisa los datos e intenta nuevamente.'
+      );
     } finally {
       setSaving(false);
     }
