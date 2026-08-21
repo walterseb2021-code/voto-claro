@@ -4550,19 +4550,51 @@ const autoguideReady = useMemo(() => {
 
   const p = String(pathname || "");
   const isHome = p === "/";
-   const isContextualDomain =
-  p.startsWith("/comentarios") ||
-  p.startsWith("/espacio-emprendedor") ||
-  p.startsWith("/proyecto-ciudadano") ||
-  p.startsWith("/intencion-de-voto") ||
-  p.startsWith("/reto-ciudadano") ||
-  p.startsWith("/solo-para-ganadores");
+  const isContextualDomain =
+    p.startsWith("/comentarios") ||
+    p.startsWith("/espacio-emprendedor") ||
+    p.startsWith("/proyecto-ciudadano") ||
+    p.startsWith("/intencion-de-voto") ||
+    p.startsWith("/reto-ciudadano") ||
+    p.startsWith("/solo-para-ganadores");
 
   if (isHome) return true;
-  if (isContextualDomain) return autoguideStatus === "ready";
+
+  if (isContextualDomain) {
+    const contextRouteRaw = String(
+      (pageContext as any)?.route || ""
+    ).trim();
+
+    if (contextRouteRaw) {
+      const currentRoute =
+        (p.replace(/\/+$/, "") || "/");
+
+      const contextRoutePath =
+        (
+          contextRouteRaw
+            .split(/[?#]/)[0]
+            .replace(/\/+$/, "")
+        ) || "/";
+
+      // Si la ruta del contexto es concreta y pertenece a la pantalla
+      // anterior, esperar al pageContext correcto antes de narrar.
+      const contextRouteIsConcrete =
+        contextRouteRaw.startsWith("/") &&
+        !contextRouteRaw.includes("[");
+
+      if (
+        contextRouteIsConcrete &&
+        contextRoutePath !== currentRoute
+      ) {
+        return false;
+      }
+    }
+
+    return autoguideStatus === "ready";
+  }
 
   return true;
-}, [mounted, pathname, autoguideStatus]);
+}, [mounted, pathname, autoguideStatus, pageContext]);
   useEffect(() => {
     if (!mounted) return;
     if (!hydratedPrefsRef.current) return;
@@ -6159,15 +6191,10 @@ function sendQuick(q: string) {
     recognitionRef.current?.stop?.();
   } catch {}
 
-  pendingGuideSpeakRef.current = null;
-  pendingGuidePathRef.current = null;
-  pendingGuideSeenKeyRef.current = null;
-  autoGuidePendingKeyRef.current = "";
-
-  if (autoGuideTimerRef.current) {
-    window.clearTimeout(autoGuideTimerRef.current);
-    autoGuideTimerRef.current = null;
-  }
+  // La autoguia administra sus propios timers, pending y deduplicacion
+  // por vista. No se limpian aqui porque este efecto de scope se ejecuta
+  // despues del efecto de entrada y podria cancelar la primera narracion
+  // de la nueva pantalla.
 
   setListening(false);
   setBusy(false);
