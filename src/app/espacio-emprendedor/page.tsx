@@ -340,6 +340,9 @@ export default function EspacioEmprendedorPage() {
       ? 'verificacion-dni'
       : 'panel-emprendedor';
 
+    // Los cambios loading/messages/projects/empty son estados de contenido
+    // del mismo panel, no entradas a nuevas vistas. El polling no debe
+    // cambiar la identidad semantica usada por la autoguia.
     const activeViewId =
       entrepreneurViewMode === 'guest-access'
         ? 'guest-access'
@@ -347,13 +350,7 @@ export default function EspacioEmprendedorPage() {
         ? 'dni-verification-checking'
         : entrepreneurViewMode === 'dni-verification'
         ? 'dni-verification'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-loading'
-        ? 'entrepreneur-dashboard-loading'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-messages'
-        ? 'entrepreneur-dashboard-messages'
-        : entrepreneurViewMode === 'entrepreneur-dashboard-projects'
-        ? 'entrepreneur-dashboard-projects'
-        : 'entrepreneur-dashboard-empty';
+        : 'entrepreneur-dashboard';
 
     const activeViewTitle =
       entrepreneurViewMode === 'guest-access'
