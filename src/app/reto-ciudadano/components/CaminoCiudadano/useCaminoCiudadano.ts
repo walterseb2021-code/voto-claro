@@ -1,13 +1,22 @@
-﻿// src/app/reto-ciudadano/components/CaminoCiudadano/useCaminoCiudadano.ts
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { GameState, GameMode, Question } from './types';
+import { useState, useCallback, useRef, useEffect } from "react";
+
+import { GameState, GameMode, Question } from "./types";
 
 const TOTAL_SQUARES = 30;
 const INITIAL_TURNS = 10;
 const QUESTION_TIME_SEC = 10;
 
- function guideSay(text: string) {
+type QuestionsResponse = {
+  ok?: boolean;
+  questions?: Array<{ id?: unknown; q?: unknown }>;
+};
+
+type VerifyResponse = {
+  ok?: boolean;
+  correct?: unknown;
+};
+
+function guideSay(text: string) {
   if (typeof window === "undefined") return;
 
   window.dispatchEvent(
@@ -19,6 +28,36 @@ const QUESTION_TIME_SEC = 10;
       },
     })
   );
+}
+
+async function verifyPracticeAnswer(
+  questionId: string,
+  answer: boolean
+): Promise<boolean | null> {
+  try {
+    const res = await fetch("/api/reto-ciudadano/questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+      body: JSON.stringify({
+        question_id: questionId,
+        level: 2,
+        party_id: "app",
+        answer,
+      }),
+    });
+
+    const data = (await res.json().catch(() => null)) as VerifyResponse | null;
+
+    if (!res.ok || data?.ok !== true || typeof data.correct !== "boolean") {
+      return null;
+    }
+
+    return data.correct;
+  } catch {
+    return null;
+  }
 }
 
 export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
@@ -37,167 +76,229 @@ export function useCaminoCiudadano(mode: GameMode, onWin?: () => void) {
   });
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const answeringRef = useRef(false);
+  const generationRef = useRef(0);
 
   useEffect(() => {
     return () => {
+      generationRef.current += 1;
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
-  // Obtener pregunta aleatoria, evitando repetir en la misma partida
   const fetchRandomQuestion = useCallback(async (excludeIds: string[]) => {
     try {
-      const { data, error } = await supabase
-        .from('reto_questions')
-        .select('id, question, answer')
-        .eq('level', 2)
-        .eq('party_id', 'app')
-        .limit(100);
+      const res = await fetch(
+        "/api/reto-ciudadano/questions?level=2&partyId=app",
+        {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+        }
+      );
 
-      if (error) throw error;
-      if (!data || data.length === 0) return null;
+      const payload = (await res.json().catch(() => null)) as
+        | QuestionsResponse
+        | null;
 
-      const available = data.filter(q => !excludeIds.includes(q.id));
-      if (available.length === 0) {
-        // Si ya respondió todas, repetir una (pero no debería ocurrir con muchas preguntas)
-        const randomIndex = Math.floor(Math.random() * data.length);
-        return data[randomIndex] as Question;
+      if (!res.ok || payload?.ok !== true || !Array.isArray(payload.questions)) {
+        return null;
       }
 
-      const randomIndex = Math.floor(Math.random() * available.length);
-      return available[randomIndex] as Question;
-    } catch (error) {
-      console.error('Error fetching question:', error);
+      const questions: Question[] = payload.questions.flatMap((item) => {
+        const id = String(item?.id ?? "").trim();
+        const question = String(item?.q ?? "").trim();
+        if (!id || !question) return [];
+        return [{ id, question }];
+      });
+
+      if (questions.length === 0) return null;
+
+      const available = questions.filter(
+        (question) => !excludeIds.includes(question.id)
+      );
+
+      const pool = available.length > 0 ? available : questions;
+      const index = Math.floor(Math.random() * pool.length);
+      return pool[index] ?? null;
+    } catch {
+      console.error("[camino-practice] question fetch failed");
       return null;
     }
   }, []);
 
-    const startTimer = useCallback(() => {
-  if (timerRef.current) clearInterval(timerRef.current);
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
 
-  timerRef.current = setInterval(() => {
-    setState((prev) => {
-      if (prev.timeLeft > 1) {
-        return { ...prev, timeLeft: prev.timeLeft - 1 };
+    timerRef.current = setInterval(() => {
+      setState((prev) => {
+        if (prev.timeLeft > 1) {
+          return { ...prev, timeLeft: prev.timeLeft - 1 };
+        }
+
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+
+        const roll = prev.pendingRoll ?? 0;
+        const newPosition = Math.max(prev.position - roll, 0);
+        const newTurnsLeft = Math.max(0, prev.turnsLeft - 1);
+        const noTurnsLeft = newTurnsLeft <= 0;
+
+        return {
+          ...prev,
+          position: newPosition,
+          turnsLeft: newTurnsLeft,
+          answeredQuestions: prev.currentQuestion
+            ? [...prev.answeredQuestions, prev.currentQuestion.id]
+            : prev.answeredQuestions,
+          pendingRoll: null,
+          showQuestion: false,
+          currentQuestion: null,
+          timeLeft: QUESTION_TIME_SEC,
+          gameOver: noTurnsLeft,
+          won: false,
+        };
+      });
+    }, 1000);
+  }, []);
+
+  const handleAnswer = useCallback(
+    async (answer: boolean) => {
+      if (mode === "con_premio") {
+        console.error(
+          "[camino-practice] prize mode must use the secure server flow"
+        );
+        return;
       }
 
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+      if (
+        !state.currentQuestion ||
+        state.pendingRoll === null ||
+        answeringRef.current
+      ) {
+        return;
       }
 
-      const roll = prev.pendingRoll ?? 0;
-      const newPosition = Math.max(prev.position - roll, 0);
-      const newTurnsLeft = prev.turnsLeft - 1;
-      const noTurnsLeft = newTurnsLeft <= 0;
+      answeringRef.current = true;
 
-      return {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+
+      const generation = generationRef.current;
+      const questionId = state.currentQuestion.id;
+      const roll = state.pendingRoll;
+
+      const correct = await verifyPracticeAnswer(questionId, answer);
+
+      if (generation !== generationRef.current) {
+        answeringRef.current = false;
+        return;
+      }
+
+      if (correct === null) {
+        console.error("[camino-practice] answer verification failed");
+        setState((prev) => ({
+          ...prev,
+          timeLeft: QUESTION_TIME_SEC,
+        }));
+        answeringRef.current = false;
+        startTimer();
+        return;
+      }
+
+      const newPosition = correct
+        ? Math.min(state.position + roll, TOTAL_SQUARES)
+        : Math.max(state.position - roll, 0);
+
+      const newTurnsLeft = Math.max(0, state.turnsLeft - 1);
+      const reachedEnd = newPosition === TOTAL_SQUARES;
+      const noTurnsLeft = newTurnsLeft === 0;
+      const gameFinished = reachedEnd || noTurnsLeft;
+
+      setState((prev) => ({
         ...prev,
         position: newPosition,
         turnsLeft: newTurnsLeft,
-        answeredQuestions: prev.currentQuestion
-          ? [...prev.answeredQuestions, prev.currentQuestion.id]
-          : prev.answeredQuestions,
+        answeredQuestions: prev.answeredQuestions.includes(questionId)
+          ? prev.answeredQuestions
+          : [...prev.answeredQuestions, questionId],
+        pendingRoll: null,
         showQuestion: false,
         currentQuestion: null,
         timeLeft: QUESTION_TIME_SEC,
-        gameOver: noTurnsLeft,
-        won: false,
-      };
-    });
-  }, 1000);
-}, []);
+        gameOver: gameFinished && !reachedEnd,
+        won: reachedEnd,
+      }));
 
-  // Manejar la respuesta del jugador (llamada desde el modal)
-  const handleAnswer = useCallback((isCorrect: boolean) => {
-    if (!state.currentQuestion || state.pendingRoll === null) return;
+      answeringRef.current = false;
 
-    // Detener el temporizador
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
+      if (reachedEnd) {
+        guideSay(
+          "Felicitaciones. Llegaste a la meta de Camino Ciudadano en modo practica."
+        );
+      } else if (noTurnsLeft) {
+        guideSay(
+          "Se acabaron los turnos. No llegaste a la meta en esta partida. Puedes reiniciar el juego e intentarlo nuevamente."
+        );
+      }
 
-    const roll = state.pendingRoll;
-    let newPosition = state.position;
-
-     if (isCorrect) {
-  newPosition = Math.min(state.position + roll, TOTAL_SQUARES);
-} else {
-  newPosition = Math.max(state.position - roll, 0);
-}
-
-const newTurnsLeft = state.turnsLeft - 1;
-const reachedEnd = newPosition === TOTAL_SQUARES;
-const noTurnsLeft = newTurnsLeft === 0;
-const gameFinished = reachedEnd || noTurnsLeft;
-
-   
-    setState(prev => ({
-      ...prev,
-      position: newPosition,
-      turnsLeft: newTurnsLeft,
-      answeredQuestions: [...prev.answeredQuestions, prev.currentQuestion!.id],
-      showQuestion: false,
-      currentQuestion: null,
-      // Mantenemos pendingRoll y currentRoll para mostrar el último número
-      // pero la próxima tirada los reemplazará
-      timeLeft: QUESTION_TIME_SEC,
-      gameOver: gameFinished && !reachedEnd,
-      won: reachedEnd,
-    }));
-
-     if (reachedEnd) {
-  guideSay(
-    mode === "con_premio"
-      ? "¡Felicidades! Llegaste a la meta de Camino Ciudadano. En modalidad con premio, quedarás registrado para la selección trimestral si tus datos están completos."
-      : "¡Felicidades! Llegaste a la meta de Camino Ciudadano en modo práctica."
+    },
+    [mode, onWin, startTimer, state]
   );
-}
 
-if (!reachedEnd && noTurnsLeft) {
-  guideSay(
-    "Se acabaron los turnos. No llegaste a la meta en esta partida. Puedes reiniciar el juego e intentarlo nuevamente."
-  );
-}
-
-if (reachedEnd && mode === 'con_premio') {
-  onWin?.();
-}
-  }, [state, mode, onWin]);
-
-  // Lanzar el dado: muestra número, carga pregunta, activa modal
   const rollDice = useCallback(async () => {
-    // No se puede lanzar si el juego terminó, ganó, ya hay pregunta activa, o no quedan turnos
-    if (state.gameOver || state.won || state.showQuestion || state.turnsLeft === 0) return;
-
-    // Generar número del dado
-    const roll = Math.floor(Math.random() * 6) + 1;
-
-    // Obtener pregunta (puede ser asíncrono)
-    const question = await fetchRandomQuestion(state.answeredQuestions);
-    if (!question) {
-      // Si no hay pregunta, termina el juego (error)
-      setState(prev => ({ ...prev, gameOver: true }));
+    if (mode === "con_premio") {
+      console.error(
+        "[camino-practice] prize mode must use the secure server flow"
+      );
       return;
     }
 
-    // Actualizar estado: mostrar el número, guardar el roll pendiente, mostrar la pregunta
-      setState(prev => ({
-  ...prev,
-  currentRoll: roll,
-  pendingRoll: roll,
-  showQuestion: true,
-  currentQuestion: question,
-  timeLeft: QUESTION_TIME_SEC,
-}));
+    if (
+      state.gameOver ||
+      state.won ||
+      state.showQuestion ||
+      state.turnsLeft === 0 ||
+      answeringRef.current
+    ) {
+      return;
+    }
 
-guideSay(question.question);
+    const generation = generationRef.current;
+    const roll = Math.floor(Math.random() * 6) + 1;
+    const question = await fetchRandomQuestion(state.answeredQuestions);
 
-startTimer();
-  }, [state, fetchRandomQuestion, startTimer]);
+    if (generation !== generationRef.current) return;
 
-  // Reiniciar completamente
+    if (!question) {
+      setState((prev) => ({ ...prev, gameOver: true }));
+      return;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      currentRoll: roll,
+      pendingRoll: roll,
+      showQuestion: true,
+      currentQuestion: question,
+      timeLeft: QUESTION_TIME_SEC,
+    }));
+
+    guideSay(question.question);
+    startTimer();
+  }, [mode, state, fetchRandomQuestion, startTimer]);
+
   const resetGame = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
+    generationRef.current += 1;
+    answeringRef.current = false;
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     setState({
       position: 0,
       turnsLeft: INITIAL_TURNS,

@@ -1,14 +1,12 @@
-﻿// src/app/reto-ciudadano/components/CaminoCiudadano/types.ts
-export type GameMode = 'sin_premio' | 'con_premio';
+export type GameMode = "sin_premio" | "con_premio";
 
 export type Question = {
   id: string;
   question: string;
-  answer: boolean; // true = Sí, false = No
 };
 
 export type GameState = {
-  position: number;              // casilla actual (0 a 30)
+  position: number;
   turnsLeft: number;
   answeredQuestions: string[];
   currentRoll: number | null;
@@ -20,4 +18,3 @@ export type GameState = {
   won: boolean;
   locked: boolean;
 };
-

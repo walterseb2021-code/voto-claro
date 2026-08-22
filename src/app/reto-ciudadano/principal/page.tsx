@@ -13,8 +13,6 @@ const PREMIO_ACTIVO = false;
 type YesNoQuestion = {
   id: string;
   q: string;
-  a: boolean; // true = SÍ, false = NO
-  note?: string; // opcional: explicación breve
 };
 
 type Winner = {
@@ -42,6 +40,36 @@ async function safeFetchJson<T>(url: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+async function verifyPracticeAnswer(
+  questionId: string,
+  level: 1 | 2,
+  answer: boolean,
+  partyId?: string | null
+) {
+  const res = await fetch("/api/reto-ciudadano/questions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    cache: "no-store",
+    body: JSON.stringify({
+      question_id: questionId,
+      level,
+      party_id: level === 2 ? String(partyId ?? "").trim() : null,
+      answer,
+    }),
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok || data?.ok !== true || typeof data?.correct !== "boolean") {
+    throw new Error(
+      data?.error || "No se pudo validar la respuesta en el servidor."
+    );
+  }
+
+  return data.correct as boolean;
 }
 
 type QuestionsAPI = {
@@ -120,9 +148,9 @@ function Nivel1General({ onStatus, mode }: Nivel1GeneralProps) {
   const TOTAL = 25;
   const PASS = 23;
 
-  // 10s por pregunta + pool total 250s
+  // 10s por pregunta + pool total 280s
   const QUESTION_SEC = 10;
-  const POOL_TOTAL_SEC = 250;
+  const POOL_TOTAL_SEC = 280;
 
   // ✅ NUEVO: control de inicio
   const [started, setStarted] = useState(false);
@@ -232,7 +260,6 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
       const cleaned = selected.map((x) => ({
         ...x,
         q: cleanText(x.q),
-        note: x.note ? cleanText(x.note) : undefined,
       }));
 
       setQuiz(cleaned);
@@ -312,6 +339,11 @@ setQLeft(QUESTION_SEC);
   async function startLevel1() {
     if (started) return;
 
+    if (mode === "con_premio") {
+      setError("La modalidad con premio requiere el flujo seguro del servidor.");
+      return;
+    }
+
     if (locked) return;
 
     if (attemptsLeft <= 0) {
@@ -325,27 +357,35 @@ setQLeft(QUESTION_SEC);
     await resetRun();
   }
 
-    function answer(val: boolean) {
+    async function answer(val: boolean) {
   if (!started) return;
   if (loading || error) return;
   if (finished) return;
   if (!current) return;
   if (lockedRef.current) return;
 
+  if (mode === "con_premio") {
+    setError("La modalidad con premio requiere el flujo seguro del servidor.");
+    return;
+  }
+
   lockedRef.current = true;
 
-  const ok = current.a === val;
+  try {
+    const ok = await verifyPracticeAnswer(current.id, 1, val);
 
-   
-  if (ok) setGood((x) => x + 1);
-  else setBad((x) => x + 1);
+    if (ok) setGood((x) => x + 1);
+    else setBad((x) => x + 1);
 
-  setIdx((x) => x + 1);
-  setQLeft(QUESTION_SEC);
-
-  queueMicrotask(() => {
-    lockedRef.current = false;
-  });
+    setIdx((x) => x + 1);
+    setQLeft(QUESTION_SEC);
+  } catch (e: any) {
+    setError(e?.message ?? "No se pudo validar la respuesta.");
+  } finally {
+    queueMicrotask(() => {
+      lockedRef.current = false;
+    });
+  }
 }
 
   function doSkip() {
@@ -1019,7 +1059,7 @@ function Nivel2Partido(props: {
   const PASS = 23;
 
   const QUESTION_SEC = 10;
-  const POOL_TOTAL_SEC = 250;
+  const POOL_TOTAL_SEC = 280;
 
   const { enabled, mode, partyId, setPartyId, partyIds, partyLoading, partyError } = props;
 
@@ -1170,7 +1210,6 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
       const cleaned = selected.map((x) => ({
         ...x,
         q: cleanText(x.q),
-        note: x.note ? cleanText(x.note) : undefined,
       }));
 
       setQuiz(cleaned);
@@ -1201,6 +1240,11 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
   async function startLevel2() {
     if (!enabled) return;
     if (started) return;
+
+    if (mode === "con_premio") {
+      setError("La modalidad con premio requiere el flujo seguro del servidor.");
+      return;
+    }
 
     if (locked) return;
 
@@ -1251,7 +1295,7 @@ setQLeft(QUESTION_SEC);
     });
   }, [enabled, started, loading, error, finished, qLeft]);
 
-  function answer(val: boolean) {
+  async function answer(val: boolean) {
     if (!enabled) return;
     if (!started) return;
     if (loading || error) return;
@@ -1259,18 +1303,33 @@ setQLeft(QUESTION_SEC);
     if (!current) return;
     if (lockedRef.current) return;
 
+    if (mode === "con_premio") {
+      setError("La modalidad con premio requiere el flujo seguro del servidor.");
+      return;
+    }
+
     lockedRef.current = true;
 
-      const ok = current.a === val;
+    try {
+      const ok = await verifyPracticeAnswer(
+        current.id,
+        2,
+        val,
+        runPartyId || partyId
+      );
 
-if (ok) setGood((x) => x + 1);
-else setBad((x) => x + 1);
-    setIdx((x) => x + 1);
-    setQLeft(QUESTION_SEC);
+      if (ok) setGood((x) => x + 1);
+      else setBad((x) => x + 1);
 
-    queueMicrotask(() => {
-      lockedRef.current = false;
-    });
+      setIdx((x) => x + 1);
+      setQLeft(QUESTION_SEC);
+    } catch (e: any) {
+      setError(e?.message ?? "No se pudo validar la respuesta.");
+    } finally {
+      queueMicrotask(() => {
+        lockedRef.current = false;
+      });
+    }
   }
 
   function doSkip() {
@@ -1297,7 +1356,7 @@ else setBad((x) => x + 1);
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">
-              Nivel 2 — Partido (según “Alianza para el Progreso”)
+              Nivel 2 — Partido (según “partido seleccionado”)
             </div>
             <div className="mt-1 text-xs text-slate-700">Bloqueado hasta aprobar Nivel 1 (23 buenas).</div>
           </div>
@@ -1315,13 +1374,13 @@ else setBad((x) => x + 1);
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">
-              Nivel 2 — Partido (según “Alianza para el Progreso”)
+              Nivel 2 — Partido (según “partido seleccionado”)
             </div>
             <div className="mt-1 text-xs text-slate-700">
               🔒 Bloqueado temporalmente por {formatRemaining(lockUntil - nowTick)}.
             </div>
             <div className="mt-2 text-[11px] text-slate-600">
-              Te recomendamos revisar “Alianza para el Progreso” y volver luego.
+              Te recomendamos revisar “partido seleccionado” y volver luego.
             </div>
           </div>
 
@@ -1348,7 +1407,7 @@ else setBad((x) => x + 1);
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-extrabold text-slate-900">
-            Nivel 2 — Partido (según “Alianza para el Progreso”)
+            Nivel 2 — Partido (según “partido seleccionado”)
           </div>
           <div className="mt-1 text-xs text-slate-700">
             ✅ Desbloqueado • {TOTAL} preguntas • Umbral: <b>{PASS}</b> • {QUESTION_SEC}s/pregunta • Pool:{" "}
@@ -1359,7 +1418,7 @@ else setBad((x) => x + 1);
             Intentos restantes: <b>{attemptsLeft}</b> de {ATTEMPTS_MAX}
             {locked && (
               <span className="ml-2 text-red-700 font-semibold">
-                ⏳ Bloqueado por {formatRemaining(lockUntil - nowTick)} — revisa “Alianza para el Progreso” y vuelve luego.
+                ⏳ Bloqueado por {formatRemaining(lockUntil - nowTick)} — revisa “partido seleccionado” y vuelve luego.
               </span>
             )}
           </div>
@@ -1821,7 +1880,7 @@ export default function RetoCiudadanoPrincipalPage() {
       setPremioCheckLoading(false);
     }
   }
-  const [partyId, setPartyId] = useState<string>("perufederal");
+  const [partyId, setPartyId] = useState<string>("app");
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [partyLoading, setPartyLoading] = useState(false);
   const [partyError, setPartyError] = useState<string | null>(null);
