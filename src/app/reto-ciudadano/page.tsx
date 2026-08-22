@@ -1,31 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { useEffect, useState } from "react";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 
 const PREMIO_ACTIVO = false;
 
-function getOrCreateDeviceId() {
-  if (typeof window === "undefined") return null;
-  const key = "vc_device_id";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-  const id = "DEV-" + crypto.randomUUID();
-  window.localStorage.setItem(key, id);
-  return id;
-}
-
 export default function RetoCiudadanoPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
-    const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
-  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [checkingData, setCheckingData] = useState(true);
   const [hasData, setHasData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -35,26 +17,33 @@ export default function RetoCiudadanoPage() {
   const [loginCodigoLoading, setLoginCodigoLoading] = useState(false);
   const [loginCodigoError, setLoginCodigoError] = useState("");
   const [registered, setRegistered] = useState(false);
- 
-  async function loadParticipant(currentDeviceId: string) {
+  async function loadParticipant() {
     setCheckingData(true);
     setDataError(null);
 
     try {
-      const { data, error } = await supabase
-        .from("project_participants")
-        .select("*")
-        .eq("device_id", currentDeviceId)
-        .maybeSingle();
+      const res = await fetch("/api/participant/session", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => ({}));
 
-      if (error) throw new Error(error.message);
+      if (!res.ok || data?.ok !== true) {
+        throw new Error("No se pudo verificar la sesión.");
+      }
 
-      setParticipant(data ?? null);
-      setHasData(!!data);
+      const currentParticipant =
+        data?.authenticated === true && data?.participant
+          ? data.participant
+          : null;
+
+      setParticipant(currentParticipant);
+      setHasData(Boolean(currentParticipant));
     } catch (e: any) {
       setParticipant(null);
       setHasData(false);
-      setDataError(e?.message ?? String(e));
+      setDataError(e?.message ?? "No se pudo verificar la sesión.");
     } finally {
       setCheckingData(false);
     }
@@ -74,37 +63,28 @@ export default function RetoCiudadanoPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from("project_participants")
-        .select("*")
-        .eq("codigo_acceso", codigo)
-        .maybeSingle();
+      const res = await fetch("/api/participant/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ codigo_acceso: codigo }),
+      });
+      const data = await res.json().catch(() => ({}));
 
-      if (error) throw new Error(error.message);
-
-      if (!data) {
-        setLoginCodigoError("Código de acceso no válido");
-        setLoginCodigoLoading(false);
-        return;
+      if (!res.ok || data?.ok !== true || data?.authenticated !== true) {
+        if (res.status === 401 || data?.error === "credentials_invalid") {
+          throw new Error("Código de acceso no válido");
+        }
+        if (res.status === 429) {
+          throw new Error("Demasiados intentos. Intenta nuevamente más tarde.");
+        }
+        throw new Error("No se pudo iniciar sesión");
       }
 
-      if (!deviceId) {
-        setLoginCodigoError("No se pudo identificar tu dispositivo.");
-        setLoginCodigoLoading(false);
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from("project_participants")
-        .update({ device_id: deviceId })
-        .eq("id", data.id);
-
-      if (updateError) throw new Error(updateError.message);
-
-      await loadParticipant(deviceId);
+      await loadParticipant();
       setCodigoAcceso("");
       setLoginCodigoError("✅ Sesión iniciada correctamente");
-      setTimeout(() => setLoginCodigoError(""), 3000);
+      window.setTimeout(() => setLoginCodigoError(""), 3000);
     } catch (err: any) {
       setLoginCodigoError(err?.message || "Error al iniciar sesión");
     } finally {
@@ -113,18 +93,15 @@ export default function RetoCiudadanoPage() {
   }
 
   useEffect(() => {
-    setDeviceId(getOrCreateDeviceId());
+    void loadParticipant();
+    // La identidad se resuelve mediante una cookie httpOnly segura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
   if (typeof window === "undefined") return;
   const params = new URLSearchParams(window.location.search);
   setRegistered(params.get("registered") === "true");
 }, []);
-
-  useEffect(() => {
-    if (!deviceId) return;
-    void loadParticipant(deviceId);
-  }, [deviceId]);
 
   useEffect(() => {
     const visibleParts: string[] = [

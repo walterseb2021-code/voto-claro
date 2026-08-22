@@ -58,15 +58,6 @@ type PartiesAPI = {
   count: number;
   partyIds: string[];
 };
-function getOrCreateDeviceId() {
-  if (typeof window === "undefined") return null;
-  const key = "vc_device_id";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-  const id = "DEV-" + crypto.randomUUID();
-  window.localStorage.setItem(key, id);
-  return id;
-}
 /** Normaliza texto + repara mojibake típico (UTF-8 leído como latin1) */
 function fixMojibake(s: string) {
   const str = s ?? "";
@@ -1676,8 +1667,6 @@ export default function RetoCiudadanoPrincipalPage() {
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     return createClient(url, key);
   }, []);
-
-  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [checkingData, setCheckingData] = useState(true);
   const [hasData, setHasData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -1690,31 +1679,39 @@ export default function RetoCiudadanoPrincipalPage() {
   const [premioCheckLoading, setPremioCheckLoading] = useState(false);
   const [premioCheckError, setPremioCheckError] = useState<string | null>(null);
   const [premioHabilitado, setPremioHabilitado] = useState(false);
- 
-        async function loadParticipant(currentDeviceId: string) {
+  async function loadParticipant() {
     setCheckingData(true);
     setDataError(null);
 
     try {
-      const { data, error } = await supabase
-        .from("project_participants")
-        .select("*")
-        .eq("device_id", currentDeviceId)
-        .maybeSingle();
+      const res = await fetch("/api/participant/session", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => ({}));
 
-      if (error) throw new Error(error.message);
+      if (!res.ok || data?.ok !== true) {
+        throw new Error("No se pudo verificar la sesión.");
+      }
 
-      setParticipant(data ?? null);
-      setHasData(!!data);
+      const currentParticipant =
+        data?.authenticated === true && data?.participant
+          ? data.participant
+          : null;
+
+      setParticipant(currentParticipant);
+      setHasData(Boolean(currentParticipant));
     } catch (e: any) {
       setParticipant(null);
       setHasData(false);
-      setDataError(e?.message ?? String(e));
+      setDataError(e?.message ?? "No se pudo verificar la sesión.");
     } finally {
       setCheckingData(false);
     }
   }
-       async function handleLoginConCodigo(e: React.FormEvent<HTMLFormElement>) {
+
+  async function handleLoginConCodigo(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoginCodigoLoading(true);
     setLoginCodigoError("");
@@ -1728,44 +1725,36 @@ export default function RetoCiudadanoPrincipalPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from("project_participants")
-        .select("*")
-        .eq("codigo_acceso", codigo)
-        .maybeSingle();
+      const res = await fetch("/api/participant/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ codigo_acceso: codigo }),
+      });
+      const data = await res.json().catch(() => ({}));
 
-      if (error) throw new Error(error.message);
-
-      if (!data) {
-        setLoginCodigoError("Código de acceso no válido");
-        setLoginCodigoLoading(false);
-        return;
+      if (!res.ok || data?.ok !== true || data?.authenticated !== true) {
+        if (res.status === 401 || data?.error === "credentials_invalid") {
+          throw new Error("Código de acceso no válido");
+        }
+        if (res.status === 429) {
+          throw new Error("Demasiados intentos. Intenta nuevamente más tarde.");
+        }
+        throw new Error("No se pudo iniciar sesión");
       }
 
-      if (!deviceId) {
-        setLoginCodigoError("No se pudo identificar tu dispositivo.");
-        setLoginCodigoLoading(false);
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from("project_participants")
-        .update({ device_id: deviceId })
-        .eq("id", data.id);
-
-      if (updateError) throw new Error(updateError.message);
-
-      await loadParticipant(deviceId);
+      await loadParticipant();
       setCodigoAcceso("");
       setLoginCodigoError("✅ Sesión iniciada correctamente");
-      setTimeout(() => setLoginCodigoError(""), 3000);
+      window.setTimeout(() => setLoginCodigoError(""), 3000);
     } catch (err: any) {
       setLoginCodigoError(err?.message || "Error al iniciar sesión");
     } finally {
       setLoginCodigoLoading(false);
     }
   }
-    async function validarPremioSilenciosamente() {
+
+  async function validarPremioSilenciosamente() {
     if (!PREMIO_ACTIVO) {
       setPremioCheckLoading(false);
       setPremioCheckError(null);
@@ -1783,7 +1772,6 @@ export default function RetoCiudadanoPrincipalPage() {
     const celular = String(participant?.phone ?? participant?.celular ?? "").trim();
     const email = String(participant?.email ?? "").trim();
     const group_code = String(participant?.group_code ?? "GRUPOA").trim();
-    const currentDeviceId = String(deviceId ?? participant?.device_id ?? "").trim();
 
     if (!dni || !celular || !email || !group_code) {
       setPremioHabilitado(false);
@@ -1805,7 +1793,6 @@ export default function RetoCiudadanoPrincipalPage() {
           dni,
           celular,
           email,
-          device_id: currentDeviceId,
           group_code,
         }),
       });
@@ -1852,15 +1839,11 @@ export default function RetoCiudadanoPrincipalPage() {
     error: string | null;
     ganadoresCount: number;
   } | null>(null);
-       useEffect(() => {
-    setDeviceId(getOrCreateDeviceId());
-  }, []);
-
   useEffect(() => {
-    if (!deviceId) return;
-    void loadParticipant(deviceId);
+    void loadParticipant();
+    // La identidad se resuelve mediante una cookie httpOnly segura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId]);
+  }, []);
 
     useEffect(() => {
     if (!PREMIO_ACTIVO && mode === "con_premio") {
@@ -1887,7 +1870,7 @@ export default function RetoCiudadanoPrincipalPage() {
 
     void validarPremioSilenciosamente();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, hasData, participant?.id, deviceId]);
+  }, [mode, hasData, participant?.id]);
 
   function hardResetToLevel1() {
     setNivel1Passed(false);

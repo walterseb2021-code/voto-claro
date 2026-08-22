@@ -19,18 +19,6 @@ type CaminoWinner = {
   premio: string;
 };
 
-function getOrCreateDeviceId() {
-  if (typeof window === "undefined") return null;
-
-  const key = "vc_device_id";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-
-  const id = "DEV-" + crypto.randomUUID();
-  window.localStorage.setItem(key, id);
-  return id;
-}
-
 export default function CaminoCiudadanoPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
   const introNarratedRef = useRef(false);
@@ -44,8 +32,6 @@ export default function CaminoCiudadanoPage() {
   const [mode, setMode] = useState<PlayMode>("sin_premio");
   const [caminoState, setCaminoState] =
     useState<CaminoCiudadanoRuntimeState | null>(null);
-
-  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [participant, setParticipant] = useState<any>(null);
   const [hasData, setHasData] = useState(false);
 
@@ -77,29 +63,30 @@ export default function CaminoCiudadanoPage() {
 
   return () => window.clearTimeout(t);
 }, []);
-
   useEffect(() => {
-    setDeviceId(getOrCreateDeviceId());
-  }, []);
-
-  useEffect(() => {
-    if (!deviceId) return;
-
     let alive = true;
 
     async function loadParticipant() {
       try {
-        const { data, error } = await supabase
-          .from("project_participants")
-          .select("*")
-          .eq("device_id", deviceId)
-          .maybeSingle();
+        const res = await fetch("/api/participant/session", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const data = await res.json().catch(() => ({}));
 
-        if (error) throw error;
+        if (!res.ok || data?.ok !== true) {
+          throw new Error("session_unavailable");
+        }
         if (!alive) return;
 
-        setParticipant(data ?? null);
-        setHasData(!!data);
+        const currentParticipant =
+          data?.authenticated === true && data?.participant
+            ? data.participant
+            : null;
+
+        setParticipant(currentParticipant);
+        setHasData(Boolean(currentParticipant));
       } catch {
         if (!alive) return;
         setParticipant(null);
@@ -112,7 +99,7 @@ export default function CaminoCiudadanoPage() {
     return () => {
       alive = false;
     };
-  }, [deviceId, supabase]);
+  }, []);
 
   async function cargarGanadoresCamino() {
     setGanadoresLoading(true);
@@ -204,7 +191,7 @@ export default function CaminoCiudadanoPage() {
         nivel: 30,
         segmento: 30,
         premio: "Camino Ciudadano - selección trimestral",
-        device_id: deviceId || "WEB",
+        device_id: "WEB",
         group_code: groupCode,
       });
 
