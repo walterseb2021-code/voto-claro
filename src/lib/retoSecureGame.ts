@@ -343,16 +343,15 @@ function parseSessionRow(value: unknown): RetoSessionRow | null {
 const SESSION_SELECT =
   "id,participant_id,group_code,game_code,game_mode,status,state_version,state,started_at,updated_at,expires_at,finished_at";
 
-export async function loadActiveRetoSession(
+export async function loadAnyActiveRetoSession(
   supabase: RetoAdminClient,
   participantId: string,
-  group: string,
   gameCode: RetoGameCode
 ): Promise<
   | { ok: true; session: RetoSessionRow | null }
   | { ok: false; reason: "unavailable" | "invalid_state" }
 > {
-  if (!isUuid(participantId) || !GROUP_RE.test(group)) {
+  if (!isUuid(participantId)) {
     return { ok: false, reason: "invalid_state" };
   }
 
@@ -381,12 +380,38 @@ export async function loadActiveRetoSession(
     return { ok: false, reason: "invalid_state" };
   }
 
-  if (session.group_code !== group) {
+  return { ok: true, session };
+}
+
+export async function loadActiveRetoSession(
+  supabase: RetoAdminClient,
+  participantId: string,
+  group: string,
+  gameCode: RetoGameCode
+): Promise<
+  | { ok: true; session: RetoSessionRow | null }
+  | { ok: false; reason: "unavailable" | "invalid_state" }
+> {
+  if (!GROUP_RE.test(group)) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const active = await loadAnyActiveRetoSession(
+    supabase,
+    participantId,
+    gameCode
+  );
+
+  if (!active.ok || !active.session) {
+    return active;
+  }
+
+  if (active.session.group_code !== group) {
     console.error("[reto-secure-game] active session group mismatch");
     return { ok: false, reason: "invalid_state" };
   }
 
-  return { ok: true, session };
+  return active;
 }
 
 export function isRetoSessionExpired(session: RetoSessionRow, now = Date.now()) {
@@ -553,6 +578,60 @@ export async function updateRetoSessionState(
     : { ok: false, reason: "invalid_state" };
 }
 
+export async function getPrincipalPrizeStartLock(
+  supabase: RetoAdminClient,
+  participantId: string,
+  now = Date.now()
+): Promise<
+  | { ok: true; locked: false; lockedUntil: null }
+  | { ok: true; locked: true; lockedUntil: string }
+  | { ok: false; reason: "unavailable" | "invalid_state" }
+> {
+  if (!isUuid(participantId) || !Number.isFinite(now)) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const lockMs = RETO_PRINCIPAL_RULES.prizeAttempt.lockSec * 1000;
+  const cutoff = new Date(now - lockMs).toISOString();
+
+  const { data, error } = await supabase
+    .from("reto_game_sessions")
+    .select("started_at,status")
+    .eq("participant_id", participantId)
+    .eq("game_code", "principal")
+    .eq("game_mode", "con_premio")
+    .neq("status", "revoked")
+    .gte("started_at", cutoff)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[reto-secure-game] principal lock lookup failed");
+    return { ok: false, reason: "unavailable" };
+  }
+
+  if (!data) {
+    return { ok: true, locked: false, lockedUntil: null };
+  }
+
+  const startedAt = new Date(String(data.started_at ?? "")).getTime();
+  if (!Number.isFinite(startedAt)) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const lockedUntilMs = startedAt + lockMs;
+  if (lockedUntilMs <= now) {
+    return { ok: true, locked: false, lockedUntil: null };
+  }
+
+  return {
+    ok: true,
+    locked: true,
+    lockedUntil: new Date(lockedUntilMs).toISOString(),
+  };
+}
+
 export function secureRandomDieRoll() {
   return randomInt(1, 7);
 }
@@ -636,8 +715,11 @@ export async function selectSecureRetoQuestion(
     (candidate) => !uniqueExcludeIds.includes(candidate.id)
   );
 
-  const pool = unseen.length > 0 ? unseen : candidates;
-  const picked = pool[randomInt(0, pool.length)];
+  if (unseen.length === 0) {
+    return { ok: true, question: null };
+  }
+
+  const picked = unseen[randomInt(0, unseen.length)];
 
   return { ok: true, question: picked };
 }
