@@ -1,4 +1,4 @@
-﻿{
+{
   "version": 1,
   "mode_defaults": {
     "allow_premios": false,
@@ -9,7 +9,7 @@
     "level2": { "total_questions": 25, "pass_score": 23, "per_question_max_sec": 10, "pool_total_sec": 280 }
   },
   "level2_party": {
-    "partyId": "partido-democratico-federal",
+    "partyId": "app",
     "source": "manual_config"
   }
 }
