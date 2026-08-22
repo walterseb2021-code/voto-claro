@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 
 import { participantJson } from "@/lib/participantApi";
 import {
+  finalizeCaminoWinAtomic,
   isRetoSessionExpired,
   loadActiveRetoSession,
   loadSecureRetoQuestionById,
@@ -315,19 +316,33 @@ export async function POST(req: NextRequest) {
       won,
     };
 
-    const updated = await updateRetoSessionState(
-      context.supabase,
-      session,
-      nextState,
-      gameOver
-        ? {
-            status: won ? "completed" : "failed",
-            finish: true,
-          }
-        : undefined
-    );
+    const updated = won
+      ? await finalizeCaminoWinAtomic(
+          context.supabase,
+          session,
+          nextState
+        )
+      : await updateRetoSessionState(
+          context.supabase,
+          session,
+          nextState,
+          gameOver
+            ? {
+                status: "failed",
+                finish: true,
+              }
+            : undefined
+        );
 
     if (!updated.ok) {
+      if (updated.reason === "expired") {
+        return participantJson(410, {
+          ok: false,
+          code: "RETO_SESSION_EXPIRED",
+          error: "La sesiÃ³n de juego venciÃ³.",
+        });
+      }
+
       return updated.reason === "unavailable"
         ? retoUnavailable("RETO_SESSION_UPDATE_FAILED")
         : retoConflict();

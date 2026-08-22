@@ -414,6 +414,50 @@ export async function loadActiveRetoSession(
   return active;
 }
 
+export async function loadRetoSessionById(
+  supabase: RetoAdminClient,
+  participantId: string,
+  group: string,
+  gameCode: RetoGameCode,
+  sessionId: string
+): Promise<
+  | { ok: true; session: RetoSessionRow | null }
+  | { ok: false; reason: "unavailable" | "invalid_state" }
+> {
+  if (
+    !isUuid(participantId) ||
+    !isUuid(sessionId) ||
+    !GROUP_RE.test(group)
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const { data, error } = await supabase
+    .from("reto_game_sessions")
+    .select(SESSION_SELECT)
+    .eq("id", sessionId)
+    .eq("participant_id", participantId)
+    .eq("group_code", group)
+    .eq("game_code", gameCode)
+    .eq("game_mode", "con_premio")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[reto-secure-game] session by id lookup failed");
+    return { ok: false, reason: "unavailable" };
+  }
+
+  if (!data) {
+    return { ok: true, session: null };
+  }
+
+  const session = parseSessionRow(data);
+  return session
+    ? { ok: true, session }
+    : { ok: false, reason: "invalid_state" };
+}
+
 export function isRetoSessionExpired(session: RetoSessionRow, now = Date.now()) {
   const expiresAt = new Date(session.expires_at).getTime();
   return !Number.isFinite(expiresAt) || expiresAt <= now;
@@ -644,6 +688,246 @@ export function isWinningRouletteSegment(segment: number) {
   return RETO_PRINCIPAL_RULES.level3.winningSegments.includes(
     segment as 2 | 6
   );
+}
+
+type RetoAtomicFinalizeFailure =
+  | "conflict"
+  | "expired"
+  | "unavailable"
+  | "invalid_state";
+
+function firstRpcRow(value: unknown): JsonObject | null {
+  if (Array.isArray(value)) {
+    return value.length > 0 && isObject(value[0]) ? value[0] : null;
+  }
+
+  return isObject(value) ? value : null;
+}
+
+function mapAtomicFinalizeError(error: unknown): RetoAtomicFinalizeFailure {
+  const message = isObject(error)
+    ? String(error.message ?? error.details ?? "")
+    : String(error ?? "");
+
+  if (message.includes("EXPIRED")) return "expired";
+
+  if (
+    message.includes("STATE_CONFLICT") ||
+    message.includes("SESSION_NOT_ACTIVE") ||
+    message.includes("STATE_INVALID") ||
+    message.includes("NEXT_STATE_INVALID") ||
+    message.includes("TURNS_INVALID")
+  ) {
+    return "conflict";
+  }
+
+  return "unavailable";
+}
+
+export async function finalizePrincipalSpinAtomic(
+  supabase: RetoAdminClient,
+  session: RetoSessionRow
+): Promise<
+  | {
+      ok: true;
+      session: RetoSessionRow;
+      segment: number;
+      isPrize: boolean;
+      awarded: boolean;
+      prizeLockedUntil: string | null;
+    }
+  | { ok: false; reason: RetoAtomicFinalizeFailure }
+> {
+  if (
+    session.game_code !== "principal" ||
+    session.game_mode !== "con_premio" ||
+    session.status !== "active"
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const state = parsePrincipalPrizeState(session.state);
+  if (
+    !state ||
+    state.phase !== "roulette" ||
+    !state.level1_passed ||
+    !state.level2_passed ||
+    state.roulette_used
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const segment = secureRandomRouletteSegment();
+
+  const { data, error } = await supabase.rpc(
+    "finalize_reto_principal_spin_atomic",
+    {
+      p_session_id: session.id,
+      p_participant_id: session.participant_id,
+      p_group_code: session.group_code,
+      p_expected_state_version: session.state_version,
+      p_segment: segment,
+    }
+  );
+
+  if (error) {
+    console.error("[reto-secure-game] principal atomic finalization failed");
+    return { ok: false, reason: mapAtomicFinalizeError(error) };
+  }
+
+  const row = firstRpcRow(data);
+  const returnedSegment = Number(row?.segment);
+  const returnedVersion = Number(row?.state_version);
+  const isPrize = row?.is_prize;
+  const awarded = row?.awarded;
+  const prizeLockedUntil =
+    row?.prize_locked_until === null || row?.prize_locked_until === undefined
+      ? null
+      : String(row.prize_locked_until);
+
+  if (
+    !row ||
+    returnedSegment !== segment ||
+    returnedVersion !== session.state_version + 1 ||
+    typeof isPrize !== "boolean" ||
+    typeof awarded !== "boolean" ||
+    (prizeLockedUntil !== null && !isIsoDate(prizeLockedUntil))
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const loaded = await loadRetoSessionById(
+    supabase,
+    session.participant_id,
+    session.group_code,
+    "principal",
+    session.id
+  );
+
+  if (!loaded.ok) return loaded;
+  if (!loaded.session || loaded.session.status !== "completed") {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const completedState = parsePrincipalPrizeState(loaded.session.state);
+  if (
+    !completedState ||
+    completedState.phase !== "completed" ||
+    !completedState.roulette_used ||
+    completedState.roulette_result !== segment
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  return {
+    ok: true,
+    session: loaded.session,
+    segment,
+    isPrize,
+    awarded,
+    prizeLockedUntil,
+  };
+}
+
+export async function finalizeCaminoWinAtomic(
+  supabase: RetoAdminClient,
+  session: RetoSessionRow,
+  nextState: CaminoPrizeState
+): Promise<
+  | {
+      ok: true;
+      session: RetoSessionRow;
+      qualifierId: string;
+      alreadyQualified: boolean;
+      awardYear: number;
+      awardQuarter: number;
+    }
+  | { ok: false; reason: RetoAtomicFinalizeFailure }
+> {
+  if (
+    session.game_code !== "camino" ||
+    session.game_mode !== "con_premio" ||
+    session.status !== "active"
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const validNextState = parseCaminoPrizeState(nextState);
+  if (
+    !validNextState ||
+    !validNextState.won ||
+    validNextState.position !== RETO_CAMINO_RULES.totalSquares ||
+    validNextState.current_question_id !== null ||
+    validNextState.question_deadline !== null ||
+    validNextState.pending_roll !== null
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "finalize_reto_camino_win_atomic",
+    {
+      p_session_id: session.id,
+      p_participant_id: session.participant_id,
+      p_group_code: session.group_code,
+      p_expected_state_version: session.state_version,
+      p_next_state: nextState,
+    }
+  );
+
+  if (error) {
+    console.error("[reto-secure-game] camino atomic finalization failed");
+    return { ok: false, reason: mapAtomicFinalizeError(error) };
+  }
+
+  const row = firstRpcRow(data);
+  const returnedVersion = Number(row?.state_version);
+  const qualifierId = String(row?.qualifier_id ?? "").trim();
+  const alreadyQualified = row?.already_qualified;
+  const awardYear = Number(row?.award_year);
+  const awardQuarter = Number(row?.award_quarter);
+
+  if (
+    !row ||
+    returnedVersion !== session.state_version + 1 ||
+    !isUuid(qualifierId) ||
+    typeof alreadyQualified !== "boolean" ||
+    !isIntegerBetween(awardYear, 2020, 2200) ||
+    !isIntegerBetween(awardQuarter, 1, 4)
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const loaded = await loadRetoSessionById(
+    supabase,
+    session.participant_id,
+    session.group_code,
+    "camino",
+    session.id
+  );
+
+  if (!loaded.ok) return loaded;
+  if (!loaded.session || loaded.session.status !== "completed") {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const completedState = parseCaminoPrizeState(loaded.session.state);
+  if (
+    !completedState ||
+    !completedState.won ||
+    completedState.position !== RETO_CAMINO_RULES.totalSquares
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  return {
+    ok: true,
+    session: loaded.session,
+    qualifierId,
+    alreadyQualified,
+    awardYear,
+    awardQuarter,
+  };
 }
 
 export async function selectSecureRetoQuestion(
