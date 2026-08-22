@@ -24,6 +24,7 @@ export type RetoSecureQuestion = {
 };
 
 export type RetoPrincipalProgress = {
+  game_code?: "principal";
   phase: "level1" | "level2" | "roulette" | "failed" | "completed";
   level: 1 | 2 | 3;
   question_index: number;
@@ -37,6 +38,7 @@ export type RetoPrincipalProgress = {
 };
 
 export type RetoCaminoProgress = {
+  game_code?: "camino";
   position: number;
   turns_left: number;
   won: boolean;
@@ -46,6 +48,7 @@ export type RetoSecureStartResponse = {
   ok: true;
   resumed: boolean;
   session: RetoSecureSession;
+  progress: RetoPrincipalProgress | RetoCaminoProgress;
 };
 
 export type RetoPrincipalQuestionResponse = {
@@ -156,6 +159,31 @@ function isSessionStatus(value: unknown): value is RetoSecureSessionStatus {
   );
 }
 
+function isPrincipalPhase(
+  value: unknown
+): value is RetoPrincipalProgress["phase"] {
+  return (
+    value === "level1" ||
+    value === "level2" ||
+    value === "roulette" ||
+    value === "failed" ||
+    value === "completed"
+  );
+}
+
+function isLevel(value: unknown): value is 1 | 2 | 3 {
+  return value === 1 || value === 2 || value === 3;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= Number.MAX_SAFE_INTEGER
+  );
+}
+
 function parseSession(value: unknown): RetoSecureSession | null {
   if (!isRecord(value)) return null;
 
@@ -191,6 +219,72 @@ function parseSession(value: unknown): RetoSecureSession | null {
     started_at: startedAt,
     expires_at: expiresAt,
     finished_at: finishedAt,
+  };
+}
+
+function parsePrincipalProgress(value: unknown): RetoPrincipalProgress | null {
+  if (!isRecord(value)) return null;
+
+  if (
+    value.game_code !== undefined &&
+    value.game_code !== "principal"
+  ) {
+    return null;
+  }
+
+  if (
+    !isPrincipalPhase(value.phase) ||
+    !isLevel(value.level) ||
+    !isNonNegativeInteger(value.question_index) ||
+    !isNonNegativeInteger(value.good) ||
+    !isNonNegativeInteger(value.bad) ||
+    !isNonNegativeInteger(value.skipped) ||
+    typeof value.level1_passed !== "boolean" ||
+    typeof value.level2_passed !== "boolean" ||
+    !(value.party_id === null || typeof value.party_id === "string") ||
+    !(
+      value.pool_deadline === null ||
+      typeof value.pool_deadline === "string"
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    game_code: "principal",
+    phase: value.phase,
+    level: value.level,
+    question_index: value.question_index,
+    good: value.good,
+    bad: value.bad,
+    skipped: value.skipped,
+    level1_passed: value.level1_passed,
+    level2_passed: value.level2_passed,
+    party_id: value.party_id,
+    pool_deadline: value.pool_deadline,
+  };
+}
+
+function parseCaminoProgress(value: unknown): RetoCaminoProgress | null {
+  if (!isRecord(value)) return null;
+
+  if (value.game_code !== undefined && value.game_code !== "camino") {
+    return null;
+  }
+
+  if (
+    !isNonNegativeInteger(value.position) ||
+    !isNonNegativeInteger(value.turns_left) ||
+    typeof value.won !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    game_code: "camino",
+    position: value.position,
+    turns_left: value.turns_left,
+    won: value.won,
   };
 }
 
@@ -271,10 +365,24 @@ export async function startSecureReto(
     );
   }
 
+  const progress =
+    gameCode === "principal"
+      ? parsePrincipalProgress(payload.progress)
+      : parseCaminoProgress(payload.progress);
+
+  if (!progress) {
+    throw new RetoSecureClientError(
+      502,
+      "RETO_CLIENT_RESPONSE_INVALID",
+      "El servidor devolviÃ³ un progreso de juego invÃ¡lido."
+    );
+  }
+
   return {
     ok: true,
     resumed: payload.resumed,
     session,
+    progress,
   };
 }
 

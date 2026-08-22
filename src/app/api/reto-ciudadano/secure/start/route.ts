@@ -9,6 +9,9 @@ import {
   getPrincipalPrizeStartLock,
   isRetoSessionExpired,
   loadAnyActiveRetoSession,
+  parseCaminoPrizeState,
+  parsePrincipalPrizeState,
+  type RetoSessionRow,
 } from "@/lib/retoSecureGame";
 import {
   parseRetoGameCode,
@@ -21,6 +24,37 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function publicStartProgress(session: RetoSessionRow) {
+  if (session.game_code === "principal") {
+    const state = parsePrincipalPrizeState(session.state);
+    if (!state) return null;
+
+    return {
+      game_code: "principal" as const,
+      phase: state.phase,
+      level: state.level,
+      question_index: state.question_index,
+      good: state.good,
+      bad: state.bad,
+      skipped: state.skipped,
+      level1_passed: state.level1_passed,
+      level2_passed: state.level2_passed,
+      party_id: state.party_id,
+      pool_deadline: state.pool_deadline,
+    };
+  }
+
+  const state = parseCaminoPrizeState(session.state);
+  if (!state) return null;
+
+  return {
+    game_code: "camino" as const,
+    position: state.position,
+    turns_left: state.turns_left,
+    won: state.won,
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const prelude = await resolveRetoPrizeMutation(req, ["game_code"]);
@@ -31,7 +65,7 @@ export async function POST(req: NextRequest) {
       return participantJson(400, {
         ok: false,
         code: "RETO_GAME_INVALID",
-        error: "Juego inválido.",
+        error: "Juego invÃ¡lido.",
       });
     }
 
@@ -66,10 +100,14 @@ export async function POST(req: NextRequest) {
         return retoConflict("RETO_SESSION_GROUP_MISMATCH");
       }
 
+      const progress = publicStartProgress(active.session);
+      if (!progress) return retoConflict("RETO_STATE_INVALID");
+
       return participantJson(200, {
         ok: true,
         resumed: true,
         session: publicRetoSession(active.session),
+        progress,
       });
     }
 
@@ -114,10 +152,14 @@ export async function POST(req: NextRequest) {
         : retoConflict();
     }
 
+    const progress = publicStartProgress(created.session);
+    if (!progress) return retoConflict("RETO_STATE_INVALID");
+
     return participantJson(201, {
       ok: true,
       resumed: false,
       session: publicRetoSession(created.session),
+      progress,
     });
   } catch {
     console.error("[reto-secure-start] unexpected failure");
