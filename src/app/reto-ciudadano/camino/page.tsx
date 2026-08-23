@@ -7,6 +7,7 @@ import CaminoCiudadano, {
   type CaminoCiudadanoRuntimeState,
 } from "../components/CaminoCiudadano";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
+import CaminoSecurePrizeFlow from "./CaminoSecurePrizeFlow";
 
 type PlayMode = "sin_premio" | "con_premio";
 
@@ -32,7 +33,6 @@ export default function CaminoCiudadanoPage() {
   const [mode, setMode] = useState<PlayMode>("sin_premio");
   const [caminoState, setCaminoState] =
     useState<CaminoCiudadanoRuntimeState | null>(null);
-  const [participant, setParticipant] = useState<any>(null);
   const [hasData, setHasData] = useState(false);
 
   const [winnerSaving, setWinnerSaving] = useState(false);
@@ -85,11 +85,9 @@ export default function CaminoCiudadanoPage() {
             ? data.participant
             : null;
 
-        setParticipant(currentParticipant);
         setHasData(Boolean(currentParticipant));
       } catch {
         if (!alive) return;
-        setParticipant(null);
         setHasData(false);
       }
     }
@@ -151,65 +149,6 @@ export default function CaminoCiudadanoPage() {
     void cargarGanadoresCamino();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ganadoresFiltro]);
-
-  async function registrarGanadorCamino() {
-    if (!PREMIO_ACTIVO) return;
-
-    if (mode !== "con_premio") return;
-
-    if (!participant) {
-      setWinnerMessage(
-        "Ganaste Camino Ciudadano, pero para quedar registrado en la modalidad con premio necesitas estar registrado o haber iniciado sesión desde Reto Ciudadano."
-      );
-      return;
-    }
-
-    const alias = String(participant.alias ?? participant.full_name ?? "").trim();
-    const dni = String(participant.dni ?? "").trim();
-    const celular = String(
-      participant.phone ?? participant.celular ?? ""
-    ).trim();
-    const email = String(participant.email ?? "").trim();
-    const groupCode = String(participant.group_code ?? "GRUPOA").trim();
-
-    if (!alias || !dni || !celular || !email) {
-      setWinnerMessage(
-        "Ganaste Camino Ciudadano, pero tu ficha no tiene todos los datos requeridos para premio: alias o nombre, DNI, celular y email."
-      );
-      return;
-    }
-
-    setWinnerSaving(true);
-    setWinnerMessage(null);
-
-    try {
-      const { error } = await supabase.from("reto_ganadores").insert({
-        alias,
-        dni,
-        celular,
-        email,
-        nivel: 30,
-        segmento: 30,
-        premio: "Camino Ciudadano - selección trimestral",
-        device_id: "WEB",
-        group_code: groupCode,
-      });
-
-      if (error) throw error;
-
-      setWinnerMessage(
-        "Ganaste Camino Ciudadano y quedaste registrado para la selección trimestral. De todos los ganadores acumulados durante el trimestre, VOTO CLARO escogerá a 5 ganadores para el evento trimestral."
-      );
-
-      await cargarGanadoresCamino();
-    } catch (e: any) {
-      setWinnerMessage(
-        e?.message || "No se pudo registrar el ganador de Camino Ciudadano."
-      );
-    } finally {
-      setWinnerSaving(false);
-    }
-  }
 
   useEffect(() => {
     if (!PREMIO_ACTIVO && mode === "con_premio") {
@@ -514,11 +453,20 @@ export default function CaminoCiudadanoPage() {
       </section>
 
       <section className="mt-5 grid grid-cols-1 gap-3">
-        <CaminoCiudadano
-          mode={PREMIO_ACTIVO ? mode : "sin_premio"}
-          onStateChange={setCaminoState}
-          onGameWin={registrarGanadorCamino}
-        />
+        {mode === "con_premio" ? (
+          !hasData ? (
+            <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+              🔒 Para jugar Camino Ciudadano con premio debes registrarte o iniciar sesión desde Reto Ciudadano.
+            </div>
+          ) : (
+            <CaminoSecurePrizeFlow onStateChange={setCaminoState} />
+          )
+        ) : (
+          <CaminoCiudadano
+            mode="sin_premio"
+            onStateChange={setCaminoState}
+          />
+        )}
       </section>
 
       <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-card-hover">
