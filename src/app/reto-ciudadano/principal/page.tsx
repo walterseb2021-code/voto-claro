@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
 import PrincipalSecurePrizeFlow from "./PrincipalSecurePrizeFlow";
 
@@ -1579,26 +1578,35 @@ function ListaGanadores(props: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
 
   async function cargarGanadores() {
     setLoading(true);
     setError(null);
 
     try {
-      const { data, error } = await supabase
-        .rpc("get_reto_ganadores", { filtro });
+      const params = new URLSearchParams({
+        game: "principal",
+        filter: filtro,
+      });
+      const res = await fetch(
+        `/api/reto-ciudadano/public-winners?${params.toString()}`,
+        {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+        }
+      );
+      const data = await res.json().catch(() => null);
 
-      if (error) throw error;
+      if (!res.ok || data?.ok !== true || !Array.isArray(data?.winners)) {
+        throw new Error(data?.error || "No se pudo cargar la lista de ganadores.");
+      }
 
-      setGanadores(data || []);
+      setGanadores(data.winners as Winner[]);
     } catch (e: any) {
       console.error("Error cargando ganadores:", e);
       setError(e?.message || "Error al cargar ganadores");
+      setGanadores([]);
     } finally {
       setLoading(false);
     }
@@ -1695,11 +1703,6 @@ function ListaGanadores(props: {
 
 export default function RetoCiudadanoPrincipalPage() {
     const { setPageContext, clearPageContext } = useAssistantRuntime();
-    const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
   const [checkingData, setCheckingData] = useState(true);
   const [hasData, setHasData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);

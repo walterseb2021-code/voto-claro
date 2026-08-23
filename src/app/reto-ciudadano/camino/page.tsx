@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { useEffect, useRef, useState } from "react";
 import CaminoCiudadano, {
   type CaminoCiudadanoRuntimeState,
 } from "../components/CaminoCiudadano";
@@ -16,7 +15,6 @@ const PREMIO_ACTIVO = false;
 type CaminoWinner = {
   alias: string;
   created_at: string;
-  segmento: number;
   premio: string;
 };
 
@@ -24,11 +22,6 @@ export default function CaminoCiudadanoPage() {
   const { setPageContext, clearPageContext } = useAssistantRuntime();
   const introNarratedRef = useRef(false);
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
 
   const [mode, setMode] = useState<PlayMode>("sin_premio");
   const [caminoState, setCaminoState] =
@@ -104,37 +97,27 @@ export default function CaminoCiudadanoPage() {
     setGanadoresError(null);
 
     try {
-      const filtroRpc = ganadoresFiltro === "TRIMESTRE" ? "TODOS" : ganadoresFiltro;
-
-      const { data, error } = await supabase.rpc("get_reto_ganadores", {
-        filtro: filtroRpc,
+      const params = new URLSearchParams({
+        game: "camino",
+        filter: ganadoresFiltro,
       });
-
-      if (error) throw error;
-
-      const list = Array.isArray(data) ? data : [];
-
-      const onlyCamino = list.filter((g: any) =>
-        String(g?.premio || "").toLowerCase().includes("camino ciudadano")
+      const res = await fetch(
+        `/api/reto-ciudadano/public-winners?${params.toString()}`,
+        {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+        }
       );
+      const data = await res.json().catch(() => null);
 
-      const now = new Date();
-      const month = now.getMonth();
-      const quarterStartMonth = Math.floor(month / 3) * 3;
-      const quarterStart = new Date(
-        now.getFullYear(),
-        quarterStartMonth,
-        1
-      ).getTime();
+      if (!res.ok || data?.ok !== true || !Array.isArray(data?.winners)) {
+        throw new Error(
+          data?.error || "No se pudo cargar la lista de Camino Ciudadano."
+        );
+      }
 
-      const filtered =
-        ganadoresFiltro === "TRIMESTRE"
-          ? onlyCamino.filter(
-              (g: any) => new Date(g.created_at).getTime() >= quarterStart
-            )
-          : onlyCamino;
-
-      setGanadores(filtered as CaminoWinner[]);
+      setGanadores(data.winners as CaminoWinner[]);
     } catch (e: any) {
       setGanadoresError(
         e?.message || "Error al cargar ganadores de Camino Ciudadano."
