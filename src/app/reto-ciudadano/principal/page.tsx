@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
+import PrincipalSecurePrizeFlow from "./PrincipalSecurePrizeFlow";
 
 type PlayMode = "sin_premio" | "con_premio";
 
@@ -1813,7 +1814,7 @@ export default function RetoCiudadanoPrincipalPage() {
     }
   }
 
-  async function validarPremioSilenciosamente() {
+  function validarPremioSilenciosamente() {
     if (!PREMIO_ACTIVO) {
       setPremioCheckLoading(false);
       setPremioCheckError(null);
@@ -1822,63 +1823,32 @@ export default function RetoCiudadanoPrincipalPage() {
     }
 
     if (!participant) {
+      setPremioCheckLoading(false);
       setPremioHabilitado(false);
       setPremioCheckError("No hay participante activo.");
       return;
     }
 
     const dni = String(participant?.dni ?? "").trim();
-    const celular = String(participant?.phone ?? participant?.celular ?? "").trim();
+    const celular = String(
+      participant?.phone ?? participant?.celular ?? ""
+    ).trim();
     const email = String(participant?.email ?? "").trim();
-    const group_code = String(participant?.group_code ?? "GRUPOA").trim();
 
-    if (!dni || !celular || !email || !group_code) {
+    if (!dni || !celular || !email) {
+      setPremioCheckLoading(false);
       setPremioHabilitado(false);
       setPremioCheckError(
-        "Tu ficha general no tiene todos los datos requeridos para premio (DNI, celular, email y grupo)."
+        "Tu ficha general no tiene todos los datos requeridos para premio (DNI, celular y email)."
       );
       return;
     }
 
-    setPremioCheckLoading(true);
+    // Esta bandera solo controla la interfaz. La autorización real, el grupo,
+    // el bloqueo de 24 horas y el estado del juego se validan en /secure/*.
+    setPremioCheckLoading(false);
     setPremioCheckError(null);
-    setPremioHabilitado(false);
-
-    try {
-      const res = await fetch("/api/reto-ciudadano/premio/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dni,
-          celular,
-          email,
-          group_code,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        if (data?.error === "BLOQUEO_24H") {
-          setPremioCheckError("Tienes un bloqueo activo de 24 horas para jugar con premio.");
-          return;
-        }
-
-        if (data?.error === "BLOQUEO_PREMIO") {
-          setPremioCheckError("Ya tienes un bloqueo mensual activo por premio.");
-          return;
-        }
-
-        setPremioCheckError("No se pudo validar la modalidad con premio.");
-        return;
-      }
-
-      setPremioHabilitado(true);
-    } catch {
-      setPremioCheckError("Error de conexión al validar la modalidad con premio.");
-    } finally {
-      setPremioCheckLoading(false);
-    }
+    setPremioHabilitado(true);
   }
   const [partyId, setPartyId] = useState<string>("app");
   const [partyIds, setPartyIds] = useState<string[]>([]);
@@ -2396,88 +2366,63 @@ export default function RetoCiudadanoPrincipalPage() {
       )}
           
               <section className="vc-reto-levels mt-5 grid grid-cols-1 gap-3">
-           {mode === "con_premio" && !hasData ? (
-      <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
-  🔒 Para jugar con premio debes registrarte o iniciar sesión desde la ventana principal de Reto Ciudadano.
-</div>
-) : mode === "con_premio" && !premioCheckLoading && !premioHabilitado ? (
-  <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
-    🔒 La modalidad con premio no está habilitada en este momento.
-  </div>
-) : (
-  <Nivel1General
-    key={`l1-${sessionKey}-${mode}`}
-    mode={mode}
-    onStatus={(s) => {
-      setNivel1Good(s.good);
-      setNivel1Passed(s.passed);
-    }}
-  />
-)}
+        {mode === "con_premio" ? (
+          !hasData ? (
+            <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+              🔒 Para jugar con premio debes registrarte o iniciar sesión desde la ventana principal de Reto Ciudadano.
+            </div>
+          ) : premioCheckLoading ? (
+            <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+              Validando los datos mínimos del participante...
+            </div>
+          ) : !premioHabilitado ? (
+            <div className="rounded-2xl border bg-white p-4 shadow-sm text-sm font-semibold text-slate-700">
+              🔒 La modalidad con premio no está habilitada en este momento.
+              {premioCheckError ? (
+                <div className="mt-2 text-xs font-semibold text-rose-700">
+                  {premioCheckError}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <PrincipalSecurePrizeFlow />
+          )
+        ) : (
+          <>
+            <Nivel1General
+              key={`l1-${sessionKey}-sin_premio`}
+              mode="sin_premio"
+              onStatus={(s) => {
+                setNivel1Good(s.good);
+                setNivel1Passed(s.passed);
+              }}
+            />
 
-        <Nivel2Partido
-          key={`l2-${sessionKey}-${mode}`}
-          enabled={(mode === "sin_premio" || premioHabilitado) && nivel1Passed}
-          mode={mode}
-          nivel1Good={nivel1Good}
-          partyId={partyId}
-          setPartyId={setPartyId}
-          partyIds={partyIds}
-          partyLoading={partyLoading}
-          partyError={partyError}
-          onStatus={(s) => {
-            setNivel2Good(s.good);
-            setNivel2Passed(s.passed);
-          }}
-          onHardResetToLevel1={hardResetToLevel1}
-        />
+            <Nivel2Partido
+              key={`l2-${sessionKey}-sin_premio`}
+              enabled={nivel1Passed}
+              mode="sin_premio"
+              nivel1Good={nivel1Good}
+              partyId={partyId}
+              setPartyId={setPartyId}
+              partyIds={partyIds}
+              partyLoading={partyLoading}
+              partyError={partyError}
+              onStatus={(s) => {
+                setNivel2Good(s.good);
+                setNivel2Passed(s.passed);
+              }}
+              onHardResetToLevel1={hardResetToLevel1}
+            />
 
-        <Nivel3Ruleta
-          enabled={(mode === "sin_premio" || premioHabilitado) && nivel2Passed}
-          mode={mode}
-          onRestartToLevel1={hardResetToLevel1}
-          winnerData={winnerData}
-          onFinishPick={async (pick) => {
-            if (!PREMIO_ACTIVO || mode !== "con_premio") return;
-
-            const celularPremio = String(
-              participant?.phone ?? participant?.celular ?? winnerData?.celular ?? ""
-            ).trim();
-
-            if (!celularPremio) {
-              hardResetToLevel1();
-              return;
-            }
-
-            const isPrize = pick === 2 || pick === 6;
-
-            try {
-              if (isPrize) {
-                await fetch("/api/reto-ciudadano/premio/lockPrizeMonth", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    celular: celularPremio,
-                    prize_segment: pick,
-                    prize_note: "Premio ruleta",
-                  }),
-                });
-              } else {
-                await fetch("/api/reto-ciudadano/premio/lock24h", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ celular: celularPremio }),
-                });
-              }
-            } catch {}
-
-            setPremioHabilitado(false);
-
-            window.setTimeout(() => {
-              hardResetToLevel1();
-            }, 2400);
-          }}
-        />
+            <Nivel3Ruleta
+              enabled={nivel2Passed}
+              mode="sin_premio"
+              onRestartToLevel1={hardResetToLevel1}
+              winnerData={winnerData}
+            />
+          </>
+        )}
       </section>
       {/* ✅ LISTA DE GANADORES */}
       <ListaGanadores onStateChange={setGanadoresState} />
