@@ -584,10 +584,8 @@ function Nivel3Ruleta(props: {
   enabled: boolean;
   mode: PlayMode;
   onRestartToLevel1?: () => void;
-  onFinishPick?: (pick: number) => void;
-  winnerData?: { alias: string; celular: string; email: string; dni: string } | null;
 }) {
-  const { enabled, mode, onRestartToLevel1, onFinishPick, winnerData } = props;
+  const { enabled, mode, onRestartToLevel1 } = props;
 
   const [started, setStarted] = useState(false);
 
@@ -753,31 +751,6 @@ function Nivel3Ruleta(props: {
       setSpinsUsed((x) => x + 1);
       setSpinning(false);
 
-      // ✅ Si es premio en modo con premio Y tenemos datos del ganador, guardar en BD
-      if (PREMIO_ACTIVO && isPrize && mode === "con_premio" && winnerData) {
-        try {
-          const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-          );
-
-          await supabase.from("reto_ganadores").insert({
-            alias: winnerData.alias,
-            dni: winnerData.dni,
-            celular: winnerData.celular,
-            email: winnerData.email,
-            nivel: 3,
-            segmento: pick,
-            premio: "Premio ruleta",
-            device_id: "WEB",
-            group_code: "GRUPOA",
-          });
-        } catch (e) {
-          console.error("Error guardando ganador:", e);
-        }
-      }
-
-      onFinishPick?.(pick);
     }, 2800);
   }
 
@@ -1952,17 +1925,6 @@ export default function RetoCiudadanoPrincipalPage() {
     return mode === "sin_premio" ? "Sin premio" : "Con premio";
   }, [mode]);
 
-    // ✅ Datos del ganador tomados del participante general del app
-  const winnerData =
-    hasData && participant
-      ? {
-          alias: String(participant.alias ?? participant.full_name ?? "").trim(),
-          dni: String(participant.dni ?? "").trim(),
-          celular: String(participant.phone ?? participant.celular ?? "").trim(),
-          email: String(participant.email ?? "").trim(),
-        }
-      : null;
-
   useEffect(() => {
     const visibleParts: string[] = [];
 
@@ -2419,7 +2381,6 @@ export default function RetoCiudadanoPrincipalPage() {
               enabled={nivel2Passed}
               mode="sin_premio"
               onRestartToLevel1={hardResetToLevel1}
-              winnerData={winnerData}
             />
           </>
         )}
