@@ -67,7 +67,7 @@ export default function AdminHubPage() {
   const resetDevice = async (deviceId: string) => {
     if (
       !confirm(
-        `¿Estás seguro de resetear el dispositivo ${deviceId}?\n\nEsto eliminará:\n- Respuestas de intención de voto\n- Comentarios en foros\n- Registro de acceso\n- Datos del reto ciudadano`
+        `¿Estás seguro de resetear el dispositivo ${deviceId}?\n\nEsto eliminará:\n- Respuestas de intención de voto\n- Comentarios en foros\n- Registro de acceso`
       )
     ) {
       return;
@@ -459,7 +459,7 @@ export default function AdminHubPage() {
 
           <div className="mt-4 text-xs text-slate-500">
             * Al resetear un dispositivo, se eliminan sus datos de: Intención de
-            Voto, Comentarios y Reto Ciudadano.
+            Voto y Comentarios.
           </div>
         </div>
       </section>
