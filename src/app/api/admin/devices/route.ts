@@ -88,7 +88,6 @@ export async function GET(req: NextRequest) {
           "archived_topic_forum_comments",
           p.device_id
         ),
-        retoCount: await countByDevice(admin, "reto_ganadores", p.device_id),
       }))
     );
 
@@ -118,7 +117,6 @@ export async function POST(req: NextRequest) {
     const tables = [
       "vote_intention_answers",
       "archived_topic_forum_comments",
-      "reto_ganadores",
       "comment_access_participants",
     ];
 

@@ -13,7 +13,7 @@ type Device = {
   forum_alias: string | null;
   voteCount: number;
   commentCount: number;
-  retoCount: number;
+
 };
 
 export default function AdminHubPage() {
@@ -109,7 +109,7 @@ export default function AdminHubPage() {
 
     if (
       !confirm(
-        "⚠️ ¿Resetear TODOS los datos de prueba?\n\nEsto eliminará:\n- TODAS las respuestas de intención de voto\n- TODOS los comentarios en foros\n- TODOS los registros de acceso\n- TODOS los ganadores del reto\n\nEsta acción NO SE PUEDE DESHACER."
+        "⚠️ ¿Resetear TODOS los datos de prueba?\n\nEsto eliminará:\n- TODAS las respuestas de intención de voto\n- TODOS los comentarios en foros\n- TODOS los registros de acceso\n\nEsta acción NO SE PUEDE DESHACER."
       )
     ) {
       return;
@@ -418,7 +418,7 @@ export default function AdminHubPage() {
                       <th className="p-2 text-left">Fecha</th>
                       <th className="p-2 text-center">Votos</th>
                       <th className="p-2 text-center">Coment.</th>
-                      <th className="p-2 text-center">Reto</th>
+
                       <th className="p-2 text-center">Acción</th>
                     </tr>
                   </thead>
@@ -439,9 +439,6 @@ export default function AdminHubPage() {
                         </td>
                         <td className="p-2 text-center">
                           {d.commentCount || 0}
-                        </td>
-                        <td className="p-2 text-center">
-                          {d.retoCount || 0}
                         </td>
                         <td className="p-2 text-center">
                           <button

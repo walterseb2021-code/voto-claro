@@ -45,7 +45,6 @@ export async function POST(request: NextRequest) {
       'vote_intention_answers',
       'archived_topic_forum_comments',
       'comment_access_participants',
-      'reto_ganadores',
     ]
 
     const resultados = []
