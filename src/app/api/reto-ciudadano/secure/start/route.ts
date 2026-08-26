@@ -4,13 +4,9 @@ import { participantJson } from "@/lib/participantApi";
 import {
   buildInitialCaminoPrizeState,
   buildInitialPrincipalPrizeState,
-  createRetoPrizeSession,
-  expireRetoSession,
-  getPrincipalPrizeStartLock,
-  isRetoSessionExpired,
-  loadAnyActiveRetoSession,
   parseCaminoPrizeState,
   parsePrincipalPrizeState,
+  startRetoPrizeSessionAtomic,
   type RetoSessionRow,
 } from "@/lib/retoSecureGame";
 import {
@@ -71,74 +67,12 @@ export async function POST(req: NextRequest) {
 
     const { context } = prelude;
 
-    let active = await loadAnyActiveRetoSession(
-      context.supabase,
-      context.participant.id,
-      gameCode
-    );
-
-    if (!active.ok) {
-      return active.reason === "unavailable"
-        ? retoUnavailable("RETO_SESSION_LOOKUP_FAILED")
-        : retoConflict("RETO_SESSION_INVALID");
-    }
-
-    if (active.session && isRetoSessionExpired(active.session)) {
-      const expired = await expireRetoSession(context.supabase, active.session);
-
-      if (!expired.ok) {
-        return expired.reason === "unavailable"
-          ? retoUnavailable("RETO_SESSION_EXPIRE_FAILED")
-          : retoConflict();
-      }
-
-      active = { ok: true, session: null };
-    }
-
-    if (active.session) {
-      if (active.session.group_code !== context.group) {
-        return retoConflict("RETO_SESSION_GROUP_MISMATCH");
-      }
-
-      const progress = publicStartProgress(active.session);
-      if (!progress) return retoConflict("RETO_STATE_INVALID");
-
-      return participantJson(200, {
-        ok: true,
-        resumed: true,
-        session: publicRetoSession(active.session),
-        progress,
-      });
-    }
-
-    if (gameCode === "principal") {
-      const lock = await getPrincipalPrizeStartLock(
-        context.supabase,
-        context.participant.id
-      );
-
-      if (!lock.ok) {
-        return lock.reason === "unavailable"
-          ? retoUnavailable("RETO_LOCK_LOOKUP_FAILED")
-          : retoConflict("RETO_LOCK_STATE_INVALID");
-      }
-
-      if (lock.locked) {
-        return participantJson(423, {
-          ok: false,
-          code: "RETO_PRINCIPAL_LOCKED",
-          error: "Debes esperar antes de iniciar un nuevo intento con premio.",
-          locked_until: lock.lockedUntil,
-        });
-      }
-    }
-
     const initialState =
       gameCode === "principal"
         ? buildInitialPrincipalPrizeState()
         : buildInitialCaminoPrizeState();
 
-    const created = await createRetoPrizeSession(
+    const started = await startRetoPrizeSessionAtomic(
       context.supabase,
       context.participant.id,
       context.group,
@@ -146,19 +80,38 @@ export async function POST(req: NextRequest) {
       initialState
     );
 
-    if (!created.ok) {
-      return created.reason === "unavailable"
-        ? retoUnavailable("RETO_SESSION_CREATE_FAILED")
-        : retoConflict();
+    if (!started.ok) {
+      if (started.reason === "unavailable") {
+        return retoUnavailable("RETO_SESSION_START_FAILED");
+      }
+
+      if (started.reason === "group_mismatch") {
+        return retoConflict("RETO_SESSION_GROUP_MISMATCH");
+      }
+
+      if (started.reason === "invalid_state") {
+        return retoConflict("RETO_STATE_INVALID");
+      }
+
+      return retoConflict();
     }
 
-    const progress = publicStartProgress(created.session);
+    if (started.outcome === "locked") {
+      return participantJson(423, {
+        ok: false,
+        code: "RETO_PRINCIPAL_LOCKED",
+        error: "Debes esperar antes de iniciar un nuevo intento con premio.",
+        locked_until: started.lockedUntil,
+      });
+    }
+
+    const progress = publicStartProgress(started.session);
     if (!progress) return retoConflict("RETO_STATE_INVALID");
 
-    return participantJson(201, {
+    return participantJson(started.outcome === "created" ? 201 : 200, {
       ok: true,
-      resumed: false,
-      session: publicRetoSession(created.session),
+      resumed: started.outcome === "resumed",
+      session: publicRetoSession(started.session),
       progress,
     });
   } catch {

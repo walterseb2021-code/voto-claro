@@ -10,7 +10,6 @@ import {
 import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 import { resolvePitchAccess } from "@/lib/pitchAccessAuth";
 import {
-  RETO_ACTIVE_SESSION_TTL_SEC,
   RETO_CAMINO_RULES,
   RETO_LEVEL2_PARTY_ID,
   RETO_PRINCIPAL_RULES,
@@ -463,104 +462,6 @@ export function isRetoSessionExpired(session: RetoSessionRow, now = Date.now()) 
   return !Number.isFinite(expiresAt) || expiresAt <= now;
 }
 
-export async function expireRetoSession(
-  supabase: RetoAdminClient,
-  session: RetoSessionRow
-): Promise<
-  | { ok: true; session: RetoSessionRow }
-  | { ok: false; reason: "conflict" | "unavailable" | "invalid_state" }
-> {
-  const now = new Date().toISOString();
-
-  const { data, error } = await supabase
-    .from("reto_game_sessions")
-    .update({
-      status: "expired",
-      state_version: session.state_version + 1,
-      updated_at: now,
-      finished_at: now,
-    })
-    .eq("id", session.id)
-    .eq("participant_id", session.participant_id)
-    .eq("group_code", session.group_code)
-    .eq("status", "active")
-    .eq("state_version", session.state_version)
-    .select(SESSION_SELECT)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[reto-secure-game] session expiration failed");
-    return { ok: false, reason: "unavailable" };
-  }
-
-  if (!data) {
-    return { ok: false, reason: "conflict" };
-  }
-
-  const parsed = parseSessionRow(data);
-  return parsed
-    ? { ok: true, session: parsed }
-    : { ok: false, reason: "invalid_state" };
-}
-
-export async function createRetoPrizeSession(
-  supabase: RetoAdminClient,
-  participantId: string,
-  group: string,
-  gameCode: RetoGameCode,
-  state: PrincipalPrizeState | CaminoPrizeState
-): Promise<
-  | { ok: true; session: RetoSessionRow }
-  | { ok: false; reason: "conflict" | "unavailable" | "invalid_state" }
-> {
-  if (!isUuid(participantId) || !GROUP_RE.test(group)) {
-    return { ok: false, reason: "invalid_state" };
-  }
-
-  const validState =
-    gameCode === "principal"
-      ? parsePrincipalPrizeState(state)
-      : parseCaminoPrizeState(state);
-
-  if (!validState) {
-    return { ok: false, reason: "invalid_state" };
-  }
-
-  const now = Date.now();
-  const expiresAt = new Date(
-    now + RETO_ACTIVE_SESSION_TTL_SEC * 1000
-  ).toISOString();
-
-  const { data, error } = await supabase
-    .from("reto_game_sessions")
-    .insert({
-      participant_id: participantId,
-      group_code: group,
-      game_code: gameCode,
-      game_mode: "con_premio",
-      status: "active",
-      state_version: 1,
-      state,
-      expires_at: expiresAt,
-    })
-    .select(SESSION_SELECT)
-    .single();
-
-  if (error) {
-    if (String(error.code ?? "") === "23505") {
-      return { ok: false, reason: "conflict" };
-    }
-
-    console.error("[reto-secure-game] session creation failed");
-    return { ok: false, reason: "unavailable" };
-  }
-
-  const parsed = parseSessionRow(data);
-  return parsed
-    ? { ok: true, session: parsed }
-    : { ok: false, reason: "invalid_state" };
-}
-
 export async function updateRetoSessionState(
   supabase: RetoAdminClient,
   session: RetoSessionRow,
@@ -622,60 +523,159 @@ export async function updateRetoSessionState(
     : { ok: false, reason: "invalid_state" };
 }
 
-export async function getPrincipalPrizeStartLock(
+type RetoAtomicStartFailure =
+  | "group_mismatch"
+  | "conflict"
+  | "unavailable"
+  | "invalid_state";
+
+export async function startRetoPrizeSessionAtomic(
   supabase: RetoAdminClient,
   participantId: string,
-  now = Date.now()
+  group: string,
+  gameCode: RetoGameCode,
+  state: PrincipalPrizeState | CaminoPrizeState
 ): Promise<
-  | { ok: true; locked: false; lockedUntil: null }
-  | { ok: true; locked: true; lockedUntil: string }
-  | { ok: false; reason: "unavailable" | "invalid_state" }
+  | {
+      ok: true;
+      outcome: "created" | "resumed";
+      session: RetoSessionRow;
+    }
+  | {
+      ok: true;
+      outcome: "locked";
+      lockedUntil: string;
+    }
+  | {
+      ok: false;
+      reason: RetoAtomicStartFailure;
+    }
 > {
-  if (!isUuid(participantId) || !Number.isFinite(now)) {
+  if (!isUuid(participantId) || !GROUP_RE.test(group)) {
     return { ok: false, reason: "invalid_state" };
   }
 
-  const lockMs = RETO_PRINCIPAL_RULES.prizeAttempt.lockSec * 1000;
-  const cutoff = new Date(now - lockMs).toISOString();
+  const validState =
+    gameCode === "principal"
+      ? parsePrincipalPrizeState(state)
+      : parseCaminoPrizeState(state);
 
-  const { data, error } = await supabase
-    .from("reto_game_sessions")
-    .select("started_at,status")
-    .eq("participant_id", participantId)
-    .eq("game_code", "principal")
-    .eq("game_mode", "con_premio")
-    .neq("status", "revoked")
-    .gte("started_at", cutoff)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  if (!validState) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "start_reto_prize_session_atomic",
+    {
+      p_participant_id: participantId,
+      p_group_code: group,
+      p_game_code: gameCode,
+      p_initial_state: validState,
+    }
+  );
 
   if (error) {
-    console.error("[reto-secure-game] principal lock lookup failed");
+    const message = String(error.message ?? error.details ?? "");
+
+    if (message.includes("RETO_START_STATE_CONFLICT")) {
+      return { ok: false, reason: "conflict" };
+    }
+
+    if (
+      message.includes("RETO_START_INVALID_INPUT") ||
+      message.includes("RETO_START_PARTICIPANT_NOT_FOUND")
+    ) {
+      return { ok: false, reason: "invalid_state" };
+    }
+
+    console.error("[reto-secure-game] atomic session start failed");
     return { ok: false, reason: "unavailable" };
   }
 
-  if (!data) {
-    return { ok: true, locked: false, lockedUntil: null };
-  }
+  const row = firstRpcRow(data);
 
-  const startedAt = new Date(String(data.started_at ?? "")).getTime();
-  if (!Number.isFinite(startedAt)) {
+  if (!row) {
     return { ok: false, reason: "invalid_state" };
   }
 
-  const lockedUntilMs = startedAt + lockMs;
-  if (lockedUntilMs <= now) {
-    return { ok: true, locked: false, lockedUntil: null };
+  const outcome = String(row.outcome ?? "");
+  const sessionId =
+    row.session_id === null || row.session_id === undefined
+      ? null
+      : String(row.session_id);
+  const lockedUntil =
+    row.locked_until === null || row.locked_until === undefined
+      ? null
+      : String(row.locked_until);
+
+  if (outcome === "group_mismatch") {
+    if (typeof sessionId !== "string" || !isUuid(sessionId) || lockedUntil !== null) {
+      return { ok: false, reason: "invalid_state" };
+    }
+
+    return { ok: false, reason: "group_mismatch" };
+  }
+
+  if (outcome === "locked") {
+    if (
+      gameCode !== "principal" ||
+      sessionId !== null ||
+      lockedUntil === null ||
+      !isIsoDate(lockedUntil)
+    ) {
+      return { ok: false, reason: "invalid_state" };
+    }
+
+    return {
+      ok: true,
+      outcome: "locked",
+      lockedUntil,
+    };
+  }
+
+  if (outcome !== "created" && outcome !== "resumed") {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  if (typeof sessionId !== "string" || !isUuid(sessionId) || lockedUntil !== null) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const loaded = await loadRetoSessionById(
+    supabase,
+    participantId,
+    group,
+    gameCode,
+    sessionId
+  );
+
+  if (!loaded.ok) {
+    return loaded;
+  }
+
+  if (!loaded.session || loaded.session.status !== "active") {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const loadedState =
+    gameCode === "principal"
+      ? parsePrincipalPrizeState(loaded.session.state)
+      : parseCaminoPrizeState(loaded.session.state);
+
+  if (!loadedState) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  if (outcome === "created" && loaded.session.state_version !== 1) {
+    return { ok: false, reason: "invalid_state" };
   }
 
   return {
     ok: true,
-    locked: true,
-    lockedUntil: new Date(lockedUntilMs).toISOString(),
+    outcome,
+    session: loaded.session,
   };
 }
-
 export function secureRandomDieRoll() {
   return randomInt(1, 7);
 }
