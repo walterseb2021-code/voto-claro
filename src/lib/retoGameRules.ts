@@ -1,6 +1,6 @@
 import "server-only";
 
-export const RETO_PRIZES_ENABLED = false;
+export { RETO_PRIZES_ENABLED } from "@/lib/retoPrizeMode";
 
 export const RETO_LEVEL2_PARTY_ID = "app";
 

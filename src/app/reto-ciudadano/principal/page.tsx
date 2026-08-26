@@ -1,5 +1,7 @@
 "use client";
 
+import { RETO_PRIZES_ENABLED } from "@/lib/retoPrizeMode";
+
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAssistantRuntime } from "@/components/assistant/AssistantRuntimeContext";
@@ -7,7 +9,6 @@ import PrincipalSecurePrizeFlow from "./PrincipalSecurePrizeFlow";
 
 type PlayMode = "sin_premio" | "con_premio";
 
-const PREMIO_ACTIVO = false;
 
 /** Pregunta tipo Sí/No */
 type YesNoQuestion = {
@@ -241,8 +242,6 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
      lastSpokenQuestionRef.current = "";
 
     try {
-      const cfg = await safeFetchJson<any>("/reto-ciudadano/config.json");
-      if (!cfg) throw new Error("No se pudo cargar /reto-ciudadano/config.json");
 
       const api = await safeFetchJson<QuestionsAPI>("/api/reto-ciudadano/questions?level=1");
       const poolQuestions =
@@ -1162,8 +1161,6 @@ const finished = started && (idx >= TOTAL || poolLeft <= 0);
       if (!enabled) throw new Error("Nivel 2 está bloqueado.");
       if (!pid) throw new Error("Selecciona un Party ID para iniciar Nivel 2.");
 
-      const cfg = await safeFetchJson<any>("/reto-ciudadano/config.json");
-      if (!cfg) throw new Error("No se pudo cargar /reto-ciudadano/config.json");
 
       const url = `/api/reto-ciudadano/questions?level=2&partyId=${encodeURIComponent(pid)}`;
       const api = await safeFetchJson<QuestionsAPI>(url);
@@ -1791,7 +1788,7 @@ export default function RetoCiudadanoPrincipalPage() {
   }
 
   function validarPremioSilenciosamente() {
-    if (!PREMIO_ACTIVO) {
+    if (!RETO_PRIZES_ENABLED) {
       setPremioCheckLoading(false);
       setPremioCheckError(null);
       setPremioHabilitado(false);
@@ -1851,7 +1848,7 @@ export default function RetoCiudadanoPrincipalPage() {
   }, []);
 
     useEffect(() => {
-    if (!PREMIO_ACTIVO && mode === "con_premio") {
+    if (!RETO_PRIZES_ENABLED && mode === "con_premio") {
       setMode("sin_premio");
       setPremioCheckLoading(false);
       setPremioCheckError(null);
@@ -2251,11 +2248,11 @@ export default function RetoCiudadanoPrincipalPage() {
           <button
   type="button"
   onClick={() => {
-    if (PREMIO_ACTIVO) setMode("con_premio");
+    if (RETO_PRIZES_ENABLED) setMode("con_premio");
   }}
-  disabled={!PREMIO_ACTIVO}
+  disabled={!RETO_PRIZES_ENABLED}
   className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
-    !PREMIO_ACTIVO
+    !RETO_PRIZES_ENABLED
       ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
       : mode === "con_premio"
       ? "bg-green-100 text-green-900 border-green-300"
@@ -2266,7 +2263,7 @@ export default function RetoCiudadanoPrincipalPage() {
 </button>
 
           {/* Descripción del premio */}
-          {!PREMIO_ACTIVO ? (
+          {!RETO_PRIZES_ENABLED ? (
             <div className="mt-3 text-xs text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
               La modalidad con premio está temporalmente en mantenimiento. Puedes participar en modo educativo sin premio.
             </div>
@@ -2280,13 +2277,13 @@ export default function RetoCiudadanoPrincipalPage() {
         </div>
 
         <p className="mt-3 text-xs text-slate-600">
-          {PREMIO_ACTIVO
+          {RETO_PRIZES_ENABLED
             ? "Nota: para jugar con premio debes tener tu acceso habilitado desde la ventana principal de Reto Ciudadano."
             : "El reto principal sigue disponible en modo educativo sin premio."}
         </p>
       </section>
 
-                      {PREMIO_ACTIVO && mode === "con_premio" && hasData && (
+                      {RETO_PRIZES_ENABLED && mode === "con_premio" && hasData && (
         <section className="mt-5 rounded-2xl border bg-white p-4 shadow-sm vc-fade-up vc-delay-2">
           <div className="text-sm font-extrabold text-slate-900">
             Modalidad con premio

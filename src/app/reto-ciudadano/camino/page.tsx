@@ -1,5 +1,7 @@
 "use client";
 
+import { RETO_PRIZES_ENABLED } from "@/lib/retoPrizeMode";
+
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import CaminoCiudadano, {
@@ -10,7 +12,6 @@ import CaminoSecurePrizeFlow from "./CaminoSecurePrizeFlow";
 
 type PlayMode = "sin_premio" | "con_premio";
 
-const PREMIO_ACTIVO = false;
 
 type CaminoWinner = {
   alias: string;
@@ -134,7 +135,7 @@ export default function CaminoCiudadanoPage() {
   }, [ganadoresFiltro]);
 
   useEffect(() => {
-    if (!PREMIO_ACTIVO && mode === "con_premio") {
+    if (!RETO_PRIZES_ENABLED && mode === "con_premio") {
       setMode("sin_premio");
       setWinnerSaving(false);
       setWinnerMessage(null);
@@ -392,11 +393,11 @@ export default function CaminoCiudadanoPage() {
           <button
             type="button"
             onClick={() => {
-              if (PREMIO_ACTIVO) setMode("con_premio");
+              if (RETO_PRIZES_ENABLED) setMode("con_premio");
             }}
-            disabled={!PREMIO_ACTIVO}
+            disabled={!RETO_PRIZES_ENABLED}
             className={`rounded-xl border px-4 py-2 text-sm font-extrabold transition vc-btn-wave vc-btn-pulse ${
-              !PREMIO_ACTIVO
+              !RETO_PRIZES_ENABLED
                 ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                 : mode === "con_premio"
                 ? "bg-green-100 text-green-900 border-green-300"
@@ -407,7 +408,7 @@ export default function CaminoCiudadanoPage() {
           </button>
         </div>
 
-        {!PREMIO_ACTIVO ? (
+        {!RETO_PRIZES_ENABLED ? (
           <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             La modalidad con premio está temporalmente en mantenimiento. Puedes participar en modo educativo sin premio.
           </div>
@@ -459,7 +460,7 @@ export default function CaminoCiudadanoPage() {
               🏆 Ganadores de Camino Ciudadano
             </h2>
             <p className="text-xs text-slate-600">
-              {PREMIO_ACTIVO
+              {RETO_PRIZES_ENABLED
                 ? "Lista de ciudadanos registrados como ganadores en la modalidad con premio."
                 : "La modalidad con premio está temporalmente en mantenimiento."}
             </p>
@@ -489,7 +490,7 @@ export default function CaminoCiudadanoPage() {
           </div>
         </div>
 
-        {PREMIO_ACTIVO ? (
+        {RETO_PRIZES_ENABLED ? (
         <div className="mt-3 rounded-xl border border-green-300 bg-green-50 p-3 text-xs text-green-800">
           🏆 <strong>Aviso trimestral:</strong> de todos los ganadores acumulados
           durante el trimestre, VOTO CLARO escogerá a{" "}
