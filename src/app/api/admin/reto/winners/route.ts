@@ -2,6 +2,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
+import {
+  isAllowedParticipantMutationOrigin,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
 
 export const runtime = "nodejs";
 
@@ -105,19 +109,37 @@ export async function GET(req: NextRequest) {
 // PATCH /api/admin/reto/winners body: { id, status }
 export async function PATCH(req: NextRequest) {
   try {
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return NextResponse.json(
+        { error: "ORIGIN_FORBIDDEN" },
+        { status: 403 }
+      );
+    }
+
     const gate = await requireAdmin(req);
     if (!gate.ok) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    const body = await req.json().catch(() => ({}));
-    const id = String((body as any)?.id ?? "").trim();
-    const status = String((body as any)?.status ?? "").trim();
+    const body = await readBoundedJsonObject(req, 2048);
+    if (!body) {
+      return NextResponse.json({ error: "INVALID_JSON" }, { status: 400 });
+    }
+
+    const keys = Object.keys(body);
+    if (keys.some((key) => key !== "id" && key !== "status")) {
+      return NextResponse.json({ error: "INVALID_FIELDS" }, { status: 400 });
+    }
+    const id =
+      typeof body.id === "string" ? body.id.trim() : "";
+
+    const status =
+      typeof body.status === "string" ? body.status.trim() : "";
 
     const allowed = ["pendiente", "contactado", "entregado", "anulado"];
 
-    if (!id) {
-      return NextResponse.json({ error: "ID_REQUIRED" }, { status: 400 });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return NextResponse.json({ error: "ID_INVALID" }, { status: 400 });
     }
 
     if (!allowed.includes(status)) {
