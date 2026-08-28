@@ -2,14 +2,12 @@ import { type NextRequest } from "next/server";
 
 import { participantJson } from "@/lib/participantApi";
 import {
-  finalizeCaminoWinAtomic,
   isRetoSessionExpired,
   loadActiveRetoSession,
-  loadSecureRetoQuestionById,
   parseCaminoPrizeState,
   parsePrincipalPrizeState,
-  updateRetoSessionState,
 } from "@/lib/retoSecureGame";
+import { commitRetoPrizeAnswerAtomic } from "@/lib/retoPrizeAnswerEngine";
 import {
   RETO_CAMINO_RULES,
   RETO_LEVEL2_PARTY_ID,
@@ -29,11 +27,6 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function expired(value: string | null, now: number) {
-  if (!value) return true;
-  const time = new Date(value).getTime();
-  return !Number.isFinite(time) || time <= now;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -98,8 +91,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const now = Date.now();
-
     if (gameCode === "principal") {
       const state = parsePrincipalPrizeState(session.state);
       if (!state) return retoConflict("RETO_STATE_INVALID");
@@ -126,25 +117,47 @@ export async function POST(req: NextRequest) {
         return retoConflict("RETO_STATE_INVALID");
       }
 
-      const source =
-        state.phase === "level1"
-          ? "principal_level1"
-          : "principal_level2";
-
-      const question = await loadSecureRetoQuestionById(
+      const committed = await commitRetoPrizeAnswerAtomic(
         context.supabase,
-        source,
-        questionId
+        {
+          sessionId: session.id,
+          participantId: session.participant_id,
+          groupCode: session.group_code,
+          expectedStateVersion: session.state_version,
+          questionInstanceId: questionId,
+          answer,
+        }
       );
 
-      if (!question.ok) {
-        return question.reason === "unavailable"
-          ? retoUnavailable("RETO_QUESTION_LOOKUP_FAILED")
+      if (!committed.ok) {
+        if (committed.reason === "expired") {
+          return participantJson(410, {
+            ok: false,
+            code: "RETO_SESSION_EXPIRED",
+            error: "La sesión de juego venció.",
+          });
+        }
+
+        if (committed.reason === "unavailable") {
+          return retoUnavailable("RETO_SESSION_UPDATE_FAILED");
+        }
+
+        return committed.reason === "conflict"
+          ? retoConflict()
           : retoConflict("RETO_QUESTION_STATE_INVALID");
       }
 
-      if (!question.question) {
-        return retoConflict("RETO_QUESTION_NOT_FOUND");
+      const result = committed.result;
+      const nextState = parsePrincipalPrizeState(result.sessionState);
+
+      if (
+        !nextState ||
+        nextState.current_question_id !== null ||
+        nextState.question_deadline !== null ||
+        !nextState.answered_question_ids.includes(questionId) ||
+        result.sessionStatus === "completed"
+      ) {
+        return retoConflict("RETO_QUESTION_STATE_INVALID");
       }
 
       const rules =
@@ -152,102 +165,102 @@ export async function POST(req: NextRequest) {
           ? RETO_PRINCIPAL_RULES.level1
           : RETO_PRINCIPAL_RULES.level2;
 
-      const questionTimedOut = expired(state.question_deadline, now);
-      const poolTimedOut = expired(state.pool_deadline, now);
-      const skipped = answer === null || questionTimedOut || poolTimedOut;
-      const correct = !skipped && answer === question.question.answer;
-      const wrong = !skipped && !correct;
+      const correct = result.wasCorrect;
+      const timedOut = result.answerOutcome === "timed_out";
+      const skipped =
+        result.answerOutcome === "skipped" || timedOut;
+      const wrong = result.answerOutcome === "wrong";
 
-      const nextGood = state.good + (correct ? 1 : 0);
-      const nextBad = state.bad + (wrong ? 1 : 0);
-      const nextSkipped = state.skipped + (skipped ? 1 : 0);
-      const nextIndex = state.question_index + 1;
-      const answeredIds = state.answered_question_ids.includes(questionId)
-        ? state.answered_question_ids
-        : [...state.answered_question_ids, questionId];
+      const expectedGood = state.good + (correct ? 1 : 0);
+      const expectedBad = state.bad + (wrong ? 1 : 0);
+      const expectedSkipped = state.skipped + (skipped ? 1 : 0);
+      const expectedIndex = state.question_index + 1;
+      const levelFinished = nextState.phase !== state.phase;
+      const passed = levelFinished
+        ? expectedGood >= rules.passScore
+        : null;
 
-      const levelFinished =
-        nextIndex >= rules.totalQuestions || poolTimedOut;
-      const passed = levelFinished && nextGood >= rules.passScore;
+      if (!levelFinished) {
+        if (
+          result.sessionStatus !== "active" ||
+          nextState.level !== state.level ||
+          nextState.question_index !== expectedIndex ||
+          nextState.good !== expectedGood ||
+          nextState.bad !== expectedBad ||
+          nextState.skipped !== expectedSkipped ||
+          nextState.pool_deadline !== state.pool_deadline
+        ) {
+          return retoConflict("RETO_QUESTION_STATE_INVALID");
+        }
+      } else if (state.phase === "level1") {
+        if (passed) {
+          if (
+            result.sessionStatus !== "active" ||
+            nextState.phase !== "level2" ||
+            nextState.level !== 2 ||
+            nextState.question_index !== 0 ||
+            nextState.pool_deadline !== null ||
+            nextState.good !== 0 ||
+            nextState.bad !== 0 ||
+            nextState.skipped !== 0 ||
+            nextState.party_id !== RETO_LEVEL2_PARTY_ID ||
+            !nextState.level1_passed
+          ) {
+            return retoConflict("RETO_QUESTION_STATE_INVALID");
+          }
+        } else if (
+          result.sessionStatus !== "failed" ||
+          nextState.phase !== "failed" ||
+          nextState.question_index !== expectedIndex ||
+          nextState.pool_deadline !== null ||
+          nextState.good !== expectedGood ||
+          nextState.bad !== expectedBad ||
+          nextState.skipped !== expectedSkipped
+        ) {
+          return retoConflict("RETO_QUESTION_STATE_INVALID");
+        }
+      } else if (passed) {
+        if (
+          result.sessionStatus !== "active" ||
+          nextState.phase !== "roulette" ||
+          nextState.level !== 3 ||
+          nextState.question_index !== expectedIndex ||
+          nextState.pool_deadline !== null ||
+          nextState.good !== expectedGood ||
+          nextState.bad !== expectedBad ||
+          nextState.skipped !== expectedSkipped ||
+          !nextState.level2_passed
+        ) {
+          return retoConflict("RETO_QUESTION_STATE_INVALID");
+        }
+      } else if (
+        result.sessionStatus !== "failed" ||
+        nextState.phase !== "failed" ||
+        nextState.question_index !== expectedIndex ||
+        nextState.pool_deadline !== null ||
+        nextState.good !== expectedGood ||
+        nextState.bad !== expectedBad ||
+        nextState.skipped !== expectedSkipped
+      ) {
+        return retoConflict("RETO_QUESTION_STATE_INVALID");
+      }
 
-      let nextState = {
-        ...state,
-        question_index: nextIndex,
-        current_question_id: null,
-        question_deadline: null,
-        answered_question_ids: answeredIds,
-        good: nextGood,
-        bad: nextBad,
-        skipped: nextSkipped,
+      const committedSession = {
+        ...session,
+        status: result.sessionStatus,
+        state_version: result.stateVersion,
+        state: result.sessionState,
+        finished_at: result.finishedAt,
       };
-
-      let nextStatus: "active" | "failed" = "active";
-      let finish = false;
-
-      if (levelFinished && state.phase === "level1") {
-        if (passed) {
-          nextState = {
-            ...nextState,
-            phase: "level2",
-            level: 2,
-            question_index: 0,
-            pool_deadline: null,
-            good: 0,
-            bad: 0,
-            skipped: 0,
-            party_id: RETO_LEVEL2_PARTY_ID,
-            level1_passed: true,
-          };
-        } else {
-          nextState = {
-            ...nextState,
-            phase: "failed",
-            pool_deadline: null,
-          };
-          nextStatus = "failed";
-          finish = true;
-        }
-      } else if (levelFinished && state.phase === "level2") {
-        if (passed) {
-          nextState = {
-            ...nextState,
-            phase: "roulette",
-            level: 3,
-            pool_deadline: null,
-            level2_passed: true,
-          };
-        } else {
-          nextState = {
-            ...nextState,
-            phase: "failed",
-            pool_deadline: null,
-          };
-          nextStatus = "failed";
-          finish = true;
-        }
-      }
-
-      const updated = await updateRetoSessionState(
-        context.supabase,
-        session,
-        nextState,
-        { status: nextStatus, finish }
-      );
-
-      if (!updated.ok) {
-        return updated.reason === "unavailable"
-          ? retoUnavailable("RETO_SESSION_UPDATE_FAILED")
-          : retoConflict();
-      }
 
       return participantJson(200, {
         ok: true,
         correct,
-        timed_out: questionTimedOut || poolTimedOut,
+        timed_out: timedOut,
         skipped,
         level_finished: levelFinished,
-        passed: levelFinished ? passed : null,
-        session: publicRetoSession(updated.session),
+        passed,
+        session: publicRetoSession(committedSession),
         progress: {
           phase: nextState.phase,
           level: nextState.level,
@@ -274,91 +287,94 @@ export async function POST(req: NextRequest) {
       return retoConflict("RETO_QUESTION_MISMATCH");
     }
 
-    const question = await loadSecureRetoQuestionById(
+    const roll = state.pending_roll;
+    const committed = await commitRetoPrizeAnswerAtomic(
       context.supabase,
-      "camino",
-      questionId
+      {
+        sessionId: session.id,
+        participantId: session.participant_id,
+        groupCode: session.group_code,
+        expectedStateVersion: session.state_version,
+        questionInstanceId: questionId,
+        answer,
+      }
     );
 
-    if (!question.ok) {
-      return question.reason === "unavailable"
-        ? retoUnavailable("RETO_QUESTION_LOOKUP_FAILED")
-        : retoConflict("RETO_QUESTION_STATE_INVALID");
-    }
-
-    if (!question.question) {
-      return retoConflict("RETO_QUESTION_NOT_FOUND");
-    }
-
-    const questionTimedOut = expired(state.question_deadline, now);
-    const skipped = answer === null || questionTimedOut;
-    const correct = !skipped && answer === question.question.answer;
-    const roll = state.pending_roll;
-
-    const nextPosition = correct
-      ? Math.min(state.position + roll, RETO_CAMINO_RULES.totalSquares)
-      : Math.max(state.position - roll, 0);
-
-    const nextTurns = Math.max(0, state.turns_left - 1);
-    const won = nextPosition === RETO_CAMINO_RULES.totalSquares;
-    const gameOver = won || nextTurns === 0;
-
-    const nextState = {
-      ...state,
-      position: nextPosition,
-      turns_left: nextTurns,
-      current_question_id: null,
-      question_deadline: null,
-      answered_question_ids: state.answered_question_ids.includes(questionId)
-        ? state.answered_question_ids
-        : [...state.answered_question_ids, questionId],
-      pending_roll: null,
-      won,
-    };
-
-    const updated = won
-      ? await finalizeCaminoWinAtomic(
-          context.supabase,
-          session,
-          nextState
-        )
-      : await updateRetoSessionState(
-          context.supabase,
-          session,
-          nextState,
-          gameOver
-            ? {
-                status: "failed",
-                finish: true,
-              }
-            : undefined
-        );
-
-    if (!updated.ok) {
-      if (updated.reason === "expired") {
+    if (!committed.ok) {
+      if (committed.reason === "expired") {
         return participantJson(410, {
           ok: false,
           code: "RETO_SESSION_EXPIRED",
-          error: "La sesiÃ³n de juego venciÃ³.",
+          error: "La sesión de juego venció.",
         });
       }
 
-      return updated.reason === "unavailable"
-        ? retoUnavailable("RETO_SESSION_UPDATE_FAILED")
-        : retoConflict();
+      if (committed.reason === "unavailable") {
+        return retoUnavailable("RETO_SESSION_UPDATE_FAILED");
+      }
+
+      return committed.reason === "conflict"
+        ? retoConflict()
+        : retoConflict("RETO_QUESTION_STATE_INVALID");
     }
+
+    const result = committed.result;
+    const nextState = parseCaminoPrizeState(result.sessionState);
+
+    const correct = result.wasCorrect;
+    const timedOut = result.answerOutcome === "timed_out";
+    const skipped =
+      result.answerOutcome === "skipped" || timedOut;
+
+    const expectedPosition = correct
+      ? Math.min(
+          state.position + roll,
+          RETO_CAMINO_RULES.totalSquares
+        )
+      : Math.max(state.position - roll, 0);
+    const expectedTurns = Math.max(0, state.turns_left - 1);
+    const expectedWon =
+      expectedPosition === RETO_CAMINO_RULES.totalSquares;
+    const gameOver = expectedWon || expectedTurns === 0;
+    const expectedStatus = expectedWon
+      ? "completed"
+      : gameOver
+        ? "failed"
+        : "active";
+
+    if (
+      !nextState ||
+      nextState.current_question_id !== null ||
+      nextState.question_deadline !== null ||
+      nextState.pending_roll !== null ||
+      !nextState.answered_question_ids.includes(questionId) ||
+      nextState.position !== expectedPosition ||
+      nextState.turns_left !== expectedTurns ||
+      nextState.won !== expectedWon ||
+      result.sessionStatus !== expectedStatus
+    ) {
+      return retoConflict("RETO_QUESTION_STATE_INVALID");
+    }
+
+    const committedSession = {
+      ...session,
+      status: result.sessionStatus,
+      state_version: result.stateVersion,
+      state: result.sessionState,
+      finished_at: result.finishedAt,
+    };
 
     return participantJson(200, {
       ok: true,
       correct,
-      timed_out: questionTimedOut,
+      timed_out: timedOut,
       skipped,
       roll,
-      position: nextPosition,
-      turns_left: nextTurns,
-      won,
+      position: nextState.position,
+      turns_left: nextState.turns_left,
+      won: nextState.won,
       game_over: gameOver,
-      session: publicRetoSession(updated.session),
+      session: publicRetoSession(committedSession),
     });
   } catch {
     console.error("[reto-secure-answer] unexpected failure");
