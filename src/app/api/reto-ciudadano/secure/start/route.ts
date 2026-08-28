@@ -6,9 +6,9 @@ import {
   buildInitialPrincipalPrizeState,
   parseCaminoPrizeState,
   parsePrincipalPrizeState,
-  startRetoPrizeSessionAtomic,
   type RetoSessionRow,
 } from "@/lib/retoSecureGame";
+import { startRetoPrizeSessionAuthoritative } from "@/lib/retoPrizeStartEngine";
 import {
   parseRetoGameCode,
   publicRetoSession,
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       return participantJson(400, {
         ok: false,
         code: "RETO_GAME_INVALID",
-        error: "Juego invÃ¡lido.",
+        error: "Juego inválido.",
       });
     }
 
@@ -72,13 +72,12 @@ export async function POST(req: NextRequest) {
         ? buildInitialPrincipalPrizeState()
         : buildInitialCaminoPrizeState();
 
-    const started = await startRetoPrizeSessionAtomic(
-      context.supabase,
-      context.participant.id,
-      context.group,
+    const started = await startRetoPrizeSessionAuthoritative(context.supabase, {
+      participantId: context.participant.id,
+      groupCode: context.group,
       gameCode,
-      initialState
-    );
+      initialState,
+    });
 
     if (!started.ok) {
       if (started.reason === "unavailable") {
@@ -96,22 +95,24 @@ export async function POST(req: NextRequest) {
       return retoConflict();
     }
 
-    if (started.outcome === "locked") {
+    const result = started.result;
+
+    if (result.outcome === "locked") {
       return participantJson(423, {
         ok: false,
         code: "RETO_PRINCIPAL_LOCKED",
         error: "Debes esperar antes de iniciar un nuevo intento con premio.",
-        locked_until: started.lockedUntil,
+        locked_until: result.lockedUntil,
       });
     }
 
-    const progress = publicStartProgress(started.session);
+    const progress = publicStartProgress(result.session);
     if (!progress) return retoConflict("RETO_STATE_INVALID");
 
-    return participantJson(started.outcome === "created" ? 201 : 200, {
+    return participantJson(result.outcome === "created" ? 201 : 200, {
       ok: true,
-      resumed: started.outcome === "resumed",
-      session: publicRetoSession(started.session),
+      resumed: result.outcome === "resumed",
+      session: publicRetoSession(result.session),
       progress,
     });
   } catch {
