@@ -2,11 +2,12 @@ import { type NextRequest } from "next/server";
 
 import { participantJson } from "@/lib/participantApi";
 import {
-  finalizePrincipalSpinAtomic,
   isRetoSessionExpired,
   loadActiveRetoSession,
   parsePrincipalPrizeState,
+  secureRandomRouletteSegment,
 } from "@/lib/retoSecureGame";
+import { finalizeRetoPrizeSpinAtomic } from "@/lib/retoPrizeSpinEngine";
 import {
   parseRetoStateVersion,
   parseRetoUuid,
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
       return participantJson(400, {
         ok: false,
         code: "RETO_REQUEST_INVALID",
-        error: "Solicitud invÃ¡lida.",
+        error: "Solicitud inválida.",
       });
     }
 
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
       return participantJson(410, {
         ok: false,
         code: "RETO_SESSION_EXPIRED",
-        error: "La sesiÃ³n de juego venciÃ³.",
+        error: "La sesión de juego venció.",
       });
     }
 
@@ -85,17 +86,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const finalized = await finalizePrincipalSpinAtomic(
-      context.supabase,
-      session
-    );
+    const segment = secureRandomRouletteSegment();
+    const finalized = await finalizeRetoPrizeSpinAtomic(context.supabase, {
+      sessionId: session.id,
+      participantId: session.participant_id,
+      groupCode: session.group_code,
+      expectedStateVersion: session.state_version,
+      segment,
+    });
 
     if (!finalized.ok) {
       if (finalized.reason === "expired") {
         return participantJson(410, {
           ok: false,
           code: "RETO_SESSION_EXPIRED",
-          error: "La sesiÃ³n de juego venciÃ³.",
+          error: "La sesión de juego venció.",
         });
       }
 
@@ -104,14 +109,37 @@ export async function POST(req: NextRequest) {
         : retoConflict();
     }
 
+    const result = finalized.result;
+    const completedState = parsePrincipalPrizeState(result.sessionState);
+
+    if (
+      !completedState ||
+      completedState.phase !== "completed" ||
+      !completedState.level1_passed ||
+      !completedState.level2_passed ||
+      !completedState.roulette_used ||
+      completedState.roulette_result !== result.segment
+    ) {
+      return retoConflict("RETO_SPIN_RESULT_INVALID");
+    }
+
+    const finalizedSession = {
+      ...session,
+      status: result.sessionStatus,
+      state_version: result.stateVersion,
+      state: result.sessionState,
+      updated_at: result.finishedAt,
+      finished_at: result.finishedAt,
+    };
+
     return participantJson(200, {
       ok: true,
-      session: publicRetoSession(finalized.session),
+      session: publicRetoSession(finalizedSession),
       spin: {
-        segment: finalized.segment,
-        is_prize: finalized.isPrize,
-        awarded: finalized.awarded,
-        prize_locked_until: finalized.prizeLockedUntil,
+        segment: result.segment,
+        is_prize: result.isPrize,
+        awarded: result.awarded,
+        prize_locked_until: result.prizeLockedUntil,
       },
     });
   } catch {
