@@ -24,6 +24,7 @@ type KnowledgeFactRow = {
   id: string;
   fact_type: RetoPrizeFactType;
   fact_data: JsonObject;
+  allowed_operators: string[];
   valid_from: string | null;
   valid_until: string | null;
 };
@@ -90,6 +91,18 @@ const SUPPORTED_OPERATORS = new Set([
   "MEMBERSHIP_DIRECT",
 ]);
 
+const ALLOWED_OPERATORS_BY_FACT_TYPE: Record<
+  RetoPrizeFactType,
+  ReadonlySet<string>
+> = {
+  boolean: new Set(["BOOL_DIRECT", "BOOL_NEGATED"]),
+  integer: new Set(["INT_EQUALS_VARIANT"]),
+  decimal: new Set(["DECIMAL_EQUALS_VARIANT"]),
+  text: new Set(["TEXT_EQUALS_VARIANT"]),
+  date: new Set(["DATE_EQUALS_VARIANT"]),
+  membership: new Set(["MEMBERSHIP_DIRECT"]),
+};
+
 function isObject(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -135,12 +148,39 @@ function firstRpcRow(value: unknown): JsonObject | null {
   return isObject(value) ? value : null;
 }
 
+function safeAllowedOperators(
+  value: unknown,
+  factType: RetoPrizeFactType
+): string[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 2) {
+    return null;
+  }
+
+  const operators = value.map((item) => String(item ?? "").trim());
+  const allowed = ALLOWED_OPERATORS_BY_FACT_TYPE[factType];
+
+  if (
+    operators.some(
+      (operator) =>
+        !SUPPORTED_OPERATORS.has(operator) || !allowed.has(operator)
+    ) ||
+    new Set(operators).size !== operators.length
+  ) {
+    return null;
+  }
+
+  return operators;
+}
+
 function parseFactRow(value: unknown): KnowledgeFactRow | null {
   if (!isObject(value)) return null;
 
   const id = String(value.id ?? "").trim();
   const factType = safeFactType(value.fact_type);
   const factData = value.fact_data;
+  const allowedOperators = factType
+    ? safeAllowedOperators(value.allowed_operators, factType)
+    : null;
   const validFrom =
     value.valid_from === null || value.valid_from === undefined
       ? null
@@ -150,7 +190,14 @@ function parseFactRow(value: unknown): KnowledgeFactRow | null {
       ? null
       : safeIsoDateTime(value.valid_until);
 
-  if (!isUuid(id) || !factType || !isObject(factData)) return null;
+  if (
+    !isUuid(id) ||
+    !factType ||
+    !isObject(factData) ||
+    !allowedOperators
+  ) {
+    return null;
+  }
   if (
     value.valid_from !== null &&
     value.valid_from !== undefined &&
@@ -170,6 +217,7 @@ function parseFactRow(value: unknown): KnowledgeFactRow | null {
     id,
     fact_type: factType,
     fact_data: factData,
+    allowed_operators: allowedOperators,
     valid_from: validFrom,
     valid_until: validUntil,
   };
@@ -501,6 +549,7 @@ export function renderRetoPrizeQuestionV1(
   source: RetoPrizeQuestionSource
 ): GeneratedRetoPrizeQuestion | null {
   if (fact.fact_type !== template.fact_type) return null;
+  if (!fact.allowed_operators.includes(template.operator_code)) return null;
 
   switch (fact.fact_type) {
     case "boolean":
@@ -581,7 +630,7 @@ async function selectRandomEligibleFact(
 
     const { data, error } = await supabase
       .from("reto_knowledge_facts")
-      .select("id,fact_type,fact_data,valid_from,valid_until")
+      .select("id,fact_type,fact_data,allowed_operators,valid_from,valid_until")
       .eq("is_active", true)
       .eq("review_status", "approved")
       .eq("lang", "es")
@@ -619,6 +668,7 @@ async function selectRandomCompatibleTemplate(
     .eq("is_active", true)
     .eq("review_status", "approved")
     .eq("fact_type", fact.fact_type)
+    .in("operator_code", fact.allowed_operators)
     .eq("renderer_version", 1)
     .contains("allowed_sources", [source])
     .limit(200);
@@ -631,7 +681,8 @@ async function selectRandomCompatibleTemplate(
   const templates = (data ?? [])
     .map((row) => parseTemplateRow(row))
     .filter((row): row is QuestionTemplateRow => Boolean(row))
-    .filter((row) => row.fact_type === fact.fact_type);
+    .filter((row) => row.fact_type === fact.fact_type)
+    .filter((row) => fact.allowed_operators.includes(row.operator_code));
 
   if (templates.length === 0) {
     return { ok: true, template: null };
