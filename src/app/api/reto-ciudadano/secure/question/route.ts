@@ -4,14 +4,16 @@ import { participantJson } from "@/lib/participantApi";
 import {
   isRetoSessionExpired,
   loadActiveRetoSession,
-  loadSecureRetoQuestionById,
   parseCaminoPrizeState,
   parsePrincipalPrizeState,
   secureRandomDieRoll,
-  selectSecureRetoQuestion,
-  toPublicRetoQuestion,
   updateRetoSessionState,
 } from "@/lib/retoSecureGame";
+import {
+  generateAndIssueRetoPrizeQuestion,
+  loadStoredRetoPrizeQuestion,
+  toPublicRetoPrizeQuestion,
+} from "@/lib/retoPrizeQuestionEngine";
 import {
   RETO_CAMINO_RULES,
   RETO_LEVEL2_PARTY_ID,
@@ -38,6 +40,19 @@ function deadlineAfter(seconds: number, maxDeadline?: string | null) {
 
   const max = new Date(maxDeadline).getTime();
   return new Date(Math.min(requested, max)).toISOString();
+}
+
+function sameInstant(left: string | null, right: string | null) {
+  if (left === null || right === null) return left === right;
+
+  const leftTime = new Date(left).getTime();
+  const rightTime = new Date(right).getTime();
+
+  return (
+    Number.isFinite(leftTime) &&
+    Number.isFinite(rightTime) &&
+    leftTime === rightTime
+  );
 }
 
 function principalPublicProgress(state: ReturnType<typeof parsePrincipalPrizeState>) {
@@ -145,11 +160,12 @@ export async function POST(req: NextRequest) {
           : "principal_level2";
 
       if (state.current_question_id) {
-        const current = await loadSecureRetoQuestionById(
-          context.supabase,
+        const current = await loadStoredRetoPrizeQuestion(context.supabase, {
+          sessionId: session.id,
+          instanceId: state.current_question_id,
           source,
-          state.current_question_id
-        );
+          expectedStateVersion: session.state_version,
+        });
 
         if (!current.ok) {
           return current.reason === "unavailable"
@@ -157,8 +173,11 @@ export async function POST(req: NextRequest) {
             : retoConflict("RETO_QUESTION_STATE_INVALID");
         }
 
-        if (!current.question) {
-          return retoConflict("RETO_QUESTION_NOT_FOUND");
+        if (
+          !current.question ||
+          !sameInstant(current.question.expiresAt, state.question_deadline)
+        ) {
+          return retoConflict("RETO_QUESTION_STATE_INVALID");
         }
 
         return participantJson(200, {
@@ -166,7 +185,7 @@ export async function POST(req: NextRequest) {
           resumed_question: true,
           session: publicRetoSession(session),
           progress: principalPublicProgress(state),
-          question: toPublicRetoQuestion(current.question),
+          question: toPublicRetoPrizeQuestion(current.question),
           question_deadline: state.question_deadline,
         });
       }
@@ -287,55 +306,79 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const selected = await selectSecureRetoQuestion(
-        context.supabase,
-        source,
-        state.answered_question_ids
+      const poolDeadline =
+        state.pool_deadline ??
+        new Date(now + rules.poolTotalSec * 1000).toISOString();
+      const questionDeadline = deadlineAfter(
+        rules.perQuestionMaxSec,
+        poolDeadline
       );
 
-      if (!selected.ok) {
-        return selected.reason === "unavailable"
+      const issued = await generateAndIssueRetoPrizeQuestion(
+        context.supabase,
+        {
+          sessionId: session.id,
+          participantId: session.participant_id,
+          groupCode: session.group_code,
+          expectedStateVersion: session.state_version,
+          source,
+          questionDeadline,
+          poolDeadline: state.pool_deadline === null ? poolDeadline : null,
+          pendingRoll: null,
+        }
+      );
+
+      if (!issued.ok) {
+        if (issued.reason === "expired") {
+          return participantJson(410, {
+            ok: false,
+            code: "RETO_SESSION_EXPIRED",
+            error: "La sesión de juego venció.",
+          });
+        }
+
+        if (issued.reason === "pool_exhausted") {
+          return retoUnavailable("RETO_QUESTION_POOL_EXHAUSTED");
+        }
+
+        return issued.reason === "unavailable"
           ? retoUnavailable("RETO_QUESTION_LOOKUP_FAILED")
           : retoConflict("RETO_QUESTION_STATE_INVALID");
       }
 
-      if (!selected.question) {
-        return retoUnavailable("RETO_QUESTION_POOL_EXHAUSTED");
+      if (
+        issued.pendingRoll !== null ||
+        !issued.poolDeadline ||
+        issued.question.issuedStateVersion !== issued.stateVersion ||
+        !sameInstant(issued.question.expiresAt, questionDeadline)
+      ) {
+        return retoConflict("RETO_QUESTION_STATE_INVALID");
       }
 
-      const poolDeadline =
-        state.pool_deadline ??
-        new Date(now + rules.poolTotalSec * 1000).toISOString();
+      if (
+        state.pool_deadline !== null &&
+        !sameInstant(issued.poolDeadline, state.pool_deadline)
+      ) {
+        return retoConflict("RETO_QUESTION_STATE_INVALID");
+      }
 
-      const nextState = {
+      const issuedState = {
         ...state,
-        pool_deadline: poolDeadline,
-        current_question_id: selected.question.id,
-        question_deadline: deadlineAfter(
-          rules.perQuestionMaxSec,
-          poolDeadline
-        ),
+        pool_deadline: issued.poolDeadline,
+        current_question_id: issued.question.id,
+        question_deadline: issued.question.expiresAt,
       };
-
-      const updated = await updateRetoSessionState(
-        context.supabase,
-        session,
-        nextState
-      );
-
-      if (!updated.ok) {
-        return updated.reason === "unavailable"
-          ? retoUnavailable("RETO_SESSION_UPDATE_FAILED")
-          : retoConflict();
-      }
 
       return participantJson(200, {
         ok: true,
         resumed_question: false,
-        session: publicRetoSession(updated.session),
-        progress: principalPublicProgress(nextState),
-        question: toPublicRetoQuestion(selected.question),
-        question_deadline: nextState.question_deadline,
+        session: publicRetoSession({
+          ...session,
+          state_version: issued.stateVersion,
+        }),
+        progress: principalPublicProgress(issuedState),
+        question: toPublicRetoPrizeQuestion(issued.question),
+        question_deadline: issuedState.question_deadline,
       });
     }
 
@@ -355,11 +398,12 @@ export async function POST(req: NextRequest) {
         return retoConflict("RETO_STATE_INVALID");
       }
 
-      const current = await loadSecureRetoQuestionById(
-        context.supabase,
-        "camino",
-        state.current_question_id
-      );
+      const current = await loadStoredRetoPrizeQuestion(context.supabase, {
+        sessionId: session.id,
+        instanceId: state.current_question_id,
+        source: "camino",
+        expectedStateVersion: session.state_version,
+      });
 
       if (!current.ok) {
         return current.reason === "unavailable"
@@ -367,8 +411,11 @@ export async function POST(req: NextRequest) {
           : retoConflict("RETO_QUESTION_STATE_INVALID");
       }
 
-      if (!current.question) {
-        return retoConflict("RETO_QUESTION_NOT_FOUND");
+      if (
+        !current.question ||
+        !sameInstant(current.question.expiresAt, state.question_deadline)
+      ) {
+        return retoConflict("RETO_QUESTION_STATE_INVALID");
       }
 
       return participantJson(200, {
@@ -377,7 +424,7 @@ export async function POST(req: NextRequest) {
         session: publicRetoSession(session),
         progress: caminoPublicProgress(state),
         roll: state.pending_roll,
-        question: toPublicRetoQuestion(current.question),
+        question: toPublicRetoPrizeQuestion(current.question),
         question_deadline: state.question_deadline,
       });
     }
@@ -386,50 +433,70 @@ export async function POST(req: NextRequest) {
       return retoConflict("RETO_STATE_INVALID");
     }
 
-    const selected = await selectSecureRetoQuestion(
-      context.supabase,
-      "camino",
-      state.answered_question_ids
+    const roll = secureRandomDieRoll();
+    const questionDeadline = deadlineAfter(
+      RETO_CAMINO_RULES.perQuestionMaxSec
     );
 
-    if (!selected.ok) {
-      return selected.reason === "unavailable"
+    const issued = await generateAndIssueRetoPrizeQuestion(
+      context.supabase,
+      {
+        sessionId: session.id,
+        participantId: session.participant_id,
+        groupCode: session.group_code,
+        expectedStateVersion: session.state_version,
+        source: "camino",
+        questionDeadline,
+        poolDeadline: null,
+        pendingRoll: roll,
+      }
+    );
+
+    if (!issued.ok) {
+      if (issued.reason === "expired") {
+        return participantJson(410, {
+          ok: false,
+          code: "RETO_SESSION_EXPIRED",
+          error: "La sesión de juego venció.",
+        });
+      }
+
+      if (issued.reason === "pool_exhausted") {
+        return retoUnavailable("RETO_QUESTION_POOL_EXHAUSTED");
+      }
+
+      return issued.reason === "unavailable"
         ? retoUnavailable("RETO_QUESTION_LOOKUP_FAILED")
         : retoConflict("RETO_QUESTION_STATE_INVALID");
     }
 
-    if (!selected.question) {
-      return retoUnavailable("RETO_QUESTION_POOL_EXHAUSTED");
+    if (
+      issued.poolDeadline !== null ||
+      issued.pendingRoll !== roll ||
+      issued.question.issuedStateVersion !== issued.stateVersion ||
+      !sameInstant(issued.question.expiresAt, questionDeadline)
+    ) {
+      return retoConflict("RETO_QUESTION_STATE_INVALID");
     }
 
-    const roll = secureRandomDieRoll();
-    const nextState = {
+    const issuedState = {
       ...state,
       pending_roll: roll,
-      current_question_id: selected.question.id,
-      question_deadline: deadlineAfter(RETO_CAMINO_RULES.perQuestionMaxSec),
+      current_question_id: issued.question.id,
+      question_deadline: issued.question.expiresAt,
     };
-
-    const updated = await updateRetoSessionState(
-      context.supabase,
-      session,
-      nextState
-    );
-
-    if (!updated.ok) {
-      return updated.reason === "unavailable"
-        ? retoUnavailable("RETO_SESSION_UPDATE_FAILED")
-        : retoConflict();
-    }
 
     return participantJson(200, {
       ok: true,
       resumed_question: false,
-      session: publicRetoSession(updated.session),
-      progress: caminoPublicProgress(nextState),
+      session: publicRetoSession({
+        ...session,
+        state_version: issued.stateVersion,
+      }),
+      progress: caminoPublicProgress(issuedState),
       roll,
-      question: toPublicRetoQuestion(selected.question),
-      question_deadline: nextState.question_deadline,
+      question: toPublicRetoPrizeQuestion(issued.question),
+      question_deadline: issuedState.question_deadline,
     });
   } catch {
     console.error("[reto-secure-question] unexpected failure");

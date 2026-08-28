@@ -924,28 +924,24 @@ export async function generateAndIssueRetoPrizeQuestion(
     return { ok: false, reason: "invalid_state" };
   }
 
-  const loaded = await loadStoredRetoPrizeQuestion(supabase, {
-    sessionId: args.sessionId,
-    instanceId,
-    source,
-    expectedStateVersion: stateVersion,
-  });
-
-  if (!loaded.ok) return loaded;
-  if (!loaded.question) {
+  if (source === "camino") {
+    if (returnedPoolDeadline !== null) {
+      return { ok: false, reason: "invalid_state" };
+    }
+  } else if (!returnedPoolDeadline) {
     return { ok: false, reason: "invalid_state" };
   }
 
-  if (
-    loaded.question.question !== generated.question.questionText ||
-    loaded.question.expiresAt !== questionDeadline
-  ) {
-    return { ok: false, reason: "invalid_state" };
-  }
+  const question: StoredRetoPrizeQuestion = {
+    id: instanceId,
+    question: generated.question.questionText,
+    expiresAt: returnedQuestionDeadline,
+    issuedStateVersion: stateVersion,
+  };
 
   return {
     ok: true,
-    question: loaded.question,
+    question,
     stateVersion,
     poolDeadline: returnedPoolDeadline,
     pendingRoll: returnedPendingRoll,
