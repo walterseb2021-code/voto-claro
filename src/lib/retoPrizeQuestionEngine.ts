@@ -596,12 +596,17 @@ async function loadUsedFactIds(
   return { ok: true, ids };
 }
 
-async function selectRandomEligibleFact(
+const FACT_SCAN_PAGE_SIZE = 500;
+const FACT_SCAN_MAX_ROWS = 5000;
+const TEMPLATE_SCAN_PAGE_SIZE = 200;
+const TEMPLATE_SCAN_MAX_ROWS = 1000;
+
+async function countEligibleFacts(
   supabase: RetoPrizeAdminClient,
   source: RetoPrizeQuestionSource,
-  usedFactIds: Set<string>
+  nowIso: string
 ): Promise<
-  | { ok: true; fact: KnowledgeFactRow | null }
+  | { ok: true; count: number }
   | { ok: false; reason: "unavailable" }
 > {
   const countResult = await supabase
@@ -610,7 +615,9 @@ async function selectRandomEligibleFact(
     .eq("is_active", true)
     .eq("review_status", "approved")
     .eq("lang", "es")
-    .contains("eligible_sources", [source]);
+    .contains("eligible_sources", [source])
+    .or(`valid_from.is.null,valid_from.lte.${nowIso}`)
+    .or(`valid_until.is.null,valid_until.gt.${nowIso}`);
 
   if (countResult.error) {
     console.error("[reto-prize-question-engine] fact count failed");
@@ -618,82 +625,144 @@ async function selectRandomEligibleFact(
   }
 
   const count = Number(countResult.count ?? 0);
-  if (!Number.isInteger(count) || count <= 0) {
-    return { ok: true, fact: null };
-  }
-
-  const now = Date.now();
-  const attempts = Math.min(Math.max(count * 2, 16), 64);
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const offset = randomInt(0, count);
-
-    const { data, error } = await supabase
-      .from("reto_knowledge_facts")
-      .select("id,fact_type,fact_data,allowed_operators,valid_from,valid_until")
-      .eq("is_active", true)
-      .eq("review_status", "approved")
-      .eq("lang", "es")
-      .contains("eligible_sources", [source])
-      .range(offset, offset)
-      .maybeSingle();
-
-    if (error) {
-      console.error("[reto-prize-question-engine] fact lookup failed");
-      return { ok: false, reason: "unavailable" };
-    }
-
-    const fact = parseFactRow(data);
-    if (!fact || usedFactIds.has(fact.id) || !activeAt(fact, now)) {
-      continue;
-    }
-
-    return { ok: true, fact };
-  }
-
-  return { ok: true, fact: null };
-}
-
-async function selectRandomCompatibleTemplate(
-  supabase: RetoPrizeAdminClient,
-  source: RetoPrizeQuestionSource,
-  fact: KnowledgeFactRow
-): Promise<
-  | { ok: true; template: QuestionTemplateRow | null }
-  | { ok: false; reason: "unavailable" }
-> {
-  const { data, error } = await supabase
-    .from("reto_question_templates")
-    .select("id,fact_type,operator_code,config,renderer_version")
-    .eq("is_active", true)
-    .eq("review_status", "approved")
-    .eq("fact_type", fact.fact_type)
-    .in("operator_code", fact.allowed_operators)
-    .eq("renderer_version", 1)
-    .contains("allowed_sources", [source])
-    .limit(200);
-
-  if (error) {
-    console.error("[reto-prize-question-engine] template lookup failed");
+  if (!Number.isInteger(count) || count < 0) {
+    console.error("[reto-prize-question-engine] invalid fact count");
     return { ok: false, reason: "unavailable" };
   }
 
-  const templates = (data ?? [])
-    .map((row) => parseTemplateRow(row))
-    .filter((row): row is QuestionTemplateRow => Boolean(row))
-    .filter((row) => row.fact_type === fact.fact_type)
-    .filter((row) => fact.allowed_operators.includes(row.operator_code));
+  return { ok: true, count };
+}
 
-  if (templates.length === 0) {
-    return { ok: true, template: null };
+async function loadEligibleFactRange(
+  supabase: RetoPrizeAdminClient,
+  source: RetoPrizeQuestionSource,
+  nowIso: string,
+  from: number,
+  to: number
+): Promise<
+  | { ok: true; rows: JsonObject[] }
+  | { ok: false; reason: "unavailable" }
+> {
+  const { data, error } = await supabase
+    .from("reto_knowledge_facts")
+    .select("id,fact_type,fact_data,allowed_operators,valid_from,valid_until")
+    .eq("is_active", true)
+    .eq("review_status", "approved")
+    .eq("lang", "es")
+    .contains("eligible_sources", [source])
+    .or(`valid_from.is.null,valid_from.lte.${nowIso}`)
+    .or(`valid_until.is.null,valid_until.gt.${nowIso}`)
+    .order("id", { ascending: true })
+    .range(from, to);
+
+  if (error) {
+    console.error("[reto-prize-question-engine] fact range lookup failed");
+    return { ok: false, reason: "unavailable" };
   }
 
   return {
     ok: true,
-    template: templates[randomInt(0, templates.length)],
+    rows: (data ?? []) as JsonObject[],
   };
 }
+type CompatibleTemplateScan = {
+  templates: QuestionTemplateRow[];
+  complete: boolean;
+};
 
+function compatibleTemplateCacheKey(
+  source: RetoPrizeQuestionSource,
+  fact: KnowledgeFactRow
+) {
+  return [
+    source,
+    fact.fact_type,
+    [...fact.allowed_operators].sort().join(","),
+  ].join("|");
+}
+
+async function loadRandomizedCompatibleTemplates(
+  supabase: RetoPrizeAdminClient,
+  source: RetoPrizeQuestionSource,
+  fact: KnowledgeFactRow
+): Promise<
+  | { ok: true; scan: CompatibleTemplateScan }
+  | { ok: false; reason: "unavailable" }
+> {
+  const templates: QuestionTemplateRow[] = [];
+  const seenTemplateIds = new Set<string>();
+  let complete = false;
+
+  for (
+    let from = 0;
+    from < TEMPLATE_SCAN_MAX_ROWS;
+    from += TEMPLATE_SCAN_PAGE_SIZE
+  ) {
+    const to = Math.min(
+      from + TEMPLATE_SCAN_PAGE_SIZE - 1,
+      TEMPLATE_SCAN_MAX_ROWS - 1
+    );
+
+    const { data, error } = await supabase
+      .from("reto_question_templates")
+      .select("id,fact_type,operator_code,config,renderer_version")
+      .eq("is_active", true)
+      .eq("review_status", "approved")
+      .eq("fact_type", fact.fact_type)
+      .in("operator_code", fact.allowed_operators)
+      .eq("renderer_version", 1)
+      .contains("allowed_sources", [source])
+      .order("id", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      console.error("[reto-prize-question-engine] template lookup failed");
+      return { ok: false, reason: "unavailable" };
+    }
+
+    const rows = (data ?? []) as JsonObject[];
+
+    for (const row of rows) {
+      const template = parseTemplateRow(row);
+      if (
+        !template ||
+        template.fact_type !== fact.fact_type ||
+        !fact.allowed_operators.includes(template.operator_code)
+      ) {
+        continue;
+      }
+
+      if (seenTemplateIds.has(template.id)) {
+        console.error("[reto-prize-question-engine] duplicate template during scan");
+        return { ok: false, reason: "unavailable" };
+      }
+
+      seenTemplateIds.add(template.id);
+      templates.push(template);
+    }
+
+    const expectedRows = to - from + 1;
+    if (rows.length < expectedRows) {
+      complete = true;
+      break;
+    }
+  }
+
+  for (let index = templates.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(0, index + 1);
+    const current = templates[index];
+    templates[index] = templates[swapIndex];
+    templates[swapIndex] = current;
+  }
+
+  return {
+    ok: true,
+    scan: {
+      templates,
+      complete,
+    },
+  };
+}
 export async function generateRetoPrizeQuestion(
   supabase: RetoPrizeAdminClient,
   sessionId: string,
@@ -709,44 +778,129 @@ export async function generateRetoPrizeQuestion(
   const used = await loadUsedFactIds(supabase, sessionId);
   if (!used.ok) return used;
 
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    const selectedFact = await selectRandomEligibleFact(
-      supabase,
-      source,
-      used.ids
-    );
-    if (!selectedFact.ok) return selectedFact;
-    if (!selectedFact.fact) return { ok: true, question: null };
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
 
-    const selectedTemplate = await selectRandomCompatibleTemplate(
-      supabase,
-      source,
-      selectedFact.fact
-    );
-    if (!selectedTemplate.ok) return selectedTemplate;
+  const counted = await countEligibleFacts(supabase, source, nowIso);
+  if (!counted.ok) return counted;
+  if (counted.count === 0) {
+    return { ok: true, question: null };
+  }
 
-    if (!selectedTemplate.template) {
-      used.ids.add(selectedFact.fact.id);
-      continue;
+  const startOffset = randomInt(0, counted.count);
+  const ranges: Array<[number, number]> =
+    startOffset === 0
+      ? [[0, counted.count - 1]]
+      : [
+          [startOffset, counted.count - 1],
+          [0, startOffset - 1],
+        ];
+
+  const seenFactIds = new Set<string>();
+  const templateCache = new Map<string, CompatibleTemplateScan>();
+  let rowsScanned = 0;
+  let incompleteTemplateScan = false;
+
+  for (const [rangeStart, rangeEnd] of ranges) {
+    for (
+      let from = rangeStart;
+      from <= rangeEnd;
+      from += FACT_SCAN_PAGE_SIZE
+    ) {
+      const remainingBudget = FACT_SCAN_MAX_ROWS - rowsScanned;
+      if (remainingBudget <= 0) {
+        console.error("[reto-prize-question-engine] fact scan safety limit reached");
+        return { ok: false, reason: "unavailable" };
+      }
+
+      const to = Math.min(
+        from + FACT_SCAN_PAGE_SIZE - 1,
+        rangeEnd,
+        from + remainingBudget - 1
+      );
+
+      const loaded = await loadEligibleFactRange(
+        supabase,
+        source,
+        nowIso,
+        from,
+        to
+      );
+      if (!loaded.ok) return loaded;
+
+      const expectedRows = to - from + 1;
+      if (loaded.rows.length !== expectedRows) {
+        console.error("[reto-prize-question-engine] fact pool changed during scan");
+        return { ok: false, reason: "unavailable" };
+      }
+
+      rowsScanned += loaded.rows.length;
+
+      for (const row of loaded.rows) {
+        const rawId = String(row.id ?? "").trim();
+        if (!isUuid(rawId) || seenFactIds.has(rawId)) {
+          console.error("[reto-prize-question-engine] invalid fact scan identity");
+          return { ok: false, reason: "unavailable" };
+        }
+        seenFactIds.add(rawId);
+
+        const fact = parseFactRow(row);
+        if (!fact || used.ids.has(fact.id) || !activeAt(fact, nowMs)) {
+          continue;
+        }
+
+        const cacheKey = compatibleTemplateCacheKey(source, fact);
+        let templateScan = templateCache.get(cacheKey);
+
+        if (!templateScan) {
+          const loadedTemplates = await loadRandomizedCompatibleTemplates(
+            supabase,
+            source,
+            fact
+          );
+          if (!loadedTemplates.ok) return loadedTemplates;
+          templateScan = loadedTemplates.scan;
+          templateCache.set(cacheKey, templateScan);
+        }
+
+        for (const template of templateScan.templates) {
+          const generated = renderRetoPrizeQuestionV1(
+            fact,
+            template,
+            source
+          );
+          if (generated) {
+            return { ok: true, question: generated };
+          }
+        }
+
+        if (!templateScan.complete) {
+          incompleteTemplateScan = true;
+        }
+      }
+
+      if (to < rangeEnd && rowsScanned >= FACT_SCAN_MAX_ROWS) {
+        console.error("[reto-prize-question-engine] fact scan safety limit reached");
+        return { ok: false, reason: "unavailable" };
+      }
     }
+  }
 
-    const generated = renderRetoPrizeQuestionV1(
-      selectedFact.fact,
-      selectedTemplate.template,
-      source
-    );
+  if (
+    rowsScanned !== counted.count ||
+    seenFactIds.size !== counted.count
+  ) {
+    console.error("[reto-prize-question-engine] incomplete fact pool scan");
+    return { ok: false, reason: "unavailable" };
+  }
 
-    if (!generated) {
-      used.ids.add(selectedFact.fact.id);
-      continue;
-    }
-
-    return { ok: true, question: generated };
+  if (incompleteTemplateScan) {
+    console.error("[reto-prize-question-engine] incomplete template scan");
+    return { ok: false, reason: "unavailable" };
   }
 
   return { ok: true, question: null };
 }
-
 function mapIssueError(error: unknown): RetoPrizeQuestionFailure {
   const message = isObject(error)
     ? String(error.message ?? error.details ?? "")
