@@ -287,23 +287,110 @@ function randomFalseInteger(actual: number, config: JsonObject) {
   return randomInt(0, 2) === 0 ? actual - delta : actual + delta;
 }
 
-function randomFalseDecimal(actual: number, config: JsonObject) {
-  const stepRaw = Number(config.step ?? 0.1);
-  const maxStepsRaw = Number(config.false_steps_max ?? 10);
-  const step =
-    Number.isFinite(stepRaw) && stepRaw > 0 && stepRaw <= 100000
-      ? stepRaw
-      : 0.1;
-  const maxSteps =
-    Number.isInteger(maxStepsRaw) && maxStepsRaw >= 1
-      ? Math.min(maxStepsRaw, 1000)
-      : 10;
+const DECIMAL_VALUE_RE =
+  /^-?(?:0|[1-9]\d{0,17})(?:\.\d{0,7}[1-9])?$/;
+const DECIMAL_STEP_RE =
+  /^(?:0\.\d{0,7}[1-9]|[1-9]\d{0,4}(?:\.\d{0,7}[1-9])?|100000)$/;
 
-  const delta = step * randomInt(1, maxSteps + 1);
-  const candidate =
-    randomInt(0, 2) === 0 ? actual - delta : actual + delta;
+type CanonicalDecimal = {
+  text: string;
+  coefficient: bigint;
+  scale: number;
+};
 
-  return Number(candidate.toFixed(8));
+function parseCanonicalDecimal(
+  value: unknown,
+  pattern: RegExp
+): CanonicalDecimal | null {
+  if (typeof value !== "string" || !pattern.test(value) || value === "-0") {
+    return null;
+  }
+
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole, fraction = ""] = unsigned.split(".");
+  const magnitude = BigInt(`${whole}${fraction}`);
+  const zero = BigInt(0);
+
+  return {
+    text: value,
+    coefficient: negative && magnitude !== zero ? -magnitude : magnitude,
+    scale: fraction.length,
+  };
+}
+
+function scaledDecimalCoefficient(
+  value: CanonicalDecimal,
+  targetScale: number
+) {
+  return (
+    value.coefficient *
+    BigInt(10) ** BigInt(targetScale - value.scale)
+  );
+}
+
+function formatScaledDecimal(
+  coefficient: bigint,
+  scale: number
+): string | null {
+  const zero = BigInt(0);
+  const negative = coefficient < zero;
+  const magnitude = negative ? -coefficient : coefficient;
+  const digits = magnitude.toString().padStart(scale + 1, "0");
+
+  let text: string;
+  if (scale === 0) {
+    text = digits;
+  } else {
+    const splitAt = digits.length - scale;
+    const whole = digits.slice(0, splitAt);
+    const fraction = digits.slice(splitAt).replace(/0+$/, "");
+    text = fraction ? `${whole}.${fraction}` : whole;
+  }
+
+  if (negative && text !== "0") {
+    text = `-${text}`;
+  }
+
+  return DECIMAL_VALUE_RE.test(text) && text !== "-0" ? text : null;
+}
+
+function randomFalseDecimal(
+  actual: CanonicalDecimal,
+  config: JsonObject
+): string | null {
+  const step = parseCanonicalDecimal(config.step, DECIMAL_STEP_RE);
+  const maxSteps = config.false_steps_max;
+
+  if (
+    !step ||
+    typeof maxSteps !== "number" ||
+    !Number.isInteger(maxSteps) ||
+    maxSteps < 1 ||
+    maxSteps > 1000
+  ) {
+    return null;
+  }
+
+  const scale = Math.max(actual.scale, step.scale);
+  const actualScaled = scaledDecimalCoefficient(actual, scale);
+  const stepScaled = scaledDecimalCoefficient(step, scale);
+  const delta = stepScaled * BigInt(randomInt(1, maxSteps + 1));
+  const direction = randomInt(0, 2) === 0 ? -BigInt(1) : BigInt(1);
+
+  const first = formatScaledDecimal(
+    actualScaled + direction * delta,
+    scale
+  );
+  if (first && first !== actual.text) {
+    return first;
+  }
+
+  const fallback = formatScaledDecimal(
+    actualScaled - direction * delta,
+    scale
+  );
+  return fallback && fallback !== actual.text ? fallback : null;
 }
 
 function shiftedIsoDate(actual: string) {
@@ -401,15 +488,20 @@ function renderDecimal(
   if (template.operator_code !== "DECIMAL_EQUALS_VARIANT") return null;
 
   const subject = safeText(fact.fact_data.subject, 3500);
-  const actual = Number(fact.fact_data.value);
+  const actual = parseCanonicalDecimal(
+    fact.fact_data.value,
+    DECIMAL_VALUE_RE
+  );
   const unit = formatUnit(fact.fact_data.unit);
 
-  if (!subject || !Number.isFinite(actual)) return null;
+  if (!subject || !actual) return null;
 
   const truthTarget = randomInt(0, 2) === 1;
   const candidate = truthTarget
-    ? actual
+    ? actual.text
     : randomFalseDecimal(actual, template.config);
+
+  if (!candidate) return null;
 
   const questionText = safeText(
     `¿Es correcto que ${subject} es ${candidate}${unit}?`,
@@ -427,7 +519,7 @@ function renderDecimal(
       candidate,
     },
     questionText,
-    correctAnswer: Object.is(candidate, actual),
+    correctAnswer: candidate === actual.text,
   };
 }
 
