@@ -270,6 +270,13 @@ function formatUnit(value: unknown) {
   const unit = safeText(value, 80);
   return unit ? ` ${unit}` : "";
 }
+function textComparisonKey(value: string) {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("es");
+}
 
 function randomFalseInteger(actual: number, config: JsonObject) {
   const minDeltaRaw = Number(config.false_delta_min ?? 1);
@@ -532,20 +539,32 @@ function renderText(
 
   const subject = safeText(fact.fact_data.subject, 3000);
   const actual = safeText(fact.fact_data.value, 1000);
-  const alternatives = Array.isArray(fact.fact_data.alternatives)
-    ? fact.fact_data.alternatives
-        .map((item) => safeText(item, 1000))
-        .filter((item): item is string => Boolean(item && item !== actual))
-        .slice(0, 100)
-    : [];
-
   if (!subject || !actual) return null;
 
-  const canRenderFalse = alternatives.length > 0;
-  const truthTarget = !canRenderFalse || randomInt(0, 2) === 1;
+  const actualKey = textComparisonKey(actual);
+  const falseAlternativesRaw = fact.fact_data.false_alternatives;
+  if (!Array.isArray(falseAlternativesRaw)) return null;
+
+  const seenKeys = new Set<string>();
+  const falseAlternatives: string[] = [];
+
+  for (const item of falseAlternativesRaw.slice(0, 100)) {
+    const alternative = safeText(item, 1000);
+    if (!alternative) continue;
+
+    const key = textComparisonKey(alternative);
+    if (!key || key === actualKey || seenKeys.has(key)) continue;
+
+    seenKeys.add(key);
+    falseAlternatives.push(alternative);
+  }
+
+  if (falseAlternatives.length === 0) return null;
+
+  const truthTarget = randomInt(0, 2) === 1;
   const candidate = truthTarget
     ? actual
-    : alternatives[randomInt(0, alternatives.length)];
+    : falseAlternatives[randomInt(0, falseAlternatives.length)];
 
   const questionText = safeText(
     `¿Es correcto afirmar que ${subject} es "${candidate}"?`,
@@ -563,7 +582,7 @@ function renderText(
       candidate,
     },
     questionText,
-    correctAnswer: candidate === actual,
+    correctAnswer: textComparisonKey(candidate) === actualKey,
   };
 }
 
