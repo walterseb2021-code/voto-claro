@@ -82,8 +82,7 @@ const GROUP_RE = /^GRUPO[A-Z]$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const SUPPORTED_OPERATORS = new Set([
-  "BOOL_DIRECT",
-  "BOOL_NEGATED",
+  "BOOL_EXPLICIT_VARIANT",
   "INT_EQUALS_VARIANT",
   "DECIMAL_EQUALS_VARIANT",
   "TEXT_EQUALS_VARIANT",
@@ -95,7 +94,7 @@ const ALLOWED_OPERATORS_BY_FACT_TYPE: Record<
   RetoPrizeFactType,
   ReadonlySet<string>
 > = {
-  boolean: new Set(["BOOL_DIRECT", "BOOL_NEGATED"]),
+  boolean: new Set(["BOOL_EXPLICIT_VARIANT"]),
   integer: new Set(["INT_EQUALS_VARIANT"]),
   decimal: new Set(["DECIMAL_EQUALS_VARIANT"]),
   text: new Set(["TEXT_EQUALS_VARIANT"]),
@@ -416,37 +415,30 @@ function renderBoolean(
   template: QuestionTemplateRow,
   source: RetoPrizeQuestionSource
 ): GeneratedRetoPrizeQuestion | null {
-  const statement = safeText(fact.fact_data.statement, 4500);
-  const value = fact.fact_data.value;
+  if (template.operator_code !== "BOOL_EXPLICIT_VARIANT") return null;
 
-  if (!statement || typeof value !== "boolean") return null;
+  const statementTrue = safeText(fact.fact_data.statement_true, 4500);
+  const statementFalse = safeText(fact.fact_data.statement_false, 4500);
 
-  if (template.operator_code === "BOOL_DIRECT") {
-    return {
-      factId: fact.id,
-      templateId: template.id,
-      source,
-      parameters: { renderer_version: 1, mode: "direct" },
-      questionText: statement,
-      correctAnswer: value,
-    };
+  if (!statementTrue || !statementFalse) return null;
+  if (textComparisonKey(statementTrue) === textComparisonKey(statementFalse)) {
+    return null;
   }
 
-  if (template.operator_code === "BOOL_NEGATED") {
-    const questionText = safeText(`No es cierto que: ${statement}`, 5000);
-    if (!questionText) return null;
+  const truthTarget = randomInt(0, 2) === 1;
+  const questionText = truthTarget ? statementTrue : statementFalse;
 
-    return {
-      factId: fact.id,
-      templateId: template.id,
-      source,
-      parameters: { renderer_version: 1, mode: "negated" },
-      questionText,
-      correctAnswer: !value,
-    };
-  }
-
-  return null;
+  return {
+    factId: fact.id,
+    templateId: template.id,
+    source,
+    parameters: {
+      renderer_version: 1,
+      truth_target: truthTarget,
+    },
+    questionText,
+    correctAnswer: truthTarget,
+  };
 }
 
 function renderInteger(
