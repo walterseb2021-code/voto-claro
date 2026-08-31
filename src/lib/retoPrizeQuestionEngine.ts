@@ -80,6 +80,8 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GROUP_RE = /^GRUPO[A-Z]$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MIN_ISO_DATE = "0001-01-01";
+const MAX_ISO_DATE = "9999-12-31";
 
 const SUPPORTED_OPERATORS = new Set([
   "BOOL_EXPLICIT_VARIANT",
@@ -290,7 +292,15 @@ function randomFalseInteger(actual: number, config: JsonObject) {
       : Math.max(minDelta, 9);
 
   const delta = randomInt(minDelta, maxDelta + 1);
-  return randomInt(0, 2) === 0 ? actual - delta : actual + delta;
+  const direction = randomInt(0, 2) === 0 ? -1 : 1;
+  const first = actual + direction * delta;
+
+  if (Number.isSafeInteger(first)) {
+    return first;
+  }
+
+  const fallback = actual - direction * delta;
+  return Number.isSafeInteger(fallback) ? fallback : null;
 }
 
 const DECIMAL_VALUE_RE =
@@ -399,15 +409,41 @@ function randomFalseDecimal(
   return fallback && fallback !== actual.text ? fallback : null;
 }
 
-function shiftedIsoDate(actual: string) {
-  const time = Date.parse(`${actual}T00:00:00.000Z`);
+function parseCanonicalIsoDate(value: unknown) {
+  const text = safeText(value, 10);
+  if (!text || !DATE_RE.test(text)) return null;
+  if (text < MIN_ISO_DATE || text > MAX_ISO_DATE) return null;
+
+  const time = Date.parse(`${text}T00:00:00.000Z`);
   if (!Number.isFinite(time)) return null;
+
+  const canonical = new Date(time).toISOString().slice(0, 10);
+  return canonical === text ? { text, time } : null;
+}
+
+function shiftedIsoDate(actual: string) {
+  const parsed = parseCanonicalIsoDate(actual);
+  if (!parsed) return null;
 
   const days = randomInt(1, 31);
   const direction = randomInt(0, 2) === 0 ? -1 : 1;
-  const shifted = new Date(time + direction * days * 86400000);
 
-  return shifted.toISOString().slice(0, 10);
+  const first = new Date(
+    parsed.time + direction * days * 86400000
+  ).toISOString().slice(0, 10);
+  const firstCanonical = parseCanonicalIsoDate(first)?.text ?? null;
+  if (firstCanonical && firstCanonical !== actual) {
+    return firstCanonical;
+  }
+
+  const fallback = new Date(
+    parsed.time - direction * days * 86400000
+  ).toISOString().slice(0, 10);
+  const fallbackCanonical = parseCanonicalIsoDate(fallback)?.text ?? null;
+
+  return fallbackCanonical && fallbackCanonical !== actual
+    ? fallbackCanonical
+    : null;
 }
 
 function renderBoolean(
@@ -458,6 +494,8 @@ function renderInteger(
   const candidate = truthTarget
     ? actual
     : randomFalseInteger(actual, template.config);
+
+  if (candidate === null) return null;
 
   const questionText = safeText(
     `¿Es correcto que ${subject} es ${candidate}${unit}?`,
@@ -586,13 +624,11 @@ function renderDate(
   if (template.operator_code !== "DATE_EQUALS_VARIANT") return null;
 
   const subject = safeText(fact.fact_data.subject, 3500);
-  const actual = safeText(fact.fact_data.value, 10);
+  const parsedActual = parseCanonicalIsoDate(fact.fact_data.value);
 
-  if (!subject || !actual || !DATE_RE.test(actual)) return null;
+  if (!subject || !parsedActual) return null;
 
-  const actualTime = Date.parse(`${actual}T00:00:00.000Z`);
-  if (!Number.isFinite(actualTime)) return null;
-
+  const actual = parsedActual.text;
   const truthTarget = randomInt(0, 2) === 1;
   const candidate = truthTarget ? actual : shiftedIsoDate(actual);
   if (!candidate) return null;
