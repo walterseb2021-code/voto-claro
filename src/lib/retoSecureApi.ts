@@ -140,7 +140,18 @@ export function parseRetoAnswer(value: unknown) {
     : undefined;
 }
 
-export function publicRetoSession(session: RetoSessionRow) {
+type PublicRetoSessionInput = Pick<
+  RetoSessionRow,
+  | "id"
+  | "game_code"
+  | "status"
+  | "state_version"
+  | "started_at"
+  | "expires_at"
+  | "finished_at"
+>;
+
+export function publicRetoSession(session: PublicRetoSessionInput) {
   return {
     id: session.id,
     game_code: session.game_code,

@@ -50,6 +50,27 @@ export type CommittedRetoPrizeAnswer = {
   finishedAt: string | null;
 };
 
+export type RetoPrizeQuestionSource =
+  | "principal_level1"
+  | "principal_level2"
+  | "camino";
+
+export type RecoverRetoPrizeAnswerArgs = CommitRetoPrizeAnswerArgs & {
+  gameCode: "principal" | "camino";
+};
+
+export type RecoveredRetoPrizeAnswer = CommittedRetoPrizeAnswer & {
+  questionSource: RetoPrizeQuestionSource;
+  issuedRoll: number | null;
+  sessionStartedAt: string;
+  sessionExpiresAt: string;
+};
+
+export type RetoPrizeAnswerRecoveryFailure =
+  | "not_replayable"
+  | "invalid_state"
+  | "unavailable";
+
 function isObject(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -71,6 +92,21 @@ function safeIsoDateTime(value: unknown) {
 
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+function safeRequiredIsoDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? value : null;
+}
+
+function safeQuestionSource(value: unknown): RetoPrizeQuestionSource | null {
+  return value === "principal_level1" ||
+    value === "principal_level2" ||
+    value === "camino"
+    ? value
+    : null;
 }
 
 function safeStatus(value: unknown): RetoPrizeAnswerSessionStatus | null {
@@ -125,6 +161,28 @@ function mapAnswerError(error: unknown): RetoPrizeAnswerFailure {
     message.includes("RETO_ANSWER_QUESTION_NOT_FOUND") ||
     message.includes("RETO_ANSWER_GAME_INVALID") ||
     message.includes("RETO_ANSWER_RESULT_STATE_INVALID")
+  ) {
+    return "invalid_state";
+  }
+
+  return "unavailable";
+}
+
+function mapAnswerRecoveryError(
+  error: unknown
+): RetoPrizeAnswerRecoveryFailure {
+  const message = isObject(error)
+    ? String(error.message ?? error.details ?? "")
+    : String(error ?? "");
+
+  if (message.includes("RETO_ANSWER_REPLAY_NOT_REPLAYABLE")) {
+    return "not_replayable";
+  }
+
+  if (
+    message.includes("RETO_ANSWER_REPLAY_INVALID_INPUT") ||
+    message.includes("RETO_ANSWER_REPLAY_STATE_INVALID") ||
+    message.includes("RETO_ANSWER_REPLAY_QUALIFIER_INVALID")
   ) {
     return "invalid_state";
   }
@@ -264,6 +322,177 @@ export async function commitRetoPrizeAnswerAtomic(
       awardQuarter,
       sessionState,
       finishedAt,
+    },
+  };
+}
+
+export async function recoverCommittedRetoPrizeAnswer(
+  supabase: RetoPrizeAdminClient,
+  args: RecoverRetoPrizeAnswerArgs
+): Promise<
+  | { ok: true; result: RecoveredRetoPrizeAnswer }
+  | { ok: false; reason: RetoPrizeAnswerRecoveryFailure }
+> {
+  const groupCode = String(args.groupCode ?? "").trim();
+
+  if (
+    !isUuid(args.sessionId) ||
+    !isUuid(args.participantId) ||
+    !GROUP_RE.test(groupCode) ||
+    (args.gameCode !== "principal" && args.gameCode !== "camino") ||
+    !Number.isInteger(args.expectedStateVersion) ||
+    args.expectedStateVersion <= 0 ||
+    !isUuid(args.questionInstanceId) ||
+    !(args.answer === null || typeof args.answer === "boolean")
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "recover_reto_prize_answer_replay_v2",
+    {
+      p_session_id: args.sessionId,
+      p_participant_id: args.participantId,
+      p_group_code: groupCode,
+      p_game_code: args.gameCode,
+      p_expected_state_version: args.expectedStateVersion,
+      p_question_instance_id: args.questionInstanceId,
+      p_answer: args.answer,
+    }
+  );
+
+  if (error) {
+    const reason = mapAnswerRecoveryError(error);
+    if (reason !== "not_replayable") {
+      console.error("[reto-prize-answer-engine] replay recovery failed");
+    }
+    return { ok: false, reason };
+  }
+
+  const row = firstRpcRow(data);
+  if (!row) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  const sessionId = String(row.session_id ?? "").trim();
+  const instanceId = String(row.instance_id ?? "").trim();
+  const stateVersion = Number(row.state_version);
+  const sessionStatus = safeStatus(row.session_status);
+  const answerOutcome = safeOutcome(row.answer_outcome);
+  const wasCorrect =
+    typeof row.was_correct === "boolean" ? row.was_correct : null;
+  const qualifierId = nullableUuid(row.qualifier_id);
+  const alreadyQualified =
+    typeof row.already_qualified === "boolean"
+      ? row.already_qualified
+      : null;
+  const awardYear = nullableInteger(row.award_year);
+  const awardQuarter = nullableInteger(row.award_quarter);
+  const sessionState = isObject(row.session_state)
+    ? row.session_state
+    : null;
+  const finishedAt =
+    row.finished_at === null || row.finished_at === undefined
+      ? null
+      : safeIsoDateTime(row.finished_at);
+  const questionSource = safeQuestionSource(row.question_source);
+  const issuedRoll = nullableInteger(row.issued_roll);
+  const sessionStartedAt = safeRequiredIsoDateTime(row.session_started_at);
+  const sessionExpiresAt = safeRequiredIsoDateTime(row.session_expires_at);
+
+  if (
+    !isUuid(sessionId) ||
+    sessionId !== args.sessionId ||
+    !isUuid(instanceId) ||
+    instanceId !== args.questionInstanceId ||
+    stateVersion !== args.expectedStateVersion + 1 ||
+    !sessionStatus ||
+    !answerOutcome ||
+    wasCorrect === null ||
+    alreadyQualified === null ||
+    qualifierId === undefined ||
+    awardYear === undefined ||
+    awardQuarter === undefined ||
+    !sessionState ||
+    (row.finished_at !== null &&
+      row.finished_at !== undefined &&
+      !finishedAt) ||
+    !questionSource ||
+    issuedRoll === undefined ||
+    !sessionStartedAt ||
+    !sessionExpiresAt
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  if ((answerOutcome === "correct") !== wasCorrect) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  if (sessionStatus === "active") {
+    if (finishedAt !== null) {
+      return { ok: false, reason: "invalid_state" };
+    }
+  } else if (!finishedAt) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  if (sessionStatus === "completed") {
+    if (
+      qualifierId === null ||
+      awardYear === null ||
+      awardQuarter === null ||
+      awardQuarter < 1 ||
+      awardQuarter > 4
+    ) {
+      return { ok: false, reason: "invalid_state" };
+    }
+  } else if (
+    qualifierId !== null ||
+    awardYear !== null ||
+    awardQuarter !== null ||
+    alreadyQualified
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  if (args.gameCode === "principal") {
+    if (
+      (questionSource !== "principal_level1" &&
+        questionSource !== "principal_level2") ||
+      issuedRoll !== null ||
+      sessionStatus === "completed"
+    ) {
+      return { ok: false, reason: "invalid_state" };
+    }
+  } else if (
+    questionSource !== "camino" ||
+    issuedRoll === null ||
+    issuedRoll < 1 ||
+    issuedRoll > 6
+  ) {
+    return { ok: false, reason: "invalid_state" };
+  }
+
+  return {
+    ok: true,
+    result: {
+      sessionId,
+      instanceId,
+      stateVersion,
+      sessionStatus,
+      answerOutcome,
+      wasCorrect,
+      qualifierId,
+      alreadyQualified,
+      awardYear,
+      awardQuarter,
+      sessionState,
+      finishedAt,
+      questionSource,
+      issuedRoll,
+      sessionStartedAt,
+      sessionExpiresAt,
     },
   };
 }
