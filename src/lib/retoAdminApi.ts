@@ -368,7 +368,7 @@ export function validateFactData(
       !statementFalse ||
       statementTrue.length > 4500 ||
       statementFalse.length > 4500 ||
-      statementTrue === statementFalse
+      textComparisonKey(statementTrue) === textComparisonKey(statementFalse)
     ) {
       return null;
     }
