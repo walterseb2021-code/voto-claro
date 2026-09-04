@@ -218,6 +218,107 @@ export function positiveVersion(value: unknown) {
     : null;
 }
 
+export type RetoAdminListQuery = {
+  status: "draft" | "approved" | "retired" | null;
+  factType: RetoFactType | null;
+  source: RetoSource | null;
+  active: boolean | null;
+  limit: number;
+  offset: number;
+};
+
+export function parseRetoAdminListQuery(
+  req: NextRequest
+):
+  | { ok: true; value: RetoAdminListQuery }
+  | { ok: false; error: "INVALID_QUERY" } {
+  const params = req.nextUrl.searchParams;
+  const allowedKeys = ["status", "type", "source", "active", "limit", "offset"];
+
+  for (const key of Array.from(params.keys())) {
+    if (!allowedKeys.includes(key)) {
+      return { ok: false, error: "INVALID_QUERY" };
+    }
+  }
+
+  for (const key of allowedKeys) {
+    if (params.getAll(key).length > 1) {
+      return { ok: false, error: "INVALID_QUERY" };
+    }
+  }
+
+  const rawStatus = params.get("status");
+  const status =
+    rawStatus === null
+      ? null
+      : ["draft", "approved", "retired"].includes(rawStatus)
+        ? (rawStatus as "draft" | "approved" | "retired")
+        : undefined;
+
+  const rawType = params.get("type");
+  const factType = rawType === null ? null : parseFactType(rawType);
+
+  const rawSource = params.get("source");
+  const source =
+    rawSource === null
+      ? null
+      : (RETO_SOURCES as readonly string[]).includes(rawSource)
+        ? (rawSource as RetoSource)
+        : undefined;
+
+  const rawActive = params.get("active");
+  const active =
+    rawActive === null
+      ? null
+      : rawActive === "true"
+        ? true
+        : rawActive === "false"
+          ? false
+          : undefined;
+
+  const rawLimit = params.get("limit");
+  const limit =
+    rawLimit === null
+      ? 50
+      : /^[1-9][0-9]{0,2}$/.test(rawLimit)
+        ? Number(rawLimit)
+        : NaN;
+
+  const rawOffset = params.get("offset");
+  const offset =
+    rawOffset === null
+      ? 0
+      : /^(0|[1-9][0-9]{0,4})$/.test(rawOffset)
+        ? Number(rawOffset)
+        : NaN;
+
+  if (
+    status === undefined ||
+    factType === null && rawType !== null ||
+    source === undefined ||
+    active === undefined ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 100 ||
+    !Number.isInteger(offset) ||
+    offset < 0 ||
+    offset > 5000
+  ) {
+    return { ok: false, error: "INVALID_QUERY" };
+  }
+
+  return {
+    ok: true,
+    value: {
+      status,
+      factType,
+      source,
+      active,
+      limit,
+      offset,
+    },
+  };
+}
 export function createRetoAdminRequestId() {
   return randomUUID();
 }

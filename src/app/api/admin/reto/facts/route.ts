@@ -11,6 +11,7 @@ import {
   parseDifficulty,
   parseFactKey,
   parseFactType,
+  parseRetoAdminListQuery,
   parseLang,
   parseNullableTimestamp,
   parseSources,
@@ -94,6 +95,67 @@ function invalidInput() {
   return retoAdminJson(400, { ok: false, error: "INVALID_INPUT" });
 }
 
+export async function GET(req: NextRequest) {
+  try {
+    const gate = await requireRetoAdmin(req);
+    if (!gate.ok) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(gate.status, { ok: false, error: gate.error }),
+        gate
+      );
+    }
+
+    const parsed = parseRetoAdminListQuery(req);
+    if (!parsed.ok) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(400, { ok: false, error: parsed.error }),
+        gate
+      );
+    }
+
+    const { status, factType, source, active, limit, offset } = parsed.value;
+    const supabase = getRetoAdminSupabase();
+
+    let query = supabase
+      .from("reto_knowledge_facts")
+      .select(
+        "id,fact_key,fact_type,lang,topic,fact_data,eligible_sources,allowed_operators,difficulty,source_reference,valid_from,valid_until,review_status,reviewed_at,is_active,version,created_at,updated_at",
+        { count: "exact" }
+      )
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(offset, offset + limit - 1);
+
+    if (status) query = query.eq("review_status", status);
+    if (factType) query = query.eq("fact_type", factType);
+    if (source) query = query.contains("eligible_sources", [source]);
+    if (active !== null) query = query.eq("is_active", active);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(500, { ok: false, error: "READ_ERROR" }),
+        gate
+      );
+    }
+
+    return withRetoAdminAuthCookies(
+      retoAdminJson(200, {
+        ok: true,
+        facts: data ?? [],
+        pagination: {
+          limit,
+          offset,
+          total: typeof count === "number" ? count : 0,
+        },
+      }),
+      gate
+    );
+  } catch {
+    return retoAdminJson(500, { ok: false, error: "INTERNAL_ERROR" });
+  }
+}
 export async function POST(req: NextRequest) {
   try {
     if (!isAllowedRetoAdminMutationOrigin(req)) {
