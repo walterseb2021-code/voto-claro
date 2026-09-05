@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 
 type WinnerRow = {
   id: string;
@@ -25,6 +24,47 @@ const STATUS_LABEL: Record<WinnerRow["status"], string> = {
   anulado: "Anulado",
 };
 
+type AdminTab = "winners" | "facts" | "templates";
+type ReviewStatus = "draft" | "approved" | "retired";
+
+type FactRow = {
+  id: string;
+  fact_key: string;
+  fact_type: string;
+  lang: string;
+  topic: string;
+  fact_data: Record<string, unknown>;
+  eligible_sources: string[];
+  allowed_operators: string[];
+  difficulty: number;
+  source_reference: string | null;
+  valid_from: string | null;
+  valid_until: string | null;
+  review_status: ReviewStatus;
+  reviewed_at: string | null;
+  is_active: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type TemplateRow = {
+  id: string;
+  code: string;
+  fact_type: string;
+  operator_code: string;
+  allowed_sources: string[];
+  config: Record<string, unknown>;
+  difficulty: number;
+  renderer_version: number;
+  review_status: ReviewStatus;
+  reviewed_at: string | null;
+  is_active: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export default function AdminRetoPage() {
   const [rows, setRows] = useState<WinnerRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,11 +73,12 @@ export default function AdminRetoPage() {
   const [group, setGroup] = useState("Todos");
   const [status, setStatus] = useState("pendiente");
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
+  const [tab, setTab] = useState<AdminTab>("winners");
+  const [bankLoading, setBankLoading] = useState(false);
+  const [factRows, setFactRows] = useState<FactRow[]>([]);
+  const [templateRows, setTemplateRows] = useState<TemplateRow[]>([]);
+  const [factTotal, setFactTotal] = useState(0);
+  const [templateTotal, setTemplateTotal] = useState(0);
 
   async function load() {
     setLoading(true);
@@ -65,6 +106,77 @@ export default function AdminRetoPage() {
       setRows([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadFacts() {
+    setBankLoading(true);
+    setNotice(null);
+
+    try {
+      const res = await fetch("/api/admin/reto/facts?limit=50&offset=0", {
+        cache: "no-store",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setNotice(data?.error ?? "Error cargando banco de hechos");
+        setFactRows([]);
+        setFactTotal(0);
+        return;
+      }
+
+      setFactRows(data.facts ?? []);
+      setFactTotal(
+        typeof data?.pagination?.total === "number" ? data.pagination.total : 0
+      );
+    } catch {
+      setNotice("Error de red");
+      setFactRows([]);
+      setFactTotal(0);
+    } finally {
+      setBankLoading(false);
+    }
+  }
+
+  async function loadTemplates() {
+    setBankLoading(true);
+    setNotice(null);
+
+    try {
+      const res = await fetch("/api/admin/reto/templates?limit=50&offset=0", {
+        cache: "no-store",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setNotice(data?.error ?? "Error cargando plantillas");
+        setTemplateRows([]);
+        setTemplateTotal(0);
+        return;
+      }
+
+      setTemplateRows(data.templates ?? []);
+      setTemplateTotal(
+        typeof data?.pagination?.total === "number" ? data.pagination.total : 0
+      );
+    } catch {
+      setNotice("Error de red");
+      setTemplateRows([]);
+      setTemplateTotal(0);
+    } finally {
+      setBankLoading(false);
+    }
+  }
+
+  function selectTab(next: AdminTab) {
+    setTab(next);
+    setNotice(null);
+
+    if (next === "facts") {
+      void loadFacts();
+    } else if (next === "templates") {
+      void loadTemplates();
     }
   }
 
@@ -98,16 +210,19 @@ export default function AdminRetoPage() {
 
   async function onLogout() {
     setLoading(true);
-    setNotice("Cerrando sesión…");
+    setNotice("Cerrando sesion...");
 
     try {
-      // 1) client-side signOut (localStorage)
-      await supabase.auth.signOut();
+      const res = await fetch("/api/admin/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
 
-      // 2) server-side signOut (cookies) para que proxy.ts te bloquee
-      await fetch("/api/admin/logout", { method: "POST" });
+      if (!res.ok) {
+        setNotice("No se pudo cerrar la sesion.");
+        return;
+      }
 
-      // 3) volver al login
       window.location.href = "/admin/login";
     } finally {
       setLoading(false);
@@ -133,7 +248,7 @@ export default function AdminRetoPage() {
     <main className={wrap}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          🎯 Admin – Reto Ciudadano (Ganadores)
+          🎯 Admin – Reto Ciudadano
         </h1>
 
         <div className="flex gap-2 flex-wrap">
@@ -156,6 +271,38 @@ export default function AdminRetoPage() {
         </div>
       </div>
 
+      <div className="mt-5 flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => selectTab("winners")}
+          className={
+            btnSm +
+            (tab === "winners" ? " ring-4 ring-red-200" : " opacity-80")
+          }
+        >
+          Ganadores
+        </button>
+        <button
+          type="button"
+          onClick={() => selectTab("facts")}
+          className={
+            btnSm + (tab === "facts" ? " ring-4 ring-red-200" : " opacity-80")
+          }
+        >
+          Banco de hechos
+        </button>
+        <button
+          type="button"
+          onClick={() => selectTab("templates")}
+          className={
+            btnSm +
+            (tab === "templates" ? " ring-4 ring-red-200" : " opacity-80")
+          }
+        >
+          Plantillas
+        </button>
+      </div>
+
       {notice && (
         <div className="mt-4 text-sm font-semibold text-slate-900">
           <div className="inline-block rounded-xl bg-green-50 border-2 border-red-500 px-4 py-2">
@@ -164,7 +311,8 @@ export default function AdminRetoPage() {
         </div>
       )}
 
-      <section className={sectionWrap}>
+      {tab === "winners" && (
+        <section className={sectionWrap}>
         <div className={inner}>
           <div className="flex gap-3 flex-wrap items-end">
             <div>
@@ -276,7 +424,170 @@ export default function AdminRetoPage() {
             )}
           </div>
         </div>
-      </section>
+        </section>
+      )}
+
+      {tab === "facts" && (
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900">
+                  Banco de hechos
+                </h2>
+                <div className="mt-1 text-xs text-slate-600">
+                  Lectura administrativa privada. Se muestran hasta 50 registros.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={bankLoading}
+                onClick={() => void loadFacts()}
+                className={btnSm}
+              >
+                Recargar
+              </button>
+            </div>
+
+            <div className="mt-4 text-xs text-slate-600">
+              Total en banco: <b>{factTotal}</b>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {bankLoading && factRows.length === 0 && (
+                <div className="text-sm text-slate-700">Cargando...</div>
+              )}
+
+              {factRows.map((r) => (
+                <div
+                  key={r.id}
+                  className="rounded-2xl border-2 border-red-600 bg-white p-4"
+                >
+                  <div className="flex justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-900">
+                        {r.fact_key}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        Tipo: <b>{r.fact_type}</b> - Tema: {r.topic}
+                      </div>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-700">
+                      v{r.version} - {r.review_status} -{" "}
+                      {r.is_active ? "activo" : "inactivo"}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-xs text-slate-600">
+                    Fuentes: {r.eligible_sources.join(", ")} - Dificultad:{" "}
+                    {r.difficulty}
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-600">
+                    Operadores: {r.allowed_operators.join(", ")}
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-600">
+                    Referencia: {r.source_reference ?? "Sin referencia"}
+                  </div>
+
+                  <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-100 p-3 text-[11px] text-slate-800">
+                    {JSON.stringify(r.fact_data, null, 2)}
+                  </pre>
+
+                  <div className="mt-2 text-[11px] text-slate-500 break-all">
+                    id: {r.id}
+                  </div>
+                </div>
+              ))}
+
+              {!bankLoading && factRows.length === 0 && (
+                <div className="text-sm text-slate-700">
+                  El banco de hechos está vacío.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {tab === "templates" && (
+        <section className={sectionWrap}>
+          <div className={inner}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900">
+                  Plantillas
+                </h2>
+                <div className="mt-1 text-xs text-slate-600">
+                  Lectura administrativa privada. Se muestran hasta 50 registros.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={bankLoading}
+                onClick={() => void loadTemplates()}
+                className={btnSm}
+              >
+                Recargar
+              </button>
+            </div>
+
+            <div className="mt-4 text-xs text-slate-600">
+              Total en banco: <b>{templateTotal}</b>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {bankLoading && templateRows.length === 0 && (
+                <div className="text-sm text-slate-700">Cargando...</div>
+              )}
+
+              {templateRows.map((r) => (
+                <div
+                  key={r.id}
+                  className="rounded-2xl border-2 border-red-600 bg-white p-4"
+                >
+                  <div className="flex justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-900">
+                        {r.code}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        Tipo: <b>{r.fact_type}</b> - Operador: {r.operator_code}
+                      </div>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-700">
+                      v{r.version} - {r.review_status} -{" "}
+                      {r.is_active ? "activo" : "inactivo"}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-xs text-slate-600">
+                    Fuentes: {r.allowed_sources.join(", ")} - Dificultad:{" "}
+                    {r.difficulty} - Renderer: {r.renderer_version}
+                  </div>
+
+                  <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-100 p-3 text-[11px] text-slate-800">
+                    {JSON.stringify(r.config, null, 2)}
+                  </pre>
+
+                  <div className="mt-2 text-[11px] text-slate-500 break-all">
+                    id: {r.id}
+                  </div>
+                </div>
+              ))}
+
+              {!bankLoading && templateRows.length === 0 && (
+                <div className="text-sm text-slate-700">
+                  El banco de plantillas está vacío.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
     </main>
   );
 }

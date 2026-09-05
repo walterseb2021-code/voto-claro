@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 
 type CommentRow = {
   id: string;
@@ -76,12 +75,6 @@ export default function AdminCommentsPage() {
 
   const [checking, setChecking] = useState(true);
 
-  const supabaseSessionClient = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
   const [items, setItems] = useState<CommentRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -128,26 +121,7 @@ export default function AdminCommentsPage() {
   }
 
   useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        const { data } = await supabaseSessionClient.auth.getSession();
-        if (!alive) return;
-
-        if (!data?.session) {
-          router.replace("/admin/login");
-          return;
-        }
-      } finally {
-        if (alive) setChecking(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setChecking(false);
   }, []);
 
   async function loadComments() {

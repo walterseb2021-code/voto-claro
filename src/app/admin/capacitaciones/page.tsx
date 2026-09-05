@@ -4,7 +4,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 
 type TrainingStatus = "active" | "pending" | "inactive" | "rejected";
 
@@ -88,12 +87,6 @@ export default function AdminCapacitacionesPage() {
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
   const [rejectedReasons, setRejectedReasons] = useState<Record<string, string>>({});
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-6xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
   const sectionWrap =
@@ -162,27 +155,8 @@ export default function AdminCapacitacionesPage() {
   }
 
   useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-
-        if (!alive) return;
-
-        if (!data?.session) {
-          router.replace("/admin/login?next=/admin/capacitaciones");
-          return;
-        }
-      } finally {
-        if (alive) setChecking(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [router, supabase.auth]);
+    setChecking(false);
+  }, []);
 
   useEffect(() => {
     if (!checking) {

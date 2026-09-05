@@ -8,7 +8,6 @@ import {
   getCandidatePanelOptions,
   type CandidatePanelIdentity,
 } from "@/lib/candidatePanelCatalog";
-import { supabase } from "@/lib/supabaseClient";
 import { createClient } from "@supabase/supabase-js";
 
 // ===============================
@@ -96,35 +95,20 @@ export default function AdminLivePage() {
 
   const [checking, setChecking] = useState(true);
 
-  const supabaseClient = useMemo(() => {
+  const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
+    return createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
   }, []);
 
   useEffect(() => {
-    // Esta ruta debe estar protegida server-side por proxy.ts (cookies + ADMIN_EMAIL).
-    // Aquí verificamos sesión cliente para evitar flashes raros.
-    let alive = true;
-
-    (async () => {
-      try {
-        const { data } = await supabaseClient.auth.getSession();
-        if (!alive) return;
-
-        if (!data?.session) {
-          router.replace("/admin/login");
-          return;
-        }
-      } finally {
-        if (alive) setChecking(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setChecking(false);
   }, []);
 
   // ===============================

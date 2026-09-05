@@ -4,7 +4,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 
 type IdentityMode = "legacy_device" | "secure_session";
 type LifecycleState = "legacy" | "draft" | "active" | "closed";
@@ -299,34 +298,8 @@ export default function AdminVoteRoundsPage() {
 
   const [checking, setChecking] = useState(true);
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
   useEffect(() => {
-    // Esta ruta debe estar protegida server-side por proxy.ts (cookies + ADMIN_EMAIL).
-    let alive = true;
-
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!alive) return;
-
-        if (!data?.session) {
-          router.replace("/admin/login");
-          return;
-        }
-      } finally {
-        if (alive) setChecking(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setChecking(false);
   }, []);
 
   const [rounds, setRounds] = useState<Round[]>([]);

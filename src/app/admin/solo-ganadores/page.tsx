@@ -4,7 +4,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 import * as tus from "tus-js-client";
 
 type Tab = "evento" | "ganadores" | "media";
@@ -1137,12 +1136,6 @@ export default function AdminSoloGanadoresPage() {
     return posts.filter((post) => post.event_id === mediaForm.event_id);
   }, [mediaForm.event_id, posts]);
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
-  }, []);
-
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/admin");
@@ -1549,14 +1542,6 @@ export default function AdminSoloGanadoresPage() {
 
     (async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        if (!alive) return;
-
-        if (!data?.session) {
-          router.replace("/admin/login");
-          return;
-        }
-
         await loadAll();
       } finally {
         if (alive) setChecking(false);
@@ -1567,7 +1552,7 @@ export default function AdminSoloGanadoresPage() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, supabase.auth]);
+  }, []);
 
   async function saveEvent() {
     if (eventEditBlockReasonValue) {

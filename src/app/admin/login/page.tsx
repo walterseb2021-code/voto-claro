@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
@@ -21,21 +21,19 @@ function AdminLoginInner() {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(url, key);
+    return createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
   }, []);
 
   const [email, setEmail] = useState("walterseb.2021@gmail.com");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string>("");
-
-  useEffect(() => {
-    // Si ya está logueado en el cliente, intentar entrar
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) router.replace(nextPath);
-    })();
-  }, [supabase, router, nextPath]);
 
    async function onSubmit(e: React.FormEvent) {
   e.preventDefault();
@@ -44,7 +42,7 @@ function AdminLoginInner() {
 
   try {
     // 1) Login en el cliente
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
@@ -54,12 +52,11 @@ function AdminLoginInner() {
       return;
     }
 
-    // 2) Leer tokens de sesión del cliente
-    const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
-    const session = sessionData?.session;
+    // 2) Use the session returned by signInWithPassword without persisting it in the browser.
+    const session = authData.session;
 
-    if (sessErr || !session) {
-      setMsg("No se pudo obtener la sesión (session null).");
+    if (!session) {
+      setMsg("No se pudo obtener la sesion.");
       return;
     }
 
