@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import RetoFactEditor from "@/components/admin/reto/RetoFactEditor";
 
 type WinnerRow = {
   id: string;
@@ -79,6 +80,7 @@ export default function AdminRetoPage() {
   const [templateRows, setTemplateRows] = useState<TemplateRow[]>([]);
   const [factTotal, setFactTotal] = useState(0);
   const [templateTotal, setTemplateTotal] = useState(0);
+  const [factEditing, setFactEditing] = useState<FactRow | null>(null);
 
   async function load() {
     setLoading(true);
@@ -450,6 +452,14 @@ export default function AdminRetoPage() {
               </button>
             </div>
 
+            <RetoFactEditor
+              editingFact={factEditing}
+              onCancelEdit={() => setFactEditing(null)}
+              onSaved={async () => {
+                setFactEditing(null);
+                await loadFacts();
+              }}
+            />
             <div className="mt-4 text-xs text-slate-600">
               Total en banco: <b>{factTotal}</b>
             </div>
@@ -473,9 +483,31 @@ export default function AdminRetoPage() {
                         Tipo: <b>{r.fact_type}</b> - Tema: {r.topic}
                       </div>
                     </div>
-                    <div className="text-xs font-semibold text-slate-700">
-                      v{r.version} - {r.review_status} -{" "}
-                      {r.is_active ? "activo" : "inactivo"}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="text-xs font-semibold text-slate-700">
+                        v{r.version} - {r.review_status} -{" "}
+                        {r.is_active ? "activo" : "inactivo"}
+                      </div>
+
+                      {r.review_status === "draft" && (
+                        <button
+                          type="button"
+                          className={btnSm}
+                          onClick={() => {
+                            setFactEditing(r);
+                            window.setTimeout(() => {
+                              document
+                                .getElementById("reto-fact-editor")
+                                ?.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "start",
+                                });
+                            }, 0);
+                          }}
+                        >
+                          Editar
+                        </button>
+                      )}
                     </div>
                   </div>
 
