@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import RetoFactEditor from "@/components/admin/reto/RetoFactEditor";
+import RetoTemplateEditor from "@/components/admin/reto/RetoTemplateEditor";
 
 type WinnerRow = {
   id: string;
@@ -81,6 +82,7 @@ export default function AdminRetoPage() {
   const [factTotal, setFactTotal] = useState(0);
   const [templateTotal, setTemplateTotal] = useState(0);
   const [factEditing, setFactEditing] = useState<FactRow | null>(null);
+  const [templateEditing, setTemplateEditing] = useState<TemplateRow | null>(null);
 
   async function load() {
     setLoading(true);
@@ -567,6 +569,15 @@ export default function AdminRetoPage() {
               </button>
             </div>
 
+            <RetoTemplateEditor
+              editingTemplate={templateEditing}
+              onCancelEdit={() => setTemplateEditing(null)}
+              onSaved={async () => {
+                setTemplateEditing(null);
+                await loadTemplates();
+              }}
+            />
+
             <div className="mt-4 text-xs text-slate-600">
               Total en banco: <b>{templateTotal}</b>
             </div>
@@ -590,9 +601,31 @@ export default function AdminRetoPage() {
                         Tipo: <b>{r.fact_type}</b> - Operador: {r.operator_code}
                       </div>
                     </div>
-                    <div className="text-xs font-semibold text-slate-700">
-                      v{r.version} - {r.review_status} -{" "}
-                      {r.is_active ? "activo" : "inactivo"}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="text-xs font-semibold text-slate-700">
+                        v{r.version} - {r.review_status} -{" "}
+                        {r.is_active ? "activo" : "inactivo"}
+                      </div>
+
+                      {r.review_status === "draft" && (
+                        <button
+                          type="button"
+                          className={btnSm}
+                          onClick={() => {
+                            setTemplateEditing(r);
+                            window.setTimeout(() => {
+                              document
+                                .getElementById("reto-template-editor")
+                                ?.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "start",
+                                });
+                            }, 0);
+                          }}
+                        >
+                          Editar
+                        </button>
+                      )}
                     </div>
                   </div>
 
