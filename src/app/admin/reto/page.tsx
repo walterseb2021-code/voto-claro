@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import RetoFactEditor from "@/components/admin/reto/RetoFactEditor";
 import RetoTemplateEditor from "@/components/admin/reto/RetoTemplateEditor";
+import RetoBankLifecycleActions from "@/components/admin/reto/RetoBankLifecycleActions";
 
 type WinnerRow = {
   id: string;
@@ -510,6 +511,19 @@ export default function AdminRetoPage() {
                           Editar
                         </button>
                       )}
+                      <RetoBankLifecycleActions
+                        kind="fact"
+                        id={r.id}
+                        version={r.version}
+                        reviewStatus={r.review_status}
+                        isActive={r.is_active}
+                        sourceReference={r.source_reference}
+                        onNotice={setNotice}
+                        onChanged={async () => {
+                          setFactEditing(null);
+                          await loadFacts();
+                        }}
+                      />
                     </div>
                   </div>
 
@@ -626,6 +640,18 @@ export default function AdminRetoPage() {
                           Editar
                         </button>
                       )}
+                      <RetoBankLifecycleActions
+                        kind="template"
+                        id={r.id}
+                        version={r.version}
+                        reviewStatus={r.review_status}
+                        isActive={r.is_active}
+                        onNotice={setNotice}
+                        onChanged={async () => {
+                          setTemplateEditing(null);
+                          await loadTemplates();
+                        }}
+                      />
                     </div>
                   </div>
 
