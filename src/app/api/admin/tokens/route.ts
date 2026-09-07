@@ -1,157 +1,522 @@
-// src/app/api/admin/tokens/route.ts
-import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
+import { randomBytes } from "node:crypto";
+import { type NextRequest } from "next/server";
+
+import {
+  createRetoAdminRequestId,
+  getRetoAdminSupabase,
+  hasExactKeys,
+  isAllowedRetoAdminMutationOrigin,
+  isUuid,
+  normalizeOptionalText,
+  parseNullableTimestamp,
+  readRetoAdminJsonObject,
+  requireRetoAdmin,
+  retoAdminJson,
+  withRetoAdminAuthCookies,
+} from "@/lib/retoAdminApi";
 
 export const runtime = "nodejs";
 
-function supabaseAdmin() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const PITCH_GROUPS = [
+  "GRUPOA",
+  "GRUPOB",
+  "GRUPOC",
+  "GRUPOD",
+  "GRUPOE",
+] as const;
 
-  if (!url) throw new Error("Missing SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL");
-  if (!service) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+type PitchGroup = (typeof PITCH_GROUPS)[number];
 
-  return createClient(url, service, { auth: { persistSession: false } });
+const CREATE_KEYS = [
+  "group_code",
+  "expires_at",
+  "note",
+] as const;
+
+const UPDATE_KEYS = [
+  "id",
+  "is_active",
+  "expires_at",
+  "note",
+] as const;
+
+function parsePitchGroup(value: unknown): PitchGroup | null {
+  if (typeof value !== "string") return null;
+
+  return (PITCH_GROUPS as readonly string[]).includes(value)
+    ? (value as PitchGroup)
+    : null;
 }
 
-async function requireAdmin(req: NextRequest) {
-  try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
-
-    if (!url || !anon || !adminEmail) {
-      return { ok: false as const, cookiesToSet: [] as any[] };
-    }
-
-    // Guardamos cookies que Supabase quiera “refrescar” (si aplica)
-    const cookiesToSet: any[] = [];
-
-    const supabase = createServerClient(url, anon, {
-      cookies: {
-        // ✅ En Route Handlers: usamos req.cookies.getAll()
-        getAll() {
-          return req.cookies.getAll();
-        },
-        // ✅ Capturamos cookies para aplicarlas al response final
-        setAll(list) {
-          cookiesToSet.push(...list);
-        },
-      },
-    });
-
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data?.user) return { ok: false as const, cookiesToSet };
-
-    const userEmail = (data.user.email ?? "").trim().toLowerCase();
-    if (userEmail !== adminEmail) return { ok: false as const, cookiesToSet };
-
-    return { ok: true as const, cookiesToSet };
-  } catch {
-    return { ok: false as const, cookiesToSet: [] as any[] };
+function parseCreateRpcResult(data: unknown) {
+  if (
+    !Array.isArray(data) ||
+    data.length !== 1 ||
+    !data[0] ||
+    typeof data[0] !== "object" ||
+    Array.isArray(data[0])
+  ) {
+    return null;
   }
+
+  const row = data[0] as Record<string, unknown>;
+
+  const id =
+    typeof row.result_link_id === "string"
+      ? row.result_link_id.trim()
+      : "";
+
+  const group =
+    typeof row.result_group_code === "string"
+      ? row.result_group_code
+      : "";
+
+  const isActive = row.result_is_active;
+
+  const expiresAt =
+    row.result_expires_at === null ||
+    typeof row.result_expires_at === "string"
+      ? row.result_expires_at
+      : undefined;
+
+  const createdAt =
+    typeof row.result_created_at === "string"
+      ? row.result_created_at
+      : "";
+
+  if (
+    !isUuid(id) ||
+    !parsePitchGroup(group) ||
+    isActive !== true ||
+    expiresAt === undefined ||
+    !createdAt
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    group_code: group as PitchGroup,
+    is_active: true,
+    expires_at: expiresAt,
+    created_at: createdAt,
+  };
 }
 
-/**
- * GET /api/admin/tokens
- * - lista tokens de /pitch
- */
+function parseStateRpcResult(data: unknown) {
+  if (
+    !Array.isArray(data) ||
+    data.length !== 1 ||
+    !data[0] ||
+    typeof data[0] !== "object" ||
+    Array.isArray(data[0])
+  ) {
+    return null;
+  }
+
+  const row = data[0] as Record<string, unknown>;
+
+  const id =
+    typeof row.result_link_id === "string"
+      ? row.result_link_id.trim()
+      : "";
+
+  const group =
+    typeof row.result_group_code === "string"
+      ? row.result_group_code
+      : "";
+
+  const isActive = row.result_is_active;
+
+  const expiresAt =
+    row.result_expires_at === null ||
+    typeof row.result_expires_at === "string"
+      ? row.result_expires_at
+      : undefined;
+
+  if (
+    !isUuid(id) ||
+    !parsePitchGroup(group) ||
+    typeof isActive !== "boolean" ||
+    expiresAt === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    group_code: group as PitchGroup,
+    is_active: isActive,
+    expires_at: expiresAt,
+  };
+}
+
+function mapPitchRpcError(error: { message?: string | null } | null | undefined) {
+  const message = String(error?.message ?? "");
+
+  if (
+    message.includes("PITCH_TOKEN_ADMIN_ACTIVE_LIMIT") ||
+    message.includes("PITCH_TOKEN_ADMIN_CREATE_CONFLICT") ||
+    message.includes("PITCH_TOKEN_ADMIN_REQUEST_CONFLICT")
+  ) {
+    return {
+      status: 409,
+      error: "CONFLICT",
+    } as const;
+  }
+
+  if (message.includes("PITCH_TOKEN_ADMIN_NOT_FOUND")) {
+    return {
+      status: 404,
+      error: "NOT_FOUND",
+    } as const;
+  }
+
+  if (message.includes("PITCH_TOKEN_ADMIN_STATE_INVALID")) {
+    return {
+      status: 409,
+      error: "STATE_INVALID",
+    } as const;
+  }
+
+  if (message.includes("PITCH_TOKEN_ADMIN_INVALID_INPUT")) {
+    return {
+      status: 400,
+      error: "INVALID_INPUT",
+    } as const;
+  }
+
+  return {
+    status: 500,
+    error: "RPC_ERROR",
+  } as const;
+}
+
+function invalidInput() {
+  return retoAdminJson(400, {
+    ok: false,
+    error: "INVALID_INPUT",
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const gate = await requireAdmin(req);
+    const gate = await requireRetoAdmin(req);
+
     if (!gate.ok) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-    }
-
-    const supabase = supabaseAdmin();
-
-    const { data, error } = await supabase
-      .from("votoclaro_public_links")
-      .select("id, token, route, is_active, expires_at, note, created_at")
-      .eq("route", "/pitch")
-      .order("token", { ascending: true })
-      .limit(2000);
-
-    if (error) {
-      return NextResponse.json(
-        { error: "SUPABASE_ERROR", detail: error.message },
-        { status: 500 }
+      return withRetoAdminAuthCookies(
+        retoAdminJson(gate.status, {
+          ok: false,
+          error: gate.error,
+        }),
+        gate
       );
     }
 
-    const res = NextResponse.json({ tokens: data ?? [] }, { status: 200 });
-
-    // ✅ Aplicar cookies (si Supabase intentó refrescar)
-    for (const { name, value, options } of gate.cookiesToSet) {
-      res.cookies.set(name, value, options);
+    if (Array.from(req.nextUrl.searchParams.keys()).length !== 0) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(400, {
+          ok: false,
+          error: "INVALID_QUERY",
+        }),
+        gate
+      );
     }
 
-    return res;
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: "EXCEPTION", detail: String(e?.message ?? e) },
-      { status: 500 }
+    const supabase = getRetoAdminSupabase();
+
+    const { data, error } = await supabase
+      .from("votoclaro_public_links")
+      .select(
+        "id,token,route,is_active,expires_at,note,created_at"
+      )
+      .eq("route", "/pitch")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .limit(200);
+
+    if (error) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(500, {
+          ok: false,
+          error: "READ_ERROR",
+        }),
+        gate
+      );
+    }
+
+    return withRetoAdminAuthCookies(
+      retoAdminJson(200, {
+        ok: true,
+        tokens: data ?? [],
+      }),
+      gate
     );
+  } catch {
+    return retoAdminJson(500, {
+      ok: false,
+      error: "INTERNAL_ERROR",
+    });
   }
 }
 
-/**
- * PATCH /api/admin/tokens
- * body: { id: string, is_active?: boolean, expires_at?: string|null, note?: string|null }
- */
-export async function PATCH(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const gate = await requireAdmin(req);
+    if (!isAllowedRetoAdminMutationOrigin(req)) {
+      return retoAdminJson(403, {
+        ok: false,
+        error: "ORIGIN_FORBIDDEN",
+      });
+    }
+
+    const gate = await requireRetoAdmin(req);
+
     if (!gate.ok) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const id = String((body as any)?.id ?? "").trim();
-    if (!id) return NextResponse.json({ error: "ID_REQUIRED" }, { status: 400 });
-
-    const patch: any = {};
-    if (typeof (body as any).is_active === "boolean") patch.is_active = (body as any).is_active;
-    if ((body as any).expires_at === null) patch.expires_at = null;
-    if (typeof (body as any).expires_at === "string") patch.expires_at = (body as any).expires_at;
-    if ((body as any).note === null) patch.note = null;
-    if (typeof (body as any).note === "string") patch.note = (body as any).note;
-
-    if (Object.keys(patch).length === 0) {
-      return NextResponse.json({ error: "NO_FIELDS" }, { status: 400 });
-    }
-
-    const supabase = supabaseAdmin();
-
-    const { data, error } = await supabase
-      .from("votoclaro_public_links")
-      .update(patch)
-      .eq("id", id)
-      .select("id, token, route, is_active, expires_at, note, created_at")
-      .maybeSingle();
-
-    if (error) {
-      return NextResponse.json(
-        { error: "SUPABASE_ERROR", detail: error.message },
-        { status: 500 }
+      return withRetoAdminAuthCookies(
+        retoAdminJson(gate.status, {
+          ok: false,
+          error: gate.error,
+        }),
+        gate
       );
     }
 
-    if (!data) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    const parsed = await readRetoAdminJsonObject(
+      req,
+      16 * 1024
+    );
 
-    const res = NextResponse.json({ ok: true, token: data }, { status: 200 });
-
-    // ✅ Aplicar cookies (si Supabase intentó refrescar)
-    for (const { name, value, options } of gate.cookiesToSet) {
-      res.cookies.set(name, value, options);
+    if (!parsed.ok) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(parsed.status, {
+          ok: false,
+          error: parsed.error,
+        }),
+        gate
+      );
     }
 
-    return res;
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: "EXCEPTION", detail: String(e?.message ?? e) },
-      { status: 500 }
+    const body = parsed.value;
+
+    if (!hasExactKeys(body, CREATE_KEYS)) {
+      return withRetoAdminAuthCookies(
+        invalidInput(),
+        gate
+      );
+    }
+
+    const groupCode = parsePitchGroup(body.group_code);
+    const expiresAt = parseNullableTimestamp(body.expires_at);
+    const note = normalizeOptionalText(body.note, 500);
+
+    if (
+      !groupCode ||
+      expiresAt === undefined ||
+      note === undefined
+    ) {
+      return withRetoAdminAuthCookies(
+        invalidInput(),
+        gate
+      );
+    }
+
+    if (
+      expiresAt !== null &&
+      new Date(expiresAt).getTime() <= Date.now()
+    ) {
+      return withRetoAdminAuthCookies(
+        invalidInput(),
+        gate
+      );
+    }
+
+    const token =
+      `${groupCode}-${randomBytes(32).toString("base64url")}`;
+
+    const requestId = createRetoAdminRequestId();
+    const supabase = getRetoAdminSupabase();
+
+    const { data, error } = await supabase.rpc(
+      "create_pitch_access_token_admin",
+      {
+        p_group_code: groupCode,
+        p_token: token,
+        p_expires_at: expiresAt,
+        p_note: note,
+        p_actor_email: gate.email,
+        p_request_id: requestId,
+      }
     );
+
+    if (error) {
+      const mapped = mapPitchRpcError(error);
+
+      return withRetoAdminAuthCookies(
+        retoAdminJson(mapped.status, {
+          ok: false,
+          error: mapped.error,
+        }),
+        gate
+      );
+    }
+
+    const created = parseCreateRpcResult(data);
+
+    if (!created) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(500, {
+          ok: false,
+          error: "RPC_RESULT_INVALID",
+        }),
+        gate
+      );
+    }
+
+    return withRetoAdminAuthCookies(
+      retoAdminJson(201, {
+        ok: true,
+        token,
+        link: created,
+        request_id: requestId,
+      }),
+      gate
+    );
+  } catch {
+    return retoAdminJson(500, {
+      ok: false,
+      error: "INTERNAL_ERROR",
+    });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    if (!isAllowedRetoAdminMutationOrigin(req)) {
+      return retoAdminJson(403, {
+        ok: false,
+        error: "ORIGIN_FORBIDDEN",
+      });
+    }
+
+    const gate = await requireRetoAdmin(req);
+
+    if (!gate.ok) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(gate.status, {
+          ok: false,
+          error: gate.error,
+        }),
+        gate
+      );
+    }
+
+    const parsed = await readRetoAdminJsonObject(
+      req,
+      16 * 1024
+    );
+
+    if (!parsed.ok) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(parsed.status, {
+          ok: false,
+          error: parsed.error,
+        }),
+        gate
+      );
+    }
+
+    const body = parsed.value;
+
+    if (!hasExactKeys(body, UPDATE_KEYS)) {
+      return withRetoAdminAuthCookies(
+        invalidInput(),
+        gate
+      );
+    }
+
+    const id =
+      typeof body.id === "string"
+        ? body.id.trim()
+        : "";
+
+    const isActive = body.is_active;
+    const expiresAt = parseNullableTimestamp(body.expires_at);
+    const note = normalizeOptionalText(body.note, 500);
+
+    if (
+      !isUuid(id) ||
+      typeof isActive !== "boolean" ||
+      expiresAt === undefined ||
+      note === undefined
+    ) {
+      return withRetoAdminAuthCookies(
+        invalidInput(),
+        gate
+      );
+    }
+
+    if (
+      isActive &&
+      expiresAt !== null &&
+      new Date(expiresAt).getTime() <= Date.now()
+    ) {
+      return withRetoAdminAuthCookies(
+        invalidInput(),
+        gate
+      );
+    }
+
+    const requestId = createRetoAdminRequestId();
+    const supabase = getRetoAdminSupabase();
+
+    const { data, error } = await supabase.rpc(
+      "set_pitch_access_token_state_admin",
+      {
+        p_link_id: id,
+        p_is_active: isActive,
+        p_expires_at: expiresAt,
+        p_note: note,
+        p_actor_email: gate.email,
+        p_request_id: requestId,
+      }
+    );
+
+    if (error) {
+      const mapped = mapPitchRpcError(error);
+
+      return withRetoAdminAuthCookies(
+        retoAdminJson(mapped.status, {
+          ok: false,
+          error: mapped.error,
+        }),
+        gate
+      );
+    }
+
+    const updated = parseStateRpcResult(data);
+
+    if (!updated) {
+      return withRetoAdminAuthCookies(
+        retoAdminJson(500, {
+          ok: false,
+          error: "RPC_RESULT_INVALID",
+        }),
+        gate
+      );
+    }
+
+    return withRetoAdminAuthCookies(
+      retoAdminJson(200, {
+        ok: true,
+        link: updated,
+        request_id: requestId,
+      }),
+      gate
+    );
+  } catch {
+    return retoAdminJson(500, {
+      ok: false,
+      error: "INTERNAL_ERROR",
+    });
   }
 }
