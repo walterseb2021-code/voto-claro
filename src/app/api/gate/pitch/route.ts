@@ -3,9 +3,13 @@ import {
   MAX_PITCH_TOKEN_LENGTH,
   VC_GROUP_COOKIE,
   VC_PITCH_COOKIE,
+  checkPitchAccessRateLimit,
+  getPitchIpFingerprint,
+  recordPitchAccessFailure,
   resolvePitchAccess,
   validatePitchToken,
 } from "@/lib/pitchAccessAuth";
+import { getParticipantSupabaseAdmin } from "@/lib/participantApi";
 
 const noStoreHeaders = {
   "Cache-Control": "no-store",
@@ -147,12 +151,50 @@ export async function POST(req: Request) {
         : invalidAccess();
     }
 
-    const access = await validatePitchToken(token);
+    const fingerprint = getPitchIpFingerprint(req);
+
+    if (!fingerprint.ok) {
+      return clearPitchCookies(unavailable());
+    }
+
+    const supabase = getParticipantSupabaseAdmin();
+
+    const rateLimit = await checkPitchAccessRateLimit(
+      supabase,
+      fingerprint.value
+    );
+
+    if (!rateLimit.ok) {
+      return clearPitchCookies(unavailable());
+    }
+
+    if (!rateLimit.allowed) {
+      return clearPitchCookies(invalidAccess(429));
+    }
+
+    const access = await validatePitchToken(
+      token,
+      undefined,
+      supabase
+    );
 
     if (!access.ok) {
-      const response =
-        access.reason === "invalid" ? invalidAccess() : unavailable();
-      return clearPitchCookies(response);
+      if (access.reason === "unavailable") {
+        return clearPitchCookies(unavailable());
+      }
+
+      const recorded = await recordPitchAccessFailure(
+        supabase,
+        fingerprint.value
+      );
+
+      if (!recorded.ok) {
+        return clearPitchCookies(unavailable());
+      }
+
+      return clearPitchCookies(
+        invalidAccess(recorded.allowed ? 401 : 429)
+      );
     }
 
     const res = jsonNoStore({ ok: true }, 200);
