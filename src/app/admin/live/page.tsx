@@ -448,7 +448,7 @@ export default function AdminLivePage() {
 
   async function deleteSingleLive(entry: LiveEntry) {
     const ok = window.confirm(
-      `Â¿Eliminar este video del historial?\n\n${entry.url}\n\nEsto lo borra de Supabase (global).`
+      `¿Eliminar este video del historial?\n\n${entry.url}\n\nEsto lo borra de Supabase (global).`
     );
     if (!ok) return;
 
@@ -490,7 +490,7 @@ export default function AdminLivePage() {
     candidateName: string
   ) {
     const ok = window.confirm(
-      `Â¿ELIMINAR TODO el historial de este candidato?\n\n${candidateName}\n\nEsto borra TODOS sus registros en Supabase (global).`
+      `¿ELIMINAR TODO el historial de este candidato?\n\n${candidateName}\n\nEsto borra TODOS sus registros en Supabase (global).`
     );
     if (!ok) return;
 
