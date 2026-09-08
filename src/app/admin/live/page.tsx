@@ -448,24 +448,34 @@ export default function AdminLivePage() {
 
   async function deleteSingleLive(entry: LiveEntry) {
     const ok = window.confirm(
-      `¿Eliminar este video del historial?\n\n${entry.url}\n\nEsto lo borra de Supabase (global).`
+      `Â¿Eliminar este video del historial?\n\n${entry.url}\n\nEsto lo borra de Supabase (global).`
     );
     if (!ok) return;
 
     setDeletingId(entry.id);
     try {
-      const { error } = await supabase
-        .from("votoclaro_live_entries")
-        .delete()
-        .eq("id", entry.id);
+      const res = await fetch("/api/admin/live", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_one",
+          liveId: entry.id,
+        }),
+      });
 
-      if (error) {
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; deletedId?: string; error?: string }
+        | null;
+
+      if (!res.ok || !data?.ok || data.deletedId !== entry.id) {
         alert("No se pudo eliminar. Revisa consola.");
-        console.warn("[VOTO CLARO] Error eliminando live (single):", error.message);
+        console.warn(
+          "[VOTO CLARO] Error eliminando live (single):",
+          data?.error ?? res.status
+        );
         return;
       }
 
-      // ✅ UI inmediata: quitamos del estado sin tocar lo demás
       setLives((prev) => prev.filter((x) => x.id !== entry.id));
     } catch (err) {
       alert("Error de red eliminando. Revisa consola.");
@@ -475,26 +485,44 @@ export default function AdminLivePage() {
     }
   }
 
-  async function deleteAllLivesForCandidate(candidateId: string, candidateName: string) {
+  async function deleteAllLivesForCandidate(
+    candidateId: string,
+    candidateName: string
+  ) {
     const ok = window.confirm(
-      `¿ELIMINAR TODO el historial de este candidato?\n\n${candidateName}\n\nEsto borra TODOS sus registros en Supabase (global).`
+      `Â¿ELIMINAR TODO el historial de este candidato?\n\n${candidateName}\n\nEsto borra TODOS sus registros en Supabase (global).`
     );
     if (!ok) return;
 
     setDeletingAll(true);
     try {
-      const { error } = await supabase
-        .from("votoclaro_live_entries")
-        .delete()
-        .eq("candidate_id", candidateId);
+      const res = await fetch("/api/admin/live", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_all",
+          candidateId,
+        }),
+      });
 
-      if (error) {
+      const data = (await res.json().catch(() => null)) as
+        | {
+            ok?: boolean;
+            candidateId?: string;
+            deletedCount?: number;
+            error?: string;
+          }
+        | null;
+
+      if (!res.ok || !data?.ok || data.candidateId !== candidateId) {
         alert("No se pudo eliminar todo. Revisa consola.");
-        console.warn("[VOTO CLARO] Error eliminando live (all):", error.message);
+        console.warn(
+          "[VOTO CLARO] Error eliminando live (all):",
+          data?.error ?? res.status
+        );
         return;
       }
 
-      // ✅ UI inmediata
       setLives((prev) => prev.filter((x) => x.candidateId !== candidateId));
     } catch (err) {
       alert("Error de red eliminando todo. Revisa consola.");
@@ -505,7 +533,7 @@ export default function AdminLivePage() {
   }
 
   // ===============================
-  // ✅ UI styles (coherente verde/rojo)
+  // UI styles (coherente verde/rojo)
   // ===============================
   const wrap =
     "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
