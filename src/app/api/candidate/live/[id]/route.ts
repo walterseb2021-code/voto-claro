@@ -75,21 +75,18 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
 
   const supabase = getCandidatePanelAdminClient();
-  const { data, error } = await supabase
-    .from("votoclaro_live_entries")
-    .update({ status: "ENDED" })
-    .eq("id", id)
-    .eq("candidate_id", session.storageCandidateId)
-    .eq("status", "LIVE")
-    .select("id")
-    .maybeSingle<{ id: string }>();
+  const { data, error } = await supabase.rpc("finish_candidate_live_entry", {
+    p_live_id: id,
+    p_candidate_id: session.storageCandidateId,
+  });
 
   if (error) {
     console.error("[candidate-live] finish failed", error.message);
     return unavailable();
   }
 
-  if (!data?.id) return badRequest();
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.id) return badRequest();
 
   return NextResponse.json({ ok: true });
 }
@@ -106,20 +103,18 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   if (!session.ok) return unauthorized();
 
   const supabase = getCandidatePanelAdminClient();
-  const { data, error } = await supabase
-    .from("votoclaro_live_entries")
-    .delete()
-    .eq("id", id)
-    .eq("candidate_id", session.storageCandidateId)
-    .select("id")
-    .maybeSingle<{ id: string }>();
+  const { data, error } = await supabase.rpc("delete_candidate_live_entry", {
+    p_live_id: id,
+    p_candidate_id: session.storageCandidateId,
+  });
 
   if (error) {
     console.error("[candidate-live] delete failed", error.message);
     return unavailable();
   }
 
-  if (!data?.id) return badRequest();
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.id) return badRequest();
 
   return NextResponse.json({ ok: true });
 }

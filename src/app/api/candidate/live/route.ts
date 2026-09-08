@@ -173,13 +173,18 @@ export async function POST(req: NextRequest) {
 
   const platform = String(body.platform ?? "").trim().toUpperCase();
   const url = parseLiveUrl(platform, body.url);
+  if (
+    body.setAsLive !== undefined &&
+    typeof body.setAsLive !== "boolean"
+  ) {
+    return badRequest();
+  }
+
   const setAsLive = body.setAsLive !== false;
 
   if (!LIVE_PLATFORMS.has(platform) || !url) return badRequest();
 
   const supabase = getCandidatePanelAdminClient();
-  const now = new Date().toISOString();
-  const status: LiveStatus = setAsLive ? "LIVE" : "ENDED";
 
   if (setAsLive) {
     const { data, error } = await supabase.rpc("create_candidate_live_entry", {
@@ -198,23 +203,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, entry: mapLive(row as LiveRow, session) });
   }
 
-  const { data, error } = await supabase
-    .from("votoclaro_live_entries")
-    .insert({
-      candidate_id: session.storageCandidateId,
-      candidate_name: session.candidateName,
-      platform,
-      url,
-      status,
-      created_at: now,
-    })
-    .select("id,candidate_id,candidate_name,platform,url,status,created_at")
-    .single();
+  const { data, error } = await supabase.rpc(
+    "create_candidate_ended_live_entry",
+    {
+      p_candidate_id: session.storageCandidateId,
+      p_candidate_name: session.candidateName,
+      p_platform: platform,
+      p_url: url,
+    }
+  );
 
-  if (error || !data) {
-    console.error("[candidate-live] create failed", error?.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row) {
+    console.error("[candidate-live] create ended rpc failed", error?.message);
     return unavailable();
   }
 
-  return NextResponse.json({ ok: true, entry: mapLive(data as LiveRow, session) });
+  return NextResponse.json({
+    ok: true,
+    entry: mapLive(row as LiveRow, session),
+  });
 }
