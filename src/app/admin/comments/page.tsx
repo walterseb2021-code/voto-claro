@@ -11,7 +11,7 @@ type CommentRow = {
   device_id: string | null;
   page: string | null;
   message: string;
-  status: "new" | "published" | "reviewed" | "archived" | "blocked";
+  status: "published" | "archived" | "blocked";
 };
 
 type WeeklyTopicRow = {
@@ -80,7 +80,7 @@ export default function AdminCommentsPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
-  const [statusFilter, setStatusFilter] = useState<string>("new");
+  const [statusFilter, setStatusFilter] = useState<string>("published");
 
   const [weeklyTopic, setWeeklyTopic] = useState<WeeklyTopicRow | null>(null);
   const [topicDraft, setTopicDraft] = useState("");
@@ -186,7 +186,7 @@ export default function AdminCommentsPage() {
     }
   }
 
-  async function setStatus(id: string, status: "reviewed" | "archived") {
+  async function setStatus(id: string, status: "published" | "archived" | "blocked") {
     setErrorMsg(null);
 
     try {
@@ -1112,9 +1112,7 @@ export default function AdminCommentsPage() {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="new">new</option>
                 <option value="published">published</option>
-                <option value="reviewed">reviewed</option>
                 <option value="archived">archived</option>
                 <option value="blocked">blocked</option>
                 <option value="ALL">Todos</option>
@@ -1245,12 +1243,8 @@ export default function AdminCommentsPage() {
                   </div>
                   <div className="text-xs font-extrabold text-slate-700">
                     status:{" "}
-                              {c.status === "new"
-  ? "Nuevo"
-  : c.status === "published"
+                              {c.status === "published"
   ? "Publicado"
-  : c.status === "reviewed"
-  ? "Revisado"
   : c.status === "archived"
   ? "Archivado"
   : "Bloqueado"}
@@ -1266,15 +1260,6 @@ export default function AdminCommentsPage() {
                 </div>
 
                 <div className="mt-3 flex gap-2 flex-wrap">
-                  {c.status !== "reviewed" && c.status !== "blocked" && (
-                    <button
-                      type="button"
-                      className="px-3 py-1 rounded-lg border-2 border-red-600 bg-green-700 text-white text-xs font-bold"
-                      onClick={() => setStatus(c.id, "reviewed")}
-                    >
-                      Marcar como Revisado
-                    </button>
-                  )}
 
                   {c.status !== "archived" && (
                     <button
