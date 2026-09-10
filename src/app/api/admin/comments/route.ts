@@ -115,7 +115,7 @@ async function readJsonObject(req: NextRequest) {
 }
 
 function json(data: any, status = 200) {
-  return NextResponse.json(data, { status });
+  return NextResponse.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
 }
 
 function withAuthCookies(
