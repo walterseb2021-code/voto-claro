@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { createClient } from "@supabase/supabase-js";
@@ -303,37 +304,15 @@ export async function POST(req: NextRequest) {
       if (!topic || topic.length > 200) return respond({ error: "INVALID_TOPIC" }, 400);
       if (!question || question.length > 1000) return respond({ error: "INVALID_QUESTION" }, 400);
 
-      const now = new Date();
-      const startsAt = now.toISOString();
-
-      const endsAtDate = new Date(now);
-      endsAtDate.setDate(endsAtDate.getDate() + 7);
-
-      // Cerrar otros temas activos para evitar duplicados.
-      const { error: closeError } = await supabase
-        .from("weekly_topics")
-        .update({
-          status: "archived",
-          ends_at: startsAt,
-        })
-        .eq("status", "active");
-
-      if (closeError) {
-        return respond({ error: "SUPABASE_ERROR", detail: closeError.message }, 500);
-      }
+      const requestId = randomUUID();
 
       const { data, error } = await supabase
-        .from("weekly_topics")
-        .insert({
-          topic,
-          question,
-          status: "active",
-          starts_at: startsAt,
-          ends_at: endsAtDate.toISOString(),
+        .rpc("admin_create_weekly_topic", {
+          p_topic: topic,
+          p_question: question,
+          p_actor_email: gate.email,
+          p_request_id: requestId,
         })
-        .select(
-          "id,topic,question,status,starts_at,ends_at,winner_video_entry_id,winner_votes,winner_published_at"
-        )
         .single();
 
       if (error) {
@@ -345,34 +324,23 @@ export async function POST(req: NextRequest) {
 
     if (action === "run_weekly_rotation") {
       if (!hasExactKeys(body, ["action"])) return respond({ error: "INVALID_PAYLOAD" }, 400);
-      const cronSecret = process.env.CRON_SECRET;
-      if (!cronSecret) {
-        return respond({ error: "MISSING_CRON_SECRET" }, 500);
-      }
 
-      const origin = new URL(req.url).origin;
+      const requestId = randomUUID();
 
-      const res = await fetch(`${origin}/api/cron/weekly-topic`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${cronSecret}`,
-        },
-        cache: "no-store",
+      const { data, error } = await supabase.rpc("admin_run_weekly_topics_cycle", {
+        p_actor_email: gate.email,
+        p_request_id: requestId,
       });
 
-      const result = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        return respond(
-          {
-            error: result?.error ?? "CRON_EXECUTION_FAILED",
-            detail: result?.detail ?? result?.message ?? "No se pudo ejecutar la rotación semanal.",
-          },
-          res.status
-        );
+      if (error) {
+        return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
       }
 
-      return respond(result ?? { ok: true });
+      return respond({
+        ok: true,
+        message: "Rotaci\u00f3n semanal ejecutada.",
+        result: data,
+      });
     }
 
     if (action === "answer_founder_question") {
@@ -565,14 +533,15 @@ export async function PATCH(req: NextRequest) {
     if (!question || question.length > 1000) return respond({ error: "INVALID_QUESTION" }, 400);
 
     const supabase = supabaseAdmin();
+    const requestId = randomUUID();
 
-    const { error } = await supabase
-      .from("weekly_topics")
-      .update({
-        topic,
-        question,
-      })
-      .eq("id", id);
+    const { error } = await supabase.rpc("admin_update_active_weekly_topic", {
+      p_topic_id: id,
+      p_topic: topic,
+      p_question: question,
+      p_actor_email: gate.email,
+      p_request_id: requestId,
+    });
 
     if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
