@@ -1,93 +1,41 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { type NextRequest } from "next/server";
 import { getCookieValue } from "@/lib/http/cookies";
+import {
+  cleanParticipantText,
+  isAllowedParticipantMutationOrigin,
+  isValidLegacyDeviceId,
+  normalizeLegacyDeviceId,
+  participantError,
+  participantJson,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DEFAULT_GROUP_CODE = "GENERAL";
-const ALLOWED_PLATFORMS = new Set(["YOUTUBE", "TIKTOK", "FACEBOOK", "OTRA"]);
+const MAX_BODY_BYTES = 2048;
+const ALLOWED_PLATFORMS = new Set([
+  "YOUTUBE",
+  "TIKTOK",
+  "FACEBOOK",
+  "OTRA",
+]);
 
-type ParticipantRow = {
-  id: string;
-  alias: string | null;
-  full_name: string | null;
-  email: string | null;
-  phone: string | null;
-};
+type ResolvedSession = Awaited<
+  ReturnType<typeof resolveParticipantSession>
+>;
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
-}
+type SessionSuccess = Extract<
+  ResolvedSession,
+  { ok: true }
+>;
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error("Missing Supabase admin configuration");
-  }
-
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function getRequestOrigin(req: Request) {
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
-
-  if (forwardedHost) return `${forwardedProto}://${forwardedHost}`;
-
-  return new URL(req.url).origin;
-}
-
-function isLocalOrigin(origin: string) {
-  try {
-    const hostname = new URL(origin).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedOrigin(req: Request) {
-  const origin = req.headers.get("origin");
-  if (!origin) return true;
-
-  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
-    return true;
-  }
-
-  try {
-    return new URL(origin).origin === getRequestOrigin(req);
-  } catch {
-    return false;
-  }
-}
-
-function cleanText(value: unknown, maxLength: number) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, maxLength);
-}
+type SupabaseAdmin = SessionSuccess["supabase"];
 
 function normalizeGroupCode(value: unknown) {
-  const group = cleanText(value, 40);
-  return group || DEFAULT_GROUP_CODE;
-}
-
-function isValidDeviceId(value: string) {
-  return value.length > 0 && value.length <= 120;
-}
-
-function isValidEmail(value: string) {
-  return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidPhone(value: string) {
-  return !value || /^[0-9+()\-\s]{6,30}$/.test(value);
+  return cleanParticipantText(value, 40) || DEFAULT_GROUP_CODE;
 }
 
 function isValidVideoUrl(value: string) {
@@ -97,20 +45,6 @@ function isValidVideoUrl(value: string) {
   } catch {
     return false;
   }
-}
-
-function toSafeForumAlias(input: unknown) {
-  const base = cleanText(input, 80)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/[^A-Za-z0-9_]/g, "")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  if (base.length >= 3) return base.slice(0, 20);
-
-  return `Usuario_${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function toSafeVideo(row: any) {
@@ -126,111 +60,36 @@ function toSafeVideo(row: any) {
   };
 }
 
-async function findAccessBy(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  column: "device_id" | "email" | "celular",
-  value: string
+async function getTrustedLegacyDeviceId(
+  supabase: SupabaseAdmin,
+  participantId: string
 ) {
-  if (!value) return null;
-
   const { data, error } = await supabase
-    .from("comment_access_participants")
-    .select("id")
-    .eq(column, value)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[comments/videos] access lookup failed", { column, error });
-    throw new Error("access lookup failed");
-  }
-
-  return data;
-}
-
-async function ensureAccess(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  deviceId: string,
-  groupCode: string
-) {
-  const existingByDevice = await findAccessBy(supabase, "device_id", deviceId);
-  if (existingByDevice?.id) return existingByDevice.id as string;
-
-  const { data: participant, error: participantError } = await supabase
     .from("project_participants")
-    .select("id, alias, full_name, email, phone")
-    .eq("device_id", deviceId)
+    .select("device_id")
+    .eq("id", participantId)
     .limit(1)
     .maybeSingle();
 
-  if (participantError) {
-    console.error("[comments/videos] participant lookup failed", participantError);
-    throw new Error("participant lookup failed");
-  }
-
-  if (!participant?.id) return null;
-
-  const row = participant as ParticipantRow;
-  const email = cleanText(row.email, 160);
-  const phone = cleanText(row.phone, 30);
-  const forumAlias = toSafeForumAlias(row.alias || row.full_name);
-
-  if (!isValidEmail(email) || !isValidPhone(phone)) return null;
-
-  const existingByEmail = await findAccessBy(supabase, "email", email);
-  if (existingByEmail?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByEmail.id);
-
-    if (error) {
-      console.error("[comments/videos] access update by email failed", error);
-      throw new Error("access update failed");
-    }
-
-    return existingByEmail.id as string;
-  }
-
-  const existingByPhone = await findAccessBy(supabase, "celular", phone);
-  if (existingByPhone?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByPhone.id);
-
-    if (error) {
-      console.error("[comments/videos] access update by phone failed", error);
-      throw new Error("access update failed");
-    }
-
-    return existingByPhone.id as string;
-  }
-
-  const payload: Record<string, unknown> = {
-    device_id: deviceId,
-    group_code: groupCode,
-    forum_alias: forumAlias,
-  };
-
-  if (email) payload.email = email;
-  if (phone) payload.celular = phone;
-
-  const { data: inserted, error } = await supabase
-    .from("comment_access_participants")
-    .insert(payload)
-    .select("id")
-    .single();
-
   if (error) {
-    console.error("[comments/videos] access insert failed", error);
-    throw new Error("access insert failed");
+    console.error(
+      "[comments/videos] participant device lookup failed"
+    );
+    throw new Error("participant device lookup failed");
   }
 
-  return inserted.id as string;
+  const deviceId = normalizeLegacyDeviceId(data?.device_id);
+
+  if (!deviceId || !isValidLegacyDeviceId(deviceId)) {
+    return null;
+  }
+
+  return deviceId;
 }
 
-async function getActiveTopicId(supabase: ReturnType<typeof getSupabaseAdmin>) {
+async function getActiveTopicId(
+  supabase: SupabaseAdmin
+) {
   const { data, error } = await supabase
     .from("weekly_topics")
     .select("id")
@@ -239,129 +98,267 @@ async function getActiveTopicId(supabase: ReturnType<typeof getSupabaseAdmin>) {
     .maybeSingle();
 
   if (error) {
-    console.error("[comments/videos] active topic lookup failed", error);
+    console.error(
+      "[comments/videos] active topic lookup failed"
+    );
     throw new Error("topic lookup failed");
   }
 
   return data?.id ? String(data.id) : null;
 }
 
-async function findExistingVideo(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+async function findExistingVideoBy(
+  supabase: SupabaseAdmin,
   weeklyTopicId: string,
-  accessParticipantId: string
+  column:
+    | "project_participant_id"
+    | "participant_device_id"
+    | "device_id",
+  value: string
 ) {
   const { data, error } = await supabase
     .from("weekly_video_entries")
-    .select("id, status, platform, video_url, title, created_at")
+    .select(
+      "id,status,platform,video_url,title,created_at"
+    )
     .eq("weekly_topic_id", weeklyTopicId)
-    .eq("access_participant_id", accessParticipantId)
+    .eq(column, value)
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    console.error("[comments/videos] existing video lookup failed", error);
+    console.error(
+      "[comments/videos] existing video lookup failed",
+      { column }
+    );
     throw new Error("video lookup failed");
   }
 
   return data;
 }
 
-export async function POST(req: Request) {
+async function findExistingVideo(
+  supabase: SupabaseAdmin,
+  weeklyTopicId: string,
+  participantId: string,
+  legacyDeviceId: string | null
+) {
+  const stable = await findExistingVideoBy(
+    supabase,
+    weeklyTopicId,
+    "project_participant_id",
+    participantId
+  );
+
+  if (stable?.id || !legacyDeviceId) {
+    return stable;
+  }
+
+  const legacyParticipantDevice = await findExistingVideoBy(
+    supabase,
+    weeklyTopicId,
+    "participant_device_id",
+    legacyDeviceId
+  );
+
+  if (legacyParticipantDevice?.id) {
+    return legacyParticipantDevice;
+  }
+
+  return findExistingVideoBy(
+    supabase,
+    weeklyTopicId,
+    "device_id",
+    legacyDeviceId
+  );
+}
+
+export async function POST(req: NextRequest) {
   try {
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return participantError(403, "origin_invalid");
+    }
+
     const cookieHeader = req.headers.get("cookie");
-    const legalAccepted = getCookieValue(cookieHeader, "vc_legal_accepted") ?? "";
-    const cookieGroup = getCookieValue(cookieHeader, "vc_group") ?? DEFAULT_GROUP_CODE;
-    const groupCode = normalizeGroupCode(cookieGroup);
+    const legalAccepted =
+      getCookieValue(
+        cookieHeader,
+        "vc_legal_accepted"
+      ) ?? "";
 
     if (legalAccepted !== "true") {
-      return json(401, { ok: false, error: "No autorizado" });
+      return participantError(
+        401,
+        "legal_acceptance_required"
+      );
     }
 
-    if (!isAllowedOrigin(req)) {
-      return json(403, { ok: false, error: "No autorizado" });
+    const body = await readBoundedJsonObject(
+      req,
+      MAX_BODY_BYTES
+    );
+
+    if (!body) {
+      return participantError(400, "request_invalid");
     }
 
-    const body = await req.json().catch(() => null);
-    const action = cleanText(body?.action, 40);
-    const deviceId = cleanText(body?.device_id, 120);
+    const action = cleanParticipantText(
+      body.action,
+      40
+    );
 
-    if (!isValidDeviceId(deviceId)) {
-      return json(400, { ok: false, error: "Solicitud invalida" });
+    if (action !== "mine" && action !== "submit") {
+      return participantError(400, "request_invalid");
     }
 
-    const supabase = getSupabaseAdmin();
-    const accessParticipantId = await ensureAccess(supabase, deviceId, groupCode);
+    const session = await resolveParticipantSession(req);
 
-    if (!accessParticipantId) {
-      return json(403, { ok: false, error: "No autorizado" });
+    if (!session.ok) {
+      return participantError(
+        session.reason === "unavailable" ? 503 : 401,
+        session.reason === "unavailable"
+          ? "session_unavailable"
+          : "unauthenticated"
+      );
     }
 
-    const weeklyTopicId = await getActiveTopicId(supabase);
+    const supabase = session.supabase;
+    const participantId = session.participant.id;
+
+    const legacyDeviceId =
+      await getTrustedLegacyDeviceId(
+        supabase,
+        participantId
+      );
+
+    const weeklyTopicId =
+      await getActiveTopicId(supabase);
 
     if (!weeklyTopicId) {
-      return json(404, { ok: false, error: "No hay tema activo" });
+      return participantError(404, "active_topic_not_found");
     }
 
-    if (action === "mine") {
-      const existingVideo = await findExistingVideo(supabase, weeklyTopicId, accessParticipantId);
+    const existingVideo = await findExistingVideo(
+      supabase,
+      weeklyTopicId,
+      participantId,
+      legacyDeviceId
+    );
 
-      return json(200, {
+    if (action === "mine") {
+      return participantJson(200, {
         ok: true,
         hasVideo: Boolean(existingVideo?.id),
         video: toSafeVideo(existingVideo),
       });
     }
 
-    if (action === "submit") {
-      const platform = cleanText(body?.platform, 30).toUpperCase();
-      const videoUrl = cleanText(body?.video_url, 500);
-      const title = cleanText(body?.title, 120);
+    if (existingVideo?.id) {
+      return participantJson(409, {
+        ok: false,
+        error: "video_already_submitted",
+        code: "VIDEO_ALREADY_SUBMITTED",
+      });
+    }
 
-      if (!ALLOWED_PLATFORMS.has(platform) || !isValidVideoUrl(videoUrl)) {
-        return json(400, { ok: false, error: "Solicitud invalida" });
-      }
+    if (!legacyDeviceId) {
+      return participantError(
+        409,
+        "participant_device_required"
+      );
+    }
 
-      const existingVideo = await findExistingVideo(supabase, weeklyTopicId, accessParticipantId);
+    const platform = cleanParticipantText(
+      body.platform,
+      30
+    ).toUpperCase();
 
-      if (existingVideo?.id) {
-        return json(409, {
+    const videoUrl = cleanParticipantText(
+      body.video_url,
+      500
+    );
+
+    const title = cleanParticipantText(
+      body.title,
+      120
+    );
+
+    if (
+      !ALLOWED_PLATFORMS.has(platform) ||
+      !isValidVideoUrl(videoUrl)
+    ) {
+      return participantError(400, "request_invalid");
+    }
+
+    const cookieGroup =
+      getCookieValue(cookieHeader, "vc_group") ??
+      DEFAULT_GROUP_CODE;
+
+    const groupCode =
+      normalizeGroupCode(cookieGroup);
+
+    const { data, error } = await supabase
+      .from("weekly_video_entries")
+      .insert({
+        weekly_topic_id: weeklyTopicId,
+        project_participant_id: participantId,
+        device_id: legacyDeviceId,
+        participant_device_id: legacyDeviceId,
+        group_code: groupCode,
+        platform,
+        video_url: videoUrl,
+        title: title || null,
+        status: "new",
+      })
+      .select(
+        "id,status,platform,video_url,title,created_at"
+      )
+      .single();
+
+    if (error) {
+      if (
+        (error as { code?: string }).code === "23505"
+      ) {
+        return participantJson(409, {
           ok: false,
-          error: "Ya enviaste un video para este tema semanal.",
+          error: "video_already_submitted",
           code: "VIDEO_ALREADY_SUBMITTED",
         });
       }
 
-      const { data, error } = await supabase
-        .from("weekly_video_entries")
-        .insert({
-          weekly_topic_id: weeklyTopicId,
-          device_id: deviceId,
-          participant_device_id: deviceId,
-          access_participant_id: accessParticipantId,
-          group_code: groupCode,
-          platform,
-          video_url: videoUrl,
-          title: title || null,
-          status: "new",
-        })
-        .select("id, status, platform, video_url, title, created_at")
-        .single();
-
-      if (error) {
-        console.error("[comments/videos] insert failed", error);
-        return json(500, { ok: false, error: "No se pudo enviar el video" });
+      if (
+        String(
+          (error as { message?: string }).message ?? ""
+        ).includes("MAX_10_VIDEOS_PER_TOPIC")
+      ) {
+        return participantJson(409, {
+          ok: false,
+          error: "topic_video_limit_reached",
+          code: "TOPIC_VIDEO_LIMIT_REACHED",
+        });
       }
 
-      return json(200, {
-        ok: true,
-        video: toSafeVideo(data),
-      });
+      console.error(
+        "[comments/videos] insert failed",
+        error
+      );
+
+      return participantError(
+        500,
+        "video_submit_failed"
+      );
     }
 
-    return json(400, { ok: false, error: "Solicitud invalida" });
-  } catch (e) {
-    console.error("[comments/videos] unexpected error", e);
-    return json(500, { ok: false, error: "No disponible" });
+    return participantJson(200, {
+      ok: true,
+      video: toSafeVideo(data),
+    });
+  } catch (error) {
+    console.error(
+      "[comments/videos] unexpected error",
+      error
+    );
+
+    return participantError(503, "unavailable");
   }
 }

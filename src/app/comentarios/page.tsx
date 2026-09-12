@@ -358,6 +358,7 @@ export default function ComentariosPage() {
 
     const [checkingData, setCheckingData] = useState(true);
   const [hasData, setHasData] = useState(false);
+  const [participantAuthenticated, setParticipantAuthenticated] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [participant, setParticipant] = useState<ParticipantSummary | null>(null);
 
@@ -411,15 +412,18 @@ export default function ComentariosPage() {
   function applyParticipantResponse(data: any) {
     const nextParticipant = data?.participant ?? null;
     setParticipant(nextParticipant);
-    setHasData(Boolean(data?.hasData && nextParticipant?.id));
+    setHasData(
+      Boolean((data?.hasData || data?.authenticated) && nextParticipant?.id)
+    );
   }
 
-     async function loadParticipant(currentDeviceId: string) {
+  async function loadParticipant(currentDeviceId: string) {
     setCheckingData(true);
     setDataError(null);
+    setParticipantAuthenticated(false);
 
     try {
-      const res = await fetch("/api/comments/participant", {
+      const legacyRes = await fetch("/api/comments/participant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
@@ -429,16 +433,57 @@ export default function ComentariosPage() {
         }),
       });
 
-      const data = await res.json().catch(() => null);
+      const legacyData = await legacyRes.json().catch(() => null);
 
-      if (!res.ok || data?.ok !== true) {
-        throw new Error(data?.error || "No se pudo verificar el participante.");
+      if (!legacyRes.ok || legacyData?.ok !== true) {
+        throw new Error(
+          legacyData?.error || "No se pudo verificar el participante."
+        );
       }
 
-      applyParticipantResponse(data);
+      const legacyParticipant = legacyData?.participant ?? null;
+      const legacyHasData = Boolean(
+        legacyData?.hasData && legacyParticipant?.id
+      );
+
+      const sessionRes = await fetch("/api/participant/session", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const sessionData = await sessionRes.json().catch(() => null);
+
+      if (!sessionRes.ok || sessionData?.ok !== true) {
+        setParticipant(legacyParticipant);
+        setHasData(legacyHasData);
+        setParticipantAuthenticated(false);
+        setDataError("No se pudo verificar la sesión segura del participante.");
+        return;
+      }
+
+      const sessionParticipant = sessionData?.participant ?? null;
+      const sessionAuthenticated = Boolean(
+        sessionData?.authenticated === true && sessionParticipant?.id
+      );
+
+      if (
+        sessionAuthenticated &&
+        legacyParticipant?.id &&
+        legacyParticipant.id === sessionParticipant.id
+      ) {
+        setParticipant(legacyParticipant);
+        setHasData(true);
+        setParticipantAuthenticated(true);
+        return;
+      }
+
+      setParticipant(legacyParticipant);
+      setHasData(legacyHasData);
+      setParticipantAuthenticated(false);
     } catch (e: any) {
       setParticipant(null);
       setHasData(false);
+      setParticipantAuthenticated(false);
       setDataError(e?.message ?? String(e));
     } finally {
       setCheckingData(false);
@@ -472,12 +517,11 @@ export default function ComentariosPage() {
         return;
       }
 
-      const res = await fetch("/api/comments/participant", {
+      const res = await fetch("/api/participant/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({
-          action: "login-code",
           device_id: deviceId,
           codigo_acceso: codigo,
         }),
@@ -487,13 +531,20 @@ export default function ComentariosPage() {
 
       if (!res.ok || data?.ok !== true) {
         setLoginCodigoError(
-          res.status === 404 ? "Código de acceso no válido" : data?.error || "Código de acceso no válido"
+          res.status === 429
+            ? "Demasiados intentos. Intenta nuevamente más tarde."
+            : res.status === 503
+            ? "No se pudo validar el acceso en este momento."
+            : "Código de acceso no válido"
         );
         setLoginCodigoLoading(false);
         return;
       }
 
       applyParticipantResponse(data);
+      setParticipantAuthenticated(
+        Boolean(data?.authenticated === true && data?.participant?.id)
+      );
       setCodigoAcceso("");
       setLoginCodigoError("✅ Sesión iniciada correctamente");
       setTimeout(() => setLoginCodigoError(""), 3000);
@@ -1140,8 +1191,13 @@ useEffect(() => {
     return;
   }
 
-    if (!hasData) {
+  if (!hasData) {
     setErrMsg("Para participar con video, primero debes registrarte como participante.");
+    return;
+  }
+
+  if (!participantAuthenticated) {
+    setErrMsg("Para participar con video, inicia sesión con tu código de acceso.");
     return;
   }
 
@@ -1176,7 +1232,6 @@ useEffect(() => {
       cache: "no-store",
       body: JSON.stringify({
         action: "mine",
-        device_id: deviceId,
       }),
     });
 
@@ -1197,7 +1252,6 @@ useEffect(() => {
       cache: "no-store",
       body: JSON.stringify({
         action: "submit",
-        device_id: deviceId,
         platform: videoPlatform,
         video_url: url,
         title,
@@ -1751,7 +1805,7 @@ const suggestedPrompts =
           !!myWinnerQuestion &&
           !myWinnerQuestion.founder_answer_text &&
           !myWinnerQuestion.founder_answer_video_url,
-        formularioAccesoVisible: !checkingData && !hasData,
+        formularioAccesoVisible: !checkingData && (!hasData || !participantAuthenticated),
         votacionSemanalVisible: votingVideos.length > 0,
         historialSemanalVisible: archivedTopicsPublic.length > 0,
         historialForosVisible: forumTopics.length > 0,
@@ -1770,6 +1824,7 @@ const suggestedPrompts =
   setPageContext,
   checkingData,
   hasData,
+  participantAuthenticated,
   weeklyTopic,
   weeklyQuestion,
   weeklyTopicId,
@@ -1888,21 +1943,23 @@ const suggestedPrompts =
           </div>
         ) : null}
 
-                      {!checkingData && !hasData ? (
+        {!checkingData && (!hasData || !participantAuthenticated) ? (
           <div className="mt-4 grid gap-4">
             <div className="rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-slate-800">
               El registro es único para todo el app y el mismo código sirve también para Proyecto Ciudadano, Espacio Emprendedor, Comentarios Ciudadanos y Reto Ciudadano.
             </div>
 
-            <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                className={btn}
-                onClick={() => router.push("/proyecto-ciudadano/registro?returnTo=comentarios")}
-              >
-                Registrarme para participar
-              </button>
-            </div>
+            {!hasData ? (
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  className={btn}
+                  onClick={() => router.push("/proyecto-ciudadano/registro?returnTo=comentarios")}
+                >
+                  Registrarme para participar
+                </button>
+              </div>
+            ) : null}
 
             <div className="rounded-2xl border-2 border-blue-600 bg-white p-4">
               <h3 className="text-base font-extrabold text-slate-900 mb-2">
@@ -1947,7 +2004,7 @@ const suggestedPrompts =
           </div>
         ) : null}
 
-        {!checkingData && hasData ? (
+        {!checkingData && hasData && participantAuthenticated ? (
           <div className="mt-4 rounded-2xl border-2 border-green-700 bg-green-50 p-4">
             <div className="text-sm font-extrabold text-green-800">Acceso habilitado</div>
 
@@ -2221,7 +2278,7 @@ const suggestedPrompts =
           </ul>
         </div>
 
-        {!checkingData && hasData ? (
+        {!checkingData && hasData && participantAuthenticated ? (
           <form onSubmit={onSubmitVideo} className="grid gap-4 mt-4">
             <div>
               <div className={label}>Plataforma</div>
