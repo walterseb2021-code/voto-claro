@@ -998,7 +998,7 @@ useEffect(() => {
     }
   }
 
-  async function loadMyWinnerQuestion(_currentWinner: LatestOfficialWinner, currentDeviceId: string) {
+  async function loadMyWinnerQuestion() {
     setWinnerQuestionLoading(true);
     setWinnerQuestionError(null);
     setWinnerQuestionOk(null);
@@ -1010,7 +1010,6 @@ useEffect(() => {
         cache: "no-store",
         body: JSON.stringify({
           action: "mine",
-          device_id: currentDeviceId,
         }),
       });
 
@@ -1032,15 +1031,24 @@ useEffect(() => {
   }
 
   useEffect(() => {
-    if (!deviceId || !latestOfficialWinner?.winnerVideoEntryId || !latestOfficialWinner.video) {
+    if (
+      !participantAuthenticated ||
+      !latestOfficialWinner?.winnerVideoEntryId ||
+      !latestOfficialWinner.video
+    ) {
       setIsOfficialWinnerUser(false);
       setMyWinnerQuestion(null);
+      setWinnerQuestionLoading(false);
+      setWinnerQuestionError(null);
       return;
     }
 
-    void loadMyWinnerQuestion(latestOfficialWinner, deviceId);
+    void loadMyWinnerQuestion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId, latestOfficialWinner?.winnerVideoEntryId]);
+  }, [
+    participantAuthenticated,
+    latestOfficialWinner?.winnerVideoEntryId,
+  ]);
 
   useEffect(() => {
     if (!showPublic && !showPublicVideos) return;
@@ -1353,8 +1361,8 @@ async function voteForVideo(videoId: string) {
     setWinnerQuestionError(null);
     setWinnerQuestionOk(null);
 
-    if (!deviceId) {
-      setWinnerQuestionError("No se pudo identificar tu dispositivo.");
+    if (!participantAuthenticated) {
+      setWinnerQuestionError("Para enviar tu pregunta, inicia sesión con tu código de acceso.");
       return;
     }
 
@@ -1394,7 +1402,6 @@ async function voteForVideo(videoId: string) {
         cache: "no-store",
         body: JSON.stringify({
           action: "submit",
-          device_id: deviceId,
           question_text: text,
         }),
       });

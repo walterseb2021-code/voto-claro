@@ -1,117 +1,56 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { type NextRequest } from "next/server";
 import { getCookieValue } from "@/lib/http/cookies";
+import {
+  cleanParticipantText,
+  isAllowedParticipantMutationOrigin,
+  isValidLegacyDeviceId,
+  normalizeLegacyDeviceId,
+  participantError,
+  participantJson,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DEFAULT_GROUP_CODE = "GENERAL";
+const MAX_BODY_BYTES = 2048;
 
-type ParticipantRow = {
+type ResolvedSession = Awaited<
+  ReturnType<typeof resolveParticipantSession>
+>;
+
+type SessionSuccess = Extract<
+  ResolvedSession,
+  { ok: true }
+>;
+
+type SupabaseAdmin = SessionSuccess["supabase"];
+
+type WinnerVideoRow = {
   id: string;
-  alias: string | null;
-  full_name: string | null;
-  email: string | null;
-  phone: string | null;
+  weekly_topic_id: string;
+  project_participant_id: string | null;
+  access_participant_id: string | null;
+  device_id: string | null;
+  participant_device_id: string | null;
+  group_code: string | null;
 };
 
 type WinnerContext = {
   topicId: string;
   videoId: string;
-  winnerDeviceId: string | null;
+  winnerParticipantId: string | null;
   groupCode: string;
 };
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
-}
-
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error("Missing Supabase admin configuration");
-  }
-
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function getRequestOrigin(req: Request) {
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
-
-  if (forwardedHost) return `${forwardedProto}://${forwardedHost}`;
-
-  return new URL(req.url).origin;
-}
-
-function isLocalOrigin(origin: string) {
-  try {
-    const hostname = new URL(origin).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedOrigin(req: Request) {
-  const origin = req.headers.get("origin");
-  if (!origin) return true;
-
-  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
-    return true;
-  }
-
-  try {
-    return new URL(origin).origin === getRequestOrigin(req);
-  } catch {
-    return false;
-  }
-}
-
-function cleanText(value: unknown, maxLength: number) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, maxLength);
-}
-
 function normalizeGroupCode(value: unknown) {
-  const group = cleanText(value, 40);
-  return group || DEFAULT_GROUP_CODE;
-}
-
-function isValidDeviceId(value: string) {
-  return value.length > 0 && value.length <= 120;
-}
-
-function isValidEmail(value: string) {
-  return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidPhone(value: string) {
-  return !value || /^[0-9+()\-\s]{6,30}$/.test(value);
+  return cleanParticipantText(value, 40) || DEFAULT_GROUP_CODE;
 }
 
 function hasLinks(text: string) {
   return /https?:\/\/|www\./i.test(text);
-}
-
-function toSafeForumAlias(input: unknown) {
-  const base = cleanText(input, 80)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/[^A-Za-z0-9_]/g, "")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  if (base.length >= 3) return base.slice(0, 20);
-
-  return `Usuario_${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function toSafeQuestion(row: any) {
@@ -124,297 +63,498 @@ function toSafeQuestion(row: any) {
     question_text: row.question_text,
     published: Boolean(row.published),
     created_at: row.created_at,
-    founder_answer_text: row.founder_answer_text ?? null,
-    founder_answer_video_url: row.founder_answer_video_url ?? null,
+    founder_answer_text:
+      row.founder_answer_text ?? null,
+    founder_answer_video_url:
+      row.founder_answer_video_url ?? null,
   };
 }
 
-async function findAccessBy(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  column: "device_id" | "email" | "celular",
-  value: string
+async function collectParticipantIds(
+  supabase: SupabaseAdmin,
+  column: "device_id" | "email" | "phone",
+  value: string,
+  candidates: Set<string>
 ) {
-  if (!value) return null;
+  if (!value) return;
 
   const { data, error } = await supabase
-    .from("comment_access_participants")
+    .from("project_participants")
     .select("id")
     .eq(column, value)
-    .limit(1)
-    .maybeSingle();
+    .limit(2);
 
   if (error) {
-    console.error("[comments/founder-questions] access lookup failed", { column, error });
-    throw new Error("access lookup failed");
+    console.error(
+      "[comments/founder-questions] participant identity lookup failed",
+      { column }
+    );
+    throw new Error("participant identity lookup failed");
   }
 
-  return data;
+  for (const row of data ?? []) {
+    if (row?.id) {
+      candidates.add(String(row.id));
+    }
+  }
 }
 
-async function ensureAccess(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  deviceId: string,
-  groupCode: string
+async function collectLegacyDeviceCandidate(
+  supabase: SupabaseAdmin,
+  value: unknown,
+  candidates: Set<string>
 ) {
-  const existingByDevice = await findAccessBy(supabase, "device_id", deviceId);
-  if (existingByDevice?.id) return existingByDevice.id as string;
+  const deviceId =
+    normalizeLegacyDeviceId(value);
 
-  const { data: participant, error: participantError } = await supabase
-    .from("project_participants")
-    .select("id, alias, full_name, email, phone")
-    .eq("device_id", deviceId)
-    .limit(1)
-    .maybeSingle();
-
-  if (participantError) {
-    console.error("[comments/founder-questions] participant lookup failed", participantError);
-    throw new Error("participant lookup failed");
+  if (
+    !deviceId ||
+    !isValidLegacyDeviceId(deviceId)
+  ) {
+    return;
   }
 
-  if (!participant?.id) return null;
+  await collectParticipantIds(
+    supabase,
+    "device_id",
+    deviceId,
+    candidates
+  );
+}
 
-  const row = participant as ParticipantRow;
-  const email = cleanText(row.email, 160);
-  const phone = cleanText(row.phone, 30);
-  const forumAlias = toSafeForumAlias(row.alias || row.full_name);
+async function resolveHistoricalWinnerParticipantId(
+  supabase: SupabaseAdmin,
+  video: WinnerVideoRow
+) {
+  const candidates = new Set<string>();
 
-  if (!isValidEmail(email) || !isValidPhone(phone)) return null;
+  await collectLegacyDeviceCandidate(
+    supabase,
+    video.participant_device_id,
+    candidates
+  );
 
-  const existingByEmail = await findAccessBy(supabase, "email", email);
-  if (existingByEmail?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByEmail.id);
+  await collectLegacyDeviceCandidate(
+    supabase,
+    video.device_id,
+    candidates
+  );
 
-    if (error) {
-      console.error("[comments/founder-questions] access update by email failed", error);
-      throw new Error("access update failed");
+  const accessParticipantId =
+    cleanParticipantText(
+      video.access_participant_id,
+      80
+    );
+
+  if (accessParticipantId) {
+    const { data: accessData, error: accessError } =
+      await supabase
+        .from("comment_access_participants")
+        .select("device_id,email,celular")
+        .eq("id", accessParticipantId)
+        .limit(1)
+        .maybeSingle();
+
+    if (accessError) {
+      console.error(
+        "[comments/founder-questions] historical access lookup failed"
+      );
+      throw new Error("historical access lookup failed");
     }
 
-    return existingByEmail.id as string;
-  }
+    if (accessData) {
+      await collectLegacyDeviceCandidate(
+        supabase,
+        accessData.device_id,
+        candidates
+      );
 
-  const existingByPhone = await findAccessBy(supabase, "celular", phone);
-  if (existingByPhone?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByPhone.id);
+      const email = cleanParticipantText(
+        accessData.email,
+        160
+      );
 
-    if (error) {
-      console.error("[comments/founder-questions] access update by phone failed", error);
-      throw new Error("access update failed");
+      if (email) {
+        await collectParticipantIds(
+          supabase,
+          "email",
+          email,
+          candidates
+        );
+      }
+
+      const phone = cleanParticipantText(
+        accessData.celular,
+        30
+      );
+
+      if (phone) {
+        await collectParticipantIds(
+          supabase,
+          "phone",
+          phone,
+          candidates
+        );
+      }
     }
-
-    return existingByPhone.id as string;
   }
 
-  const payload: Record<string, unknown> = {
-    device_id: deviceId,
-    group_code: groupCode,
-    forum_alias: forumAlias,
-  };
-
-  if (email) payload.email = email;
-  if (phone) payload.celular = phone;
-
-  const { data: inserted, error } = await supabase
-    .from("comment_access_participants")
-    .insert(payload)
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("[comments/founder-questions] access insert failed", error);
-    throw new Error("access insert failed");
+  if (candidates.size !== 1) {
+    return null;
   }
 
-  return inserted.id as string;
+  return [...candidates][0];
+}
+
+async function resolveWinnerParticipantId(
+  supabase: SupabaseAdmin,
+  video: WinnerVideoRow
+) {
+  const stableParticipantId =
+    cleanParticipantText(
+      video.project_participant_id,
+      80
+    );
+
+  if (stableParticipantId) {
+    return stableParticipantId;
+  }
+
+  return resolveHistoricalWinnerParticipantId(
+    supabase,
+    video
+  );
 }
 
 async function getWinnerContext(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  fallbackGroupCode: string
+  supabase: SupabaseAdmin
 ): Promise<WinnerContext | null> {
-  const { data: topicData, error: topicError } = await supabase
-    .from("weekly_topics")
-    .select("id, winner_video_entry_id")
-    .eq("status", "archived")
-    .not("winner_video_entry_id", "is", null)
-    .order("winner_published_at", { ascending: false })
-    .order("ends_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: topicData, error: topicError } =
+    await supabase
+      .from("weekly_topics")
+      .select("id,winner_video_entry_id")
+      .eq("status", "archived")
+      .not("winner_video_entry_id", "is", null)
+      .order("winner_published_at", {
+        ascending: false,
+        nullsFirst: false,
+      })
+      .order("ends_at", {
+        ascending: false,
+        nullsFirst: false,
+      })
+      .limit(1)
+      .maybeSingle();
 
   if (topicError) {
-    console.error("[comments/founder-questions] winner topic lookup failed", topicError);
+    console.error(
+      "[comments/founder-questions] winner topic lookup failed"
+    );
     throw new Error("winner topic lookup failed");
   }
 
-  if (!topicData?.winner_video_entry_id) return null;
+  if (!topicData?.winner_video_entry_id) {
+    return null;
+  }
 
-  const { data: videoData, error: videoError } = await supabase
-    .from("weekly_video_entries")
-    .select("id, weekly_topic_id, device_id, participant_device_id, group_code")
-    .eq("id", topicData.winner_video_entry_id)
-    .limit(1)
-    .maybeSingle();
+  const { data: videoData, error: videoError } =
+    await supabase
+      .from("weekly_video_entries")
+      .select(
+        "id,weekly_topic_id,project_participant_id,access_participant_id,device_id,participant_device_id,group_code"
+      )
+      .eq(
+        "id",
+        topicData.winner_video_entry_id
+      )
+      .limit(1)
+      .maybeSingle();
 
   if (videoError) {
-    console.error("[comments/founder-questions] winner video lookup failed", videoError);
+    console.error(
+      "[comments/founder-questions] winner video lookup failed"
+    );
     throw new Error("winner video lookup failed");
   }
 
-  if (!videoData?.id) return null;
+  if (!videoData?.id) {
+    return null;
+  }
+
+  const video = videoData as WinnerVideoRow;
+
+  const winnerParticipantId =
+    await resolveWinnerParticipantId(
+      supabase,
+      video
+    );
 
   return {
     topicId: String(topicData.id),
-    videoId: String(videoData.id),
-    winnerDeviceId: videoData.participant_device_id ?? videoData.device_id ?? null,
-    groupCode: normalizeGroupCode(videoData.group_code || fallbackGroupCode),
+    videoId: String(video.id),
+    winnerParticipantId,
+    groupCode:
+      normalizeGroupCode(video.group_code),
   };
 }
 
 async function findExistingQuestion(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseAdmin,
   winner: WinnerContext
 ) {
   const { data, error } = await supabase
     .from("weekly_founder_questions")
     .select(
-      "id, created_at, weekly_topic_id, weekly_video_entry_id, question_text, published, founder_answer_text, founder_answer_video_url"
+      "id,created_at,weekly_topic_id,weekly_video_entry_id,question_text,published,founder_answer_text,founder_answer_video_url"
     )
     .eq("weekly_topic_id", winner.topicId)
     .eq("weekly_video_entry_id", winner.videoId)
-    .order("created_at", { ascending: false })
+    .order("created_at", {
+      ascending: false,
+    })
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    console.error("[comments/founder-questions] existing question lookup failed", error);
+    console.error(
+      "[comments/founder-questions] existing question lookup failed"
+    );
     throw new Error("question lookup failed");
   }
 
   return data;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const cookieHeader = req.headers.get("cookie");
-    const legalAccepted = getCookieValue(cookieHeader, "vc_legal_accepted") ?? "";
-    const cookieGroup = getCookieValue(cookieHeader, "vc_group") ?? DEFAULT_GROUP_CODE;
-    const cookieGroupCode = normalizeGroupCode(cookieGroup);
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return participantError(
+        403,
+        "origin_invalid"
+      );
+    }
+
+    const cookieHeader =
+      req.headers.get("cookie");
+
+    const legalAccepted =
+      getCookieValue(
+        cookieHeader,
+        "vc_legal_accepted"
+      ) ?? "";
 
     if (legalAccepted !== "true") {
-      return json(401, { ok: false, error: "No autorizado" });
+      return participantError(
+        401,
+        "legal_acceptance_required"
+      );
     }
 
-    if (!isAllowedOrigin(req)) {
-      return json(403, { ok: false, error: "No autorizado" });
+    const body = await readBoundedJsonObject(
+      req,
+      MAX_BODY_BYTES
+    );
+
+    if (!body) {
+      return participantError(
+        400,
+        "request_invalid"
+      );
     }
 
-    const body = await req.json().catch(() => null);
-    const action = cleanText(body?.action, 40);
-    const deviceId = cleanText(body?.device_id, 120);
+    const action = cleanParticipantText(
+      body.action,
+      40
+    );
 
-    if (!isValidDeviceId(deviceId)) {
-      return json(400, { ok: false, error: "Solicitud invalida" });
+    if (
+      action !== "mine" &&
+      action !== "submit"
+    ) {
+      return participantError(
+        400,
+        "request_invalid"
+      );
     }
 
-    const supabase = getSupabaseAdmin();
-    const accessParticipantId = await ensureAccess(supabase, deviceId, cookieGroupCode);
+    const session =
+      await resolveParticipantSession(req);
 
-    if (!accessParticipantId) {
+    if (!session.ok) {
+      return participantError(
+        session.reason === "unavailable"
+          ? 503
+          : 401,
+        session.reason === "unavailable"
+          ? "session_unavailable"
+          : "unauthenticated"
+      );
+    }
+
+    const supabase = session.supabase;
+    const participantId =
+      session.participant.id;
+
+    const winner =
+      await getWinnerContext(supabase);
+
+    if (!winner) {
       if (action === "mine") {
-        return json(200, {
+        return participantJson(200, {
           ok: true,
           canAsk: false,
           hasQuestion: false,
-          reason: "NO_ACCESS",
+          reason: "NO_WINNER",
           question: null,
         });
       }
 
-      return json(403, { ok: false, error: "No autorizado" });
+      return participantError(
+        409,
+        "winner_unavailable"
+      );
     }
 
-    const winner = await getWinnerContext(supabase, cookieGroupCode);
-
-    if (!winner) {
-      return json(200, {
-        ok: true,
-        canAsk: false,
-        hasQuestion: false,
-        reason: "NO_WINNER",
-        question: null,
-      });
-    }
-
-    if (winner.winnerDeviceId !== deviceId) {
-      return json(200, {
-        ok: true,
-        canAsk: false,
-        hasQuestion: false,
-        reason: "NOT_WINNER",
-        question: null,
-      });
-    }
-
-    const existingQuestion = await findExistingQuestion(supabase, winner);
-
-    if (action === "mine") {
-      return json(200, {
-        ok: true,
-        canAsk: !existingQuestion?.id,
-        hasQuestion: Boolean(existingQuestion?.id),
-        question: toSafeQuestion(existingQuestion),
-      });
-    }
-
-    if (action === "submit") {
-      const questionText = cleanText(body?.question_text, 500);
-
-      if (!questionText || hasLinks(questionText)) {
-        return json(400, { ok: false, error: "Solicitud invalida" });
-      }
-
-      if (existingQuestion?.id) {
-        return json(409, {
-          ok: false,
-          error: "Ya existe una pregunta registrada para este ganador.",
-          code: "QUESTION_ALREADY_SUBMITTED",
+    if (!winner.winnerParticipantId) {
+      if (action === "mine") {
+        return participantJson(200, {
+          ok: true,
+          canAsk: false,
+          hasQuestion: false,
+          reason:
+            "WINNER_IDENTITY_UNRESOLVED",
+          question: null,
         });
       }
 
-      const { data, error } = await supabase
-        .from("weekly_founder_questions")
-        .insert({
-          weekly_topic_id: winner.topicId,
-          weekly_video_entry_id: winner.videoId,
-          group_code: winner.groupCode,
-          question_text: questionText,
-          published: false,
-        })
-        .select(
-          "id, created_at, weekly_topic_id, weekly_video_entry_id, question_text, published, founder_answer_text, founder_answer_video_url"
-        )
-        .single();
+      return participantError(
+        409,
+        "winner_identity_unresolved"
+      );
+    }
 
-      if (error) {
-        console.error("[comments/founder-questions] insert failed", error);
-        return json(500, { ok: false, error: "No se pudo registrar la pregunta" });
+    if (
+      winner.winnerParticipantId !==
+      participantId
+    ) {
+      if (action === "mine") {
+        return participantJson(200, {
+          ok: true,
+          canAsk: false,
+          hasQuestion: false,
+          reason: "NOT_WINNER",
+          question: null,
+        });
       }
 
-      return json(200, {
+      return participantError(
+        403,
+        "not_winner"
+      );
+    }
+
+    const existingQuestion =
+      await findExistingQuestion(
+        supabase,
+        winner
+      );
+
+    if (action === "mine") {
+      return participantJson(200, {
         ok: true,
-        question: toSafeQuestion(data),
+        canAsk:
+          !existingQuestion?.id,
+        hasQuestion:
+          Boolean(existingQuestion?.id),
+        question:
+          toSafeQuestion(existingQuestion),
       });
     }
 
-    return json(400, { ok: false, error: "Solicitud invalida" });
-  } catch (e) {
-    console.error("[comments/founder-questions] unexpected error", e);
-    return json(500, { ok: false, error: "No disponible" });
+    const questionText =
+      cleanParticipantText(
+        body.question_text,
+        500
+      );
+
+    if (
+      !questionText ||
+      hasLinks(questionText)
+    ) {
+      return participantError(
+        400,
+        "request_invalid"
+      );
+    }
+
+    if (existingQuestion?.id) {
+      return participantJson(409, {
+        ok: false,
+        error:
+          "question_already_submitted",
+        code:
+          "QUESTION_ALREADY_SUBMITTED",
+      });
+    }
+
+    const { data, error } =
+      await supabase
+        .from("weekly_founder_questions")
+        .insert({
+          weekly_topic_id:
+            winner.topicId,
+          weekly_video_entry_id:
+            winner.videoId,
+          group_code:
+            winner.groupCode,
+          question_text:
+            questionText,
+          published: false,
+        })
+        .select(
+          "id,created_at,weekly_topic_id,weekly_video_entry_id,question_text,published,founder_answer_text,founder_answer_video_url"
+        )
+        .single();
+
+    if (error) {
+      if (
+        (error as { code?: string }).code ===
+        "23505"
+      ) {
+        return participantJson(409, {
+          ok: false,
+          error:
+            "question_already_submitted",
+          code:
+            "QUESTION_ALREADY_SUBMITTED",
+        });
+      }
+
+      console.error(
+        "[comments/founder-questions] insert failed",
+        error
+      );
+
+      return participantError(
+        500,
+        "question_submit_failed"
+      );
+    }
+
+    return participantJson(200, {
+      ok: true,
+      question:
+        toSafeQuestion(data),
+    });
+  } catch (error) {
+    console.error(
+      "[comments/founder-questions] unexpected error",
+      error
+    );
+
+    return participantError(
+      503,
+      "unavailable"
+    );
   }
 }
