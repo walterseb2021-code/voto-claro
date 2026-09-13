@@ -1,110 +1,41 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { type NextRequest } from "next/server";
 import { getCookieValue } from "@/lib/http/cookies";
+import {
+  cleanParticipantText,
+  isAllowedParticipantMutationOrigin,
+  isValidLegacyDeviceId,
+  normalizeLegacyDeviceId,
+  participantError,
+  participantJson,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DEFAULT_GROUP_CODE = "GENERAL";
+const MAX_BODY_BYTES = 2048;
 
-type ParticipantRow = {
-  id: string;
-  alias: string | null;
-  full_name: string | null;
-  email: string | null;
-  phone: string | null;
-};
+type ResolvedSession = Awaited<
+  ReturnType<typeof resolveParticipantSession>
+>;
 
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
-}
+type SessionSuccess = Extract<
+  ResolvedSession,
+  { ok: true }
+>;
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error("Missing Supabase admin configuration");
-  }
-
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function getRequestOrigin(req: Request) {
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
-
-  if (forwardedHost) return `${forwardedProto}://${forwardedHost}`;
-
-  return new URL(req.url).origin;
-}
-
-function isLocalOrigin(origin: string) {
-  try {
-    const hostname = new URL(origin).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedOrigin(req: Request) {
-  const origin = req.headers.get("origin");
-  if (!origin) return true;
-
-  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
-    return true;
-  }
-
-  try {
-    return new URL(origin).origin === getRequestOrigin(req);
-  } catch {
-    return false;
-  }
-}
-
-function cleanText(value: unknown, maxLength: number) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, maxLength);
-}
+type SupabaseAdmin = SessionSuccess["supabase"];
 
 function normalizeGroupCode(value: unknown) {
-  const group = cleanText(value, 40);
-  return group || DEFAULT_GROUP_CODE;
+  return cleanParticipantText(value, 40) || DEFAULT_GROUP_CODE;
 }
 
-function isValidDeviceId(value: string) {
-  return value.length > 0 && value.length <= 120;
-}
-
-function isValidId(value: string) {
-  return value.length > 0 && value.length <= 120;
-}
-
-function isValidEmail(value: string) {
-  return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidPhone(value: string) {
-  return !value || /^[0-9+()\-\s]{6,30}$/.test(value);
-}
-
-function toSafeForumAlias(input: unknown) {
-  const base = cleanText(input, 80)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/[^A-Za-z0-9_]/g, "")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  if (base.length >= 3) return base.slice(0, 20);
-
-  return `Usuario_${crypto.randomUUID().slice(0, 8)}`;
+function isValidUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
 }
 
 function toSafeVote(row: any) {
@@ -118,111 +49,36 @@ function toSafeVote(row: any) {
   };
 }
 
-async function findAccessBy(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  column: "device_id" | "email" | "celular",
-  value: string
+async function getTrustedLegacyDeviceId(
+  supabase: SupabaseAdmin,
+  participantId: string
 ) {
-  if (!value) return null;
-
   const { data, error } = await supabase
-    .from("comment_access_participants")
-    .select("id")
-    .eq(column, value)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[comments/video-votes] access lookup failed", { column, error });
-    throw new Error("access lookup failed");
-  }
-
-  return data;
-}
-
-async function ensureAccess(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  deviceId: string,
-  groupCode: string
-) {
-  const existingByDevice = await findAccessBy(supabase, "device_id", deviceId);
-  if (existingByDevice?.id) return existingByDevice.id as string;
-
-  const { data: participant, error: participantError } = await supabase
     .from("project_participants")
-    .select("id, alias, full_name, email, phone")
-    .eq("device_id", deviceId)
+    .select("device_id")
+    .eq("id", participantId)
     .limit(1)
     .maybeSingle();
 
-  if (participantError) {
-    console.error("[comments/video-votes] participant lookup failed", participantError);
-    throw new Error("participant lookup failed");
-  }
-
-  if (!participant?.id) return null;
-
-  const row = participant as ParticipantRow;
-  const email = cleanText(row.email, 160);
-  const phone = cleanText(row.phone, 30);
-  const forumAlias = toSafeForumAlias(row.alias || row.full_name);
-
-  if (!isValidEmail(email) || !isValidPhone(phone)) return null;
-
-  const existingByEmail = await findAccessBy(supabase, "email", email);
-  if (existingByEmail?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByEmail.id);
-
-    if (error) {
-      console.error("[comments/video-votes] access update by email failed", error);
-      throw new Error("access update failed");
-    }
-
-    return existingByEmail.id as string;
-  }
-
-  const existingByPhone = await findAccessBy(supabase, "celular", phone);
-  if (existingByPhone?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByPhone.id);
-
-    if (error) {
-      console.error("[comments/video-votes] access update by phone failed", error);
-      throw new Error("access update failed");
-    }
-
-    return existingByPhone.id as string;
-  }
-
-  const payload: Record<string, unknown> = {
-    device_id: deviceId,
-    group_code: groupCode,
-    forum_alias: forumAlias,
-  };
-
-  if (email) payload.email = email;
-  if (phone) payload.celular = phone;
-
-  const { data: inserted, error } = await supabase
-    .from("comment_access_participants")
-    .insert(payload)
-    .select("id")
-    .single();
-
   if (error) {
-    console.error("[comments/video-votes] access insert failed", error);
-    throw new Error("access insert failed");
+    console.error(
+      "[comments/video-votes] participant device lookup failed"
+    );
+    throw new Error("participant device lookup failed");
   }
 
-  return inserted.id as string;
+  const deviceId = normalizeLegacyDeviceId(data?.device_id);
+
+  if (!deviceId || !isValidLegacyDeviceId(deviceId)) {
+    return null;
+  }
+
+  return deviceId;
 }
 
-async function getVotingTopicId(supabase: ReturnType<typeof getSupabaseAdmin>) {
+async function getVotingTopicId(
+  supabase: SupabaseAdmin
+) {
   const { data, error } = await supabase
     .from("weekly_topics")
     .select("id")
@@ -231,7 +87,9 @@ async function getVotingTopicId(supabase: ReturnType<typeof getSupabaseAdmin>) {
     .maybeSingle();
 
   if (error) {
-    console.error("[comments/video-votes] voting topic lookup failed", error);
+    console.error(
+      "[comments/video-votes] voting topic lookup failed"
+    );
     throw new Error("topic lookup failed");
   }
 
@@ -239,20 +97,24 @@ async function getVotingTopicId(supabase: ReturnType<typeof getSupabaseAdmin>) {
 }
 
 async function findExistingVote(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseAdmin,
   weeklyTopicId: string,
-  accessParticipantId: string
+  participantId: string
 ) {
   const { data, error } = await supabase
     .from("weekly_video_votes")
-    .select("id, weekly_topic_id, weekly_video_entry_id, created_at")
+    .select(
+      "id,weekly_topic_id,weekly_video_entry_id,created_at"
+    )
     .eq("weekly_topic_id", weeklyTopicId)
-    .eq("access_participant_id", accessParticipantId)
+    .eq("project_participant_id", participantId)
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    console.error("[comments/video-votes] existing vote lookup failed", error);
+    console.error(
+      "[comments/video-votes] existing vote lookup failed"
+    );
     throw new Error("vote lookup failed");
   }
 
@@ -260,119 +122,231 @@ async function findExistingVote(
 }
 
 async function findReviewedVideo(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseAdmin,
   videoId: string
 ) {
   const { data, error } = await supabase
     .from("weekly_video_entries")
-    .select("id, weekly_topic_id, status")
+    .select("id,weekly_topic_id,status")
     .eq("id", videoId)
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    console.error("[comments/video-votes] video lookup failed", error);
+    console.error(
+      "[comments/video-votes] video lookup failed"
+    );
     throw new Error("video lookup failed");
   }
 
   return data;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return participantError(403, "origin_invalid");
+    }
+
     const cookieHeader = req.headers.get("cookie");
-    const legalAccepted = getCookieValue(cookieHeader, "vc_legal_accepted") ?? "";
-    const cookieGroup = getCookieValue(cookieHeader, "vc_group") ?? DEFAULT_GROUP_CODE;
-    const groupCode = normalizeGroupCode(cookieGroup);
+    const legalAccepted =
+      getCookieValue(
+        cookieHeader,
+        "vc_legal_accepted"
+      ) ?? "";
 
     if (legalAccepted !== "true") {
-      return json(401, { ok: false, error: "No autorizado" });
+      return participantError(
+        401,
+        "legal_acceptance_required"
+      );
     }
 
-    if (!isAllowedOrigin(req)) {
-      return json(403, { ok: false, error: "No autorizado" });
+    const body = await readBoundedJsonObject(
+      req,
+      MAX_BODY_BYTES
+    );
+
+    if (!body) {
+      return participantError(400, "request_invalid");
     }
 
-    const body = await req.json().catch(() => null);
-    const action = cleanText(body?.action, 40);
-    const deviceId = cleanText(body?.device_id, 120);
+    const action = cleanParticipantText(
+      body.action,
+      40
+    );
 
-    if (!isValidDeviceId(deviceId)) {
-      return json(400, { ok: false, error: "Solicitud invalida" });
+    if (action !== "mine" && action !== "submit") {
+      return participantError(400, "request_invalid");
     }
 
-    const supabase = getSupabaseAdmin();
-    const accessParticipantId = await ensureAccess(supabase, deviceId, groupCode);
+    const session = await resolveParticipantSession(req);
 
-    if (!accessParticipantId) {
-      return json(403, { ok: false, error: "No autorizado" });
+    if (!session.ok) {
+      return participantError(
+        session.reason === "unavailable" ? 503 : 401,
+        session.reason === "unavailable"
+          ? "session_unavailable"
+          : "unauthenticated"
+      );
     }
 
-    const weeklyTopicId = await getVotingTopicId(supabase);
+    const supabase = session.supabase;
+    const participantId = session.participant.id;
+
+    const weeklyTopicId =
+      await getVotingTopicId(supabase);
 
     if (!weeklyTopicId) {
-      return json(404, { ok: false, error: "No hay tema en votacion" });
+      return participantError(
+        404,
+        "voting_topic_not_found"
+      );
     }
 
-    if (action === "mine") {
-      const existingVote = await findExistingVote(supabase, weeklyTopicId, accessParticipantId);
+    const existingVote = await findExistingVote(
+      supabase,
+      weeklyTopicId,
+      participantId
+    );
 
-      return json(200, {
+    if (action === "mine") {
+      return participantJson(200, {
         ok: true,
         hasVote: Boolean(existingVote?.id),
         vote: toSafeVote(existingVote),
       });
     }
 
-    if (action === "submit") {
-      const videoId = cleanText(body?.weekly_video_entry_id, 120);
+    if (existingVote?.id) {
+      return participantJson(409, {
+        ok: false,
+        error: "vote_already_submitted",
+        code: "VOTE_ALREADY_SUBMITTED",
+      });
+    }
 
-      if (!isValidId(videoId)) {
-        return json(400, { ok: false, error: "Solicitud invalida" });
-      }
+    const videoId = cleanParticipantText(
+      body.weekly_video_entry_id,
+      120
+    );
 
-      const existingVote = await findExistingVote(supabase, weeklyTopicId, accessParticipantId);
+    if (!isValidUuid(videoId)) {
+      return participantError(400, "request_invalid");
+    }
 
-      if (existingVote?.id) {
-        return json(409, {
+    const video = await findReviewedVideo(
+      supabase,
+      videoId
+    );
+
+    if (
+      !video?.id ||
+      String(video.weekly_topic_id) !== weeklyTopicId ||
+      video.status !== "reviewed"
+    ) {
+      return participantError(
+        400,
+        "video_not_eligible"
+      );
+    }
+
+    const legacyDeviceId =
+      await getTrustedLegacyDeviceId(
+        supabase,
+        participantId
+      );
+
+    if (!legacyDeviceId) {
+      return participantError(
+        409,
+        "participant_device_required"
+      );
+    }
+
+    const cookieGroup =
+      getCookieValue(cookieHeader, "vc_group") ??
+      DEFAULT_GROUP_CODE;
+
+    const groupCode =
+      normalizeGroupCode(cookieGroup);
+
+    const { data, error } = await supabase
+      .from("weekly_video_votes")
+      .insert({
+        weekly_topic_id: weeklyTopicId,
+        weekly_video_entry_id: videoId,
+        project_participant_id: participantId,
+        device_id: legacyDeviceId,
+        access_participant_id: null,
+        group_code: groupCode,
+      })
+      .select(
+        "id,weekly_topic_id,weekly_video_entry_id,created_at"
+      )
+      .single();
+
+    if (error) {
+      if (
+        (error as { code?: string }).code === "23505"
+      ) {
+        return participantJson(409, {
           ok: false,
-          error: "Ya registraste tu voto en este tema semanal.",
+          error: "vote_already_submitted",
           code: "VOTE_ALREADY_SUBMITTED",
         });
       }
 
-      const video = await findReviewedVideo(supabase, videoId);
+      const message = String(
+        (error as { message?: string }).message ?? ""
+      );
 
-      if (!video?.id || String(video.weekly_topic_id) !== weeklyTopicId || video.status !== "reviewed") {
-        return json(400, { ok: false, error: "Solicitud invalida" });
+      if (
+        message.includes(
+          "WEEKLY_VOTE_TOPIC_NOT_VOTING"
+        )
+      ) {
+        return participantError(
+          409,
+          "voting_topic_not_available"
+        );
       }
 
-      const { data, error } = await supabase
-        .from("weekly_video_votes")
-        .insert({
-          weekly_topic_id: weeklyTopicId,
-          weekly_video_entry_id: videoId,
-          device_id: deviceId,
-          access_participant_id: accessParticipantId,
-          group_code: groupCode,
-        })
-        .select("id, weekly_topic_id, weekly_video_entry_id, created_at")
-        .single();
-
-      if (error) {
-        console.error("[comments/video-votes] insert failed", error);
-        return json(500, { ok: false, error: "No se pudo registrar el voto" });
+      if (
+        message.includes(
+          "WEEKLY_VOTE_VIDEO_NOT_ELIGIBLE"
+        )
+      ) {
+        return participantError(
+          409,
+          "video_not_eligible"
+        );
       }
 
-      return json(200, {
-        ok: true,
-        vote: toSafeVote(data),
-      });
+      console.error(
+        "[comments/video-votes] insert failed",
+        error
+      );
+
+      return participantError(
+        500,
+        "vote_submit_failed"
+      );
     }
 
-    return json(400, { ok: false, error: "Solicitud invalida" });
-  } catch (e) {
-    console.error("[comments/video-votes] unexpected error", e);
-    return json(500, { ok: false, error: "No disponible" });
+    return participantJson(200, {
+      ok: true,
+      vote: toSafeVote(data),
+    });
+  } catch (error) {
+    console.error(
+      "[comments/video-votes] unexpected error",
+      error
+    );
+
+    return participantError(
+      500,
+      "video_vote_unavailable"
+    );
   }
 }

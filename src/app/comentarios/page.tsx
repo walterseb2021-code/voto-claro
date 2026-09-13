@@ -763,12 +763,14 @@ useEffect(() => {
 }, [timeFilter]);
 
 useEffect(() => {
-  if (deviceId && (weeklyTopicId || votingTopicId)) {
+  if (participantAuthenticated && votingTopicId) {
     void loadMyVoteForWeeklyTopic();
+  } else {
+    setMyVotedVideoId(null);
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [deviceId, weeklyTopicId, votingTopicId]);
+}, [participantAuthenticated, votingTopicId]);
       async function loadVotingVideos() {
   try {
     if (!votingTopicId) {
@@ -800,7 +802,7 @@ useEffect(() => {
 }
   async function loadMyVoteForWeeklyTopic() {
     try {
-      if (!deviceId || !votingTopicId) {
+      if (!participantAuthenticated || !votingTopicId) {
         setMyVotedVideoId(null);
         return;
       }
@@ -811,7 +813,6 @@ useEffect(() => {
         cache: "no-store",
         body: JSON.stringify({
           action: "mine",
-          device_id: deviceId,
         }),
       });
 
@@ -1059,7 +1060,11 @@ useEffect(() => {
 
     if (showPublicVideos) {
       void loadPublicReviewedVideos();
-      void loadMyVoteForWeeklyTopic();
+
+      if (participantAuthenticated) {
+        void loadMyVoteForWeeklyTopic();
+      }
+
       void loadVideoVoteCounts();
     }
 
@@ -1070,14 +1075,25 @@ useEffect(() => {
 
       if (showPublicVideos) {
         void loadPublicReviewedVideos();
-        void loadMyVoteForWeeklyTopic();
+
+        if (participantAuthenticated) {
+          void loadMyVoteForWeeklyTopic();
+        }
+
         void loadVideoVoteCounts();
       }
     }, 8000);
 
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPublic, showPublicVideos, timeFilter, weeklyTopicId, deviceId]);
+  }, [
+    showPublic,
+    showPublicVideos,
+    timeFilter,
+    weeklyTopicId,
+    votingTopicId,
+    participantAuthenticated,
+  ]);
 
     useEffect(() => {
     if (!selectedArchivedTopicId && archivedTopicsPublic.length > 0) {
@@ -1303,8 +1319,8 @@ async function voteForVideo(videoId: string) {
     return;
   }
 
-  if (!deviceId) {
-    setErrMsg("No se pudo identificar tu dispositivo.");
+  if (!participantAuthenticated) {
+    setErrMsg("Para votar, inicia sesión con tu código de acceso.");
     return;
   }
 
@@ -1328,7 +1344,6 @@ async function voteForVideo(videoId: string) {
       cache: "no-store",
       body: JSON.stringify({
         action: "submit",
-        device_id: deviceId,
         weekly_video_entry_id: videoId,
       }),
     });
