@@ -417,35 +417,12 @@ export default function ComentariosPage() {
     );
   }
 
-  async function loadParticipant(currentDeviceId: string) {
+  async function loadParticipant() {
     setCheckingData(true);
     setDataError(null);
     setParticipantAuthenticated(false);
 
     try {
-      const legacyRes = await fetch("/api/comments/participant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          action: "lookup",
-          device_id: currentDeviceId,
-        }),
-      });
-
-      const legacyData = await legacyRes.json().catch(() => null);
-
-      if (!legacyRes.ok || legacyData?.ok !== true) {
-        throw new Error(
-          legacyData?.error || "No se pudo verificar el participante."
-        );
-      }
-
-      const legacyParticipant = legacyData?.participant ?? null;
-      const legacyHasData = Boolean(
-        legacyData?.hasData && legacyParticipant?.id
-      );
-
       const sessionRes = await fetch("/api/participant/session", {
         method: "GET",
         cache: "no-store",
@@ -454,8 +431,8 @@ export default function ComentariosPage() {
       const sessionData = await sessionRes.json().catch(() => null);
 
       if (!sessionRes.ok || sessionData?.ok !== true) {
-        setParticipant(legacyParticipant);
-        setHasData(legacyHasData);
+        setParticipant(null);
+        setHasData(false);
         setParticipantAuthenticated(false);
         setDataError("No se pudo verificar la sesión segura del participante.");
         return;
@@ -466,20 +443,9 @@ export default function ComentariosPage() {
         sessionData?.authenticated === true && sessionParticipant?.id
       );
 
-      if (
-        sessionAuthenticated &&
-        legacyParticipant?.id &&
-        legacyParticipant.id === sessionParticipant.id
-      ) {
-        setParticipant(legacyParticipant);
-        setHasData(true);
-        setParticipantAuthenticated(true);
-        return;
-      }
-
-      setParticipant(legacyParticipant);
-      setHasData(legacyHasData);
-      setParticipantAuthenticated(false);
+      setParticipant(sessionParticipant);
+      setHasData(sessionAuthenticated);
+      setParticipantAuthenticated(sessionAuthenticated);
     } catch (e: any) {
       setParticipant(null);
       setHasData(false);
@@ -491,12 +457,10 @@ export default function ComentariosPage() {
   }
 
   useEffect(() => {
-    if (!deviceId) return;
-
-    void loadParticipant(deviceId);
+    void loadParticipant();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId]);
+  }, []);
       const handleLoginConCodigo = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginCodigoLoading(true);
@@ -554,30 +518,6 @@ export default function ComentariosPage() {
       setLoginCodigoLoading(false);
     }
   };
-      async function ensureCommentAccessParticipant() {
-    if (!deviceId) {
-      throw new Error("No se pudo identificar tu dispositivo.");
-    }
-
-    if (!participant?.id) {
-      throw new Error("Primero debes registrarte como participante.");
-    }
-
-    const res = await fetch("/api/comments/access", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ device_id: deviceId }),
-    });
-
-    const data = await res.json().catch(() => null);
-
-    if (!res.ok || data?.ok !== true || !data?.access?.id) {
-      throw new Error(data?.error || "No se pudo habilitar el acceso a comentarios.");
-    }
-
-    return String(data.access.id);
-  }
   async function loadPublicReviewed() {
     setPublicLoading(true);
     setPublicError(null);
