@@ -30,7 +30,6 @@ export default function TopicForumPage() {
   const [comments, setComments] = useState<ForumCommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [hasAccess, setHasAccess] = useState(false);
   const [forumAlias, setForumAlias] = useState<string>("");
   const [forumMessage, setForumMessage] = useState("");
@@ -44,39 +43,43 @@ export default function TopicForumPage() {
       router.push("/comentarios");
     }
   }
-  function getOrCreateDeviceId() {
-  if (typeof window === "undefined") return null;
-  const key = "vc_device_id";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-  const id = "DEV-" + crypto.randomUUID();
-  window.localStorage.setItem(key, id);
-  return id;
-}
-
-  async function checkForumAccess(currentDeviceId: string) {
+  async function checkForumAccess() {
     try {
-      const res = await fetch("/api/comments/access", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ device_id: currentDeviceId }),
+      const res = await fetch("/api/participant/session", {
+        method: "GET",
+        cache: "no-store",
       });
 
       const data = await res.json().catch(() => null);
 
-      if (!res.ok || !data?.ok || !data?.access?.id) {
+      const authenticated = Boolean(
+        res.ok &&
+          data?.ok === true &&
+          data?.authenticated === true &&
+          data?.participant?.id
+      );
+
+      if (!authenticated) {
         setHasAccess(false);
         setForumAlias("");
         return;
       }
 
       setHasAccess(true);
-      setForumAlias(String(data.access.forum_alias ?? "").trim());
+
+      setForumAlias(
+        String(
+          data?.participant?.alias ??
+            data?.participant?.display_name ??
+            "Ciudadano"
+        ).trim()
+      );
     } catch {
       setHasAccess(false);
       setForumAlias("");
     }
   }
+
   async function loadForum() {
     if (!topicId) {
       setErrorMsg("No se encontró el tema del foro.");
@@ -125,11 +128,6 @@ export default function TopicForumPage() {
   setForumOkMsg(null);
   setErrorMsg(null);
 
-  if (!deviceId) {
-    setErrorMsg("No se pudo identificar tu dispositivo.");
-    return;
-  }
-
   if (!hasAccess) {
     setErrorMsg("Primero debes registrarte como participante o iniciar sesion con tu codigo de acceso en Comentarios Ciudadanos.");
     return;
@@ -150,7 +148,6 @@ export default function TopicForumPage() {
       body: JSON.stringify({
         action: "submit",
         topic_id: topicId,
-        device_id: deviceId,
         message: text,
       }),
     });
@@ -179,15 +176,10 @@ export default function TopicForumPage() {
     void loadForum();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topicId]);
-   useEffect(() => {
-  const currentDeviceId = getOrCreateDeviceId();
-  setDeviceId(currentDeviceId);
-
-  if (currentDeviceId) {
-    void checkForumAccess(currentDeviceId);
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+  useEffect(() => {
+    void checkForumAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
      useEffect(() => {
     const commentsCount = comments.length;
     const latestComment = comments[0] ?? null;
