@@ -1,326 +1,370 @@
-// src/app/api/comments/route.ts
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { type NextRequest } from "next/server";
 import { getCookieValue } from "@/lib/http/cookies";
+import {
+  cleanParticipantText,
+  isAllowedParticipantMutationOrigin,
+  participantError,
+  participantJson,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import { resolveParticipantSession } from "@/lib/participantSessionAuth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DEFAULT_GROUP_CODE = "GENERAL";
-const MAX_MESSAGE_LENGTH = 2000;
+const MAX_BODY_BYTES = 2048;
+const MAX_MESSAGE_LENGTH = 500;
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+type ResolvedSession = Awaited<
+  ReturnType<typeof resolveParticipantSession>
+>;
 
-  if (!url || !serviceKey) {
-    throw new Error("Missing Supabase admin configuration");
-  }
+type SessionSuccess = Extract<
+  ResolvedSession,
+  { ok: true }
+>;
 
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
-}
-
-function getRequestOrigin(req: Request) {
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
-
-  if (forwardedHost) return `${forwardedProto}://${forwardedHost}`;
-
-  return new URL(req.url).origin;
-}
-
-function isLocalOrigin(origin: string) {
-  try {
-    const hostname = new URL(origin).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedOrigin(req: Request) {
-  const origin = req.headers.get("origin");
-  if (!origin) return true;
-
-  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
-    return true;
-  }
-
-  try {
-    return new URL(origin).origin === getRequestOrigin(req);
-  } catch {
-    return false;
-  }
-}
-
-function cleanText(value: unknown, maxLength: number) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, maxLength);
-}
-
-function safeMetadata(raw: unknown) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return {};
-  }
-
-  const input = raw as Record<string, unknown>;
-
-  return {
-    source_module: cleanText(input.source_module, 80),
-    source_section: cleanText(input.source_section, 80),
-    source_action: cleanText(input.source_action, 80),
-    page_title: cleanText(input.page_title, 120),
-    route: cleanText(input.route, 200),
-    topic_id: cleanText(input.topic_id, 120),
-    topic_title: cleanText(input.topic_title, 160),
-    user_alias: cleanText(input.user_alias, 80),
-    submitted_from: cleanText(input.submitted_from, 80),
-    client_timestamp: cleanText(input.client_timestamp, 80),
-  };
-}
-
-function isValidDeviceId(value: string) {
-  return value.length > 0 && value.length <= 120;
-}
-
-function isValidTopicId(value: string) {
-  return value.length > 0 && value.length <= 120;
-}
+type SupabaseAdmin = SessionSuccess["supabase"];
 
 function normalizeGroupCode(value: unknown) {
-  const group = cleanText(value, 40);
-  return group || DEFAULT_GROUP_CODE;
+  return cleanParticipantText(value, 40) || DEFAULT_GROUP_CODE;
+}
+
+function normalizeMessage(value: unknown) {
+  if (typeof value !== "string") return null;
+
+  const message = value
+    .trim()
+    .replace(/\s+/g, " ");
+
+  if (
+    message.length < 3 ||
+    message.length > MAX_MESSAGE_LENGTH
+  ) {
+    return null;
+  }
+
+  return message;
 }
 
 function hasLinks(text: string) {
   return /https?:\/\/|www\./i.test(text);
 }
 
-function toSafeForumAlias(input: unknown) {
-  const base = cleanText(input, 80)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/[^A-Za-z0-9_]/g, "")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  if (base.length >= 3) return base.slice(0, 20);
-
-  return `Usuario_${crypto.randomUUID().slice(0, 8)}`;
-}
-
-function isValidEmail(value: string) {
-  return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidPhone(value: string) {
-  return !value || /^[0-9+()\-\s]{6,30}$/.test(value);
-}
-
-async function findAccessBy(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  column: "device_id" | "email" | "celular",
-  value: string
+function hasOnlyMessageField(
+  body: Record<string, unknown>
 ) {
-  if (!value) return null;
+  const keys = Object.keys(body);
 
+  return (
+    keys.length === 1 &&
+    keys[0] === "message"
+  );
+}
+
+async function getActiveTopicId(
+  supabase: SupabaseAdmin
+) {
   const { data, error } = await supabase
-    .from("comment_access_participants")
-    .select("id, forum_alias, group_code")
-    .eq(column, value)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[comments] access lookup failed", { column, error });
-    throw new Error("access lookup failed");
-  }
-
-  return data;
-}
-
-async function ensureAccess(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  deviceId: string,
-  groupCode: string
-) {
-  const existingByDevice = await findAccessBy(supabase, "device_id", deviceId);
-  if (existingByDevice?.id) return existingByDevice.id as string;
-
-  const { data: participant, error: participantError } = await supabase
-    .from("project_participants")
-    .select("id, alias, full_name, email, phone")
-    .eq("device_id", deviceId)
-    .limit(1)
-    .maybeSingle();
-
-  if (participantError) {
-    console.error("[comments] participant lookup failed", participantError);
-    throw new Error("participant lookup failed");
-  }
-
-  if (!participant?.id) {
-    return null;
-  }
-
-  const email = cleanText((participant as any).email, 160);
-  const phone = cleanText((participant as any).phone, 30);
-  const forumAlias = toSafeForumAlias((participant as any).alias || (participant as any).full_name);
-
-  if (!isValidEmail(email) || !isValidPhone(phone)) {
-    return null;
-  }
-
-  const existingByEmail = await findAccessBy(supabase, "email", email);
-  if (existingByEmail?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByEmail.id);
-
-    if (error) {
-      console.error("[comments] access update by email failed", error);
-      throw new Error("access update failed");
-    }
-
-    return existingByEmail.id as string;
-  }
-
-  const existingByPhone = await findAccessBy(supabase, "celular", phone);
-  if (existingByPhone?.id) {
-    const { error } = await supabase
-      .from("comment_access_participants")
-      .update({ device_id: deviceId, forum_alias: forumAlias, group_code: groupCode })
-      .eq("id", existingByPhone.id);
-
-    if (error) {
-      console.error("[comments] access update by phone failed", error);
-      throw new Error("access update failed");
-    }
-
-    return existingByPhone.id as string;
-  }
-
-  const payload: Record<string, unknown> = {
-    device_id: deviceId,
-    group_code: groupCode,
-    forum_alias: forumAlias,
-  };
-
-  if (email) payload.email = email;
-  if (phone) payload.celular = phone;
-
-  const { data: inserted, error } = await supabase
-    .from("comment_access_participants")
-    .insert(payload)
+    .from("weekly_topics")
     .select("id")
-    .single();
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
-    console.error("[comments] access insert failed", error);
-    throw new Error("access insert failed");
+    console.error(
+      "[comments] active topic lookup failed"
+    );
+    throw new Error("active topic lookup failed");
   }
 
-  return inserted.id as string;
+  return data?.id ? String(data.id) : null;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    // --------------------------------------------------------
+    // ORIGIN ESTRICTO
+    // --------------------------------------------------------
+
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return participantError(
+        403,
+        "origin_invalid"
+      );
+    }
+
+    // --------------------------------------------------------
+    // ACEPTACION LEGAL
+    // --------------------------------------------------------
+
     const cookieHeader = req.headers.get("cookie");
-    const legalAccepted = getCookieValue(cookieHeader, "vc_legal_accepted") ?? "";
-    const cookieGroup = getCookieValue(cookieHeader, "vc_group") ?? "";
+
+    const legalAccepted =
+      getCookieValue(
+        cookieHeader,
+        "vc_legal_accepted"
+      ) ?? "";
 
     if (legalAccepted !== "true") {
-      return json(401, { ok: false, error: "No autorizado" });
+      return participantError(
+        401,
+        "legal_acceptance_required"
+      );
     }
 
-    if (!isAllowedOrigin(req)) {
-      return json(403, { ok: false, error: "No autorizado" });
+    // --------------------------------------------------------
+    // BODY LIMITADO
+    // --------------------------------------------------------
+
+    const body = await readBoundedJsonObject(
+      req,
+      MAX_BODY_BYTES
+    );
+
+    if (!body || !hasOnlyMessageField(body)) {
+      return participantError(
+        400,
+        "request_invalid"
+      );
     }
 
-    const payload = await req.json().catch(() => ({}));
+    const message = normalizeMessage(
+      body.message
+    );
 
-    const message = cleanText(payload?.message, MAX_MESSAGE_LENGTH);
-    const deviceId = cleanText(payload?.device_id, 120);
-    const page = cleanText(payload?.page, 200) || "/comentarios";
-    const weeklyTopicId = cleanText(payload?.weekly_topic_id, 120);
-    const groupCode = normalizeGroupCode(cookieGroup);
-    const metadata = safeMetadata(payload?.metadata);
-
-    if (!isValidDeviceId(deviceId) || !isValidTopicId(weeklyTopicId)) {
-      return json(400, { ok: false, error: "Solicitud invalida" });
-    }
-
-    if (!message || message.length < 3 || message.length > MAX_MESSAGE_LENGTH) {
-      return json(400, { ok: false, error: "Solicitud invalida" });
+    if (!message) {
+      return participantError(
+        400,
+        "comment_invalid"
+      );
     }
 
     if (hasLinks(message)) {
-      return json(400, { ok: false, error: "Solicitud invalida", code: "LINKS_NOT_ALLOWED" });
-    }
-
-    const supabase = getSupabaseAdmin();
-    const accessParticipantId = await ensureAccess(supabase, deviceId, groupCode);
-
-    if (!accessParticipantId) {
-      return json(403, { ok: false, error: "No autorizado" });
-    }
-
-    const { count, error: countError } = await supabase
-      .from("user_comments")
-      .select("id", { count: "exact", head: true })
-      .eq("page", page)
-      .eq("weekly_topic_id", weeklyTopicId)
-      .eq("access_participant_id", accessParticipantId);
-
-    if (countError) {
-      console.error("[comments] count failed", countError);
-      return json(500, { ok: false, error: "No disponible" });
-    }
-
-    if ((count ?? 0) >= 3) {
-      return json(409, {
+      return participantJson(400, {
         ok: false,
-        error: "No se pudo publicar",
-        code: "MAX_3_COMMENTS_PER_TOPIC",
+        error: "links_not_allowed",
+        code: "LINKS_NOT_ALLOWED",
       });
     }
+
+    // --------------------------------------------------------
+    // SESION SEGURA
+    //
+    // project_participant_id nunca viene del navegador.
+    // --------------------------------------------------------
+
+    const session =
+      await resolveParticipantSession(req);
+
+    if (!session.ok) {
+      return participantError(
+        session.reason === "unavailable"
+          ? 503
+          : 401,
+        session.reason === "unavailable"
+          ? "session_unavailable"
+          : "unauthenticated"
+      );
+    }
+
+    const supabase = session.supabase;
+
+    const participantId =
+      session.participant.id;
+
+    // --------------------------------------------------------
+    // TOPIC ACTIVE RESUELTO SERVER-SIDE
+    //
+    // weekly_topic_id nunca viene del navegador.
+    // --------------------------------------------------------
+
+    const weeklyTopicId =
+      await getActiveTopicId(supabase);
+
+    if (!weeklyTopicId) {
+      return participantError(
+        404,
+        "active_topic_not_found"
+      );
+    }
+
+    // --------------------------------------------------------
+    // GROUP CODE
+    //
+    // No es autoridad de identidad.
+    // Se conserva desde la cookie del modulo.
+    // --------------------------------------------------------
+
+    const cookieGroup =
+      getCookieValue(
+        cookieHeader,
+        "vc_group"
+      ) ?? DEFAULT_GROUP_CODE;
+
+    const groupCode =
+      normalizeGroupCode(cookieGroup);
+
+    // --------------------------------------------------------
+    // METADATA SERVER-SIDE
+    //
+    // No se aceptan alias, participant_id, topic_id,
+    // route ni timestamps enviados por el navegador.
+    // --------------------------------------------------------
+
+    const metadata = {
+      source_module: "comentarios-ciudadanos",
+      source_section: "comentario-semanal",
+      source_action: "publicar-comentario",
+      page_title: "Comentarios Ciudadanos",
+      route: "/comentarios",
+      topic_id: weeklyTopicId,
+      submitted_from: "comentarios-page",
+    };
+
+    // --------------------------------------------------------
+    // INSERT
+    //
+    // No se envia device_id.
+    // No se envia access_participant_id.
+    //
+    // El trigger Fase 1:
+    // - deriva device_id desde project_participants
+    // - fuerza access_participant_id = NULL
+    // - valida topic active
+    // - serializa maximo de 3
+    // - toma decision final de moderacion
+    // --------------------------------------------------------
 
     const { data, error } = await supabase
       .from("user_comments")
       .insert({
         group_code: groupCode,
-        device_id: deviceId,
-        access_participant_id: accessParticipantId,
-        weekly_topic_id: weeklyTopicId,
-        page,
+        project_participant_id:
+          participantId,
+        weekly_topic_id:
+          weeklyTopicId,
+        page: "/comentarios",
         message,
-        status: "published",
+        status: "blocked",
         metadata,
       })
-      .select("id, created_at, group_code, status")
-      .maybeSingle();
+      .select(
+        "id,created_at,group_code,status"
+      )
+      .single();
 
     if (error) {
-      console.error("[comments] insert failed", error);
-      return json(500, { ok: false, error: "No se pudo publicar" });
+      const dbMessage = String(
+        (
+          error as {
+            message?: string;
+          }
+        ).message ?? ""
+      );
+
+      if (
+        dbMessage.includes(
+          "MAX_3_COMMENTS_PER_TOPIC"
+        )
+      ) {
+        return participantJson(409, {
+          ok: false,
+          error: "max_3_comments_per_topic",
+          code: "MAX_3_COMMENTS_PER_TOPIC",
+        });
+      }
+
+      if (
+        dbMessage.includes(
+          "COMMENT_TOPIC_NOT_ACTIVE"
+        )
+      ) {
+        return participantJson(409, {
+          ok: false,
+          error: "active_topic_not_available",
+          code: "ACTIVE_TOPIC_NOT_AVAILABLE",
+        });
+      }
+
+      if (
+        dbMessage.includes(
+          "COMMENT_PARTICIPANT_NOT_FOUND"
+        )
+      ) {
+        return participantError(
+          401,
+          "unauthenticated"
+        );
+      }
+
+      if (
+        dbMessage.includes(
+          "COMMENT_INVALID_MESSAGE"
+        )
+      ) {
+        return participantError(
+          400,
+          "comment_invalid"
+        );
+      }
+
+      console.error(
+        "[comments] secure insert failed"
+      );
+
+      return participantError(
+        500,
+        "comment_submit_failed"
+      );
     }
 
-    return json(200, {
+    if (!data?.id) {
+      console.error(
+        "[comments] secure insert returned no row"
+      );
+
+      return participantError(
+        500,
+        "comment_submit_failed"
+      );
+    }
+
+    // --------------------------------------------------------
+    // MODERACION
+    //
+    // La fila BLOCKED se conserva para control administrativo,
+    // pero no se presenta al usuario como publicada.
+    // --------------------------------------------------------
+
+    if (data.status === "blocked") {
+      return participantJson(422, {
+        ok: false,
+        error: "comment_blocked",
+        code: "COMMENT_BLOCKED",
+      });
+    }
+
+    return participantJson(200, {
       ok: true,
-      comment: data,
+      comment: {
+        id: data.id,
+        created_at: data.created_at,
+        group_code: data.group_code,
+        status: data.status,
+      },
     });
-  } catch (e) {
-    console.error("[comments] unexpected error", e);
-    return json(500, { ok: false, error: "No disponible" });
+  } catch (error) {
+    console.error(
+      "[comments] unexpected error",
+      error
+    );
+
+    return participantError(
+      500,
+      "comment_service_unavailable"
+    );
   }
 }

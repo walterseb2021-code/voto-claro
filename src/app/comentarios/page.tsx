@@ -1122,6 +1122,10 @@ useEffect(() => {
     return;
   }
 
+  if (!participantAuthenticated) {
+    setErrMsg("Para comentar, inicia sesión con tu código de acceso.");
+    return;
+  }
   if (!weeklyTopicId) {
     setErrMsg("No se encontró un tema semanal activo.");
     return;
@@ -1149,24 +1153,8 @@ useEffect(() => {
   setSending(true);
 
   try {
-    const payload: any = {
+    const payload = {
       message: text,
-      page: "/comentarios",
-      weekly_topic_id: weeklyTopicId,
-      device_id: deviceId,
-      metadata: {
-        source_module: "comentarios-ciudadanos",
-        source_section: "comentario-semanal",
-        source_action: "publicar-comentario",
-        page_title: "Comentarios Ciudadanos",
-        route: "/comentarios",
-        topic_id: weeklyTopicId,
-        user_alias: participant?.alias || participant?.display_name || "",
-        user_full_name: participant?.display_name || "",
-        participant_id: participant?.id || "",
-        submitted_from: "comentarios-page",
-        client_timestamp: new Date().toISOString(),
-      },
     };
 
     const res = await fetch("/api/comments", {
@@ -1193,10 +1181,24 @@ useEffect(() => {
   } catch (e: any) {
     const msg = (e?.message || "").toLowerCase();
 
-    if (e?.code === "MAX_3_COMMENTS_PER_TOPIC" || msg.includes("max_3_comments_per_topic")) {
+    if (
+      e?.code === "MAX_3_COMMENTS_PER_TOPIC" ||
+      msg.includes("max_3_comments_per_topic")
+    ) {
       setErrMsg("Ya alcanzaste el máximo de 3 comentarios para este tema semanal.");
     } else if (e?.code === "LINKS_NOT_ALLOWED") {
-      setErrMsg("No esta permitido incluir enlaces en el comentario.");
+      setErrMsg("No está permitido incluir enlaces en el comentario.");
+    } else if (e?.code === "COMMENT_BLOCKED") {
+      setErrMsg(
+        "El comentario fue bloqueado por las reglas de moderación. Reescríbelo con respeto e inténtalo nuevamente."
+      );
+    } else if (msg.includes("unauthenticated")) {
+      setErrMsg("Tu sesión de participante ya no está activa. Inicia sesión nuevamente.");
+    } else if (
+      e?.code === "ACTIVE_TOPIC_NOT_AVAILABLE" ||
+      msg.includes("active_topic_not_found")
+    ) {
+      setErrMsg("El tema semanal ya no está disponible para recibir comentarios.");
     } else {
       setErrMsg(e?.message ?? String(e));
     }
