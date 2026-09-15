@@ -438,7 +438,6 @@ export default function AdminCommentsPage() {
       return;
     }
 
-    const matchedComment = items.find((x) => x.id === user_comment_id);
 
     setSavingAward(true);
     setErrorMsg(null);
@@ -451,8 +450,6 @@ export default function AdminCommentsPage() {
         body: JSON.stringify({
           action: "create_comment_award",
           user_comment_id,
-          device_id: matchedComment?.device_id ?? null,
-          group_code: matchedComment?.group_code ?? "GENERAL",
           award_year,
           award_quarter,
           award_title: awardTitle.trim(),

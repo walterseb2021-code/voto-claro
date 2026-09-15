@@ -396,18 +396,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "create_comment_award") {
-      if (!hasExactKeys(body, ["action", "user_comment_id", "device_id", "group_code", "award_year", "award_quarter", "award_title", "award_note", "contact_status", "logistics_note", "includes_companion", "published"])) return respond({ error: "INVALID_PAYLOAD" }, 400);
+      if (!hasExactKeys(body, ["action", "user_comment_id", "award_year", "award_quarter", "award_title", "award_note", "contact_status", "logistics_note", "includes_companion", "published"])) return respond({ error: "INVALID_PAYLOAD" }, 400);
       if (!isUuid(body.user_comment_id)) return respond({ error: "INVALID_USER_COMMENT_ID" }, 400);
-      if (body.device_id !== null && typeof body.device_id !== "string") return respond({ error: "INVALID_DEVICE_ID" }, 400);
-      if (typeof body.group_code !== "string") return respond({ error: "INVALID_GROUP_CODE" }, 400);
       if (typeof body.award_year !== "number" || !Number.isInteger(body.award_year)) return respond({ error: "INVALID_AWARD_YEAR" }, 400);
       if (typeof body.award_quarter !== "number" || !Number.isInteger(body.award_quarter) || ![1, 2, 3, 4].includes(body.award_quarter)) return respond({ error: "INVALID_AWARD_QUARTER" }, 400);
       if (typeof body.award_title !== "string" || typeof body.award_note !== "string" || typeof body.contact_status !== "string" || typeof body.logistics_note !== "string") return respond({ error: "INVALID_AWARD_TEXT_FIELDS" }, 400);
       if (typeof body.includes_companion !== "boolean") return respond({ error: "INVALID_INCLUDES_COMPANION" }, 400);
       if (typeof body.published !== "boolean") return respond({ error: "INVALID_PUBLISHED" }, 400);
       const userCommentId = body.user_comment_id.trim();
-      const deviceId = body.device_id === null ? null : body.device_id.trim();
-      const groupCode = body.group_code.trim();
       const awardYear = body.award_year;
       const awardQuarter = body.award_quarter;
       const awardTitle = body.award_title.trim();
@@ -416,13 +412,55 @@ export async function POST(req: NextRequest) {
       const logisticsNote = body.logistics_note.trim();
       const includesCompanion = body.includes_companion;
       const published = body.published;
-      if (!groupCode) return respond({ error: "INVALID_GROUP_CODE" }, 400);
       if (!["pending", "contacted", "confirmed", "completed"].includes(contactStatus)) return respond({ error: "INVALID_CONTACT_STATUS" }, 400);
+
+      const {
+        data: trustedComment,
+        error: trustedCommentError,
+      } = await supabase
+        .from("user_comments")
+        .select(
+          "id,device_id,group_code,project_participant_id"
+        )
+        .eq("id", userCommentId)
+        .limit(1)
+        .maybeSingle();
+
+      if (trustedCommentError) {
+        return respond(
+          {
+            error: "SUPABASE_ERROR",
+            detail: trustedCommentError.message,
+          },
+          500
+        );
+      }
+
+      if (!trustedComment?.id) {
+        return respond(
+          { error: "COMMENT_NOT_FOUND" },
+          404
+        );
+      }
+
+      const trustedGroupCode =
+        typeof trustedComment.group_code === "string"
+          ? trustedComment.group_code.trim()
+          : "";
+
+      if (!trustedGroupCode) {
+        return respond(
+          { error: "COMMENT_IDENTITY_INVALID" },
+          409
+        );
+      }
 
       const payload = {
         user_comment_id: userCommentId,
-        device_id: deviceId,
-        group_code: groupCode,
+        device_id: trustedComment.device_id ?? null,
+        group_code: trustedGroupCode,
+        project_participant_id:
+          trustedComment.project_participant_id ?? null,
         award_year: awardYear,
         award_quarter: awardQuarter,
         award_title: awardTitle || null,
