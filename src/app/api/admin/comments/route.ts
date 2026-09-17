@@ -360,18 +360,19 @@ export async function POST(req: NextRequest) {
         return respond({ error: "MISSING_FOUNDER_ANSWER" }, 400);
       }
 
-      const payload: Record<string, any> = {
-        founder_answer_text: founderAnswerText || null,
-        founder_answer_video_url: founderAnswerVideoUrl || null,
-        founder_answered_at: new Date().toISOString(),
-        question_status: "answered",
-        published,
-      };
+      const requestId = randomUUID();
 
-      const { error } = await supabase
-        .from("weekly_founder_questions")
-        .update(payload)
-        .eq("id", id);
+      const { error } = await supabase.rpc(
+        "admin_answer_founder_question",
+        {
+          p_question_id: id,
+          p_founder_answer_text: founderAnswerText,
+          p_founder_answer_video_url: founderAnswerVideoUrl,
+          p_published: published,
+          p_actor_email: gate.email,
+          p_request_id: requestId,
+        }
+      );
 
       if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
@@ -385,10 +386,17 @@ export async function POST(req: NextRequest) {
       const id = body.id.trim();
       const published = body.published;
 
-      const { error } = await supabase
-        .from("weekly_founder_questions")
-        .update({ published })
-        .eq("id", id);
+      const requestId = randomUUID();
+
+      const { error } = await supabase.rpc(
+        "admin_set_founder_question_publish",
+        {
+          p_question_id: id,
+          p_published: published,
+          p_actor_email: gate.email,
+          p_request_id: requestId,
+        }
+      );
 
       if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
@@ -414,65 +422,24 @@ export async function POST(req: NextRequest) {
       const published = body.published;
       if (!["pending", "contacted", "confirmed", "completed"].includes(contactStatus)) return respond({ error: "INVALID_CONTACT_STATUS" }, 400);
 
-      const {
-        data: trustedComment,
-        error: trustedCommentError,
-      } = await supabase
-        .from("user_comments")
-        .select(
-          "id,device_id,group_code,project_participant_id"
-        )
-        .eq("id", userCommentId)
-        .limit(1)
-        .maybeSingle();
+      const requestId = randomUUID();
 
-      if (trustedCommentError) {
-        return respond(
-          {
-            error: "SUPABASE_ERROR",
-            detail: trustedCommentError.message,
-          },
-          500
-        );
-      }
-
-      if (!trustedComment?.id) {
-        return respond(
-          { error: "COMMENT_NOT_FOUND" },
-          404
-        );
-      }
-
-      const trustedGroupCode =
-        typeof trustedComment.group_code === "string"
-          ? trustedComment.group_code.trim()
-          : "";
-
-      if (!trustedGroupCode) {
-        return respond(
-          { error: "COMMENT_IDENTITY_INVALID" },
-          409
-        );
-      }
-
-      const payload = {
-        user_comment_id: userCommentId,
-        device_id: trustedComment.device_id ?? null,
-        group_code: trustedGroupCode,
-        project_participant_id:
-          trustedComment.project_participant_id ?? null,
-        award_year: awardYear,
-        award_quarter: awardQuarter,
-        award_title: awardTitle || null,
-        award_note: awardNote || null,
-        contact_status: contactStatus,
-        logistics_note: logisticsNote || null,
-        includes_companion: includesCompanion,
-        published,
-        published_at: published ? new Date().toISOString() : null,
-      };
-
-      const { error } = await supabase.from("comment_awards").insert(payload);
+      const { error } = await supabase.rpc(
+        "admin_create_comment_award",
+        {
+          p_user_comment_id: userCommentId,
+          p_award_year: awardYear,
+          p_award_quarter: awardQuarter,
+          p_award_title: awardTitle,
+          p_award_note: awardNote,
+          p_contact_status: contactStatus,
+          p_logistics_note: logisticsNote,
+          p_includes_companion: includesCompanion,
+          p_published: published,
+          p_actor_email: gate.email,
+          p_request_id: requestId,
+        }
+      );
 
       if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
@@ -494,21 +461,22 @@ export async function POST(req: NextRequest) {
       const published = body.published;
       if (!["pending", "contacted", "confirmed", "completed"].includes(contactStatus)) return respond({ error: "INVALID_CONTACT_STATUS" }, 400);
 
-      const payload: Record<string, any> = {
-        award_title: awardTitle || null,
-        award_note: awardNote || null,
-        includes_companion: includesCompanion,
-        published,
-      };
+      const requestId = randomUUID();
 
-      if (contactStatus) payload.contact_status = contactStatus;
-      payload.logistics_note = logisticsNote || null;
-      payload.published_at = published ? new Date().toISOString() : null;
-
-      const { error } = await supabase
-        .from("comment_awards")
-        .update(payload)
-        .eq("id", id);
+      const { error } = await supabase.rpc(
+        "admin_update_comment_award",
+        {
+          p_award_id: id,
+          p_award_title: awardTitle,
+          p_award_note: awardNote,
+          p_contact_status: contactStatus,
+          p_logistics_note: logisticsNote,
+          p_includes_companion: includesCompanion,
+          p_published: published,
+          p_actor_email: gate.email,
+          p_request_id: requestId,
+        }
+      );
 
       if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
@@ -527,12 +495,18 @@ export async function POST(req: NextRequest) {
     const status = body.status.trim();
     const allowed = isVideoTarget ? new Set(["reviewed", "archived", "blocked"]) : new Set(["published", "archived", "blocked"]);
     if (!allowed.has(status)) return respond({ error: "STATUS_NOT_ALLOWED" }, 400);
-    const tableName = isVideoTarget ? "weekly_video_entries" : "user_comments";
+    const requestId = randomUUID();
 
-    const { error } = await supabase
-      .from(tableName)
-      .update({ status })
-      .eq("id", id);
+    const { error } = await supabase.rpc(
+      "admin_set_comment_content_status",
+      {
+        p_target: isVideoTarget ? "video" : "comment",
+        p_entity_id: id,
+        p_status: status,
+        p_actor_email: gate.email,
+        p_request_id: requestId,
+      }
+    );
 
     if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
 
