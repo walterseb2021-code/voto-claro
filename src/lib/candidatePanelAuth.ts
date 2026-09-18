@@ -402,9 +402,7 @@ export async function validateCandidatePanelSession(
 
   if (shouldTouch) {
     const { error: touchError } = await supabase
-      .from("candidate_panel_sessions")
-      .update({ last_seen_at: new Date().toISOString() })
-      .eq("id", data.id);
+      .rpc("touch_candidate_panel_session", { p_session_id: data.id });
 
     if (touchError) {
       console.error("[candidate-panel] session touch failed", touchError.message);
@@ -429,10 +427,7 @@ export async function revokeCandidatePanelSession(req: NextRequest) {
   const tokenHash = hashCandidatePanelToken(token);
   const supabase = getCandidatePanelAdminClient();
   const { error } = await supabase
-    .from("candidate_panel_sessions")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("token_hash", tokenHash)
-    .is("revoked_at", null);
+    .rpc("revoke_candidate_panel_session_by_token_hash", { p_token_hash: tokenHash });
 
   if (error) {
     console.error("[candidate-panel] session revoke failed", error.message);
@@ -445,10 +440,7 @@ export async function revokeCandidatePanelSessionsForCandidate(candidateId: stri
 
   const supabase = getCandidatePanelAdminClient();
   const { error } = await supabase
-    .from("candidate_panel_sessions")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("candidate_id", identity.storageCandidateId)
-    .is("revoked_at", null);
+    .rpc("revoke_candidate_panel_sessions_for_candidate", { p_candidate_id: identity.storageCandidateId });
 
   if (error) {
     console.error("[candidate-panel] candidate session revoke failed", error.message);
