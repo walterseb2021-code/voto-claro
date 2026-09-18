@@ -98,10 +98,13 @@ export async function POST(req: NextRequest) {
       );
     }
     if (legacyDeviceId) {
-      const { error: deviceUpdateError } = await supabase
-        .from("project_participants")
-        .update({ device_id: legacyDeviceId })
-        .eq("id", safeParticipant.id);
+      const { error: deviceUpdateError } = await supabase.rpc(
+        "update_project_participant_device_id_secure",
+        {
+          p_participant_id: safeParticipant.id,
+          p_device_id: legacyDeviceId,
+        }
+      );
 
       if (deviceUpdateError) {
         console.error("[participant-login] legacy device update failed");
