@@ -2,8 +2,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/adminAuth";
+import {
+  isAllowedAdminMutationOrigin,
+  readAdminJsonObject,
+} from "@/lib/adminMutationSecurity";
 
 export const runtime = "nodejs";
+
+const MAX_BODY_BYTES = 8 * 1024;
 
 type TrainingStatus = "active" | "pending" | "inactive" | "rejected";
 
@@ -20,7 +26,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
 
-    const body = await req.json();
+    if (!isAllowedAdminMutationOrigin(req)) {
+      return NextResponse.json({ error: "Solicitud invalida." }, { status: 403 });
+    }
+
+    const body = await readAdminJsonObject(req, MAX_BODY_BYTES);
+    if (!body) {
+      return NextResponse.json({ error: "Solicitud invalida." }, { status: 400 });
+    }
 
     const id = cleanText(body.id, 80);
     const status = cleanText(body.status, 40) as TrainingStatus;

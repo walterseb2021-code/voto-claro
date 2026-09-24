@@ -1,8 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/adminAuth";
+import {
+  isAllowedAdminMutationOrigin,
+  readAdminJsonObject,
+} from "@/lib/adminMutationSecurity";
 
 export const runtime = "nodejs";
+
+const MAX_BODY_BYTES = 2 * 1024;
 
 type ParticipantRow = {
   device_id: string;
@@ -105,7 +111,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
 
-    const body = await req.json().catch(() => null);
+    if (!isAllowedAdminMutationOrigin(req)) {
+      return jsonError("Solicitud invalida", 403);
+    }
+
+    const body = await readAdminJsonObject(req, MAX_BODY_BYTES);
     const action = String(body?.action ?? "").trim();
     const deviceId = cleanDeviceId(body?.device_id);
 
