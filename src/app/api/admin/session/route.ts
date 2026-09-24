@@ -1,12 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isConfiguredAdminEmail } from "@/lib/adminAuth";
+import {
+  isAllowedAdminMutationOrigin,
+  readAdminJsonObject,
+} from "@/lib/adminMutationSecurity";
+
+const MAX_BODY_BYTES = 16 * 1024;
 
 // POST /api/admin/session
 // Body: { access_token, refresh_token }
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
+    if (!isAllowedAdminMutationOrigin(req)) {
+      return NextResponse.json({ error: "REQUEST_INVALID" }, { status: 403 });
+    }
+
+    const body = await readAdminJsonObject(req, MAX_BODY_BYTES);
+    if (!body) {
+      return NextResponse.json({ error: "INVALID_REQUEST" }, { status: 400 });
+    }
     const access_token = String(body?.access_token ?? "").trim();
     const refresh_token = String(body?.refresh_token ?? "").trim();
 

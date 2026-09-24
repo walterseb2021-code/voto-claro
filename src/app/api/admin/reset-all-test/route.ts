@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
+import {
+  isAllowedAdminMutationOrigin,
+  readAdminJsonObject,
+} from "@/lib/adminMutationSecurity";
 
 export const runtime = 'nodejs'
+
+const MAX_BODY_BYTES = 2 * 1024;
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
@@ -23,6 +29,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     }
 
+    if (!isAllowedAdminMutationOrigin(request)) {
+      return NextResponse.json({ error: 'Solicitud invalida' }, { status: 403 })
+    }
+
     const gate = await requireAdmin(request)
     if (!gate.ok) {
       return NextResponse.json({ error: gate.error }, { status: gate.status })
@@ -33,7 +43,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Reset no configurado' }, { status: 403 })
     }
 
-    const { secretKey } = await request.json()
+    const body = await readAdminJsonObject(request, MAX_BODY_BYTES)
+    if (!body) {
+      return NextResponse.json({ error: 'Solicitud invalida' }, { status: 400 })
+    }
+
+    const secretKey = body.secretKey
 
     if (typeof secretKey !== 'string' || secretKey.length === 0 || secretKey !== configuredSecret) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })

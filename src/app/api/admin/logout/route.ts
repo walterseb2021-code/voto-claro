@@ -1,9 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isAllowedAdminMutationOrigin } from "@/lib/adminMutationSecurity";
 
 // POST /api/admin/logout
 export async function POST(req: NextRequest) {
   try {
+    if (!isAllowedAdminMutationOrigin(req)) {
+      return NextResponse.json({ error: "REQUEST_INVALID" }, { status: 403 });
+    }
+
     const res = NextResponse.json({ ok: true }, { status: 200 });
 
     const supabase = createServerClient(
