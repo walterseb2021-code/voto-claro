@@ -7,6 +7,7 @@ import {
   isAllowedCandidatePanelMutationOrigin,
   isJsonContentType,
 } from "@/lib/candidatePanelOrigin";
+import { readBoundedJsonObject } from "@/lib/participantApi";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,7 @@ type PatchBody = {
 };
 
 const PATCH_KEYS = new Set(["status"]);
+const MAX_PATCH_BODY_BYTES = 1024;
 
 function unauthorized() {
   return NextResponse.json({ ok: false, error: "No autorizado." }, { status: 401 });
@@ -54,12 +56,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const session = await validateCandidatePanelSession(req);
   if (!session.ok) return unauthorized();
 
-  let body: PatchBody;
-  try {
-    body = (await req.json()) as PatchBody;
-  } catch {
-    return badRequest();
-  }
+  const body = (await readBoundedJsonObject(
+    req,
+    MAX_PATCH_BODY_BYTES
+  )) as PatchBody | null;
 
   if (
     !body ||

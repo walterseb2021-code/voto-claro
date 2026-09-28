@@ -18,6 +18,7 @@ import {
   isAllowedCandidatePanelMutationOrigin,
   isJsonContentType,
 } from "@/lib/candidatePanelOrigin";
+import { readBoundedJsonObject } from "@/lib/participantApi";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,7 @@ type UnlockBody = {
 };
 
 const UNLOCK_KEYS = new Set(["candidateId", "accessCode"]);
+const MAX_UNLOCK_BODY_BYTES = 2 * 1024;
 const FORBIDDEN_LEGACY_KEYS = new Set([
   "pin",
   "candidatePin",
@@ -78,12 +80,10 @@ export async function POST(req: NextRequest) {
     return genericUnauthorized(400);
   }
 
-  let body: UnlockBody;
-  try {
-    body = (await req.json()) as UnlockBody;
-  } catch {
-    return genericUnauthorized(400);
-  }
+  const body = (await readBoundedJsonObject(
+    req,
+    MAX_UNLOCK_BODY_BYTES
+  )) as UnlockBody | null;
 
   if (
     !body ||

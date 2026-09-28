@@ -8,11 +8,13 @@ import {
   isAllowedCandidatePanelMutationOrigin,
   isJsonContentType,
 } from "@/lib/candidatePanelOrigin";
+import { readBoundedJsonObject } from "@/lib/participantApi";
 
 export const runtime = "nodejs";
 
 const LIVE_PLATFORMS = new Set(["YOUTUBE", "FACEBOOK", "TIKTOK", "OTRA"]);
 const LIVE_BODY_KEYS = new Set(["platform", "url", "setAsLive"]);
+const MAX_LIVE_BODY_BYTES = 8 * 1024;
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"]);
 const FACEBOOK_HOSTS = new Set(["facebook.com", "www.facebook.com", "m.facebook.com", "fb.watch"]);
 const TIKTOK_HOSTS = new Set(["tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com"]);
@@ -155,12 +157,10 @@ export async function POST(req: NextRequest) {
   const session = await validateCandidatePanelSession(req);
   if (!session.ok) return unauthorized();
 
-  let body: LiveBody;
-  try {
-    body = (await req.json()) as LiveBody;
-  } catch {
-    return badRequest();
-  }
+  const body = (await readBoundedJsonObject(
+    req,
+    MAX_LIVE_BODY_BYTES
+  )) as LiveBody | null;
 
   if (
     !body ||
