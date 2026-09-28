@@ -31,8 +31,6 @@ export default function AdminHubPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [secretKey, setSecretKey] = useState("");
-  const [showSecretInput, setShowSecretInput] = useState(false);
 
   useEffect(() => {
     setChecking(false);
@@ -98,45 +96,6 @@ export default function AdminHubPage() {
     } catch (error) {
       console.error("Error resetando dispositivo:", error);
       setMessage({ type: "error", text: "Error al resetear dispositivo" });
-    }
-  };
-
-  const resetAllTest = async () => {
-    if (!secretKey) {
-      setMessage({ type: "error", text: "Debes ingresar la clave secreta" });
-      return;
-    }
-
-    if (
-      !confirm(
-        "⚠️ ¿Resetear TODOS los datos de prueba?\n\nEsto eliminará:\n- TODAS las respuestas de intención de voto\n- TODOS los comentarios en foros\n- TODOS los registros de acceso\n\nEsta acción NO SE PUEDE DESHACER."
-      )
-    ) {
-      return;
-    }
-
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/admin/reset-all-test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secretKey }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        setMessage({
-          type: "success",
-          text: "✅ Todos los datos de prueba fueron reseteados",
-        });
-        loadDevices();
-      } else {
-        setMessage({ type: "error", text: `❌ Error: ${data.error}` });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "❌ Error de conexión" });
     }
   };
 
@@ -222,7 +181,7 @@ export default function AdminHubPage() {
 
           <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
             Desde aquí controlas módulos proactivos, participación ciudadana,
-            Espacio Emprendedor, capacitaciones, tokens y datos de prueba.
+            Espacio Emprendedor, capacitaciones, tokens y dispositivos de prueba.
           </div>
 
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -344,10 +303,10 @@ export default function AdminHubPage() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div className="text-sm font-extrabold text-slate-900">
-                🧪 Reset de Datos de Prueba
+                🧪 Dispositivos de Prueba
               </div>
               <div className="mt-1 text-xs text-slate-600">
-                Aquí puedes resetear dispositivos individuales o todos los datos de prueba.
+                Puedes revisar y resetear dispositivos individuales de prueba.
               </div>
             </div>
 
@@ -359,44 +318,8 @@ export default function AdminHubPage() {
               >
                 {loadingDevices ? "Cargando..." : "↻ Refrescar"}
               </button>
-
-              <button
-                onClick={() => setShowSecretInput(!showSecretInput)}
-                className="bg-yellow-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-yellow-700"
-              >
-                {showSecretInput ? "Ocultar" : "Reset Masivo"}
-              </button>
             </div>
           </div>
-
-          {showSecretInput && (
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
-              <label className="block text-xs font-bold mb-1">
-                Clave Secreta:
-              </label>
-
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={secretKey}
-                  onChange={(e) => setSecretKey(e.target.value)}
-                  className="flex-1 border rounded px-3 py-2 text-sm"
-                  placeholder="Ingresa la clave de admin"
-                />
-
-                <button
-                  onClick={resetAllTest}
-                  className="bg-red-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-red-700"
-                >
-                  ⚠️ Resetear TODO
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-600 mt-2">
-                Esta acción eliminará TODOS los datos de prueba de todas las tablas.
-              </p>
-            </div>
-          )}
 
           <div className="mt-4">
             <h3 className="text-sm font-bold mb-2">📱 Dispositivos registrados</h3>
