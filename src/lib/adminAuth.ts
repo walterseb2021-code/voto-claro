@@ -1,4 +1,4 @@
-import { type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export type AdminAuthResult =
@@ -54,4 +54,14 @@ export async function requireAdmin(req: NextRequest): Promise<AdminAuthResult> {
   }
 
   return { ok: true, email, cookiesToSet };
+}
+
+export function withAdminAuthCookies<T>(
+  response: NextResponse<T>,
+  gate: AdminAuthResult
+): NextResponse<T> {
+  for (const { name, value, options } of gate.cookiesToSet) {
+    response.cookies.set(name, value, options);
+  }
+  return response;
 }

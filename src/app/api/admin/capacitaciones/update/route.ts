@@ -1,7 +1,7 @@
 // src/app/api/admin/capacitaciones/update/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/adminAuth";
+import { requireAdmin, withAdminAuthCookies } from "@/lib/adminAuth";
 import {
   isAllowedAdminMutationOrigin,
   readAdminJsonObject,
@@ -20,19 +20,23 @@ function cleanText(value: unknown, max = 1200) {
 }
 
 export async function POST(req: NextRequest) {
+  let jsonResponse = (body: unknown, init?: ResponseInit) =>
+    NextResponse.json(body, init);
   try {
     const gate = await requireAdmin(req);
+    jsonResponse = (body: unknown, init?: ResponseInit) =>
+      withAdminAuthCookies(NextResponse.json(body, init), gate);
     if (!gate.ok) {
-      return NextResponse.json({ error: gate.error }, { status: gate.status });
+      return jsonResponse({ error: gate.error }, { status: gate.status });
     }
 
     if (!isAllowedAdminMutationOrigin(req)) {
-      return NextResponse.json({ error: "Solicitud invalida." }, { status: 403 });
+      return jsonResponse({ error: "Solicitud invalida." }, { status: 403 });
     }
 
     const body = await readAdminJsonObject(req, MAX_BODY_BYTES);
     if (!body) {
-      return NextResponse.json({ error: "Solicitud invalida." }, { status: 400 });
+      return jsonResponse({ error: "Solicitud invalida." }, { status: 400 });
     }
 
     const id = cleanText(body.id, 80);
@@ -41,14 +45,14 @@ export async function POST(req: NextRequest) {
     const rejected_reason = cleanText(body.rejected_reason, 1200) || null;
 
     if (!id) {
-      return NextResponse.json(
+      return jsonResponse(
         { error: "Falta el ID de la capacitación." },
         { status: 400 }
       );
     }
 
     if (!ALLOWED_STATUS.has(status)) {
-      return NextResponse.json(
+      return jsonResponse(
         {
           error:
             "Estado inválido. Usa active, pending, inactive o rejected.",
@@ -58,7 +62,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (status === "rejected" && !rejected_reason) {
-      return NextResponse.json(
+      return jsonResponse(
         { error: "Para rechazar una publicación debes indicar el motivo." },
         { status: 400 }
       );
@@ -68,7 +72,7 @@ export async function POST(req: NextRequest) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
+      return jsonResponse(
         {
           error:
             "Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno.",
@@ -103,13 +107,13 @@ export async function POST(req: NextRequest) {
     if (error) throw error;
 
     if (!data) {
-      return NextResponse.json(
+      return jsonResponse(
         { error: "No se encontró la capacitación indicada." },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({
+    return jsonResponse({
       ok: true,
       message: `Capacitación actualizada a estado ${status}.`,
       capacitacion: data,
@@ -117,7 +121,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error("Error admin actualizando capacitación:", err);
 
-    return NextResponse.json(
+    return jsonResponse(
       {
         error: err?.message || "No se pudo actualizar la capacitación.",
       },

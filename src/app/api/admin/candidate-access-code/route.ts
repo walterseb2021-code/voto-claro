@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/adminAuth";
+import { requireAdmin, withAdminAuthCookies } from "@/lib/adminAuth";
 import {
   generateCandidateAccessCode,
   getCandidatePanelAdminClient,
@@ -26,7 +26,7 @@ type CredentialRow = {
 
 const BODY_KEYS = new Set(["candidateId"]);
 
-function jsonResponse(body: unknown, status = 200) {
+function baseJsonResponse(body: unknown, status = 200) {
   return NextResponse.json(body, {
     status,
     headers: {
@@ -38,7 +38,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 function jsonError(message: string, status = 400) {
-  return jsonResponse({ ok: false, error: message }, status);
+  return baseJsonResponse({ ok: false, error: message }, status);
 }
 
 function currentRevision(row: CredentialRow | null) {
@@ -65,6 +65,11 @@ async function getCredentialRow(storageCandidateId: string) {
 
 export async function GET(req: NextRequest) {
   const gate = await requireAdmin(req);
+  const jsonResponse = (body: unknown, status = 200) =>
+    withAdminAuthCookies(baseJsonResponse(body, status), gate);
+  const jsonError = (message: string, status = 400) =>
+    jsonResponse({ ok: false, error: message }, status);
+
   if (!gate.ok) {
     return jsonResponse({ error: gate.error }, gate.status);
   }
@@ -102,6 +107,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const gate = await requireAdmin(req);
+  const jsonResponse = (body: unknown, status = 200) =>
+    withAdminAuthCookies(baseJsonResponse(body, status), gate);
+  const jsonError = (message: string, status = 400) =>
+    jsonResponse({ ok: false, error: message }, status);
+
   if (!gate.ok) {
     return jsonResponse({ error: gate.error }, gate.status);
   }

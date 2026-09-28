@@ -1,23 +1,28 @@
 // src/app/api/admin/capacitaciones/list/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/adminAuth";
+import { requireAdmin, withAdminAuthCookies } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  let jsonResponse = (body: unknown, init?: ResponseInit) =>
+    NextResponse.json(body, init);
+
   try {
     const gate = await requireAdmin(req);
+    jsonResponse = (body: unknown, init?: ResponseInit) =>
+      withAdminAuthCookies(NextResponse.json(body, init), gate);
 
     if (!gate.ok) {
-      return NextResponse.json({ error: gate.error }, { status: gate.status });
+      return jsonResponse({ error: gate.error }, { status: gate.status });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
+      return jsonResponse(
         {
           error:
             "Falta configurar SUPABASE_SERVICE_ROLE_KEY en las variables de entorno.",
@@ -133,7 +138,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({
+    return jsonResponse({
       ok: true,
       count: items.length,
       capacitaciones: items,
@@ -141,7 +146,7 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     console.error("Error admin listando capacitaciones:", err);
 
-    return NextResponse.json(
+    return jsonResponse(
       {
         error:
           err?.message || "No se pudo cargar la administración de capacitaciones.",

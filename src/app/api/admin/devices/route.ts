@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/adminAuth";
+import { requireAdmin, withAdminAuthCookies } from "@/lib/adminAuth";
 import {
   isAllowedAdminMutationOrigin,
   readAdminJsonObject,
@@ -62,10 +62,18 @@ async function countByDevice(
 }
 
 export async function GET(req: NextRequest) {
+  let jsonResponse = (body: unknown, init?: ResponseInit) =>
+    NextResponse.json(body, init);
+  let authJsonError = (message = "No disponible", status = 500) =>
+    jsonError(message, status);
   try {
     const gate = await requireAdmin(req);
+    jsonResponse = (body: unknown, init?: ResponseInit) =>
+      withAdminAuthCookies(NextResponse.json(body, init), gate);
+    authJsonError = (message = "No disponible", status = 500) =>
+      withAdminAuthCookies(jsonError(message, status), gate);
     if (!gate.ok) {
-      return NextResponse.json({ error: gate.error }, { status: gate.status });
+      return jsonResponse({ error: gate.error }, { status: gate.status });
     }
 
     const admin = getSupabaseAdmin();
@@ -78,7 +86,7 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error("[admin/devices] participant lookup failed", error);
-      return jsonError();
+      return authJsonError();
     }
 
     const devices = await Promise.all(
@@ -97,22 +105,30 @@ export async function GET(req: NextRequest) {
       }))
     );
 
-    return NextResponse.json({ devices });
+    return jsonResponse({ devices });
   } catch (e) {
     console.error("[admin/devices] GET unexpected error", e);
-    return jsonError();
+    return authJsonError();
   }
 }
 
 export async function POST(req: NextRequest) {
+  let jsonResponse = (body: unknown, init?: ResponseInit) =>
+    NextResponse.json(body, init);
+  let authJsonError = (message = "No disponible", status = 500) =>
+    jsonError(message, status);
   try {
     const gate = await requireAdmin(req);
+    jsonResponse = (body: unknown, init?: ResponseInit) =>
+      withAdminAuthCookies(NextResponse.json(body, init), gate);
+    authJsonError = (message = "No disponible", status = 500) =>
+      withAdminAuthCookies(jsonError(message, status), gate);
     if (!gate.ok) {
-      return NextResponse.json({ error: gate.error }, { status: gate.status });
+      return jsonResponse({ error: gate.error }, { status: gate.status });
     }
 
     if (!isAllowedAdminMutationOrigin(req)) {
-      return jsonError("Solicitud invalida", 403);
+      return authJsonError("Solicitud invalida", 403);
     }
 
     const body = await readAdminJsonObject(req, MAX_BODY_BYTES);
@@ -120,7 +136,7 @@ export async function POST(req: NextRequest) {
     const deviceId = cleanDeviceId(body?.device_id);
 
     if (action !== "reset-device" || !isValidDeviceId(deviceId)) {
-      return jsonError("Solicitud invalida", 400);
+      return authJsonError("Solicitud invalida", 400);
     }
 
     const admin = getSupabaseAdmin();
@@ -135,13 +151,13 @@ export async function POST(req: NextRequest) {
 
       if (error) {
         console.error("[admin/devices] reset failed", { table, error });
-        return jsonError("No se pudo resetear");
+        return authJsonError("No se pudo resetear");
       }
     }
 
-    return NextResponse.json({ ok: true });
+    return jsonResponse({ ok: true });
   } catch (e) {
     console.error("[admin/devices] POST unexpected error", e);
-    return jsonError("No se pudo resetear");
+    return authJsonError("No se pudo resetear");
   }
 }
