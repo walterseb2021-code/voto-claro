@@ -6,17 +6,12 @@ import {
   hashCandidateAccessCode,
 } from "@/lib/candidatePanelAuth";
 import { resolveCandidatePanelIdentity } from "@/lib/candidatePanelCatalog";
-import {
-  isAllowedCandidatePanelMutationOrigin,
-  isJsonContentType,
-} from "@/lib/candidatePanelOrigin";
+import { isAllowedCandidatePanelMutationOrigin } from "@/lib/candidatePanelOrigin";
+import { readAdminJsonObject } from "@/lib/adminMutationSecurity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Body = {
-  candidateId?: unknown;
-};
 
 type CredentialRow = {
   credential_revision: number | string | null;
@@ -25,6 +20,7 @@ type CredentialRow = {
 };
 
 const BODY_KEYS = new Set(["candidateId"]);
+const MAX_BODY_BYTES = 2 * 1024;
 
 function baseJsonResponse(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -120,23 +116,12 @@ export async function POST(req: NextRequest) {
     return jsonError("No autorizado.", 403);
   }
 
-  if (!isJsonContentType(req)) {
+  const body = await readAdminJsonObject(req, MAX_BODY_BYTES);
+  if (!body) {
     return jsonError("Solicitud invalida.");
   }
 
-  let body: Body;
-  try {
-    body = (await req.json()) as Body;
-  } catch {
-    return jsonError("Solicitud invalida.");
-  }
-
-  if (
-    !body ||
-    typeof body !== "object" ||
-    Array.isArray(body) ||
-    Object.keys(body).some((key) => !BODY_KEYS.has(key))
-  ) {
+  if (Object.keys(body).some((key) => !BODY_KEYS.has(key))) {
     return jsonError("Solicitud invalida.");
   }
 
