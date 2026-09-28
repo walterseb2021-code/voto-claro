@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import {
   MAX_PITCH_TOKEN_LENGTH,
   VC_GROUP_COOKIE,
@@ -9,7 +9,13 @@ import {
   resolvePitchAccess,
   validatePitchToken,
 } from "@/lib/pitchAccessAuth";
-import { getParticipantSupabaseAdmin } from "@/lib/participantApi";
+import {
+  getParticipantSupabaseAdmin,
+  isAllowedParticipantMutationOrigin,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+
+const MAX_BODY_BYTES = 4 * 1024;
 
 const noStoreHeaders = {
   "Cache-Control": "no-store",
@@ -50,49 +56,6 @@ function clearPitchCookies(response: NextResponse) {
   return response;
 }
 
-function getRequestOrigin(req: Request) {
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
-
-  if (forwardedHost) {
-    return `${forwardedProto}://${forwardedHost}`;
-  }
-
-  return new URL(req.url).origin;
-}
-
-function isLocalOrigin(origin: string) {
-  try {
-    const hostname = new URL(origin).hostname;
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "::1"
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedOrigin(req: Request) {
-  const origin = req.headers.get("origin");
-  if (!origin) return true;
-
-  if (process.env.NODE_ENV !== "production" && isLocalOrigin(origin)) {
-    return true;
-  }
-
-  try {
-    return new URL(origin).origin === getRequestOrigin(req);
-  } catch {
-    return false;
-  }
-}
-
-function isJsonContentType(req: Request) {
-  const contentType = req.headers.get("content-type") ?? "";
-  return contentType.toLowerCase().split(";")[0].trim() === "application/json";
-}
 
 export async function GET(req: Request) {
   try {
@@ -111,21 +74,16 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   let shouldClearPitchCookies = false;
 
   try {
-    if (!isAllowedOrigin(req)) {
+    if (!isAllowedParticipantMutationOrigin(req)) {
       return invalidAccess(403);
     }
 
-    if (!isJsonContentType(req)) {
-      return invalidAccess(400);
-    }
-
-    const body = await req.json().catch(() => null);
-
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
+    const body = await readBoundedJsonObject(req, MAX_BODY_BYTES);
+    if (!body) {
       return invalidAccess(400);
     }
 
