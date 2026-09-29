@@ -1,11 +1,26 @@
 // src/app/api/party/docs/chat/route.ts
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  isAllowedParticipantMutationOrigin,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import {
+  consumeAiAnswerRateLimit,
+  getAiAnswerIpFingerprint,
+} from "@/lib/aiAnswerRateLimit";
 import { loadPartyDocsFromPublic } from "@/lib/partyDocs/loadPartyDocs";
 import { retrieveRelevantChunks } from "@/lib/partyDocs/retrieve";
 
 type Mode = "STRICT" | "SUMMARY";
+
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_QUESTION_CHARS = 6000;
+const REQUEST_KEYS = new Set(["partyId", "mode", "question"]);
+const ALLOWED_PARTY_IDS = new Set(["app", "perufederal"]);
+const VALID_MODES = new Set<Mode>(["STRICT", "SUMMARY"]);
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 
 async function safeJson(res: Response) {
   try {
@@ -15,11 +30,6 @@ async function safeJson(res: Response) {
   }
 }
 
-function shouldFallback(status: number) {
-  // 403 (permisos / modelo no habilitado), 404 (modelo no existe),
-  // 429 (quota), 500/502/503 (errores transitorios)
-  return [403, 404, 429, 500, 502, 503].includes(status);
-}
    function normalizeText(input: string) {
   return String(input || "")
     .toLowerCase()
@@ -136,24 +146,66 @@ function buildLocalFallbackAnswer(params: {
     "Esta respuesta se generó desde el respaldo local."
   );
 }
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
-
-    const partyId = String(body.partyId ?? "perufederal");
-    const mode = (String(body.mode ?? "SUMMARY").toUpperCase() as Mode) || "SUMMARY";
-    const question = String(body.question ?? "").trim();
-
-    if (!question) {
-      return NextResponse.json({ ok: false, error: "Falta question" }, { status: 400 });
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 403, headers: NO_STORE_HEADERS }
+      );
     }
+
+    const body = await readBoundedJsonObject(req, MAX_BODY_BYTES);
+
+    if (
+      !body ||
+      Object.keys(body).some((key) => !REQUEST_KEYS.has(key))
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const rawPartyId =
+      body.partyId === undefined ? "perufederal" : body.partyId;
+    const rawMode = body.mode === undefined ? "SUMMARY" : body.mode;
+
+    if (
+      typeof rawPartyId !== "string" ||
+      typeof rawMode !== "string" ||
+      typeof body.question !== "string"
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const partyId = rawPartyId.trim().toLowerCase();
+    const normalizedMode = rawMode.trim().toUpperCase();
+    const question = body.question.trim();
+
+    if (
+      !ALLOWED_PARTY_IDS.has(partyId) ||
+      !VALID_MODES.has(normalizedMode as Mode) ||
+      !question ||
+      question.length > MAX_QUESTION_CHARS
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const mode = normalizedMode as Mode;
 
     // 1) Cargar docs JSON oficiales
     const docs = await loadPartyDocsFromPublic(partyId);
     if (!docs.length) {
       return NextResponse.json(
-        { ok: false, error: `No hay docs JSON en /public/party/${partyId}/docs/` },
-        { status: 404 }
+        { ok: false, error: "party_docs_unavailable" },
+        { status: 404, headers: NO_STORE_HEADERS }
       );
     }
 
@@ -193,27 +245,71 @@ ${sections || "- (sin secciones)"}`;
     // 3) Key SOLO server-side
         const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
     if (!apiKey) {
-      return NextResponse.json({
-        ok: true,
-        partyId,
-        mode,
-        answer: buildLocalFallbackAnswer({ partyId, mode, question, chunks, docs }),
-        fallback: "LOCAL_JSON_NO_GEMINI_KEY",
-        chunks_used: chunks.length,
-        docs_loaded: docs.map((d: any) => ({
-          doc_id: d.doc_id,
-          title: d.title,
-          updated_at: d.updated_at,
-        })),
-      });
+      return NextResponse.json(
+        {
+          ok: true,
+          partyId,
+          mode,
+          answer: buildLocalFallbackAnswer({
+            partyId,
+            mode,
+            question,
+            chunks,
+            docs,
+          }),
+          fallback: "LOCAL_JSON",
+        },
+        { headers: NO_STORE_HEADERS }
+      );
     }
-
     // 🔒 Límite de seguridad para evitar payload excesivo
     const MAX_CONTEXT_CHARS = 12000;
     const safeContext =
       context.length > MAX_CONTEXT_CHARS
         ? context.slice(0, MAX_CONTEXT_CHARS) + "\n\n[Contenido recortado por límite técnico]"
         : context;
+
+    const ipFingerprint = getAiAnswerIpFingerprint(req);
+
+    if (ipFingerprint.ok) {
+      const rateLimit = await consumeAiAnswerRateLimit(ipFingerprint.value);
+
+      if (!rateLimit.ok || !rateLimit.allowed) {
+        return NextResponse.json(
+          {
+            ok: true,
+            partyId,
+            mode,
+            answer: buildLocalFallbackAnswer({
+              partyId,
+              mode,
+              question,
+              chunks,
+              docs,
+            }),
+            fallback: "LOCAL_JSON",
+          },
+          { headers: NO_STORE_HEADERS }
+        );
+      }
+    } else {
+      return NextResponse.json(
+        {
+          ok: true,
+          partyId,
+          mode,
+          answer: buildLocalFallbackAnswer({
+            partyId,
+            mode,
+            question,
+            chunks,
+            docs,
+          }),
+          fallback: "LOCAL_JSON",
+        },
+        { headers: NO_STORE_HEADERS }
+      );
+    }
 
     // 4) Reglas anti-invento + estilo humano
     const system = `
@@ -254,6 +350,7 @@ ${safeContext}
 
       return fetch(url, {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey,
@@ -267,95 +364,92 @@ ${safeContext}
       });
     }
 
-    const preferred = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
+    const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
 
-    // Orden de fallback (puedes ajustar si quieres)
-    const modelsToTry = Array.from(
-      new Set([
-        preferred,
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-      ].filter(Boolean))
-    );
+    let data: any = {};
 
-    let lastStatus = 0;
-    let lastData: any = null;
-    let usedModel: string | null = null;
+    try {
+      const resp = await callGemini(model);
+      data = await safeJson(resp);
 
-    for (const m of modelsToTry) {
-      const resp = await callGemini(m);
-      const data = await safeJson(resp);
+      if (!resp.ok) {
+        console.error("[party-docs] Gemini request failed", resp.status);
 
-      if (resp.ok) {
-        usedModel = m;
-        lastData = data;
-        break;
+        return NextResponse.json(
+          {
+            ok: true,
+            partyId,
+            mode,
+            answer: buildLocalFallbackAnswer({
+              partyId,
+              mode,
+              question,
+              chunks,
+              docs,
+            }),
+            fallback: "LOCAL_JSON",
+          },
+          { headers: NO_STORE_HEADERS }
+        );
       }
+    } catch {
+      console.error("[party-docs] Gemini request failed");
 
-      lastStatus = resp.status;
-      lastData = data;
-
-      console.log("🧪 PARTY DOCS → GEMINI FAIL model:", m, "status:", resp.status);
-      console.log("🧪 PARTY DOCS → GEMINI ERROR BODY:", JSON.stringify(data).slice(0, 2000));
-
-      // Si no es un error “fallback-able”, cortamos ahí
-      if (!shouldFallback(resp.status)) break;
-    }
-
-         if (!usedModel) {
-      return NextResponse.json({
-        ok: true,
-        partyId,
-        mode,
-        answer: buildLocalFallbackAnswer({ partyId, mode, question, chunks, docs }),
-        fallback: `LOCAL_JSON_GEMINI_ERROR_${lastStatus || 502}`,
-        gemini_message: lastData?.error?.message ?? null,
-        chunks_used: chunks.length,
-        docs_loaded: docs.map((d: any) => ({
-          doc_id: d.doc_id,
-          title: d.title,
-          updated_at: d.updated_at,
-        })),
-      });
+      return NextResponse.json(
+        {
+          ok: true,
+          partyId,
+          mode,
+          answer: buildLocalFallbackAnswer({
+            partyId,
+            mode,
+            question,
+            chunks,
+            docs,
+          }),
+          fallback: "LOCAL_JSON",
+        },
+        { headers: NO_STORE_HEADERS }
+      );
     }
 
     const text =
-      lastData?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("")?.trim() || "";
-
-          if (!text) {
-      return NextResponse.json({
+      data?.candidates?.[0]?.content?.parts
+        ?.map((p: any) => p?.text)
+        .join("")
+        ?.trim() || "";
+    if (!text) {
+      return NextResponse.json(
+        {
+          ok: true,
+          partyId,
+          mode,
+          answer: buildLocalFallbackAnswer({
+            partyId,
+            mode,
+            question,
+            chunks,
+            docs,
+          }),
+          fallback: "LOCAL_JSON",
+        },
+        { headers: NO_STORE_HEADERS }
+      );
+    }
+    return NextResponse.json(
+      {
         ok: true,
         partyId,
         mode,
-        model_used: usedModel,
-        answer: buildLocalFallbackAnswer({ partyId, mode, question, chunks, docs }),
-        fallback: "LOCAL_JSON_EMPTY_GEMINI_TEXT",
-        chunks_used: chunks.length,
-        docs_loaded: docs.map((d: any) => ({
-          doc_id: d.doc_id,
-          title: d.title,
-          updated_at: d.updated_at,
-        })),
-      });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      partyId,
-      mode,
-      model_used: usedModel,
-      answer: text,
-      chunks_used: chunks.length,
-      docs_loaded: docs.map((d: any) => ({
-        doc_id: d.doc_id,
-        title: d.title,
-        updated_at: d.updated_at,
-      })),
-    });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "Error" }, { status: 500 });
+        answer: text,
+      },
+      { headers: NO_STORE_HEADERS }
+    );
+  } catch {
+    console.error("[party-docs] request failed");
+    return NextResponse.json(
+      { ok: false, error: "party_docs_unavailable" },
+      { status: 503, headers: NO_STORE_HEADERS }
+    );
   }
 }

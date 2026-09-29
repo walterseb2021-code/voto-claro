@@ -30,6 +30,7 @@ let _cache: { loadedAt: number; partyId: string; docs: PartyDoc[] } | null = nul
 
 // Cache (ms). Si luego quieres, lo subimos a 5 min.
 const CACHE_TTL_MS = 60_000;
+const PARTY_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
  * Carga todos los JSON oficiales del partido desde:
@@ -42,23 +43,34 @@ const CACHE_TTL_MS = 60_000;
 export async function loadPartyDocsFromPublic(
   partyId = "perufederal"
 ): Promise<PartyDoc[]> {
+  const normalizedPartyId = String(partyId ?? "").trim().toLowerCase();
+
+  if (!PARTY_ID_RE.test(normalizedPartyId)) {
+    return [];
+  }
+
   // Cache simple en memoria (server) para no leer disco en cada request
  if (
   _cache &&
-  _cache.partyId === partyId &&
+  _cache.partyId === normalizedPartyId &&
   Date.now() - _cache.loadedAt < CACHE_TTL_MS
 ) {
   return _cache.docs;
 }
 
-  const baseDir = path.join(process.cwd(), "public", "party", partyId, "docs");
+  const partyRoot = path.resolve(process.cwd(), "public", "party");
+  const baseDir = path.resolve(partyRoot, normalizedPartyId, "docs");
+
+  if (!baseDir.startsWith(`${partyRoot}${path.sep}`)) {
+    return [];
+  }
 
   let files: string[] = [];
   try {
     files = await fs.readdir(baseDir);
   } catch (e) {
     // Si la carpeta no existe o Vercel no la ve, devolvemos vacío (sin romper)
-    _cache = { loadedAt: Date.now(), partyId, docs: [] };
+    _cache = { loadedAt: Date.now(), partyId: normalizedPartyId, docs: [] };
     return [];
   }
 
@@ -117,7 +129,7 @@ export async function loadPartyDocsFromPublic(
     );
   }
 
-  _cache = { loadedAt: Date.now(), partyId, docs };
+  _cache = { loadedAt: Date.now(), partyId: normalizedPartyId, docs };
   return docs;
 }
 
