@@ -1,4 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  isAllowedParticipantMutationOrigin,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import {
+  consumeAiAnswerRateLimit,
+  getAiAnswerIpFingerprint,
+} from "@/lib/aiAnswerRateLimit";
 import {
   getPageIdFromPathname,
   getPageProfile,
@@ -8,6 +16,15 @@ import { sanitizeAssistantTextForUi } from "@/lib/assistant/sanitizeAssistantTex
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const MAX_BODY_BYTES = 64 * 1024;
+const MAX_QUESTION_CHARS = 6000;
+const MAX_PATHNAME_CHARS = 2048;
+const REQUEST_KEYS = new Set(["question", "pathname", "pageContext"]);
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store",
+};
 
 type RequestBody = {
   question?: string;
@@ -482,21 +499,77 @@ function extractGeminiText(data: any): string {
     .trim();
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as RequestBody;
-
-    const question = String(body.question ?? "").trim();
-    const pathname = String(body.pathname ?? "").trim();
-    const pageContext = isRecord(body.pageContext) ? body.pageContext : null;
-
-    if (!question) {
-      return NextResponse.json({ answer: "" }, { status: 400 });
+    if (!isAllowedParticipantMutationOrigin(request)) {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 403, headers: NO_STORE_HEADERS }
+      );
     }
 
-    if (!pageContext) {
-      return NextResponse.json({ answer: "" });
+    const body = await readBoundedJsonObject(request, MAX_BODY_BYTES);
+    if (!body) {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
     }
+
+    if (Object.keys(body).some((key) => !REQUEST_KEYS.has(key))) {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    if (typeof body.question !== "string") {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    if (body.pathname !== undefined && typeof body.pathname !== "string") {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const question = body.question.trim();
+    const pathname =
+      typeof body.pathname === "string" ? body.pathname.trim() : "";
+
+    if (!question || question.length > MAX_QUESTION_CHARS) {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    if (pathname.length > MAX_PATHNAME_CHARS) {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    if (body.pageContext === undefined || body.pageContext === null) {
+      return NextResponse.json(
+        { answer: "" },
+        { headers: NO_STORE_HEADERS }
+      );
+    }
+
+    if (!isRecord(body.pageContext)) {
+      return NextResponse.json(
+        { error: "request_invalid" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const pageContext = body.pageContext;
 
     const explicitPageId =
       typeof pageContext.pageId === "string" ? normalizePageId(pageContext.pageId) : null;
@@ -513,16 +586,52 @@ export async function POST(request: Request) {
     const profile = getPageProfile(pageId);
 
     if (!profile) {
-      return NextResponse.json({ answer: "" });
+      return NextResponse.json(
+        { answer: "" },
+        { headers: NO_STORE_HEADERS }
+      );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
+    const model = (process.env.GEMINI_MODEL || "gemini-2.0-flash").trim();
 
-    if (!apiKey) {
+    if (!apiKey || !model) {
       return NextResponse.json(
-        { error: "Falta GEMINI_API_KEY en el servidor." },
-        { status: 500 }
+        { error: "context_answer_unavailable" },
+        { status: 503, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const ipFingerprint = getAiAnswerIpFingerprint(request);
+    if (!ipFingerprint.ok) {
+      return NextResponse.json(
+        { error: "context_answer_unavailable" },
+        { status: 503, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const rateLimit = await consumeAiAnswerRateLimit(ipFingerprint.value);
+    if (!rateLimit.ok) {
+      return NextResponse.json(
+        { error: "context_answer_unavailable" },
+        { status: 503, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    if (!rateLimit.allowed) {
+      const retryAfter = String(
+        Math.max(1, Math.min(3600, rateLimit.retryAfterSeconds))
+      );
+
+      return NextResponse.json(
+        { error: "context_answer_rate_limited" },
+        {
+          status: 429,
+          headers: {
+            ...NO_STORE_HEADERS,
+            "Retry-After": retryAfter,
+          },
+        }
       );
     }
 
@@ -566,11 +675,13 @@ export async function POST(request: Request) {
     ].join("\n\n");
 
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         headers: {
           "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
         },
         body: JSON.stringify({
           systemInstruction: {
@@ -593,10 +704,10 @@ export async function POST(request: Request) {
     );
 
     if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
+      console.error("[context-answer] Gemini request failed", geminiResponse.status);
       return NextResponse.json(
-        { error: `Gemini respondió con error: ${errorText}` },
-        { status: 500 }
+        { error: "context_answer_unavailable" },
+        { status: 503, headers: NO_STORE_HEADERS }
       );
     }
 
@@ -604,16 +715,19 @@ export async function POST(request: Request) {
     const rawAnswer = extractGeminiText(data);
     const answer = finalizeAssistantAnswer(rawAnswer);
 
-    return NextResponse.json({
-      answer,
-      pageId: profile.pageId,
-      source: "context-answer",
-    });
-  } catch (error) {
-    console.error("context-answer route error", error);
     return NextResponse.json(
-      { error: "No se pudo generar la respuesta contextual." },
-      { status: 500 }
+      {
+        answer,
+        pageId: profile.pageId,
+        source: "context-answer",
+      },
+      { headers: NO_STORE_HEADERS }
+    );
+  } catch {
+    console.error("[context-answer] request failed");
+    return NextResponse.json(
+      { error: "context_answer_unavailable" },
+      { status: 503, headers: NO_STORE_HEADERS }
     );
   }
 }
