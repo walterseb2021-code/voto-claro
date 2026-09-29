@@ -1,7 +1,15 @@
 // src/app/api/ai/answer/route.ts
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  isAllowedParticipantMutationOrigin,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import {
+  consumeAiAnswerRateLimit,
+  getAiAnswerIpFingerprint,
+} from "@/lib/aiAnswerRateLimit";
 import fs from "fs/promises";
 import path from "path";
 
@@ -17,6 +25,11 @@ type PdfPagesApiResponse = {
   pages: Array<{ page: number; text: string }>;
   source?: { title?: string; page_range?: string };
 };
+
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_ID_CHARS = 96;
+const MAX_QUESTION_CHARS = 6000;
+const CANDIDATE_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function norm(s: string) {
   return (s || "")
@@ -243,34 +256,26 @@ function clipEvidence(s: string, maxChars: number) {
   return x.slice(0, maxChars).trim() + "…";
 }
 
-function getBaseUrl(req: Request) {
-  const proto = req.headers.get("x-forwarded-proto") ?? "http";
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "localhost:3000";
-  return `${proto}://${host}`;
+function getBaseUrl(req: NextRequest) {
+  return req.nextUrl.origin;
 }
 
 async function fetchLocalJson(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
-const ct = res.headers.get("content-type") || "";
-const raw = await res.text();
+  const res = await fetch(url, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  const raw = await res.text();
 
-let data: any = null;
-try {
-  data = ct.includes("application/json") ? JSON.parse(raw) : JSON.parse(raw);
-} catch {
-  data = { _nonJson: true, text: raw.slice(0, 1200) };
-}
-
-if (!res.ok) {
-  const msg = data?.error ?? (data?._nonJson ? "Non-JSON response from /api/docs/plan" : `HTTP ${res.status}`);
-  throw new Error(msg);
-}
-return data;
   if (!res.ok) {
-    const msg = (data as any)?.error ?? `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new Error("document_source_unavailable");
   }
-  return data;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("document_source_invalid");
+  }
 }
 
 function isNoEvidenceAnswer(s: string) {
@@ -297,7 +302,6 @@ function extractPagesFromAnswer(answer: string): number[] {
  */
 async function callGeminiWithPdf(args: { question: string; pdfBase64: string; filename?: string }) {
   const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
-  console.log("🧪 GEMINI CHECK → API KEY length:", apiKey.length);
   if (!apiKey) throw new Error("Falta GEMINI_API_KEY en .env.local");
 
   const model = (process.env.GEMINI_MODEL ?? "gemini-2.5-flash").trim();
@@ -352,6 +356,7 @@ async function callGeminiWithPdf(args: { question: string; pdfBase64: string; fi
 
   const r = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(30_000),
     headers: {
       "Content-Type": "application/json",
       "x-goog-api-key": apiKey,
@@ -360,10 +365,6 @@ async function callGeminiWithPdf(args: { question: string; pdfBase64: string; fi
   });
 
   const j = await r.json();
-  if (!r.ok) {
-  console.log("🧪 GEMINI HTTP STATUS:", r.status);
-  console.log("🧪 GEMINI ERROR BODY:", JSON.stringify(j).slice(0, 1200));
-}
   if (!r.ok) {
     const msg = (j as any)?.error?.message ?? (j as any)?.error ?? `Gemini error HTTP ${r.status}`;
     throw new Error(msg);
@@ -374,7 +375,6 @@ async function callGeminiWithPdf(args: { question: string; pdfBase64: string; fi
 
   const text =
     cand0?.content?.parts?.map((p: any) => p?.text ?? "").join("") ?? "";
-console.log("🧪 GEMINI RAW RESPONSE TEXT:", text.slice(0, 200));
 
   return {
     text: String(text || "").trim(),
@@ -413,7 +413,7 @@ async function resolveHvPdfPath(id: string) {
   try {
     files = (await fs.readdir(baseDir)).filter((f) => f.toLowerCase().endsWith("_hv.pdf"));
   } catch {
-    return { ok: false as const, pdfPath: expected, filename: `${id}_hv.pdf`, strategy: "dir_missing" as const, baseDir };
+    return { ok: false as const, pdfPath: expected, filename: `${id}_hv.pdf`, strategy: "dir_missing" as const };
   }
 
   const wanted = norm(id);
@@ -424,21 +424,99 @@ async function resolveHvPdfPath(id: string) {
     }
   }
 
-  return { ok: false as const, pdfPath: expected, filename: `${id}_hv.pdf`, strategy: "not_found" as const, baseDir, sample: files.slice(0, 10) };
+  return { ok: false as const, pdfPath: expected, filename: `${id}_hv.pdf`, strategy: "not_found" as const };
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const json = await req.json().catch(() => ({}));
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      );
+    }
 
-    const id = String(json?.id ?? "").trim();
-    const doc = String(json?.doc ?? "plan").trim().toLowerCase() as DocType;
-    const question = String(json?.question ?? "").trim();
+    const json = await readBoundedJsonObject(req, MAX_BODY_BYTES);
+    if (!json) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
+    }
 
-    if (!id) return NextResponse.json({ ok: false, error: "Missing id" }, { status: 400 });
-    if (doc !== "plan" && doc !== "hv")
-      return NextResponse.json({ ok: false, error: "doc must be 'plan' or 'hv'" }, { status: 400 });
-    if (!question) return NextResponse.json({ ok: false, error: "Missing question" }, { status: 400 });
+    const keys = Object.keys(json);
+    if (keys.some((key) => key !== "id" && key !== "doc" && key !== "question")) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const id = typeof json.id === "string" ? json.id.trim() : "";
+    const docRaw = json.doc === undefined ? "plan" : json.doc;
+    const question = typeof json.question === "string" ? json.question.trim() : "";
+
+    if (!id || id.length > MAX_ID_CHARS || !CANDIDATE_ID_RE.test(id)) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    if (typeof docRaw !== "string") {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const doc = docRaw.trim().toLowerCase() as DocType;
+    if (doc !== "plan" && doc !== "hv") {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    if (!question || question.length > MAX_QUESTION_CHARS) {
+      return NextResponse.json(
+        { ok: false, error: "request_invalid" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const ipFingerprint = getAiAnswerIpFingerprint(req);
+    if (!ipFingerprint.ok) {
+      return NextResponse.json(
+        { ok: false, error: "ai_answer_unavailable" },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const rateLimit = await consumeAiAnswerRateLimit(ipFingerprint.value);
+    if (!rateLimit.ok) {
+      return NextResponse.json(
+        { ok: false, error: "ai_answer_unavailable" },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    if (!rateLimit.allowed) {
+      const retryAfter = String(
+        Math.max(1, Math.min(3600, rateLimit.retryAfterSeconds))
+      );
+
+      return NextResponse.json(
+        { ok: false, error: "ai_answer_rate_limited" },
+        {
+          status: 429,
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": retryAfter,
+          },
+        }
+      );
+    }
 
     const axis = detectAxisFromQuestion(question);
     const tokens = tokenize(question);
@@ -456,14 +534,6 @@ if (!resolved.ok) {
       axis,
       answer: "No hay evidencia suficiente en las fuentes consultadas.",
       citations: [] as Source[],
-      debug: {
-        note: "PDF HV no encontrado",
-        strategy: resolved.strategy,
-        pdfPath: resolved.pdfPath,
-        baseDir: (resolved as any).baseDir,
-        sample: (resolved as any).sample,
-        tokens_used: tokens,
-      },
     },
     { headers: { "Cache-Control": "no-store" } }
   );
@@ -484,19 +554,12 @@ try {
       axis,
       answer: "No hay evidencia suficiente en las fuentes consultadas.",
       citations: [] as Source[],
-      debug: {
-        note: "PDF HV encontrado pero no se pudo leer",
-        strategy: resolved.strategy,
-        pdfPath,
-        tokens_used: tokens,
-      },
     },
     { headers: { "Cache-Control": "no-store" } }
   );
 }
 
       const pdfBase64 = pdfBuf.toString("base64");
-      const pdfBytes = pdfBuf.byteLength;
 
       const gem = await callGeminiWithPdf({
         question,
@@ -515,16 +578,6 @@ try {
             axis,
             answer: "No hay evidencia suficiente en las fuentes consultadas.",
             citations: [] as Source[],
-            debug: {
-              note: "Gemini devolvió no-evidencia (HV PDF directo)",
-              pdfPath,
-              pdf_bytes: pdfBytes,
-              tokens_used: tokens,
-              modelUsed: gem.modelUsed,
-              hasCandidates: gem.hasCandidates,
-              finishReason: gem.finishReason,
-              answer_preview: String(answerRaw || "").slice(0, 140),
-            },
           },
           { headers: { "Cache-Control": "no-store" } }
         );
@@ -542,17 +595,6 @@ try {
           axis,
           answer: answerRaw,
           citations,
-          debug: {
-            note: "HV por PDF directo",
-            pdfPath,
-            pdf_bytes: pdfBytes,
-            tokens_used: tokens,
-            pages_cited: pages,
-            modelUsed: gem.modelUsed,
-            hasCandidates: gem.hasCandidates,
-            finishReason: gem.finishReason,
-            answer_preview: String(answerRaw || "").slice(0, 140),
-          },
         },
         { headers: { "Cache-Control": "no-store" } }
       );
@@ -614,7 +656,6 @@ try {
           axis,
           answer: "No hay evidencia suficiente en las fuentes consultadas.",
           citations: [] as Source[],
-          debug: { pages_used: [], tokens_used: tokens, note: "No chunks con score>0 y fallback vacío" },
         },
         { headers: { "Cache-Control": "no-store" } }
       );
@@ -670,6 +711,7 @@ try {
 
       const r = await fetch(url, {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey,
@@ -698,11 +740,6 @@ try {
           axis,
           answer: "No hay evidencia suficiente en las fuentes consultadas.",
           citations: [] as Source[],
-          debug: {
-            pages_used: picked.map((x) => ({ page: x.page, score: x.score })),
-            tokens_used: tokens,
-            note: "Gemini devolvió no-evidencia",
-          },
         },
         { headers: { "Cache-Control": "no-store" } }
       );
@@ -724,15 +761,14 @@ try {
         axis,
         answer,
         citations,
-        debug: {
-          pages_used: picked.map((x) => ({ page: x.page, score: x.score })),
-          tokens_used: tokens,
-          chunks_picked: picked.length,
-        },
       },
       { headers: { "Cache-Control": "no-store" } }
     );
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: String(e?.message ?? e ?? "Error") }, { status: 500 });
+  } catch {
+    console.error("[ai-answer] request failed");
+    return NextResponse.json(
+      { ok: false, error: "ai_answer_unavailable" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    );
   }
 }
