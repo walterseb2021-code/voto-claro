@@ -187,7 +187,6 @@ function getEvidenceKind(answer: string, citations: Source[]) {
   return "NO_EVIDENCE" as const;
 }
 
-// ✅ Respuesta esperada de /api/web/ask (se deja por compatibilidad)
 type WebAskCitation = { source: number; url: string; quote: string };
 type WebAskSource = { source: number; title: string; url: string; domain: string };
 type WebAskResponse = {
