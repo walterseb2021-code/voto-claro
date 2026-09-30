@@ -1,11 +1,57 @@
 // src/app/api/compare/plan/route.ts
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  isAllowedParticipantMutationOrigin,
+  readBoundedJsonObject,
+} from "@/lib/participantApi";
+import {
+  consumeAiAnswerRateLimit,
+  getAiAnswerIpFingerprint,
+} from "@/lib/aiAnswerRateLimit";
 
 type Source = { title: string; url?: string; page?: number };
 
 type CompareAxis = "SEG" | "ECO" | "SAL" | "EDU";
+
+const MAX_BODY_BYTES = 8 * 1024;
+const MAX_ID_CHARS = 96;
+const MAX_QUESTION_CHARS = 6000;
+const DOCS_FETCH_TIMEOUT_MS = 20_000;
+const GEMINI_TIMEOUT_MS = 30_000;
+
+const REQUEST_KEYS = new Set(["idA", "idB", "axis", "q"]);
+const VALID_AXES = new Set<CompareAxis>(["SEG", "ECO", "SAL", "EDU"]);
+const SAFE_ID_RE = /^[\p{L}\p{N}_-]+$/u;
+
+function compareJson(
+  status: number,
+  body: Record<string, unknown>,
+  extraHeaders: Record<string, string> = {}
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, max-age=0, private",
+      Pragma: "no-cache",
+      Vary: "Origin",
+      ...extraHeaders,
+    },
+  });
+}
+
+function hasOnlyRequestKeys(body: Record<string, unknown>) {
+  return Object.keys(body).every((key) => REQUEST_KEYS.has(key));
+}
+
+function parseCompareId(value: unknown) {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text || text.length > MAX_ID_CHARS) return null;
+  if (!SAFE_ID_RE.test(text)) return null;
+  return text;
+}
 
 type PdfPagesApiResponse = {
   id: string;
@@ -229,16 +275,17 @@ function getBaseUrl(req: Request) {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "localhost:3000";
   return `${proto}://${host}`;
 }
-async function fetchPlan(req: Request, candidateId: string): Promise<PdfPagesApiResponse> {
-  const origin = new URL(req.url).origin; // ✅ siempre el mismo origen real del request
+async function fetchPlan(req: NextRequest, candidateId: string): Promise<PdfPagesApiResponse> {
+  const origin = req.nextUrl.origin;
   const url = `${origin}/api/docs/plan?id=${encodeURIComponent(candidateId)}`;
 
 const res = await fetch(url, {
-  cache: "no-store",
-  headers: {
-    cookie: req.headers.get("cookie") ?? "",
-  },
-});
+    cache: "no-store",
+    headers: {
+      cookie: req.headers.get("cookie") ?? "",
+    },
+    signal: AbortSignal.timeout(DOCS_FETCH_TIMEOUT_MS),
+  });
 
   // ✅ leer como texto primero para evitar "Unexpected token <" si llega HTML
   const text = await res.text();
@@ -259,7 +306,7 @@ const res = await fetch(url, {
 }
 
 // ✅ helper: intentar cargar plan sin romper flujo
-async function tryFetchPlan(req: Request, candidateId: string): Promise<{ ok: true; data: PdfPagesApiResponse } | { ok: false; error: string }> {
+async function tryFetchPlan(req: NextRequest, candidateId: string): Promise<{ ok: true; data: PdfPagesApiResponse } | { ok: false; error: string }> {
   try {
     const data = await fetchPlan(req, candidateId);
     return { ok: true, data };
@@ -405,6 +452,7 @@ async function geminiAnswerFromEvidence(args: {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     });
     data = await res.json();
   } catch {
@@ -502,7 +550,7 @@ async function buildAnswerWithGemini(axis: CompareAxis, docLabel: string, questi
   return { answer, pages: pagesUsed };
 }
 
-function noPlanPayload(id: string, question: string, sideLabel: "a" | "b", reason = "NO_PLAN_PDF") {
+function noPlanPayload(id: string, question: string) {
   return {
     id,
     answer:
@@ -511,107 +559,166 @@ function noPlanPayload(id: string, question: string, sideLabel: "a" | "b", reaso
       `No hay evidencia suficiente en las fuentes consultadas.\n\n` +
       `Regla: si un dato no aparece en el PDF consultado, se responde “No hay evidencia suficiente en las fuentes consultadas.”`,
     citations: [] as Source[],
-    _debug: { side: sideLabel, reason },
   };
 }
 
-export async function GET(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const idA = searchParams.get("idA") ?? searchParams.get("a");
-    const idB = searchParams.get("idB") ?? searchParams.get("b");
-    const axisRaw = (searchParams.get("axis") ?? "ECO").trim().toUpperCase();
+    if (!isAllowedParticipantMutationOrigin(req)) {
+      return compareJson(403, { error: "request_invalid" });
+    }
 
-    const axis: CompareAxis = (["SEG", "ECO", "SAL", "EDU"] as const).includes(axisRaw as any) ? (axisRaw as CompareAxis) : "ECO";
+    const json = await readBoundedJsonObject(req, MAX_BODY_BYTES);
 
-    if (!idA || !idB) return NextResponse.json({ error: "Missing idA or idB" }, { status: 400 });
+    if (!json || !hasOnlyRequestKeys(json)) {
+      return compareJson(400, { error: "request_invalid" });
+    }
 
-    const qCustom = (searchParams.get("q") ?? "").trim();
+    const idA = parseCompareId(json.idA);
+    const idB = parseCompareId(json.idB);
+
+    if (!idA || !idB) {
+      return compareJson(400, { error: "request_invalid" });
+    }
+
+    const axisRaw =
+      typeof json.axis === "string"
+        ? json.axis.trim().toUpperCase()
+        : "ECO";
+
+    if (!VALID_AXES.has(axisRaw as CompareAxis)) {
+      return compareJson(400, { error: "request_invalid" });
+    }
+
+    const axis = axisRaw as CompareAxis;
+
+    if (json.q !== undefined && typeof json.q !== "string") {
+      return compareJson(400, { error: "request_invalid" });
+    }
+
+    const qCustom = typeof json.q === "string" ? json.q.trim() : "";
+
+    if (qCustom.length > MAX_QUESTION_CHARS) {
+      return compareJson(400, { error: "request_invalid" });
+    }
+
     const question = qCustom || axisToQuestion(axis);
 
-    // ✅ 1) Intentar cargar ambos planes (sin depender de exists)
-    const aTry = await tryFetchPlan(req, idA);
-    const bTry = await tryFetchPlan(req, idB);
+    const ipFingerprint = getAiAnswerIpFingerprint(req);
+
+    if (!ipFingerprint.ok) {
+      return compareJson(503, { error: "rate_limit_unavailable" });
+    }
+
+    const rateLimit = await consumeAiAnswerRateLimit(ipFingerprint.value);
+
+    if (!rateLimit.ok) {
+      return compareJson(503, { error: "rate_limit_unavailable" });
+    }
+
+    if (!rateLimit.allowed) {
+      return compareJson(
+        429,
+        { error: "rate_limited" },
+        {
+          "Retry-After": String(Math.max(1, rateLimit.retryAfterSeconds)),
+        }
+      );
+    }
+
+    const [aTry, bTry] = await Promise.all([
+      tryFetchPlan(req, idA),
+      tryFetchPlan(req, idB),
+    ]);
 
     const hasPlanA = aTry.ok;
     const hasPlanB = bTry.ok;
 
-   // ✅ 2) Si uno o ambos no tienen plan, igual responde el que sí tiene (sin "Pendiente...")
-if (!hasPlanA || !hasPlanB) {
-  const aOut = hasPlanA ? ((aTry as any).data as PdfPagesApiResponse) : null;
-  const bOut = hasPlanB ? ((bTry as any).data as PdfPagesApiResponse) : null;
+    if (!hasPlanA || !hasPlanB) {
+      const aOut = aTry.ok ? aTry.data : null;
+      const bOut = bTry.ok ? bTry.data : null;
 
-  let aPayload: any;
-  let bPayload: any;
+      let aPayload: { id: string; answer: string; citations: Source[] };
+      let bPayload: { id: string; answer: string; citations: Source[] };
 
-  if (aOut) {
-    const aBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, aOut.pages ?? []);
-    const aTitle = aOut.source?.title ?? "Plan de Gobierno (PDF)";
-    const aCitations: Source[] = (aBuilt.pages ?? []).map((p) => ({ title: aTitle, page: p }));
-    aPayload = { id: idA, answer: aBuilt.answer, citations: aCitations };
-  } else {
-    aPayload = noPlanPayload(idA, question, "a", "NO_PLAN_PDF");
-  }
+      if (aOut) {
+        const aBuilt = await buildAnswerWithGemini(
+          axis,
+          "Plan de Gobierno",
+          question,
+          aOut.pages ?? []
+        );
+        const aTitle = aOut.source?.title ?? "Plan de Gobierno (PDF)";
+        const aCitations: Source[] = (aBuilt.pages ?? []).map((page) => ({
+          title: aTitle,
+          page,
+        }));
+        aPayload = { id: idA, answer: aBuilt.answer, citations: aCitations };
+      } else {
+        aPayload = noPlanPayload(idA, question);
+      }
 
-  if (bOut) {
-    const bBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, bOut.pages ?? []);
-    const bTitle = bOut.source?.title ?? "Plan de Gobierno (PDF)";
-    const bCitations: Source[] = (bBuilt.pages ?? []).map((p) => ({ title: bTitle, page: p }));
-    bPayload = { id: idB, answer: bBuilt.answer, citations: bCitations };
-  } else {
-    bPayload = noPlanPayload(idB, question, "b", "NO_PLAN_PDF");
-  }
+      if (bOut) {
+        const bBuilt = await buildAnswerWithGemini(
+          axis,
+          "Plan de Gobierno",
+          question,
+          bOut.pages ?? []
+        );
+        const bTitle = bOut.source?.title ?? "Plan de Gobierno (PDF)";
+        const bCitations: Source[] = (bBuilt.pages ?? []).map((page) => ({
+          title: bTitle,
+          page,
+        }));
+        bPayload = { id: idB, answer: bBuilt.answer, citations: bCitations };
+      } else {
+        bPayload = noPlanPayload(idB, question);
+      }
 
-  return NextResponse.json(
-    {
-      axis,
-      a: aPayload,
-      b: bPayload,
-      debug: {
+      return compareJson(200, {
         axis,
-        rule: "Compare plan: intenta /api/docs/plan; si falla, NO_PLAN_PDF. (No depende de exists).",
-        model: (process.env.GEMINI_MODEL ?? "gemini-1.5-flash").trim(),
-        hasPlanA,
-        hasPlanB,
-        errA: aTry.ok ? null : (aTry as any).error,
-        errB: bTry.ok ? null : (bTry as any).error,
-      },
-    },
-    { headers: { "Cache-Control": "no-store" } }
-  );
-}
+        a: aPayload,
+        b: bPayload,
+      });
+    }
 
-// ✅ 3) Si ambos tienen plan, comparación completa
-const planA = (aTry as any).data as PdfPagesApiResponse;
-const planB = (bTry as any).data as PdfPagesApiResponse;
+    const planA = aTry.data;
+    const planB = bTry.data;
 
-const aBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, planA.pages ?? []);
-const bBuilt = await buildAnswerWithGemini(axis, "Plan de Gobierno", question, planB.pages ?? []);
-
-const aTitle = planA.source?.title ?? "Plan de Gobierno (PDF)";
-const bTitle = planB.source?.title ?? "Plan de Gobierno (PDF)";
-
-const aCitations: Source[] = (aBuilt.pages ?? []).map((p) => ({ title: aTitle, page: p }));
-const bCitations: Source[] = (bBuilt.pages ?? []).map((p) => ({ title: bTitle, page: p }));
-
-return NextResponse.json(
-  {
-    axis,
-    a: { id: idA, answer: aBuilt.answer, citations: aCitations },
-    b: { id: idB, answer: bBuilt.answer, citations: bCitations },
-    debug: {
+    const aBuilt = await buildAnswerWithGemini(
       axis,
-      rule:
-        "RAG por fragmentos (chunks) + chunking que respeta bullets + score flexible + fallback por página + Gemini (sin inventar) + citas por página.",
-      model: (process.env.GEMINI_MODEL ?? "gemini-1.5-flash").trim(),
-      hasPlanA,
-      hasPlanB,
-    },
-  },
-  { headers: { "Cache-Control": "no-store" } }
-);
+      "Plan de Gobierno",
+      question,
+      planA.pages ?? []
+    );
 
-     } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "Compare failed" }, { status: 500 });
+    const bBuilt = await buildAnswerWithGemini(
+      axis,
+      "Plan de Gobierno",
+      question,
+      planB.pages ?? []
+    );
+
+    const aTitle = planA.source?.title ?? "Plan de Gobierno (PDF)";
+    const bTitle = planB.source?.title ?? "Plan de Gobierno (PDF)";
+
+    const aCitations: Source[] = (aBuilt.pages ?? []).map((page) => ({
+      title: aTitle,
+      page,
+    }));
+
+    const bCitations: Source[] = (bBuilt.pages ?? []).map((page) => ({
+      title: bTitle,
+      page,
+    }));
+
+    return compareJson(200, {
+      axis,
+      a: { id: idA, answer: aBuilt.answer, citations: aCitations },
+      b: { id: idB, answer: bBuilt.answer, citations: bCitations },
+    });
+  } catch {
+    console.error("[compare-plan] request failed");
+    return compareJson(503, { error: "compare_unavailable" });
   }
 }

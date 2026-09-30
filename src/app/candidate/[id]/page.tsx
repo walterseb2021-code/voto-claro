@@ -1952,12 +1952,16 @@ return;
     }
 
     // ✅ 2) Fallback al flujo actual por API (sin romper nada)
-    const url =
-      `/api/compare/plan?idA=${encodeURIComponent(id)}` +
-      `&idB=${encodeURIComponent(compareWith)}` +
-      `&axis=${encodeURIComponent(compareAxis)}`;
-
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch("/api/compare/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        idA: id,
+        idB: compareWith,
+        axis: compareAxis,
+      }),
+    });
     const data = await res.json();
 
     if (!res.ok) {

@@ -5858,12 +5858,16 @@ if (isDynamicContextPage && pageContext) {
         if (wantsCompare) {
           const axis = inferAxisFromQuestion(rawQ);
 
-          const url =
-            `/api/compare/plan?axis=${encodeURIComponent(axis)}` +
-            `&idA=${encodeURIComponent(candidateId)}` +
-            `&idB=${encodeURIComponent(compareCandidateId)}`;
-
-          const res = await fetch(url, { cache: "no-store" });
+          const res = await fetch("/api/compare/plan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({
+              idA: candidateId,
+              idB: compareCandidateId,
+              axis,
+            }),
+          });
           const payload = await safeReadJson(res);
 
           if (!res.ok) {
