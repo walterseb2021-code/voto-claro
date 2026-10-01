@@ -1,8 +1,14 @@
-// src/app/api/candidates/profile/route.ts
+﻿// src/app/api/candidates/profile/route.ts
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { MOCK_CANDIDATES, CandidateRole } from "@/lib/votoclaro/mockCandidates";
+
+const MAX_ID_CHARS = 96;
+const MAX_IDS = 20;
+const MAX_IDS_RAW_CHARS = MAX_IDS * MAX_ID_CHARS + (MAX_IDS - 1);
+const SAFE_ID_RE = /^[\p{L}\p{N}_-]+$/u;
+const PROFILE_QUERY_KEYS = new Set(["id", "ids"]);
 
 type Profile = {
   id: string;
@@ -10,10 +16,26 @@ type Profile = {
   party_name: string | null;
   role: CandidateRole | null;
   photo_url: string | null;
-  hv_pdf_exists: boolean;
-  hv_pdf_path: string; // relativo (para UI). "" si no existe
   hv_summary: string;
 };
+
+function profileJson(status: number, body: Record<string, unknown>) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, max-age=0, private",
+      Pragma: "no-cache",
+    },
+  });
+}
+
+function isSafeCandidateId(value: string) {
+  return (
+    value.length >= 1 &&
+    value.length <= MAX_ID_CHARS &&
+    SAFE_ID_RE.test(value)
+  );
+}
 
 function humanizeFromSlug(slug: string) {
   return slug
@@ -28,48 +50,25 @@ function pickLocalPhotoUrl(candidateId: string) {
   const exts = ["png", "jpg", "jpeg", "webp"];
 
   for (const ext of exts) {
-    const abs = path.join(baseDir, `${candidateId}.${ext}`);
-    if (fs.existsSync(abs)) return `/candidates/${candidateId}.${ext}`;
+    const filename = `${candidateId}.${ext}`;
+    const abs = path.join(baseDir, filename);
+    if (fs.existsSync(abs)) return `/candidates/${filename}`;
   }
-  return null;
-}
 
-/**
- * ✅ Encuentra HV PDF en data/docs/persona/
- * Acepta:
- *  - <id>_hv.pdf
- *  - <id>.pdf
- */
-function findHvPdf(candidateId: string): { abs: string; rel: string } | null {
-  const dir = path.join(process.cwd(), "data", "docs", "persona");
-  const patterns = [`${candidateId}_hv.pdf`, `${candidateId}.pdf`];
-
-  for (const name of patterns) {
-    const abs = path.join(dir, name);
-    if (fs.existsSync(abs)) {
-      return { abs, rel: `data/docs/persona/${name}` };
-    }
-  }
   return null;
 }
 
 function buildProfile(id: string): Profile {
-  const hv = findHvPdf(id);
+  const candidate = MOCK_CANDIDATES.find((c) => c.id === id) ?? null;
 
-  // ✅ Enriquecer si está en mock (nombre real/partido/rol)
-  const m = MOCK_CANDIDATES.find((c) => c.id === id) ?? null;
-
-  const full_name = m?.full_name ?? humanizeFromSlug(id);
-  const party_name = m?.party_name ?? null;
-  const role = m?.role ?? null;
-
-  // ✅ Foto local por id (si existe)
+  const full_name = candidate?.full_name ?? humanizeFromSlug(id);
+  const party_name = candidate?.party_name ?? null;
+  const role = candidate?.role ?? null;
   const photo_url = pickLocalPhotoUrl(id);
 
-  // ✅ Resumen mínimo (sin inventar)
-  const hv_summary = m
+  const hv_summary = candidate
     ? `${full_name} figura como candidato/a${party_name ? ` por ${party_name}` : ""}.`
-    : `${full_name} figura en el padrón local de candidatos.`;
+    : `${full_name} figura en el padrÃ³n local de candidatos.`;
 
   return {
     id,
@@ -77,54 +76,71 @@ function buildProfile(id: string): Profile {
     party_name,
     role,
     photo_url,
-    hv_pdf_exists: Boolean(hv),
-    hv_pdf_path: hv?.rel ?? "",
-    hv_summary: hv_summary + " (Nota: el resumen detallado se generará leyendo el PDF).",
+    hv_summary:
+      hv_summary +
+      " (Nota: el resumen detallado se generarÃ¡ leyendo el PDF).",
   };
 }
 
-function parseIdsParam(raw: string) {
-  return raw
-    .split(",")
-    .map((x) => String(x || "").trim())
-    .filter(Boolean)
-    .slice(0, 20); // límite defensivo
+function parseIdsParam(raw: string): string[] | null {
+  if (raw.length < 1 || raw.length > MAX_IDS_RAW_CHARS) return null;
+
+  const ids = raw.split(",").map((value) => value.trim());
+
+  if (
+    ids.length < 1 ||
+    ids.length > MAX_IDS ||
+    ids.some((id) => !isSafeCandidateId(id))
+  ) {
+    return null;
+  }
+
+  return Array.from(new Set(ids));
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+  try {
+    const { searchParams } = new URL(req.url);
+    const entries = Array.from(searchParams.entries());
 
-  // ✅ Nuevo: ids (multi)
-  const idsRaw = (searchParams.get("ids") ?? "").trim();
-  if (idsRaw) {
-    const ids = parseIdsParam(idsRaw);
-
-    if (!ids.length) {
-      return NextResponse.json({ profiles: {} }, { status: 400 });
+    if (
+      entries.some(([key]) => !PROFILE_QUERY_KEYS.has(key)) ||
+      searchParams.getAll("id").length > 1 ||
+      searchParams.getAll("ids").length > 1
+    ) {
+      return profileJson(400, { error: "request_invalid" });
     }
 
-    const profiles: Record<string, Profile | null> = {};
-    for (const id of ids) {
-      // si viene un id inválido, devolvemos null (no rompemos UI)
-      if (!id) {
-        profiles[id] = null;
-        continue;
+    const idRaw = searchParams.get("id");
+    const idsRaw = searchParams.get("ids");
+
+    if ((idRaw === null) === (idsRaw === null)) {
+      return profileJson(400, { error: "request_invalid" });
+    }
+
+    if (idsRaw !== null) {
+      const ids = parseIdsParam(idsRaw.trim());
+
+      if (!ids) {
+        return profileJson(400, { error: "request_invalid" });
       }
-      profiles[id] = buildProfile(id);
+
+      const profiles: Record<string, Profile> = {};
+      for (const id of ids) {
+        profiles[id] = buildProfile(id);
+      }
+
+      return profileJson(200, { profiles });
     }
 
-    return NextResponse.json({ profiles }, { headers: { "Cache-Control": "no-store" } });
+    const id = (idRaw ?? "").trim();
+    if (!isSafeCandidateId(id)) {
+      return profileJson(400, { error: "request_invalid" });
+    }
+
+    return profileJson(200, { profile: buildProfile(id) });
+  } catch {
+    console.error("[candidates-profile] request failed");
+    return profileJson(503, { error: "candidate_profile_unavailable" });
   }
-
-  // ✅ Modo clásico: id (uno)
-  const id = (searchParams.get("id") ?? "").trim();
-  if (!id) {
-    return NextResponse.json({ profile: null }, { status: 400 });
-  }
-
-  // ✅ Antes: si no había HV devolvía 404 y rompía pantallas.
-  // Ahora: devolvemos ficha igual, marcando hv_pdf_exists=false.
-  const profile = buildProfile(id);
-
-  return NextResponse.json({ profile }, { headers: { "Cache-Control": "no-store" } });
 }
