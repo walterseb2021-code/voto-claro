@@ -5,6 +5,21 @@ import { NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
+const INDEX_QUERY_KEYS = new Set(["onlyWithPlan"]);
+
+function candidatesIndexJson(
+  status: number,
+  body: Record<string, unknown>
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, max-age=0, private",
+      Pragma: "no-cache",
+    },
+  });
+}
+
 type CandidateLite = {
   id: string;
   full_name: string;
@@ -83,7 +98,25 @@ async function hasPlanPdfForCandidate(c: CandidateLite) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const onlyWithPlan = searchParams.get("onlyWithPlan") === "1";
+    const entries = Array.from(searchParams.entries());
+
+    if (
+      entries.some(([key]) => !INDEX_QUERY_KEYS.has(key)) ||
+      searchParams.getAll("onlyWithPlan").length > 1
+    ) {
+      return candidatesIndexJson(400, { error: "request_invalid" });
+    }
+
+    const onlyWithPlanRaw = searchParams.get("onlyWithPlan");
+    if (
+      onlyWithPlanRaw !== null &&
+      onlyWithPlanRaw !== "0" &&
+      onlyWithPlanRaw !== "1"
+    ) {
+      return candidatesIndexJson(400, { error: "request_invalid" });
+    }
+
+    const onlyWithPlan = onlyWithPlanRaw === "1";
 
     // 1) IDs desde PDFs locales (opcional)
     const personaDir = path.join(process.cwd(), "data", "docs", "persona");
@@ -146,26 +179,12 @@ export async function GET(req: Request) {
     // Orden estable para el UI
     candidates.sort((a, b) => a.full_name.localeCompare(b.full_name, "es", { sensitivity: "base" }));
 
-    return NextResponse.json(
-      {
-        candidates,
-        count: candidates.length,
-        source: {
-          pdf_dir: "data/docs/persona/*_hv.pdf",
-          json_optional: "data/candidates.json",
-          plan_dir: "data/docs/partido/*_plan.pdf",
-          filter_onlyWithPlan: onlyWithPlan,
-          filtered_out_no_plan: filteredOutNoPlan,
-          note:
-            "La lista sale de JSON + PDFs (unión). Si onlyWithPlan=1, se filtra por existencia del PDF de plan por party_name.",
-        },
-      },
-      { headers: { "Cache-Control": "no-store" } }
-    );
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: "Failed to build candidates index", detail: e?.message ?? String(e) },
-      { status: 500 }
-    );
+    return candidatesIndexJson(200, {
+      candidates,
+      count: candidates.length,
+    });
+  } catch {
+    console.error("[candidates-index] request failed");
+    return candidatesIndexJson(503, { error: "candidates_index_unavailable" });
   }
 }

@@ -66,40 +66,75 @@ function readCandidateIdsFromPersonaFolder(): string[] {
   return unique;
 }
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const q = (searchParams.get("q") ?? "").trim().toLowerCase();
+const MAX_QUERY_CHARS = 120;
+const SEARCH_QUERY_KEYS = new Set(["q"]);
 
-  if (q.length < 2) return NextResponse.json({ items: [] });
-
-  // ✅ 1) Base: ids desde filesystem
-  const ids = readCandidateIdsFromPersonaFolder();
-
-  // ✅ 2) Índice de enriquecimiento (nombre real/partido/rol SOLO si lo tienes validado)
-  const enrichIndex = new Map<string, { full_name: string; party_name: string; role: CandidateRole }>();
-  for (const c of MOCK_CANDIDATES) enrichIndex.set(c.id, c);
-
-  // ✅ 3) Lista completa
-  const all: Candidate[] = ids.map((id) => {
-    const enriched = enrichIndex.get(id);
-
-    return {
-      id,
-      full_name: enriched?.full_name ?? humanizeFromSlug(id),
-      party_name: enriched?.party_name ?? null,
-      role: enriched?.role ?? null,
-      photo_url: resolveLocalPhotoUrl(id),
-    };
+function candidatesSearchJson(
+  status: number,
+  body: Record<string, unknown>
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, max-age=0, private",
+      Pragma: "no-cache",
+    },
   });
+}
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const entries = Array.from(searchParams.entries());
 
-  // ✅ 4) Filtro por nombre o partido
-  const items = all
-    .filter((c) => {
-      const name = c.full_name.toLowerCase();
-      const party = (c.party_name ?? "").toLowerCase();
-      return name.includes(q) || party.includes(q);
-    })
-    .slice(0, 30);
+    if (
+      entries.some(([key]) => !SEARCH_QUERY_KEYS.has(key)) ||
+      searchParams.getAll("q").length > 1
+    ) {
+      return candidatesSearchJson(400, { error: "request_invalid" });
+    }
 
-  return NextResponse.json({ items });
+    const rawQuery = (searchParams.get("q") ?? "").trim();
+    if (rawQuery.length > MAX_QUERY_CHARS) {
+      return candidatesSearchJson(400, { error: "request_invalid" });
+    }
+
+    const q = rawQuery.toLowerCase();
+    if (q.length < 2) {
+      return candidatesSearchJson(200, { items: [] });
+    }
+
+    const ids = readCandidateIdsFromPersonaFolder();
+
+    const enrichIndex = new Map<
+      string,
+      { full_name: string; party_name: string; role: CandidateRole }
+    >();
+    for (const candidate of MOCK_CANDIDATES) {
+      enrichIndex.set(candidate.id, candidate);
+    }
+
+    const all: Candidate[] = ids.map((id) => {
+      const enriched = enrichIndex.get(id);
+      return {
+        id,
+        full_name: enriched?.full_name ?? humanizeFromSlug(id),
+        party_name: enriched?.party_name ?? null,
+        role: enriched?.role ?? null,
+        photo_url: resolveLocalPhotoUrl(id),
+      };
+    });
+
+    const items = all
+      .filter((candidate) => {
+        const name = candidate.full_name.toLowerCase();
+        const party = (candidate.party_name ?? "").toLowerCase();
+        return name.includes(q) || party.includes(q);
+      })
+      .slice(0, 30);
+
+    return candidatesSearchJson(200, { items });
+  } catch {
+    console.error("[candidates-search] request failed");
+    return candidatesSearchJson(503, { error: "candidates_search_unavailable" });
+  }
 }
