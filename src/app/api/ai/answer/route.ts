@@ -10,6 +10,10 @@ import {
   consumeAiAnswerRateLimit,
   getAiAnswerIpFingerprint,
 } from "@/lib/aiAnswerRateLimit";
+import {
+  getInternalDocsPlanToken,
+  INTERNAL_DOCS_PLAN_HEADER,
+} from "@/lib/internalDocsAuth";
 import fs from "fs/promises";
 import path from "path";
 
@@ -260,9 +264,13 @@ function getBaseUrl(req: NextRequest) {
   return req.nextUrl.origin;
 }
 
-async function fetchLocalJson(url: string) {
+async function fetchLocalJson(
+  url: string,
+  headers: Record<string, string> = {}
+) {
   const res = await fetch(url, {
     cache: "no-store",
+    headers,
     signal: AbortSignal.timeout(15_000),
   });
   const raw = await res.text();
@@ -608,7 +616,19 @@ try {
         ? `${base}/api/docs/plan?id=${encodeURIComponent(id)}`
         : `${base}/api/docs/hv?id=${encodeURIComponent(id)}`;
 
-    const data = (await fetchLocalJson(sourceUrl)) as PdfPagesApiResponse;
+    const sourceHeaders: Record<string, string> = {};
+    if (doc === "plan") {
+      const internalToken = getInternalDocsPlanToken(id);
+      if (!internalToken) {
+        throw new Error("document_source_unavailable");
+      }
+      sourceHeaders[INTERNAL_DOCS_PLAN_HEADER] = internalToken;
+    }
+
+    const data = (await fetchLocalJson(
+      sourceUrl,
+      sourceHeaders
+    )) as PdfPagesApiResponse;
 
     const allChunks: Array<{ page: number; chunk: string; score: number }> = [];
     for (const p of data.pages ?? []) {

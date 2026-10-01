@@ -10,6 +10,10 @@ import {
   consumeAiAnswerRateLimit,
   getAiAnswerIpFingerprint,
 } from "@/lib/aiAnswerRateLimit";
+import {
+  getInternalDocsPlanToken,
+  INTERNAL_DOCS_PLAN_HEADER,
+} from "@/lib/internalDocsAuth";
 
 type Source = { title: string; url?: string; page?: number };
 
@@ -270,42 +274,44 @@ function detectTopic(question: string) {
   return "Tema";
 }
 
-function getBaseUrl(req: Request) {
-  const proto = req.headers.get("x-forwarded-proto") ?? "http";
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "localhost:3000";
-  return `${proto}://${host}`;
-}
-async function fetchPlan(req: NextRequest, candidateId: string): Promise<PdfPagesApiResponse> {
+async function fetchPlan(
+  req: NextRequest,
+  candidateId: string
+): Promise<PdfPagesApiResponse> {
+  const internalToken = getInternalDocsPlanToken(candidateId);
+  if (!internalToken) {
+    throw new Error("document_source_unavailable");
+  }
+
   const origin = req.nextUrl.origin;
   const url = `${origin}/api/docs/plan?id=${encodeURIComponent(candidateId)}`;
 
-const res = await fetch(url, {
+  const res = await fetch(url, {
     cache: "no-store",
     headers: {
       cookie: req.headers.get("cookie") ?? "",
+      [INTERNAL_DOCS_PLAN_HEADER]: internalToken,
     },
     signal: AbortSignal.timeout(DOCS_FETCH_TIMEOUT_MS),
   });
 
-  // ✅ leer como texto primero para evitar "Unexpected token <" si llega HTML
   const text = await res.text();
-  let data: any = null;
+  let data: unknown = null;
 
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error(`docs/plan devolvió no-JSON (status ${res.status}) (id=${candidateId})`);
+    throw new Error("document_source_invalid");
   }
 
   if (!res.ok) {
-    const msg = data?.error ?? "No se pudo cargar el plan";
-    throw new Error(`${msg} (id=${candidateId})`);
+    throw new Error("document_source_unavailable");
   }
 
   return data as PdfPagesApiResponse;
 }
 
-// ✅ helper: intentar cargar plan sin romper flujo
+// helper: intentar cargar plan sin romper flujo
 async function tryFetchPlan(req: NextRequest, candidateId: string): Promise<{ ok: true; data: PdfPagesApiResponse } | { ok: false; error: string }> {
   try {
     const data = await fetchPlan(req, candidateId);

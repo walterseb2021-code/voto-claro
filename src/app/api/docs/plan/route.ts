@@ -2,12 +2,29 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import {
+  INTERNAL_DOCS_PLAN_HEADER,
+  isValidInternalDocsPlanToken,
+} from "@/lib/internalDocsAuth";
 import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { MOCK_CANDIDATES } from "@/lib/votoclaro/mockCandidates";
 import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "url";
+
+const MAX_ID_CHARS = 96;
+const SAFE_ID_RE = /^[\p{L}\p{N}_-]+$/u;
+
+function docsPlanJson(status: number, body: Record<string, unknown>) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, max-age=0, private",
+      Pragma: "no-cache",
+    },
+  });
+}
 // ✅ DOMMatrix shim (clonable) para pdfjs en Vercel/Node
 // Evita usar el paquete "dommatrix" (puede causar DataCloneError con structuredClone)
 class DOMMatrixShim {
@@ -1432,111 +1449,66 @@ function sanitizePdfText(input: string): string {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-   const anyId = (searchParams.get("id") ?? "").trim();
-   const candidateId = anyId; // ✅ siempre definido (si id era partySlug, igual queda como input)
-let mock: any = null;       // ✅ lo usaremos en party_resolution sin romper scope
+    const anyId = (searchParams.get("id") ?? "").trim();
 
-if (!anyId) {
-  return NextResponse.json(
-
-    { error: "Falta parámetro 'id' en la URL." },
-    { status: 400 }
-  );
-}
-
-// ✅ PRO: id puede ser candidateId o partyId
-const resolved = resolvePartyIdFromAnyId(anyId);
-
-// Si resolvePartyIdFromAnyId no logró nada, tratamos como candidateId para inferir desde HV
-let partyId: string | null = resolved.partyId;
-
-let partyName: string | null = null;
-let inferredFromHv: { partyName: string; hvPage: number } | null = null;
-
-// Si el id era candidateId, buscamos partido por mock/HV
-if (resolved.reason !== "ASSUME_PARTY_ID") {
-
-  const candidateId = anyId;
-
- mock = MOCK_CANDIDATES.find((c) => c.id === candidateId) ?? null;
-partyName = mock?.party_name ?? null;
-
-  if (!partyName) {
-    inferredFromHv = await inferPartyNameFromHv(candidateId);
-    partyName = inferredFromHv?.partyName ?? null;
-  }
-
-  if (!partyName && !partyId) {
-   return NextResponse.json(
-
-      {
-        error:
-          "No se pudo determinar el partido del candidato (ni por mock ni por HV).",
-        rule: "Sin partido identificado no se puede cargar el plan.",
-        debug: { anyId, resolved },
-      },
-      { status: 404 }
-    );
-  }
-
-  if (!partyId && partyName) partyId = slugifyPartyName(partyName);
-} else {
-  // ✅ id ya era partyId
-  partyName = null;
-}
-
-if (!partyId) {
-  return NextResponse.json(
-
-    {
-      error: "No se pudo resolver partyId.",
-      debug: { anyId, resolved },
-    },
-    { status: 404 }
-  );
-}
-
-// partyId ya viene resuelto arriba (candidateId o partyId directo)
-const pdfPath = planPdfPathFromPartyId(partyId);
-
-if (!pdfPath) {
-
-      return NextResponse.json(
-        {
-          error: "Plan de Gobierno no encontrado para el partido identificado.",
-          party_name: partyName,
-          party_id: partyId,
-expected_paths: [
-  `data/docs/partido/${partyId}_plan.pdf`,
-  `data/docs/plan/${partyId}_plan.pdf`,
-  `data/docs/partido/(variacion con tildes)_plan.pdf`,
-],
-
-          note:
-            "Puede significar: (1) el partido no presentó plan, o (2) el archivo aún no fue cargado/nombrado con ese party_id.",
-          hv_party_source: inferredFromHv ? { page: inferredFromHv.hvPage, label: "Organización política (HV)" } : null,
-        },
-        { status: 404 }
-      );
+    if (!anyId || anyId.length > MAX_ID_CHARS || !SAFE_ID_RE.test(anyId)) {
+      return docsPlanJson(400, { error: "request_invalid" });
     }
 
-const maxPagesToTry = 60;
-const pages: Array<{ page: number; text: string }> = [];
+    const internalToken = req.headers.get(INTERNAL_DOCS_PLAN_HEADER);
+    if (!isValidInternalDocsPlanToken(anyId, internalToken)) {
+      return docsPlanJson(403, { error: "request_invalid" });
+    }
 
-for (let p = 1; p <= maxPagesToTry; p++) {
-  try {
-    const raw = await extractPageText(pdfPath, p);
-    const fixed = fixMojibake(raw);
-    const text = sanitizePdfText(fixed).trim();
+    const candidateId = anyId;
+    let mock: any = null;
 
-    if (text) pages.push({ page: p, text });
+    const resolved = resolvePartyIdFromAnyId(anyId);
+    let partyId: string | null = resolved.partyId;
+    let partyName: string | null = null;
+    let inferredFromHv: { partyName: string; hvPage: number } | null = null;
 
-  } catch (e: any) {
-    const msg = String(e?.message ?? "");
-    if (msg.includes("Wrong page range") || msg.includes("first page")) break;
-    throw e;
-  }
-}
+    if (resolved.reason !== "ASSUME_PARTY_ID") {
+      mock = MOCK_CANDIDATES.find((c) => c.id === candidateId) ?? null;
+      partyName = mock?.party_name ?? null;
+
+      if (!partyName) {
+        inferredFromHv = await inferPartyNameFromHv(candidateId);
+        partyName = inferredFromHv?.partyName ?? null;
+      }
+
+      if (!partyName && !partyId) {
+        return docsPlanJson(404, { error: "document_unavailable" });
+      }
+
+      if (!partyId && partyName) partyId = slugifyPartyName(partyName);
+    }
+
+    if (!partyId) {
+      return docsPlanJson(404, { error: "document_unavailable" });
+    }
+
+    const pdfPath = planPdfPathFromPartyId(partyId);
+    if (!pdfPath) {
+      return docsPlanJson(404, { error: "document_unavailable" });
+    }
+
+    const maxPagesToTry = 60;
+    const pages: Array<{ page: number; text: string }> = [];
+
+    for (let p = 1; p <= maxPagesToTry; p++) {
+      try {
+        const raw = await extractPageText(pdfPath, p);
+        const fixed = fixMojibake(raw);
+        const text = sanitizePdfText(fixed).trim();
+
+        if (text) pages.push({ page: p, text });
+      } catch (e: any) {
+        const msg = String(e?.message ?? "");
+        if (msg.includes("Wrong page range") || msg.includes("first page")) break;
+        throw e;
+      }
+    }
 
     return NextResponse.json(
       {
@@ -1550,23 +1522,17 @@ for (let p = 1; p <= maxPagesToTry; p++) {
           title: "Plan de Gobierno (PDF por partido) (cargado por el admin)",
           page_range: pages.length ? `1-${pages.length}` : "0",
         },
-        party_resolution: {
-          from_mock: Boolean(mock?.party_name),
-          from_hv: inferredFromHv ? { page: inferredFromHv.hvPage, field: "Organización política (HV)" } : null,
-        },
+        from_mock: Boolean(mock?.party_name),
+        from_hv: inferredFromHv
+          ? { page: inferredFromHv.hvPage, field: "Organización política (HV)" }
+          : null,
         note:
           "Extracción por página en 3 modos: (A) BBOX anti-tablas + (B) LAYOUT refluido + (C) PLAIN refluido tipo PDF-chat; selector automático (tablas=>BBOX, narrativo=>PLAIN).",
       },
       { headers: { "Cache-Control": "no-store" } }
     );
- } catch (e: any) {
-  return NextResponse.json(
-    {
-      error: e?.message ?? "DOCS_PLAN_FAILED",
-      stack: String(e?.stack ?? ""),
-    },
-     { status: 500 }
-    );
+  } catch {
+    console.error("[docs-plan] request failed");
+    return docsPlanJson(503, { error: "document_source_unavailable" });
   }
 }
-
