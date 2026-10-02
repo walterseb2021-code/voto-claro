@@ -148,8 +148,7 @@ export async function GET(req: NextRequest) {
 
     return jsonResponse(
       {
-        error:
-          err?.message || "No se pudo cargar la administración de capacitaciones.",
+        error: "No se pudo cargar la administraci\u00f3n de capacitaciones.",
       },
       { status: 500 }
     );

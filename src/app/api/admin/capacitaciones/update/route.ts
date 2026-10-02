@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
 
     return jsonResponse(
       {
-        error: err?.message || "No se pudo actualizar la capacitación.",
+        error: "No se pudo actualizar la capacitaci\u00f3n.",
       },
       { status: 500 }
     );

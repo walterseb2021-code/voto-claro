@@ -84,8 +84,9 @@ export async function GET(req: NextRequest) {
     const { data, error } = await q;
 
     if (error) {
+      console.error("[admin/reto/winners] Supabase operation failed", error);
       return NextResponse.json(
-        { error: "SUPABASE_ERROR", detail: error.message },
+        { error: "SUPABASE_ERROR" },
         { status: 500 }
       );
     }
@@ -99,8 +100,9 @@ export async function GET(req: NextRequest) {
 
     return res;
   } catch (e: any) {
+    console.error("[admin/reto/winners] unexpected error", e);
     return NextResponse.json(
-      { error: "EXCEPTION", detail: String(e?.message ?? e) },
+      { error: "EXCEPTION" },
       { status: 500 }
     );
   }
@@ -156,8 +158,9 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle();
 
     if (error) {
+      console.error("[admin/reto/winners] Supabase operation failed", error);
       return NextResponse.json(
-        { error: "SUPABASE_ERROR", detail: error.message },
+        { error: "SUPABASE_ERROR" },
         { status: 500 }
       );
     }
@@ -175,8 +178,9 @@ export async function PATCH(req: NextRequest) {
 
     return res;
   } catch (e: any) {
+    console.error("[admin/reto/winners] unexpected error", e);
     return NextResponse.json(
-      { error: "EXCEPTION", detail: String(e?.message ?? e) },
+      { error: "EXCEPTION" },
       { status: 500 }
     );
   }

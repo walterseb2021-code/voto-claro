@@ -31,16 +31,19 @@ export async function POST(req: NextRequest) {
     // Esto elimina cookies de sesión server-side
     const { error } = await supabase.auth.signOut();
     if (error) {
+      console.error("[admin/logout] signOut failed", error);
+
       return NextResponse.json(
-        { error: "SIGNOUT_FAILED", detail: error.message },
+        { error: "SIGNOUT_FAILED" },
         { status: 500 }
       );
     }
 
     return res;
   } catch (e: any) {
+    console.error("[admin/logout] unexpected error", e);
     return NextResponse.json(
-      { error: "EXCEPTION", detail: String(e?.message ?? e) },
+      { error: "EXCEPTION" },
       { status: 500 }
     );
   }

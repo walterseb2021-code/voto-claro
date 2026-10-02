@@ -55,8 +55,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
+      console.error("[admin/session] setSession failed", error);
+
       return NextResponse.json(
-        { error: "SET_SESSION_FAILED", detail: error.message },
+        { error: "SET_SESSION_FAILED" },
         { status: 401 }
       );
     }
@@ -78,8 +80,9 @@ export async function POST(req: NextRequest) {
 
     return res;
   } catch (e: any) {
+    console.error("[admin/session] unexpected error", e);
     return NextResponse.json(
-      { error: "EXCEPTION", detail: String(e?.message ?? e) },
+      { error: "EXCEPTION" },
       { status: 500 }
     );
   }

@@ -197,7 +197,10 @@ if (rawLimit !== null) {
     if (status) q = q.eq("status", status);
 
     const { data, error } = await q;
-    if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+    if (error) {
+      console.error("[admin/comments] Supabase operation failed", error);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
+    }
 
     const { data: topicRow, error: topicError } = await supabase
       .from("weekly_topics")
@@ -210,7 +213,8 @@ if (rawLimit !== null) {
       .maybeSingle();
 
     if (topicError) {
-      return respond({ error: "SUPABASE_ERROR", detail: topicError.message }, 500);
+      console.error("[admin/comments] Supabase operation failed", topicError);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
     }
 
     const { data: archivedTopics, error: archivedTopicsError } = await supabase
@@ -223,7 +227,8 @@ if (rawLimit !== null) {
       .limit(10);
 
     if (archivedTopicsError) {
-      return respond({ error: "SUPABASE_ERROR", detail: archivedTopicsError.message }, 500);
+      console.error("[admin/comments] Supabase operation failed", archivedTopicsError);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
     }
 
     const { data: videoRows, error: videoError } = await supabase
@@ -233,7 +238,8 @@ if (rawLimit !== null) {
       .limit(100);
 
     if (videoError) {
-      return respond({ error: "SUPABASE_ERROR", detail: videoError.message }, 500);
+      console.error("[admin/comments] Supabase operation failed", videoError);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
     }
 
     const { data: founderQuestions, error: founderQuestionsError } = await supabase
@@ -245,7 +251,8 @@ if (rawLimit !== null) {
       .limit(100);
 
     if (founderQuestionsError) {
-      return respond({ error: "SUPABASE_ERROR", detail: founderQuestionsError.message }, 500);
+      console.error("[admin/comments] Supabase operation failed", founderQuestionsError);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
     }
 
     const { data: commentAwards, error: commentAwardsError } = await supabase
@@ -257,7 +264,8 @@ if (rawLimit !== null) {
       .limit(50);
 
     if (commentAwardsError) {
-      return respond({ error: "SUPABASE_ERROR", detail: commentAwardsError.message }, 500);
+      console.error("[admin/comments] Supabase operation failed", commentAwardsError);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
     }
 
     return respond({
@@ -270,7 +278,8 @@ if (rawLimit !== null) {
       commentAwards: commentAwards ?? [],
     });
   } catch (e: any) {
-    return respond({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
+    console.error("[admin/comments] unexpected error", e);
+    return respond({ error: "SERVER_ERROR" }, 500);
   }
 }
 
@@ -316,7 +325,8 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (error) {
-        return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+        console.error("[admin/comments] Supabase operation failed", error);
+        return respond({ error: "SUPABASE_ERROR" }, 500);
       }
 
       return respond({ ok: true, weeklyTopic: data });
@@ -333,7 +343,8 @@ export async function POST(req: NextRequest) {
       });
 
       if (error) {
-        return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+        console.error("[admin/comments] Supabase operation failed", error);
+        return respond({ error: "SUPABASE_ERROR" }, 500);
       }
 
       return respond({
@@ -374,7 +385,10 @@ export async function POST(req: NextRequest) {
         }
       );
 
-      if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+      if (error) {
+      console.error("[admin/comments] Supabase operation failed", error);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
+    }
 
       return respond({ ok: true });
     }
@@ -398,7 +412,10 @@ export async function POST(req: NextRequest) {
         }
       );
 
-      if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+      if (error) {
+      console.error("[admin/comments] Supabase operation failed", error);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
+    }
 
       return respond({ ok: true });
     }
@@ -441,7 +458,10 @@ export async function POST(req: NextRequest) {
         }
       );
 
-      if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+      if (error) {
+      console.error("[admin/comments] Supabase operation failed", error);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
+    }
 
       return respond({ ok: true });
     }
@@ -478,7 +498,10 @@ export async function POST(req: NextRequest) {
         }
       );
 
-      if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+      if (error) {
+      console.error("[admin/comments] Supabase operation failed", error);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
+    }
 
       return respond({ ok: true });
     }
@@ -508,11 +531,15 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+    if (error) {
+      console.error("[admin/comments] Supabase operation failed", error);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
+    }
 
     return respond({ ok: true });
   } catch (e: any) {
-    return respond({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
+    console.error("[admin/comments] unexpected error", e);
+    return respond({ error: "SERVER_ERROR" }, 500);
   }
 }
 
@@ -555,10 +582,14 @@ export async function PATCH(req: NextRequest) {
       p_request_id: requestId,
     });
 
-    if (error) return respond({ error: "SUPABASE_ERROR", detail: error.message }, 500);
+    if (error) {
+      console.error("[admin/comments] Supabase operation failed", error);
+      return respond({ error: "SUPABASE_ERROR" }, 500);
+    }
 
     return respond({ ok: true });
   } catch (e: any) {
-    return respond({ error: "SERVER_ERROR", detail: e?.message ?? String(e) }, 500);
+    console.error("[admin/comments] unexpected error", e);
+    return respond({ error: "SERVER_ERROR" }, 500);
   }
 }
