@@ -611,19 +611,16 @@ try {
     // ✅ PLAN: sin cambios (por ahora)
     const base = getBaseUrl(req);
 
-    const sourceUrl =
-      doc === "plan"
-        ? `${base}/api/docs/plan?id=${encodeURIComponent(id)}`
-        : `${base}/api/docs/hv?id=${encodeURIComponent(id)}`;
+    const sourceUrl = `${base}/api/docs/plan?id=${encodeURIComponent(id)}`;
 
-    const sourceHeaders: Record<string, string> = {};
-    if (doc === "plan") {
-      const internalToken = getInternalDocsPlanToken(id);
-      if (!internalToken) {
-        throw new Error("document_source_unavailable");
-      }
-      sourceHeaders[INTERNAL_DOCS_PLAN_HEADER] = internalToken;
+    const internalToken = getInternalDocsPlanToken(id);
+    if (!internalToken) {
+      throw new Error("document_source_unavailable");
     }
+
+    const sourceHeaders: Record<string, string> = {
+      [INTERNAL_DOCS_PLAN_HEADER]: internalToken,
+    };
 
     const data = (await fetchLocalJson(
       sourceUrl,
@@ -765,11 +762,7 @@ try {
       );
     }
 
-    const title =
-      data.source?.title ??
-      (doc === "plan"
-        ? "Plan de Gobierno (PDF por partido) (cargado por el admin)"
-        : "Hoja de Vida (JNE) (PDF cargado por el admin)");
+    const title = data.source?.title ?? "Plan de Gobierno (PDF por partido) (cargado por el admin)";
 
     const citations = Array.from(new Set(picked.map((p) => p.page))).map((p) => ({ title, page: p }));
 
