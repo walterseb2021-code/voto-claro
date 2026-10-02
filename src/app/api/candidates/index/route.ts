@@ -66,7 +66,6 @@ function partyIdFromName(partyName: string) {
 
 /**
  * ✅ Check rápido local: ¿existe data/docs/partido/<partyId>_plan.pdf?
- * No depende de /api/docs/plan/exists (evita fetch interno).
  */
 async function hasPlanPdfForCandidate(c: CandidateLite) {
   const baseDir = path.join(process.cwd(), "data", "docs", "partido");
