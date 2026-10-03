@@ -7,6 +7,19 @@ import {
   readBoundedJsonObject,
 } from "@/lib/participantApi";
 
+const ADMIN_NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, max-age=0, private",
+  Pragma: "no-cache",
+} as const;
+
+function adminJson(body: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(ADMIN_NO_STORE_HEADERS)) {
+    headers.set(name, value);
+  }
+  return NextResponse.json(body, { ...init, headers });
+}
+
 export const runtime = "nodejs";
 
 function supabaseAdmin() {
@@ -61,7 +74,7 @@ export async function GET(req: NextRequest) {
   try {
     const gate = await requireAdmin(req);
     if (!gate.ok) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+      return adminJson({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -85,13 +98,13 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error("[admin/reto/winners] Supabase operation failed", error);
-      return NextResponse.json(
+      return adminJson(
         { error: "SUPABASE_ERROR" },
         { status: 500 }
       );
     }
 
-    const res = NextResponse.json({ winners: data ?? [] }, { status: 200 });
+    const res = adminJson({ winners: data ?? [] }, { status: 200 });
 
     // ✅ Aplicar cookies refrescadas (si hubo)
     for (const { name, value, options } of gate.cookiesToSet) {
@@ -101,7 +114,7 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (e: any) {
     console.error("[admin/reto/winners] unexpected error", e);
-    return NextResponse.json(
+    return adminJson(
       { error: "EXCEPTION" },
       { status: 500 }
     );
@@ -112,7 +125,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     if (!isAllowedParticipantMutationOrigin(req)) {
-      return NextResponse.json(
+      return adminJson(
         { error: "ORIGIN_FORBIDDEN" },
         { status: 403 }
       );
@@ -120,17 +133,17 @@ export async function PATCH(req: NextRequest) {
 
     const gate = await requireAdmin(req);
     if (!gate.ok) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+      return adminJson({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
     const body = await readBoundedJsonObject(req, 2048);
     if (!body) {
-      return NextResponse.json({ error: "INVALID_JSON" }, { status: 400 });
+      return adminJson({ error: "INVALID_JSON" }, { status: 400 });
     }
 
     const keys = Object.keys(body);
     if (keys.some((key) => key !== "id" && key !== "status")) {
-      return NextResponse.json({ error: "INVALID_FIELDS" }, { status: 400 });
+      return adminJson({ error: "INVALID_FIELDS" }, { status: 400 });
     }
     const id =
       typeof body.id === "string" ? body.id.trim() : "";
@@ -141,11 +154,11 @@ export async function PATCH(req: NextRequest) {
     const allowed = ["pendiente", "contactado", "entregado", "anulado"];
 
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
-      return NextResponse.json({ error: "ID_INVALID" }, { status: 400 });
+      return adminJson({ error: "ID_INVALID" }, { status: 400 });
     }
 
     if (!allowed.includes(status)) {
-      return NextResponse.json({ error: "STATUS_INVALID" }, { status: 400 });
+      return adminJson({ error: "STATUS_INVALID" }, { status: 400 });
     }
 
     const supabase = supabaseAdmin();
@@ -159,17 +172,17 @@ export async function PATCH(req: NextRequest) {
 
     if (error) {
       console.error("[admin/reto/winners] Supabase operation failed", error);
-      return NextResponse.json(
+      return adminJson(
         { error: "SUPABASE_ERROR" },
         { status: 500 }
       );
     }
 
     if (!data) {
-      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+      return adminJson({ error: "NOT_FOUND" }, { status: 404 });
     }
 
-    const res = NextResponse.json({ ok: true, row: data }, { status: 200 });
+    const res = adminJson({ ok: true, row: data }, { status: 200 });
 
     // ✅ Aplicar cookies refrescadas (si hubo)
     for (const { name, value, options } of gate.cookiesToSet) {
@@ -179,7 +192,7 @@ export async function PATCH(req: NextRequest) {
     return res;
   } catch (e: any) {
     console.error("[admin/reto/winners] unexpected error", e);
-    return NextResponse.json(
+    return adminJson(
       { error: "EXCEPTION" },
       { status: 500 }
     );

@@ -60,6 +60,9 @@ export function withAdminAuthCookies<T>(
   response: NextResponse<T>,
   gate: AdminAuthResult
 ): NextResponse<T> {
+  response.headers.set("Cache-Control", "no-store, max-age=0, private");
+  response.headers.set("Pragma", "no-cache");
+
   for (const { name, value, options } of gate.cookiesToSet) {
     response.cookies.set(name, value, options);
   }

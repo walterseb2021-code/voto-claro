@@ -373,7 +373,13 @@ const CONTROLLED_RPC_ERRORS = new Set([
 ]);
 
 function json(status: number, body: Record<string, unknown>) {
-  return NextResponse.json(body, { status });
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, max-age=0, private",
+      Pragma: "no-cache",
+    },
+  });
 }
 
 function withAuthCookies(response: NextResponse, gate: Awaited<ReturnType<typeof requireAdmin>>) {
