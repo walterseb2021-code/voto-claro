@@ -198,22 +198,26 @@ function getOrCreateDeviceId(memoryDeviceId = ""): string {
   return newId;
 }
 
-  function getGroupFromToken(): string {
-  if (typeof window === "undefined") return "GRUPOB";
-
-  const url = new URL(window.location.href);
-  const token =
-    url.searchParams.get("token") ||
-    url.searchParams.get("t") ||
-    "";
-
-  if (token.startsWith("GRUPOA-")) return "GRUPOA";
-  if (token.startsWith("GRUPOB-")) return "GRUPOB";
-  if (token.startsWith("GRUPOC-")) return "GRUPOC";
-  if (token.startsWith("GRUPOD-")) return "GRUPOD";
-  if (token.startsWith("GRUPOE-")) return "GRUPOE";
-
-  return "GRUPOB";
+async function getAuthorizedGroup(signal: AbortSignal): Promise<string> {
+  try {
+    const res = await fetch("/api/gate/pitch", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal,
+    });
+    const data = await res.json().catch(() => null);
+    if (
+      !res.ok ||
+      !isResponseObject(data) ||
+      data.ok !== true ||
+      typeof data.group !== "string" ||
+      !/^GRUPO[A-Z]$/.test(data.group)
+    ) return "";
+    return data.group;
+  } catch {
+    return "";
+  }
 }
 
 const MOTIVATIONAL: string[] = [
@@ -254,7 +258,7 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
   const [parties, setParties] = useState<VoteOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userGroup, setUserGroup] = useState<string>("GRUPOB");
+  const [userGroup, setUserGroup] = useState<string>("");
   const [deviceIdUnavailable, setDeviceIdUnavailable] = useState(false);
 
   // Flujo de votación
@@ -301,10 +305,6 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
       answersAbortControllerRef.current = null;
       answersSubmittingRef.current = false;
     };
-  }, []);
-
-  useEffect(() => {
-    setUserGroup(getGroupFromToken());
   }, []);
 
   async function loadActive(
@@ -457,9 +457,14 @@ const answersAbortControllerRef = useRef<AbortController | null>(null);
     const controller = new AbortController();
 
     async function init() {
+      setUserGroup("");
       try {
         await runGate(controller.signal);
         if (!mountedRef.current || controller.signal.aborted) return;
+
+        const authorizedGroup = await getAuthorizedGroup(controller.signal);
+        if (!mountedRef.current || controller.signal.aborted) return;
+        setUserGroup(authorizedGroup);
 
         const activeData = await loadActive({
           signal: controller.signal,
@@ -1191,7 +1196,7 @@ useEffect(() => {
                         {globalRound.name}
                       </span>
                       <span className="ml-2 text-xs text-slate-600">
-                        Grupo: {userGroup}
+                        Grupo: {userGroup || "No disponible"}
                       </span>
                     </div>
                   )}
