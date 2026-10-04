@@ -590,7 +590,6 @@ export async function POST(
       normalizeGroupCode(cookieGroup);
 
     const {
-      data,
       error,
     } = await supabase
       .from(
@@ -603,22 +602,10 @@ export async function POST(
         group_code: groupCode,
         message,
         status: "published",
-      })
-      .select(
-        "id,created_at,message,project_participant_id"
-      )
-      .single();
+      });
 
     if (error) {
-      console.error(
-        JSON.stringify({
-          event: "forum_comment_insert_failed",
-          code: error.code ?? null,
-          message: error.message ?? null,
-          details: error.details ?? null,
-          hint: error.hint ?? null,
-        })
-      );
+      console.error("[comments/forum-comments] insert failed");
 
       const mapped =
         mapInsertError(error);
@@ -633,21 +620,7 @@ export async function POST(
       );
     }
 
-    const forumAlias =
-      toSafeForumAlias(
-        session.participant.alias ||
-          session.participant
-            .display_name
-      );
-
-    return participantJson(200, {
-      ok: true,
-      comment:
-        toSafeComment(
-          data,
-          forumAlias
-        ),
-    });
+    return participantJson(200, { ok: true });
   } catch (error) {
     console.error(
       "[comments/forum-comments] unexpected error",
