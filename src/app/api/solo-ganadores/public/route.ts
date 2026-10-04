@@ -121,7 +121,13 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function json(status: number, body: Record<string, unknown>) {
-  return NextResponse.json(body, { status });
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, max-age=0, private",
+      Pragma: "no-cache",
+    },
+  });
 }
 
 function getSupabaseAdmin() {
