@@ -611,8 +611,13 @@ export async function POST(
 
     if (error) {
       console.error(
-        "[comments/forum-comments] stable insert failed",
-        error
+        JSON.stringify({
+          event: "forum_comment_insert_failed",
+          code: error.code ?? null,
+          message: error.message ?? null,
+          details: error.details ?? null,
+          hint: error.hint ?? null,
+        })
       );
 
       const mapped =
