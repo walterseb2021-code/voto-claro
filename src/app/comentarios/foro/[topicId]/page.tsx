@@ -30,6 +30,7 @@ export default function TopicForumPage() {
   const [comments, setComments] = useState<ForumCommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [forumErrorMsg, setForumErrorMsg] = useState<string | null>(null);
   const [hasAccess, setHasAccess] = useState(false);
   const [forumAlias, setForumAlias] = useState<string>("");
   const [forumMessage, setForumMessage] = useState("");
@@ -126,16 +127,16 @@ export default function TopicForumPage() {
   async function submitForumComment(e: React.FormEvent) {
   e.preventDefault();
   setForumOkMsg(null);
-  setErrorMsg(null);
+  setForumErrorMsg(null);
 
   if (!hasAccess) {
-    setErrorMsg("Primero debes registrarte como participante o iniciar sesion con tu codigo de acceso en Comentarios Ciudadanos.");
+    setForumErrorMsg("Primero debes registrarte como participante o iniciar sesion con tu codigo de acceso en Comentarios Ciudadanos.");
     return;
   }
 
   const text = forumMessage.trim();
   if (!text) {
-    setErrorMsg("Escribe un comentario antes de publicarlo.");
+    setForumErrorMsg("Escribe un comentario antes de publicarlo.");
     return;
   }
 
@@ -156,9 +157,9 @@ export default function TopicForumPage() {
 
     if (!res.ok || !data?.ok) {
       if (data?.code === "LINKS_NOT_ALLOWED") {
-        setErrorMsg("No se permiten enlaces en los comentarios del foro.");
+        setForumErrorMsg("No se permiten enlaces en los comentarios del foro.");
       } else {
-        setErrorMsg(data?.error ?? "No se pudo publicar el comentario.");
+        setForumErrorMsg(data?.error ?? "No se pudo publicar el comentario.");
       }
       return;
     }
@@ -167,7 +168,7 @@ export default function TopicForumPage() {
     setForumOkMsg("Tu comentario fue publicado en el foro.");
     await loadForum();
   } catch (e: any) {
-    setErrorMsg(e?.message ?? String(e));
+    setForumErrorMsg(e?.message ?? String(e));
   } finally {
     setSendingForumComment(false);
   }
@@ -454,6 +455,12 @@ export default function TopicForumPage() {
   {forumOkMsg ? (
     <div className="mt-4 rounded-xl border-2 border-green-700 bg-white p-3 text-sm font-bold text-green-800">
       {forumOkMsg}
+    </div>
+  ) : null}
+
+  {forumErrorMsg ? (
+    <div role="alert" className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
+      {forumErrorMsg}
     </div>
   ) : null}
 

@@ -573,15 +573,19 @@ export default function CandidatePanelPage() {
   }
 
   async function logout() {
+    if (explicitLogoutRef.current) return;
     explicitLogoutRef.current = true;
     cancelActiveLoadLives();
     cancelActiveAccessStatus();
     try {
-      await fetch("/api/candidate/panel/logout", {
+      const res = await fetch("/api/candidate/panel/logout", {
         method: "POST",
         credentials: "same-origin",
       });
-    } finally {
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.ok !== true) {
+        throw new Error("Logout not confirmed");
+      }
       if (!mountedRef.current) return;
 
       setAuthenticated(false);
@@ -591,6 +595,11 @@ export default function CandidatePanelPage() {
       setLiveLoading(false);
       setNotice("Sesión cerrada.");
       void loadAccessAvailability();
+    } catch {
+      explicitLogoutRef.current = false;
+      if (!mountedRef.current) return;
+      setLiveLoading(false);
+      setNotice("No se pudo confirmar el cierre de sesión. Intenta nuevamente.");
     }
   }
 
