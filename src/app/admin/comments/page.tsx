@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
 import { useRouter } from "next/navigation";
 
 type CommentRow = {
@@ -13,6 +17,36 @@ type CommentRow = {
   message: string;
   status: "published" | "archived" | "blocked";
 };
+
+type CommentFilters = {
+  query: string;
+  group: string;
+  status: "ALL" | CommentRow["status"];
+  from: string;
+  until: string;
+};
+
+const COMMENT_PAGE_SIZE = 10;
+const EMPTY_COMMENT_FILTERS: CommentFilters = { query: "", group: "", status: "ALL", from: "", until: "" };
+
+function filterCommentEntries(comments: CommentRow[], filters: CommentFilters) {
+  const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
+  const query = normalize(filters.query);
+  const group = normalize(filters.group);
+  return comments.filter((comment) => {
+    if (query && !normalize(comment.message).includes(query)) return false;
+    if (group && !normalize(comment.group_code).includes(group)) return false;
+    if (filters.status !== "ALL" && comment.status !== filters.status) return false;
+    if (filters.from || filters.until) {
+      const date = new Date(comment.created_at);
+      if (Number.isNaN(date.getTime())) return false;
+      const day = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+      if (filters.from && day < filters.from) return false;
+      if (filters.until && day > filters.until) return false;
+    }
+    return true;
+  });
+}
 
 type WeeklyTopicRow = {
   id: string;
@@ -38,6 +72,34 @@ type VideoRow = {
   status: "new" | "reviewed" | "archived" | "blocked";
 };
 
+type VideoFilters = {
+  query: string;
+  status: "ALL" | VideoRow["status"];
+  from: string;
+  until: string;
+};
+
+const VIDEO_PAGE_SIZE = 10;
+const EMPTY_VIDEO_FILTERS: VideoFilters = { query: "", status: "ALL", from: "", until: "" };
+
+function filterVideoEntries(videos: VideoRow[], filters: VideoFilters, topics: WeeklyTopicRow[]) {
+  const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
+  const query = normalize(filters.query);
+  const topicNames = new Map(topics.map((topic) => [topic.id, topic.topic]));
+  return videos.filter((video) => {
+    if (filters.status !== "ALL" && video.status !== filters.status) return false;
+    if (query && !normalize([video.title ?? "", topicNames.get(video.weekly_topic_id) ?? ""].join(" ")).includes(query)) return false;
+    if (filters.from || filters.until) {
+      const date = new Date(video.created_at);
+      if (Number.isNaN(date.getTime())) return false;
+      const day = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+      if (filters.from && day < filters.from) return false;
+      if (filters.until && day > filters.until) return false;
+    }
+    return true;
+  });
+}
+
 type FounderQuestionRow = {
   id: string;
   created_at: string;
@@ -52,6 +114,44 @@ type FounderQuestionRow = {
   founder_answered_at: string | null;
   published: boolean;
 };
+
+type SectionFilters = { query: string; status: string; flag: "ALL" | "yes" | "no"; from: string; until: string };
+const SECTION_PAGE_SIZE = 10;
+const EMPTY_SECTION_FILTERS: SectionFilters = { query: "", status: "ALL", flag: "ALL", from: "", until: "" };
+
+function normalizeSectionQuery(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
+}
+
+function matchesSectionDate(value: string | null | undefined, filters: SectionFilters) {
+  if (!filters.from && !filters.until) return true;
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const day = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+  return (!filters.from || day >= filters.from) && (!filters.until || day <= filters.until);
+}
+
+function filterHistoryEntries(topics: WeeklyTopicRow[], filters: SectionFilters) {
+  const query = normalizeSectionQuery(filters.query);
+  return topics.filter((topic) => {
+    if (query && !normalizeSectionQuery([topic.topic, topic.question].join(" ")).includes(query)) return false;
+    if (filters.status !== "ALL" && topic.status !== filters.status) return false;
+    const hasWinner = !!topic.winner_video_entry_id;
+    if (filters.flag !== "ALL" && hasWinner !== (filters.flag === "yes")) return false;
+    return matchesSectionDate(topic.winner_published_at, filters);
+  });
+}
+
+function filterFounderEntries(questions: FounderQuestionRow[], filters: SectionFilters) {
+  const query = normalizeSectionQuery(filters.query);
+  return questions.filter((question) => {
+    if (query && !normalizeSectionQuery(question.question_text).includes(query)) return false;
+    if (filters.status !== "ALL" && question.question_status !== filters.status) return false;
+    if (filters.flag !== "ALL" && question.published !== (filters.flag === "yes")) return false;
+    return matchesSectionDate(question.created_at, filters);
+  });
+}
 
 type CommentAwardRow = {
   id: string;
@@ -76,6 +176,8 @@ export default function AdminCommentsPage() {
   const [checking, setChecking] = useState(true);
 
   const [items, setItems] = useState<CommentRow[]>([]);
+  const [commentFilters, setCommentFilters] = useState<CommentFilters>(EMPTY_COMMENT_FILTERS);
+  const [commentPage, setCommentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -91,8 +193,14 @@ export default function AdminCommentsPage() {
   const [rotationMsgType, setRotationMsgType] = useState<"success" | "error" | null>(null);
 
   const [videoItems, setVideoItems] = useState<VideoRow[]>([]);
+  const [videoFilters, setVideoFilters] = useState<VideoFilters>(EMPTY_VIDEO_FILTERS);
+  const [videoPage, setVideoPage] = useState(1);
   const [archivedTopics, setArchivedTopics] = useState<WeeklyTopicRow[]>([]);
   const [founderQuestions, setFounderQuestions] = useState<FounderQuestionRow[]>([]);
+  const [historyFilters, setHistoryFilters] = useState<SectionFilters>(EMPTY_SECTION_FILTERS);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [founderFilters, setFounderFilters] = useState<SectionFilters>(EMPTY_SECTION_FILTERS);
+  const [founderPage, setFounderPage] = useState(1);
   const [commentAwards, setCommentAwards] = useState<CommentAwardRow[]>([]);
 
   const [founderAnswerDrafts, setFounderAnswerDrafts] = useState<
@@ -111,6 +219,71 @@ export default function AdminCommentsPage() {
   const [awardPublished, setAwardPublished] = useState(false);
   const [savingAward, setSavingAward] = useState(false);
   const [updatingAwardId, setUpdatingAwardId] = useState<string | null>(null);
+
+  const filteredHistoryItems = useMemo(() => filterHistoryEntries(archivedTopics, historyFilters), [archivedTopics, historyFilters]);
+  const historyPageCount = Math.max(1, Math.ceil(filteredHistoryItems.length / SECTION_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, historyPageCount);
+  const visibleHistoryItems = filteredHistoryItems.slice((currentHistoryPage - 1) * SECTION_PAGE_SIZE, currentHistoryPage * SECTION_PAGE_SIZE);
+  const historyStatusOptions = Array.from(new Set([...archivedTopics.map((row) => row.status), ...(historyFilters.status !== "ALL" ? [historyFilters.status] : [])]));
+
+  function updateHistoryFilter<K extends keyof SectionFilters>(key: K, value: SectionFilters[K]) {
+    setHistoryFilters((previous) => ({ ...previous, [key]: value }));
+    setHistoryPage(1);
+  }
+
+  function clearHistoryFilters() {
+    setHistoryFilters(EMPTY_SECTION_FILTERS);
+    setHistoryPage(1);
+  }
+
+  const filteredFounderItems = useMemo(() => filterFounderEntries(founderQuestions, founderFilters), [founderQuestions, founderFilters]);
+  const founderPageCount = Math.max(1, Math.ceil(filteredFounderItems.length / SECTION_PAGE_SIZE));
+  const currentFounderPage = Math.min(founderPage, founderPageCount);
+  const visibleFounderItems = filteredFounderItems.slice((currentFounderPage - 1) * SECTION_PAGE_SIZE, currentFounderPage * SECTION_PAGE_SIZE);
+  const founderStatusOptions = Array.from(new Set([...founderQuestions.map((row) => row.question_status), ...(founderFilters.status !== "ALL" ? [founderFilters.status] : [])]));
+
+  function updateFounderFilter<K extends keyof SectionFilters>(key: K, value: SectionFilters[K]) {
+    setFounderFilters((previous) => ({ ...previous, [key]: value }));
+    setFounderPage(1);
+  }
+
+  function clearFounderFilters() {
+    setFounderFilters(EMPTY_SECTION_FILTERS);
+    setFounderPage(1);
+  }
+
+  const filteredCommentItems = useMemo(() => filterCommentEntries(items, commentFilters), [items, commentFilters]);
+  const commentPageCount = Math.max(1, Math.ceil(filteredCommentItems.length / COMMENT_PAGE_SIZE));
+  const currentCommentPage = Math.min(commentPage, commentPageCount);
+  const visibleCommentItems = filteredCommentItems.slice((currentCommentPage - 1) * COMMENT_PAGE_SIZE, currentCommentPage * COMMENT_PAGE_SIZE);
+
+  function updateCommentFilter<K extends keyof CommentFilters>(key: K, value: CommentFilters[K]) {
+    setCommentFilters((previous) => ({ ...previous, [key]: value }));
+    setCommentPage(1);
+  }
+
+  function clearCommentFilters() {
+    setCommentFilters(EMPTY_COMMENT_FILTERS);
+    setCommentPage(1);
+  }
+
+  const filteredVideoItems = useMemo(
+    () => filterVideoEntries(videoItems, videoFilters, weeklyTopic ? [weeklyTopic, ...archivedTopics] : archivedTopics),
+    [videoItems, videoFilters, weeklyTopic, archivedTopics]
+  );
+  const videoPageCount = Math.max(1, Math.ceil(filteredVideoItems.length / VIDEO_PAGE_SIZE));
+  const currentVideoPage = Math.min(videoPage, videoPageCount);
+  const visibleVideoItems = filteredVideoItems.slice((currentVideoPage - 1) * VIDEO_PAGE_SIZE, currentVideoPage * VIDEO_PAGE_SIZE);
+
+  function updateVideoFilter<K extends keyof VideoFilters>(key: K, value: VideoFilters[K]) {
+    setVideoFilters((previous) => ({ ...previous, [key]: value }));
+    setVideoPage(1);
+  }
+
+  function clearVideoFilters() {
+    setVideoFilters(EMPTY_VIDEO_FILTERS);
+    setVideoPage(1);
+  }
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -524,75 +697,60 @@ export default function AdminCommentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking, groupFilter, statusFilter]);
 
-  const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
-  const inner = "rounded-2xl border-2 border-red-600 bg-white/85 p-4";
-  const btnSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
   const select =
-    "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
+    "mt-2 w-full rounded-xl min-h-11 border border-slate-300 bg-white px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 font-semibold";
   const input =
-    "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
+    "mt-2 w-full rounded-xl min-h-11 border border-slate-300 bg-white px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 font-semibold";
   const textarea =
-    "mt-2 w-full min-h-[100px] rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold";
+    "mt-2 w-full min-h-[100px] rounded-xl min-h-11 border border-slate-300 bg-white px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 font-semibold";
 
   if (checking) {
     return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – Comentarios
-        </h1>
+      <AdminPageShell>
+        <AdminHeader title="Admin – Comentarios" />
 
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
+        <section className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6">
+            <div className="text-lg font-extrabold text-black">Cargando…</div>
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
               Verificando sesión.
             </div>
           </div>
         </section>
 
-        <button type="button" onClick={goBack} className={btnSm + " mt-4"}>
+        <AdminButton type="button" onClick={goBack} variant="secondary" className="max-w-full whitespace-normal mt-4">
           ← Volver
-        </button>
-      </main>
+        </AdminButton>
+      </AdminPageShell>
     );
   }
 
   return (
-    <main className={wrap}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – Comentarios
-        </h1>
+    <AdminPageShell>
+      <AdminHeader
+        title="Admin – Comentarios"
+        actions={
+          <AdminNavActions includeLogout>
+            <AdminButton href="/admin">🛠 Admin Central</AdminButton>
+            <AdminButton href="/">Inicio</AdminButton>
+            <AdminButton type="button" onClick={goBack}>← Volver</AdminButton>
+          </AdminNavActions>
+        }
+      />
 
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/admin" className={btnSm}>
-            🛠 Admin Central
-          </Link>
-          <button type="button" onClick={goBack} className={btnSm}>
-            ← Volver
-          </button>
-        </div>
-      </div>
-
-      <section className={sectionWrap}>
-        <div className={inner}>
-          <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
-            <div className="text-sm font-extrabold text-slate-900">
+      <section className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-6">
+          <AdminCard className="min-w-0 break-words mb-4">
+            <div className="text-lg font-extrabold text-black">
               🗓 Tema de la semana
             </div>
-            <div className="mt-1 text-xs text-slate-600">
+            <div className="mt-1 text-sm text-slate-600">
               Este bloque controla lo que ve la página pública de comentarios.
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="mt-4 grid [&>*]:min-w-0 grid-cols-1 gap-3">
               <div>
-                <div className="text-xs font-extrabold text-slate-700">Tema</div>
+                <div className="text-sm font-extrabold text-slate-700">Tema</div>
                 <input
                   value={topicDraft}
                   onChange={(e) => setTopicDraft(e.target.value)}
@@ -602,7 +760,7 @@ export default function AdminCommentsPage() {
               </div>
 
               <div>
-                <div className="text-xs font-extrabold text-slate-700">
+                <div className="text-sm font-extrabold text-slate-700">
                   Pregunta guía
                 </div>
                 <textarea
@@ -614,10 +772,10 @@ export default function AdminCommentsPage() {
               </div>
 
               <div className="flex gap-2 flex-wrap">
-                <button
+                <AdminButton
                   type="button"
                   onClick={saveWeeklyTopic}
-                  className={btnSm}
+                  variant="primary" className="max-w-full whitespace-normal"
                   disabled={savingTopic || loading || runningRotation}
                 >
                   {savingTopic
@@ -625,26 +783,26 @@ export default function AdminCommentsPage() {
                   : weeklyTopic?.id
                   ? "Guardar tema semanal"
                   : "Crear tema semanal activo"}
-                </button>
+                </AdminButton>
 
-                <button
+                <AdminButton
                   type="button"
                   onClick={loadComments}
-                  className={btnSm}
+                  variant="secondary" className="max-w-full whitespace-normal"
                   disabled={savingTopic || loading || runningRotation}
                 >
                   Recargar tema
-                </button>
+                </AdminButton>
 
-                <button
+                <AdminButton
                   type="button"
                   onClick={runWeeklyRotationNow}
-                  className={btnSm}
+                  variant="primary" className="max-w-full whitespace-normal"
                   disabled={savingTopic || loading || runningRotation}
                   title="Ejecuta ahora la rotación semanal sin esperar al cron"
                 >
                   {runningRotation ? "Ejecutando..." : "⏩ Ejecutar cambio semanal ahora"}
-                </button>
+                </AdminButton>
               </div>
 
               {runningRotation ? (
@@ -665,31 +823,69 @@ export default function AdminCommentsPage() {
                 </div>
               ) : null}
             </div>
-          </div>
+          </AdminCard>
 
-          <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
-            <div className="text-sm font-extrabold text-slate-900">
+          <AdminCard className="min-w-0 break-words mb-4">
+            <div className="text-lg font-extrabold text-black">
               🏆 Historial oficial de ganadores
             </div>
-            <div className="mt-1 text-xs text-slate-600">
+            <div className="mt-1 text-sm text-slate-600">
               Aquí se muestran los temas semanales ya cerrados con su resultado oficial.
             </div>
 
+            <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <label className="text-sm font-bold text-slate-700">
+                Tema / pregunta
+                <input className={input} value={historyFilters.query} onChange={(e) => updateHistoryFilter("query", e.target.value)} placeholder="Buscar texto" />
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Estado
+                <select className={select} value={historyFilters.status} onChange={(e) => updateHistoryFilter("status", e.target.value)}>
+                  <option value="ALL">Todos</option>
+                  {historyStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Ganador
+                <select className={select} value={historyFilters.flag} onChange={(e) => updateHistoryFilter("flag", e.target.value as SectionFilters["flag"])}>
+                  <option value="ALL">Todos</option>
+                  <option value="yes">Con ganador</option>
+                  <option value="no">Sin ganador</option>
+                </select>
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Fecha Desde
+                <input className={input + " min-w-0 max-w-full"} type="date" value={historyFilters.from} onChange={(e) => updateHistoryFilter("from", e.target.value)} />
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Fecha Hasta
+                <input className={input + " min-w-0 max-w-full"} type="date" value={historyFilters.until} onChange={(e) => updateHistoryFilter("until", e.target.value)} />
+              </label>
+              <div className="flex items-end">
+                <AdminButton type="button" onClick={clearHistoryFilters}>Limpiar filtros</AdminButton>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">Fechas de publicación del ganador. Los registros sin esa fecha no coinciden al aplicar un rango.</p>
+            <p className="mt-2 text-sm font-bold text-slate-700" aria-live="polite">Resultados: {filteredHistoryItems.length} de {archivedTopics.length} registros cargados.</p>
+            {historyFilters.from && historyFilters.until && historyFilters.from > historyFilters.until ? (
+              <p className="mt-2 text-sm text-red-700">La fecha Desde debe ser anterior o igual a la fecha Hasta.</p>
+            ) : null}
+
             <div className="mt-4 space-y-3">
-              {archivedTopics.length === 0 ? (
+              {filteredHistoryItems.length === 0 ? (
                 <div className="text-sm font-semibold text-slate-700">
-                  Aún no hay semanas cerradas con ganador oficial guardado.
+                  No hay registros del historial que coincidan con los filtros.
                 </div>
               ) : null}
 
-              {archivedTopics.map((t) => (
+              {visibleHistoryItems.map((t) => (
                 <div
                   key={t.id}
-                  className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                  className="min-w-0 break-words rounded-xl border border-slate-200 bg-slate-50 p-4"
                 >
-                  <div className="text-sm font-extrabold text-slate-900">{t.topic}</div>
+                  <div className="text-lg font-extrabold text-black">{t.topic}</div>
 
-                  <div className="mt-1 text-xs text-slate-600">
+                  <div className="mt-1 text-sm text-slate-600">
                     Estado: {t.status}
                     {t.winner_published_at
                       ? ` • Publicado: ${new Date(t.winner_published_at).toLocaleString()}`
@@ -700,7 +896,7 @@ export default function AdminCommentsPage() {
                     {t.question}
                   </div>
 
-                  <div className="mt-3 text-sm font-extrabold text-slate-900">
+                  <div className="mt-3 text-lg font-extrabold text-black">
                     Ganador oficial:{" "}
                     {t.winner_video_entry_id ? "Sí registrado" : "Sin video ganador"}
                   </div>
@@ -711,24 +907,67 @@ export default function AdminCommentsPage() {
                 </div>
               ))}
             </div>
-          </div>
+            <nav aria-label="Paginación de historial" className="mt-4 flex flex-wrap items-center gap-3">
+              <AdminButton type="button" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>Anterior</AdminButton>
+              <span className="text-sm font-bold text-slate-700">Página {currentHistoryPage} de {historyPageCount}</span>
+              <AdminButton type="button" disabled={currentHistoryPage >= historyPageCount} onClick={() => setHistoryPage(currentHistoryPage + 1)}>Siguiente</AdminButton>
+            </nav>
+          </AdminCard>
 
-          <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
-            <div className="text-sm font-extrabold text-slate-900">
+          <AdminCard className="min-w-0 break-words mb-4">
+            <div className="text-lg font-extrabold text-black">
               🎙 Preguntas al fundador
             </div>
-            <div className="mt-1 text-xs text-slate-600">
+            <div className="mt-1 text-sm text-slate-600">
               Aquí se responde la pregunta del ganador semanal y se decide si se publica.
             </div>
 
+            <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <label className="text-sm font-bold text-slate-700">
+                Texto de la pregunta
+                <input className={input} value={founderFilters.query} onChange={(e) => updateFounderFilter("query", e.target.value)} placeholder="Buscar texto" />
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Estado
+                <select className={select} value={founderFilters.status} onChange={(e) => updateFounderFilter("status", e.target.value)}>
+                  <option value="ALL">Todos</option>
+                  {founderStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Publicación
+                <select className={select} value={founderFilters.flag} onChange={(e) => updateFounderFilter("flag", e.target.value as SectionFilters["flag"])}>
+                  <option value="ALL">Todos</option>
+                  <option value="yes">Publicado</option>
+                  <option value="no">No publicado</option>
+                </select>
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Fecha Desde
+                <input className={input + " min-w-0 max-w-full"} type="date" value={founderFilters.from} onChange={(e) => updateFounderFilter("from", e.target.value)} />
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Fecha Hasta
+                <input className={input + " min-w-0 max-w-full"} type="date" value={founderFilters.until} onChange={(e) => updateFounderFilter("until", e.target.value)} />
+              </label>
+              <div className="flex items-end">
+                <AdminButton type="button" onClick={clearFounderFilters}>Limpiar filtros</AdminButton>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">Fechas de creación de la pregunta.</p>
+            <p className="mt-2 text-sm font-bold text-slate-700" aria-live="polite">Resultados: {filteredFounderItems.length} de {founderQuestions.length} registros cargados.</p>
+            {founderFilters.from && founderFilters.until && founderFilters.from > founderFilters.until ? (
+              <p className="mt-2 text-sm text-red-700">La fecha Desde debe ser anterior o igual a la fecha Hasta.</p>
+            ) : null}
+
             <div className="mt-4 space-y-3">
-              {founderQuestions.length === 0 ? (
+              {filteredFounderItems.length === 0 ? (
                 <div className="text-sm font-semibold text-slate-700">
-                  Aún no hay preguntas registradas para el fundador.
+                  No hay preguntas que coincidan con los filtros.
                 </div>
               ) : null}
 
-              {founderQuestions.map((q) => {
+              {visibleFounderItems.map((q) => {
                 const draft = founderAnswerDrafts[q.id] ?? {
                   text: q.founder_answer_text ?? "",
                   videoUrl: q.founder_answer_video_url ?? "",
@@ -737,22 +976,22 @@ export default function AdminCommentsPage() {
                 return (
                   <div
                     key={q.id}
-                    className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                    className="min-w-0 break-words rounded-xl border border-slate-200 bg-slate-50 p-4"
                   >
                     <div className="flex flex-wrap gap-2 items-center justify-between">
-                      <div className="text-xs font-extrabold text-slate-900">
+                      <div className="text-lg font-extrabold text-black">
                         {q.group_code} • {new Date(q.created_at).toLocaleString()}
                       </div>
-                      <div className="text-xs font-extrabold text-slate-700">
+                      <div className="text-sm font-extrabold text-slate-700">
                         estado: {q.question_status} • publicado: {q.published ? "sí" : "no"}
                       </div>
                     </div>
 
-                    <div className="mt-2 text-xs text-slate-600">
+                    <div className="mt-2 text-sm text-slate-600">
                       topic_id: {q.weekly_topic_id} • video_id: {q.weekly_video_entry_id}
                     </div>
 
-                    <div className="mt-3 text-sm font-extrabold text-slate-900">
+                    <div className="mt-3 text-lg font-extrabold text-black">
                       Pregunta del ganador
                     </div>
                     <div className="mt-1 text-sm font-semibold text-slate-800 whitespace-pre-wrap">
@@ -760,7 +999,7 @@ export default function AdminCommentsPage() {
                     </div>
 
                     <div className="mt-4">
-                      <div className="text-xs font-extrabold text-slate-700">
+                      <div className="text-sm font-extrabold text-slate-700">
                         Respuesta escrita del fundador
                       </div>
                       <textarea
@@ -780,7 +1019,7 @@ export default function AdminCommentsPage() {
                     </div>
 
                     <div className="mt-4">
-                      <div className="text-xs font-extrabold text-slate-700">
+                      <div className="text-sm font-extrabold text-slate-700">
                         Video de respuesta (opcional)
                       </div>
                       <input
@@ -800,41 +1039,46 @@ export default function AdminCommentsPage() {
                     </div>
 
                     <div className="mt-3 flex gap-2 flex-wrap">
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm}
+                        variant="primary" className="max-w-full whitespace-normal"
                         disabled={founderQuestionSavingId === q.id}
                         onClick={() => answerFounderQuestion(q.id)}
                       >
                         {founderQuestionSavingId === q.id ? "Guardando..." : "Guardar y publicar"}
-                      </button>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm}
+                        variant={q.published ? "danger" : "primary"} className="max-w-full whitespace-normal"
                         disabled={founderQuestionSavingId === q.id}
                         onClick={() => toggleFounderQuestionPublish(q.id, !q.published)}
                       >
                         {q.published ? "Ocultar publicación" : "Publicar respuesta"}
-                      </button>
+                      </AdminButton>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+            <nav aria-label="Paginación de preguntas" className="mt-4 flex flex-wrap items-center gap-3">
+              <AdminButton type="button" disabled={currentFounderPage <= 1} onClick={() => setFounderPage(currentFounderPage - 1)}>Anterior</AdminButton>
+              <span className="text-sm font-bold text-slate-700">Página {currentFounderPage} de {founderPageCount}</span>
+              <AdminButton type="button" disabled={currentFounderPage >= founderPageCount} onClick={() => setFounderPage(currentFounderPage + 1)}>Siguiente</AdminButton>
+            </nav>
+          </AdminCard>
 
-          <div className="rounded-2xl border-2 border-red-600 bg-white/90 p-4 mb-4">
-            <div className="text-sm font-extrabold text-slate-900">
+          <AdminCard className="min-w-0 break-words mb-4">
+            <div className="text-lg font-extrabold text-black">
               ✈ Ganador trimestral de comentarios
             </div>
-            <div className="mt-1 text-xs text-slate-600">
+            <div className="mt-1 text-sm text-slate-600">
               Aquí se registra el comentario ganador del trimestre y su coordinación.
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="mt-4 grid [&>*]:min-w-0 grid-cols-1 gap-3">
               <div>
-                <div className="text-xs font-extrabold text-slate-700">
+                <div className="text-sm font-extrabold text-slate-700">
                   ID del comentario ganador
                 </div>
                 <input
@@ -845,9 +1089,9 @@ export default function AdminCommentsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid [&>*]:min-w-0 grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <div className="text-xs font-extrabold text-slate-700">Año</div>
+                  <div className="text-sm font-extrabold text-slate-700">Año</div>
                   <input
                     className={input}
                     value={awardYear}
@@ -857,7 +1101,7 @@ export default function AdminCommentsPage() {
                 </div>
 
                 <div>
-                  <div className="text-xs font-extrabold text-slate-700">Trimestre</div>
+                  <div className="text-sm font-extrabold text-slate-700">Trimestre</div>
                   <select
                     className={select}
                     value={awardQuarter}
@@ -872,7 +1116,7 @@ export default function AdminCommentsPage() {
               </div>
 
               <div>
-                <div className="text-xs font-extrabold text-slate-700">Título público</div>
+                <div className="text-sm font-extrabold text-slate-700">Título público</div>
                 <input
                   className={input}
                   value={awardTitle}
@@ -882,7 +1126,7 @@ export default function AdminCommentsPage() {
               </div>
 
               <div>
-                <div className="text-xs font-extrabold text-slate-700">Nota pública</div>
+                <div className="text-sm font-extrabold text-slate-700">Nota pública</div>
                 <textarea
                   className={textarea}
                   value={awardNote}
@@ -892,7 +1136,7 @@ export default function AdminCommentsPage() {
               </div>
 
               <div>
-                <div className="text-xs font-extrabold text-slate-700">Estado de contacto</div>
+                <div className="text-sm font-extrabold text-slate-700">Estado de contacto</div>
                 <select
                   className={select}
                   value={awardContactStatus}
@@ -906,7 +1150,7 @@ export default function AdminCommentsPage() {
               </div>
 
               <div>
-                <div className="text-xs font-extrabold text-slate-700">Nota logística</div>
+                <div className="text-sm font-extrabold text-slate-700">Nota logística</div>
                 <textarea
                   className={textarea}
                   value={awardLogisticsNote}
@@ -934,14 +1178,14 @@ export default function AdminCommentsPage() {
               </label>
 
               <div className="flex gap-2 flex-wrap">
-                <button
+                <AdminButton
                   type="button"
-                  className={btnSm}
+                  variant="primary" className="max-w-full whitespace-normal"
                   onClick={createCommentAward}
                   disabled={savingAward}
                 >
                   {savingAward ? "Guardando..." : "Crear ganador trimestral"}
-                </button>
+                </AdminButton>
               </div>
             </div>
 
@@ -955,24 +1199,24 @@ export default function AdminCommentsPage() {
               {commentAwards.map((a) => (
                 <div
                   key={a.id}
-                  className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                  className="min-w-0 break-words rounded-xl border border-slate-200 bg-slate-50 p-4"
                 >
                   <div className="flex flex-wrap gap-2 items-center justify-between">
-                    <div className="text-xs font-extrabold text-slate-900">
+                    <div className="text-lg font-extrabold text-black">
                       {a.group_code} • {a.award_year} / T{a.award_quarter}
                     </div>
-                    <div className="text-xs font-extrabold text-slate-700">
+                    <div className="text-sm font-extrabold text-slate-700">
                       contacto: {a.contact_status} • publicado: {a.published ? "sí" : "no"}
                     </div>
                   </div>
 
-                  <div className="mt-2 text-xs text-slate-600">
+                  <div className="mt-2 text-sm text-slate-600">
                     comment_id: {a.user_comment_id}
                     {a.published_at ? ` • publicado: ${new Date(a.published_at).toLocaleString()}` : ""}
                   </div>
 
                   <div className="mt-3">
-                    <div className="text-xs font-extrabold text-slate-700">Título público</div>
+                    <div className="text-sm font-extrabold text-slate-700">Título público</div>
                     <input
                       className={input}
                       value={a.award_title ?? ""}
@@ -987,7 +1231,7 @@ export default function AdminCommentsPage() {
                   </div>
 
                   <div className="mt-3">
-                    <div className="text-xs font-extrabold text-slate-700">Nota pública</div>
+                    <div className="text-sm font-extrabold text-slate-700">Nota pública</div>
                     <textarea
                       className={textarea}
                       value={a.award_note ?? ""}
@@ -1002,7 +1246,7 @@ export default function AdminCommentsPage() {
                   </div>
 
                   <div className="mt-3">
-                    <div className="text-xs font-extrabold text-slate-700">Estado de contacto</div>
+                    <div className="text-sm font-extrabold text-slate-700">Estado de contacto</div>
                     <select
                       className={select}
                       value={a.contact_status}
@@ -1022,7 +1266,7 @@ export default function AdminCommentsPage() {
                   </div>
 
                   <div className="mt-3">
-                    <div className="text-xs font-extrabold text-slate-700">Nota logística</div>
+                    <div className="text-sm font-extrabold text-slate-700">Nota logística</div>
                     <textarea
                       className={textarea}
                       value={a.logistics_note ?? ""}
@@ -1071,23 +1315,23 @@ export default function AdminCommentsPage() {
                   </div>
 
                   <div className="mt-3 flex gap-2 flex-wrap">
-                    <button
+                    <AdminButton
                       type="button"
-                      className={btnSm}
+                      variant="primary" className="max-w-full whitespace-normal"
                       disabled={updatingAwardId === a.id}
                       onClick={() => updateCommentAward(a)}
                     >
                       {updatingAwardId === a.id ? "Guardando..." : "Guardar cambios"}
-                    </button>
+                    </AdminButton>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </AdminCard>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <AdminCard className="grid [&>*]:min-w-0 grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <div className="text-xs font-extrabold text-slate-700">Grupo</div>
+              <div className="text-sm font-extrabold text-slate-700">Grupo</div>
               <select
                 className={select}
                 value={groupFilter}
@@ -1103,7 +1347,7 @@ export default function AdminCommentsPage() {
             </div>
 
             <div>
-              <div className="text-xs font-extrabold text-slate-700">Estado</div>
+              <div className="text-sm font-extrabold text-slate-700">Estado</div>
               <select
                 className={select}
                 value={statusFilter}
@@ -1117,15 +1361,15 @@ export default function AdminCommentsPage() {
             </div>
 
             <div className="flex items-end">
-              <button
+              <AdminButton
                 type="button"
                 onClick={loadComments}
-                className={btnSm + " w-full"}
+                variant="secondary" className="max-w-full whitespace-normal"
               >
                 {loading ? "Cargando..." : "Recargar"}
-              </button>
+              </AdminButton>
             </div>
-          </div>
+          </AdminCard>
 
           {errorMsg ? (
             <div className="mt-4 rounded-xl border-2 border-red-600 bg-white p-3 text-sm font-bold text-red-700">
@@ -1133,31 +1377,64 @@ export default function AdminCommentsPage() {
             </div>
           ) : null}
 
-          <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4">
-            <div className="text-sm font-extrabold text-slate-900">
+          <AdminCard className="min-w-0 break-words mt-4">
+            <div className="text-lg font-extrabold text-black">
               🎥 Videos enviados – YO POLÍTICO
             </div>
-            <div className="mt-1 text-xs text-slate-600">
+            <div className="mt-1 text-sm text-slate-600">
               Aquí se revisan los enlaces enviados por ciudadanos para el tema semanal.
             </div>
 
+            <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <label className="text-sm font-bold text-slate-700">
+                Tema / título
+                <input className={input} value={videoFilters.query} onChange={(e) => updateVideoFilter("query", e.target.value)} placeholder="Buscar tema o título" />
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Estado del video
+                <select className={select} value={videoFilters.status} onChange={(e) => updateVideoFilter("status", e.target.value as VideoFilters["status"])}>
+                  <option value="ALL">Todos</option>
+                  <option value="new">Nuevo</option>
+                  <option value="reviewed">Revisado</option>
+                  <option value="archived">Archivado</option>
+                  <option value="blocked">Bloqueado</option>
+                </select>
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Fecha Desde
+                <input className={input + " min-w-0 max-w-full"} type="date" value={videoFilters.from} onChange={(e) => updateVideoFilter("from", e.target.value)} />
+              </label>
+              <label className="text-sm font-bold text-slate-700">
+                Fecha Hasta
+                <input className={input + " min-w-0 max-w-full"} type="date" value={videoFilters.until} onChange={(e) => updateVideoFilter("until", e.target.value)} />
+              </label>
+              <div className="flex items-end">
+                <AdminButton type="button" onClick={clearVideoFilters}>Limpiar filtros</AdminButton>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">La búsqueda por tema usa los temas disponibles en esta página.</p>
+            <p className="mt-2 text-sm font-bold text-slate-700" aria-live="polite">Resultados: {filteredVideoItems.length} de {videoItems.length} videos cargados.</p>
+            {videoFilters.from && videoFilters.until && videoFilters.from > videoFilters.until ? (
+              <p className="mt-2 text-sm text-red-700">La fecha Desde debe ser anterior o igual a la fecha Hasta.</p>
+            ) : null}
+
             <div className="mt-4 space-y-3">
-              {videoItems.length === 0 && !loading ? (
+              {filteredVideoItems.length === 0 && !loading ? (
                 <div className="text-sm font-semibold text-slate-700">
-                  No hay videos enviados todavía.
+                  No hay videos que coincidan con los filtros.
                 </div>
               ) : null}
 
-              {videoItems.map((v) => (
+              {visibleVideoItems.map((v) => (
                 <div
                   key={v.id}
-                  className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                  className="min-w-0 break-words rounded-xl border border-slate-200 bg-slate-50 p-4"
                 >
                   <div className="flex flex-wrap gap-2 items-center justify-between">
-                    <div className="text-xs font-extrabold text-slate-900">
+                    <div className="text-lg font-extrabold text-black">
                       {v.group_code} • {new Date(v.created_at).toLocaleString()}
                     </div>
-                    <div className="text-xs font-extrabold text-slate-700">
+                    <div className="text-sm font-extrabold text-slate-700">
                       status:{" "}
                       {v.status === "new"
                         ? "Nuevo"
@@ -1179,66 +1456,109 @@ export default function AdminCommentsPage() {
                     </div>
                   ) : null}
 
-                  <div className="mt-2 text-xs text-slate-600 break-all">
+                  <div className="mt-2 text-sm text-slate-600 break-all">
                     {v.video_url}
                   </div>
 
-                  <div className="mt-2 text-xs text-slate-600">
+                  <div className="mt-2 text-sm text-slate-600">
                     device: {v.device_id ?? "-"} • id: {v.id}
                   </div>
 
                   <div className="mt-3 flex gap-2 flex-wrap">
-                    <a
+                    <AdminButton
                       href={v.video_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="px-3 py-1 rounded-lg border-2 border-red-600 bg-green-700 text-white text-xs font-bold"
+                      variant="secondary" className="max-w-full whitespace-normal"
                     >
                       Ver video
-                    </a>
+                    </AdminButton>
 
                     {v.status !== "reviewed" && v.status !== "blocked" && (
-                      <button
+                      <AdminButton
                         type="button"
-                        className="px-3 py-1 rounded-lg border-2 border-red-600 bg-green-700 text-white text-xs font-bold"
+                        variant="primary" className="max-w-full whitespace-normal"
                         onClick={() => setVideoStatus(v.id, "reviewed")}
                       >
                         Marcar como Revisado
-                      </button>
+                      </AdminButton>
                     )}
 
                     {v.status !== "archived" && (
-                      <button
+                      <AdminButton
                         type="button"
-                        className="px-3 py-1 rounded-lg border-2 border-red-600 bg-slate-700 text-white text-xs font-bold"
+                        variant="danger" className="max-w-full whitespace-normal"
                         onClick={() => setVideoStatus(v.id, "archived")}
                       >
                         Marcar como Archivado
-                      </button>
+                      </AdminButton>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+            <nav aria-label="Paginación de videos" className="mt-4 flex flex-wrap items-center gap-3">
+              <AdminButton type="button" disabled={currentVideoPage <= 1} onClick={() => setVideoPage(currentVideoPage - 1)}>Anterior</AdminButton>
+              <span className="text-sm font-bold text-slate-700">Página {currentVideoPage} de {videoPageCount}</span>
+              <AdminButton type="button" disabled={currentVideoPage >= videoPageCount} onClick={() => setVideoPage(currentVideoPage + 1)}>Siguiente</AdminButton>
+            </nav>
+          </AdminCard>
 
           <div className="mt-4 space-y-3">
-            {items.length === 0 && !loading ? (
+            <AdminCard className="min-w-0 break-words">
+              <h2 className="text-lg font-extrabold text-black">Comentarios</h2>
+              <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <label className="text-sm font-bold text-slate-700">
+                  Texto del comentario
+                  <input className={input} value={commentFilters.query} onChange={(e) => updateCommentFilter("query", e.target.value)} placeholder="Buscar texto" />
+                </label>
+                <label className="text-sm font-bold text-slate-700">
+                  Grupo
+                  <input className={input} value={commentFilters.group} onChange={(e) => updateCommentFilter("group", e.target.value)} placeholder="Ej: GRUPOA" />
+                </label>
+                <label className="text-sm font-bold text-slate-700">
+                  Estado del comentario
+                  <select className={select} value={commentFilters.status} onChange={(e) => updateCommentFilter("status", e.target.value as CommentFilters["status"])}>
+                    <option value="ALL">Todos</option>
+                    <option value="published">Publicado</option>
+                    <option value="archived">Archivado</option>
+                    <option value="blocked">Bloqueado</option>
+                  </select>
+                </label>
+                <label className="text-sm font-bold text-slate-700">
+                  Fecha Desde
+                  <input className={input + " min-w-0 max-w-full"} type="date" value={commentFilters.from} onChange={(e) => updateCommentFilter("from", e.target.value)} />
+                </label>
+                <label className="text-sm font-bold text-slate-700">
+                  Fecha Hasta
+                  <input className={input + " min-w-0 max-w-full"} type="date" value={commentFilters.until} onChange={(e) => updateCommentFilter("until", e.target.value)} />
+                </label>
+                <div className="flex items-end">
+                  <AdminButton type="button" onClick={clearCommentFilters}>Limpiar filtros</AdminButton>
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">Para buscar en todos los grupos y estados, selecciona Todos en los filtros superiores.</p>
+              <p className="mt-2 text-sm font-bold text-slate-700" aria-live="polite">Resultados: {filteredCommentItems.length} de {items.length} comentarios cargados.</p>
+              {commentFilters.from && commentFilters.until && commentFilters.from > commentFilters.until ? (
+                <p className="mt-2 text-sm text-red-700">La fecha Desde debe ser anterior o igual a la fecha Hasta.</p>
+              ) : null}
+            </AdminCard>
+            {filteredCommentItems.length === 0 && !loading ? (
               <div className="text-sm font-semibold text-slate-700">
-                No hay comentarios para mostrar.
+                No hay comentarios que coincidan con los filtros.
               </div>
             ) : null}
 
-            {items.map((c) => (
-              <div
+            {visibleCommentItems.map((c) => (
+              <AdminCard
                 key={c.id}
-                className="rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+                className="min-w-0 break-words"
               >
                 <div className="flex flex-wrap gap-2 items-center justify-between">
-                  <div className="text-xs font-extrabold text-slate-900">
+                  <div className="text-lg font-extrabold text-black">
                     {c.group_code} • {new Date(c.created_at).toLocaleString()}
                   </div>
-                  <div className="text-xs font-extrabold text-slate-700">
+                  <div className="text-sm font-extrabold text-slate-700">
                     status:{" "}
                               {c.status === "published"
   ? "Publicado"
@@ -1252,27 +1572,32 @@ export default function AdminCommentsPage() {
                   {c.message}
                 </div>
 
-                <div className="mt-2 text-xs text-slate-600">
+                <div className="mt-2 text-sm text-slate-600">
                   page: {c.page ?? "-"} • device: {c.device_id ?? "-"} • id: {c.id}
                 </div>
 
                 <div className="mt-3 flex gap-2 flex-wrap">
 
                   {c.status !== "archived" && (
-                    <button
+                    <AdminButton
                       type="button"
-                      className="px-3 py-1 rounded-lg border-2 border-red-600 bg-slate-700 text-white text-xs font-bold"
+                      variant="danger" className="max-w-full whitespace-normal"
                       onClick={() => setStatus(c.id, "archived")}
                     >
                       Marcar como Archivado
-                    </button>
+                    </AdminButton>
                   )}
                 </div>
-              </div>
+              </AdminCard>
             ))}
+            <nav aria-label="Paginación de comentarios" className="mt-4 flex flex-wrap items-center gap-3">
+              <AdminButton type="button" disabled={currentCommentPage <= 1} onClick={() => setCommentPage(currentCommentPage - 1)}>Anterior</AdminButton>
+              <span className="text-sm font-bold text-slate-700">Página {currentCommentPage} de {commentPageCount}</span>
+              <AdminButton type="button" disabled={currentCommentPage >= commentPageCount} onClick={() => setCommentPage(currentCommentPage + 1)}>Siguiente</AdminButton>
+            </nav>
           </div>
         </div>
       </section>
-    </main>
+    </AdminPageShell>
   );
 }

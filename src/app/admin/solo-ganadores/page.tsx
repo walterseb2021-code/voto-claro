@@ -1,7 +1,11 @@
 // src/app/admin/solo-ganadores/page.tsx
 "use client";
 
-import Link from "next/link";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as tus from "tus-js-client";
@@ -1775,25 +1779,11 @@ export default function AdminSoloGanadoresPage() {
     }
   }
 
-  const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-6xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
-  const inner = "rounded-2xl border-2 border-red-600 bg-white/85 p-4";
-  const card = "rounded-2xl border-2 border-red-600 bg-white/90 p-4 shadow-sm";
-  const btn =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-  const btnSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
   const input =
-    "w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700";
-  const label = "block text-xs font-extrabold text-slate-700 mb-1";
+    "min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-green-700";
+  const label = "block text-sm font-extrabold text-slate-700 mb-1";
   const fileInput =
-    "mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700";
+    "mt-2 block w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700";
 
   function MediaPreview({ url, labelText }: { url: string; labelText: string }) {
     const clean = String(url || "").trim();
@@ -1803,31 +1793,31 @@ export default function AdminSoloGanadoresPage() {
 
     return (
       <div className="mt-3 rounded-xl border border-slate-300 bg-white p-2">
-        <div className="mb-2 text-xs font-extrabold text-slate-700">{labelText}</div>
+        <div className="mb-2 text-sm font-extrabold text-slate-700">{labelText}</div>
 
         {embed ? (
           <iframe
             src={embed}
             title={labelText}
-            className="h-56 w-full rounded-lg bg-black"
+            className="aspect-video w-full max-w-full rounded-lg bg-black"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
         ) : isDirectVideoUrl(clean) ? (
-          <video src={clean} controls className="max-h-56 w-full rounded-lg bg-black" />
+          <video src={clean} controls className="max-h-56 w-full max-w-full rounded-lg bg-black object-contain" />
         ) : isImageUrl(clean) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={clean}
             alt={labelText}
-            className="max-h-48 w-full rounded-lg object-contain bg-slate-50"
+            className="max-h-48 w-full max-w-full rounded-lg object-contain bg-slate-50"
           />
         ) : (
           <a
             href={clean}
             target="_blank"
             rel="noreferrer"
-            className="text-xs font-extrabold text-green-800 underline break-all"
+            className="text-sm font-extrabold text-green-800 underline break-all"
           >
             Abrir enlace
           </a>
@@ -1855,7 +1845,7 @@ export default function AdminSoloGanadoresPage() {
     return (
       <div
         className={
-          "mt-2 rounded-xl border px-3 py-2 text-xs font-semibold " +
+          "mt-2 rounded-xl border px-3 py-2 text-sm font-semibold " +
           severityClass[presentation.severity]
         }
         role={metadata.state === "inconsistent" ? "alert" : "status"}
@@ -1902,47 +1892,35 @@ export default function AdminSoloGanadoresPage() {
 
   if (checking) {
     return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin Solo para ganadores
-        </h1>
+      <AdminPageShell>
+        <AdminHeader title="Admin Solo para ganadores" />
 
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
+        <section className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6">
+            <div className="text-lg font-extrabold text-black">Cargando…</div>
             <div className="mt-2 text-sm font-semibold text-slate-700">
               Verificando sesión de administrador.
             </div>
           </div>
         </section>
-      </main>
+      </AdminPageShell>
     );
   }
 
   return (
-    <main className={wrap}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-            Admin Solo para ganadores
-          </h1>
-          <p className="mt-1 text-sm font-semibold text-slate-700">
-            Gestiona evento del semestre, ganadores, fotos, videos, entrevistas y reconocimientos.
-          </p>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/solo-para-ganadores" className={btnSm}>
-            🏆 Ver ventana pública
-          </Link>
-          <Link href="/admin" className={btnSm}>
-            ⚙️ Admin Central
-          </Link>
-          <button type="button" onClick={goBack} className={btnSm}>
-            ← Volver
-          </button>
-        </div>
-      </div>
+    <AdminPageShell>
+      <AdminHeader
+        title="Admin Solo para ganadores"
+        description="Gestiona evento del semestre, ganadores, fotos, videos, entrevistas y reconocimientos."
+        actions={
+          <AdminNavActions includeLogout>
+            <AdminButton href="/admin">⚙️ Admin Central</AdminButton>
+            <AdminButton href="/">Inicio</AdminButton>
+            <AdminButton href="/solo-para-ganadores">🏆 Ver ventana pública</AdminButton>
+            <AdminButton type="button" onClick={goBack}>← Volver</AdminButton>
+          </AdminNavActions>
+        }
+      />
 
       {message ? (
         <div
@@ -1966,55 +1944,43 @@ export default function AdminSoloGanadoresPage() {
         </div>
       ) : null}
 
-      <section className={sectionWrap}>
-        <div className={inner}>
+      <section className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-6">
           <div className="flex flex-wrap gap-2">
-            <button
+            <AdminButton
               type="button"
               onClick={() => setTab("evento")}
-              className={
-                tab === "evento"
-                  ? btnSm
-                  : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")
-              }
+              variant="secondary" className={tab === "evento" ? "ring-2 ring-green-700 ring-offset-2 bg-[#bffcff]" : ""}
             >
               🗓️ Evento
-            </button>
+            </AdminButton>
 
-            <button
+            <AdminButton
               type="button"
               onClick={() => setTab("ganadores")}
-              className={
-                tab === "ganadores"
-                  ? btnSm
-                  : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")
-              }
+              variant="secondary" className={tab === "ganadores" ? "ring-2 ring-green-700 ring-offset-2 bg-[#bffcff]" : ""}
             >
               🏅 Ganadores
-            </button>
+            </AdminButton>
 
-            <button
+            <AdminButton
               type="button"
               onClick={() => setTab("media")}
-              className={
-                tab === "media"
-                  ? btnSm
-                  : btnSm.replace("bg-green-800 text-white", "bg-white text-slate-900")
-              }
+              variant="secondary" className={tab === "media" ? "ring-2 ring-green-700 ring-offset-2 bg-[#bffcff]" : ""}
             >
               📸 Galería
-            </button>
+            </AdminButton>
 
-            <button type="button" onClick={loadAll} className={btnSm + " ml-auto"} disabled={loading}>
+            <AdminButton type="button" onClick={loadAll} variant="secondary" className="max-w-full whitespace-normal" disabled={loading}>
               {loading ? "Cargando…" : "↻ Refrescar"}
-            </button>
+            </AdminButton>
           </div>
         </div>
       </section>
 
       {tab === "evento" ? (
-        <section className={sectionWrap}>
-          <div className={inner}>
+        <section className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <div className="text-lg font-extrabold text-slate-900">
@@ -2025,7 +1991,7 @@ export default function AdminSoloGanadoresPage() {
                 </p>
               </div>
 
-              <button
+              <AdminButton
                 type="button"
                 onClick={() => {
                   setEventForm(emptyEvent);
@@ -2033,19 +1999,19 @@ export default function AdminSoloGanadoresPage() {
                   setEventPromoVideoAsset(null);
                   setEventEditSnapshot(null);
                 }}
-                className={btnSm}
+                variant="primary" className="max-w-full whitespace-normal"
               >
                 + Nuevo evento
-              </button>
+              </AdminButton>
             </div>
 
-            <div className="mt-5 space-y-5">
+            <AdminCard className="min-w-0 break-words mt-5 space-y-5">
               <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                <div className="mb-3 text-lg font-extrabold text-black">
                   1. Datos principales del evento
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid [&>*]:min-w-0 grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className={label}>Título del evento *</label>
                     <input
@@ -2092,11 +2058,11 @@ export default function AdminSoloGanadoresPage() {
               </div>
 
               <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                <div className="mb-3 text-lg font-extrabold text-black">
                   2. Lugar y ubicación
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid [&>*]:min-w-0 grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className={label}>Lugar / ambiente</label>
                     <input
@@ -2132,11 +2098,11 @@ export default function AdminSoloGanadoresPage() {
               </div>
 
               <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                <div className="mb-3 text-lg font-extrabold text-black">
                   3. Descripción y reconocimientos
                 </div>
 
-                <div className="grid grid-cols-1 gap-3">
+                <div className="grid [&>*]:min-w-0 grid-cols-1 gap-3">
                   <div>
                     <label className={label}>Descripción del evento</label>
                     <textarea
@@ -2164,11 +2130,11 @@ export default function AdminSoloGanadoresPage() {
               </div>
 
               <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4">
-                <div className="mb-3 text-sm font-extrabold text-slate-900">
+                <div className="mb-3 text-lg font-extrabold text-black">
                   4. Imagen, video y publicación
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid [&>*]:min-w-0 grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className={label}>URL imagen principal</label>
                     <input
@@ -2270,16 +2236,16 @@ export default function AdminSoloGanadoresPage() {
                   </label>
                 </div>
               </div>
-            </div>
+            </AdminCard>
 
             {eventEditBlockReasonValue ? (
               <EditBlockedNotice reason={eventEditBlockReasonValue} />
             ) : null}
 
-            <button
+            <AdminButton
               type="button"
               onClick={saveEvent}
-              className={btn + " mt-5"}
+              variant="primary" className="max-w-full whitespace-normal mt-5"
               disabled={saving || eventEditBlocked}
             >
               {saving
@@ -2287,27 +2253,27 @@ export default function AdminSoloGanadoresPage() {
                 : eventForm.id
                   ? "Guardar evento del semestre"
                   : "Crear evento del semestre"}
-            </button>
+            </AdminButton>
 
-            <div className="mt-6 grid grid-cols-1 gap-3">
+            <div className="mt-6 grid [&>*]:min-w-0 grid-cols-1 gap-3">
               {events.map((ev) => (
-                <div key={ev.id} className={card}>
+                <AdminCard key={ev.id} className="min-w-0 break-words">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <div className="text-sm font-extrabold text-slate-900">{ev.title}</div>
-                      <div className="mt-1 text-xs text-slate-600">
+                      <div className="text-lg font-extrabold text-black">{ev.title}</div>
+                      <div className="mt-1 text-sm text-slate-600">
                         {ev.semester || "Sin semestre"} • {formatDate(ev.event_date)} • {ev.status}
                       </div>
-                      <div className="mt-1 text-xs text-slate-600">
+                      <div className="mt-1 text-sm text-slate-600">
                         {ev.published ? "Publicado" : "Borrador"}{" "}
                         {ev.featured ? "• Destacado" : ""}
                       </div>
                     </div>
 
                     <div className="flex gap-2 flex-wrap">
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm}
+                        variant="secondary" className="max-w-full whitespace-normal"
                         onClick={() => {
                           setEventForm({
                             id: ev.id,
@@ -2341,19 +2307,19 @@ export default function AdminSoloGanadoresPage() {
                         }}
                       >
                         Editar
-                      </button>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm + " bg-red-700 hover:bg-red-800"}
+                        variant="danger" className="max-w-full whitespace-normal"
                         onClick={() => deleteRow("event", ev.id, ev.updated_at)}
                         disabled={saving}
                       >
                         Eliminar
-                      </button>
+                      </AdminButton>
                     </div>
                   </div>
-                </div>
+                </AdminCard>
               ))}
             </div>
           </div>
@@ -2361,8 +2327,8 @@ export default function AdminSoloGanadoresPage() {
       ) : null}
 
       {tab === "ganadores" ? (
-        <section className={sectionWrap}>
-          <div className={inner}>
+        <section className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <div className="text-lg font-extrabold text-slate-900">🏅 Ganadores</div>
@@ -2371,7 +2337,7 @@ export default function AdminSoloGanadoresPage() {
                 </p>
               </div>
 
-              <button
+              <AdminButton
                 type="button"
                 onClick={() => {
                   setPostForm(emptyPost);
@@ -2379,10 +2345,10 @@ export default function AdminSoloGanadoresPage() {
                   setPostVideoAsset(null);
                   setPostEditSnapshot(null);
                 }}
-                className={btnSm}
+                variant="primary" className="max-w-full whitespace-normal"
               >
                 + Nuevo ganador
-              </button>
+              </AdminButton>
             </div>
 
             {!hasEvents ? (
@@ -2397,7 +2363,7 @@ export default function AdminSoloGanadoresPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <AdminCard className="min-w-0 break-words mt-5 grid [&>*]:min-w-0 grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className={label}>Título *</label>
                 <input
@@ -2627,43 +2593,43 @@ export default function AdminSoloGanadoresPage() {
                 />
                 Destacado
               </label>
-            </div>
+            </AdminCard>
 
             {postEditBlockReasonValue ? (
               <EditBlockedNotice reason={postEditBlockReasonValue} />
             ) : null}
 
-            <button
+            <AdminButton
               type="button"
               onClick={savePost}
-              className={btn + " mt-5"}
+              variant="primary" className="max-w-full whitespace-normal mt-5"
               disabled={saving || postEditBlocked}
             >
               {saving ? "Guardando…" : postForm.id ? "Guardar ganador" : "Crear ganador"}
-            </button>
+            </AdminButton>
 
-            <div className="mt-6 grid grid-cols-1 gap-3">
+            <div className="mt-6 grid [&>*]:min-w-0 grid-cols-1 gap-3">
               {posts.map((p) => (
-                <div key={p.id} className={card}>
+                <AdminCard key={p.id} className="min-w-0 break-words">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <div className="text-sm font-extrabold text-slate-900">{p.title}</div>
-                      <div className="mt-1 text-xs text-slate-600">
+                      <div className="text-lg font-extrabold text-black">{p.title}</div>
+                      <div className="mt-1 text-sm text-slate-600">
                         Evento: {eventLabel(p.event_id)}
                       </div>
-                      <div className="mt-1 text-xs text-slate-600">
+                      <div className="mt-1 text-sm text-slate-600">
                         {p.winner_alias || p.winner_name || "Sin nombre visible"} • {p.source_module}
                       </div>
-                      <div className="mt-1 text-xs text-slate-600">
+                      <div className="mt-1 text-sm text-slate-600">
                         {p.published ? "Publicado" : "Borrador"}{" "}
                         {p.featured ? "• Destacado" : ""}
                       </div>
                     </div>
 
                     <div className="flex gap-2 flex-wrap">
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm}
+                        variant="secondary" className="max-w-full whitespace-normal"
                         onClick={() => {
                           setPostForm({
                             id: p.id,
@@ -2693,19 +2659,19 @@ export default function AdminSoloGanadoresPage() {
                         }}
                       >
                         Editar
-                      </button>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm + " bg-red-700 hover:bg-red-800"}
+                        variant="danger" className="max-w-full whitespace-normal"
                         onClick={() => deleteRow("post", p.id, p.updated_at)}
                         disabled={saving}
                       >
                         Eliminar
-                      </button>
+                      </AdminButton>
                     </div>
                   </div>
-                </div>
+                </AdminCard>
               ))}
             </div>
           </div>
@@ -2713,8 +2679,8 @@ export default function AdminSoloGanadoresPage() {
       ) : null}
 
       {tab === "media" ? (
-        <section className={sectionWrap}>
-          <div className={inner}>
+        <section className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <div className="text-lg font-extrabold text-slate-900">📸 Galería</div>
@@ -2723,17 +2689,17 @@ export default function AdminSoloGanadoresPage() {
                 </p>
               </div>
 
-              <button
+              <AdminButton
                 type="button"
                 onClick={() => {
                   setMediaForm(emptyMedia);
                   setMediaAsset(null);
                   setMediaEditSnapshot(null);
                 }}
-                className={btnSm}
+                variant="primary" className="max-w-full whitespace-normal"
               >
                 + Nuevo contenido
-              </button>
+              </AdminButton>
             </div>
 
             {!hasEvents ? (
@@ -2748,7 +2714,7 @@ export default function AdminSoloGanadoresPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <AdminCard className="min-w-0 break-words mt-5 grid [&>*]:min-w-0 grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className={label}>Título *</label>
                 <input
@@ -2915,41 +2881,41 @@ export default function AdminSoloGanadoresPage() {
                 />
                 Destacado
               </label>
-            </div>
+            </AdminCard>
 
             {mediaEditBlockReasonValue ? (
               <EditBlockedNotice reason={mediaEditBlockReasonValue} />
             ) : null}
 
-            <button
+            <AdminButton
               type="button"
               onClick={saveMedia}
-              className={btn + " mt-5"}
+              variant="primary" className="max-w-full whitespace-normal mt-5"
               disabled={saving || mediaEditBlocked}
             >
               {saving ? "Guardando…" : mediaForm.id ? "Guardar contenido" : "Crear contenido"}
-            </button>
+            </AdminButton>
 
-            <div className="mt-6 grid grid-cols-1 gap-3">
+            <div className="mt-6 grid [&>*]:min-w-0 grid-cols-1 gap-3">
               {media.map((m) => (
-                <div key={m.id} className={card}>
+                <AdminCard key={m.id} className="min-w-0 break-words">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <div className="text-sm font-extrabold text-slate-900">{m.title}</div>
-                      <div className="mt-1 text-xs text-slate-600">
+                      <div className="text-lg font-extrabold text-black">{m.title}</div>
+                      <div className="mt-1 text-sm text-slate-600">
                         Evento: {eventLabel(m.event_id)}
                       </div>
-                      <div className="mt-1 text-xs text-slate-600">
+                      <div className="mt-1 text-sm text-slate-600">
                         {m.media_type} • {m.published ? "Publicado" : "Borrador"}{" "}
                         {m.featured ? "• Destacado" : ""}
                       </div>
-                      <div className="mt-1 text-xs text-slate-500 break-all">{m.media_url}</div>
+                      <div className="mt-1 text-sm text-slate-500 break-all">{m.media_url}</div>
                     </div>
 
                     <div className="flex gap-2 flex-wrap">
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm}
+                        variant="secondary" className="max-w-full whitespace-normal"
                         onClick={() => {
                           setMediaForm({
                             id: m.id,
@@ -2972,24 +2938,24 @@ export default function AdminSoloGanadoresPage() {
                         }}
                       >
                         Editar
-                      </button>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
-                        className={btnSm + " bg-red-700 hover:bg-red-800"}
+                        variant="danger" className="max-w-full whitespace-normal"
                         onClick={() => deleteRow("media", m.id, m.updated_at)}
                         disabled={saving}
                       >
                         Eliminar
-                      </button>
+                      </AdminButton>
                     </div>
                   </div>
-                </div>
+                </AdminCard>
               ))}
             </div>
           </div>
         </section>
       ) : null}
-    </main>
+    </AdminPageShell>
   );
 }

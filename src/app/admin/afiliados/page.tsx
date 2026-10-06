@@ -1,6 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
 import { useEffect, useState } from "react";
 
 type Afiliado = {
@@ -260,20 +264,13 @@ export default function AdminAfiliadosPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-4 py-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold text-slate-900">
-            Admin - Gestión de Afiliados APP
-          </h1>
-
-          <Link
-            href="/admin"
-            className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
-          >
-            ← Volver al Admin
-          </Link>
-        </div>
+    <AdminPageShell>
+        <AdminHeader title="Admin - Gestión de Afiliados APP" actions={
+          <AdminNavActions includeLogout>
+            <AdminButton href="/admin">Admin Central</AdminButton>
+            <AdminButton href="/">Inicio</AdminButton>
+          </AdminNavActions>
+        } />
 
         {message && (
           <div
@@ -289,7 +286,7 @@ export default function AdminAfiliadosPage() {
           </div>
         )}
 
-        <div className="mb-6 rounded-2xl border-2 border-blue-600 bg-white p-6 shadow-sm">
+        <AdminCard>
           <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-slate-900">
             <span className="text-2xl">🛡️</span>
             Gestión administrativa segura
@@ -302,9 +299,9 @@ export default function AdminAfiliadosPage() {
             borrarlo, preservando proyectos, mensajes y demás referencias
             históricas.
           </p>
-        </div>
+        </AdminCard>
 
-        <div className="mb-6 rounded-2xl border-2 border-green-600 bg-white p-6 shadow-sm">
+        <AdminCard>
           <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-slate-900">
             <span className="text-2xl">➕</span>
             Agregar o reactivar afiliado
@@ -328,28 +325,28 @@ export default function AdminAfiliadosPage() {
                     .slice(0, 8)
                 )
               }
-              className="flex-1 rounded-xl border-2 border-slate-300 px-4 py-2 focus:border-green-500 focus:outline-none"
+              className="min-w-0 w-full flex-1 rounded-xl border-2 border-slate-300 px-4 py-2 focus:border-green-500 focus:outline-none"
               maxLength={8}
             />
 
-            <button
+            <AdminButton
               type="button"
               onClick={() => void agregarAfiliado()}
               disabled={agregando}
-              className="rounded-xl bg-green-700 px-6 py-2 font-semibold text-white hover:bg-green-800 disabled:opacity-50"
+              variant="primary" className=""
             >
               {agregando ? "Procesando..." : "Agregar / Reactivar"}
-            </button>
+            </AdminButton>
           </div>
-        </div>
+        </AdminCard>
 
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <AdminCard>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-bold text-slate-900">
               Lista de afiliados
             </h2>
 
-            <div className="flex gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <input
                 type="text"
                 inputMode="numeric"
@@ -363,16 +360,16 @@ export default function AdminAfiliadosPage() {
                       .slice(0, 8)
                   )
                 }
-                className="rounded-xl border-2 border-slate-300 px-4 py-2 text-sm focus:border-green-500 focus:outline-none"
+                className="min-w-0 w-full min-h-11 rounded-xl border-2 border-slate-300 px-4 py-2 text-sm focus:border-green-500 focus:outline-none"
               />
 
-              <button
+              <AdminButton
                 type="button"
                 onClick={() => void cargarAfiliados(buscarDni)}
-                className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                 className=""
               >
                 Buscar
-              </button>
+              </AdminButton>
             </div>
           </div>
 
@@ -391,8 +388,8 @@ export default function AdminAfiliadosPage() {
               No se encontraron afiliados.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="min-w-0 overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead className="bg-slate-100">
                   <tr>
                     <th className="p-3 text-left">DNI</th>
@@ -420,7 +417,7 @@ export default function AdminAfiliadosPage() {
                         </div>
 
                         {!afiliado.participant_linked && (
-                          <div className="mt-1 text-xs font-semibold text-amber-700">
+                          <div className="mt-1 text-sm font-semibold text-amber-700">
                             Registro legacy sin participante vinculado
                           </div>
                         )}
@@ -440,7 +437,7 @@ export default function AdminAfiliadosPage() {
 
                       <td className="p-3">
                         <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                          className={`inline-flex rounded-full px-2 py-1 text-sm font-semibold ${
                             afiliado.is_active
                               ? "bg-green-100 text-green-800"
                               : "bg-slate-200 text-slate-700"
@@ -453,24 +450,20 @@ export default function AdminAfiliadosPage() {
                       </td>
 
                       <td className="p-3 text-center">
-                        <button
+                        <AdminButton
                           type="button"
                           onClick={() =>
                             void cambiarEstado(afiliado)
                           }
                           disabled={mutandoId === afiliado.id}
-                          className={`rounded-lg px-3 py-1 text-xs font-semibold text-white disabled:opacity-50 ${
-                            afiliado.is_active
-                              ? "bg-amber-600 hover:bg-amber-700"
-                              : "bg-green-700 hover:bg-green-800"
-                          }`}
+                          variant={afiliado.is_active ? "danger" : "primary"}
                         >
                           {mutandoId === afiliado.id
                             ? "Procesando..."
                             : afiliado.is_active
                               ? "Desactivar"
                               : "Reactivar"}
-                        </button>
+                        </AdminButton>
                       </td>
                     </tr>
                   ))}
@@ -478,8 +471,7 @@ export default function AdminAfiliadosPage() {
               </table>
             </div>
           )}
-        </div>
-      </div>
-    </main>
+        </AdminCard>
+    </AdminPageShell>
   );
 }

@@ -1,5 +1,8 @@
 "use client";
 
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
+
 import { useEffect, useMemo, useState } from "react";
 
 type FactType =
@@ -309,46 +312,41 @@ export default function RetoTemplateEditor({
   }
 
   const inputClass =
-    "mt-1 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm text-slate-900";
-  const labelClass = "text-xs font-extrabold text-slate-900";
-  const buttonClass =
-    "inline-flex items-center justify-center rounded-xl border-2 border-red-600 bg-green-800 px-3 py-2 text-xs font-extrabold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-60";
+    "mt-1 min-h-11 min-w-0 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2";
+  const labelClass = "text-sm font-bold text-black";
 
   return (
-    <div
-      id="reto-template-editor"
-      className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50 p-4"
-    >
+    <AdminCard id="reto-template-editor" className="mt-4 min-w-0">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-sm font-extrabold text-slate-900">
+          <div className="text-xl font-extrabold text-black">
             Editor seguro de plantillas
           </div>
-          <div className="mt-1 text-xs text-slate-600">
+          <div className="mt-1 text-sm text-slate-600">
             Crea o modifica borradores. Aprobar, activar y retirar se gestionan
             en una fase separada.
           </div>
         </div>
 
-        <button
+        <AdminButton
           type="button"
-          className={buttonClass}
+          variant="primary"
           disabled={saving}
           onClick={startCreate}
         >
           + Nueva plantilla
-        </button>
+        </AdminButton>
       </div>
 
       {localNotice && (
-        <div className="mt-3 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800">
+        <div className="mt-3 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800">
           {localNotice}
         </div>
       )}
 
       {open && (
         <div className="mt-4 space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 gap-3 md:grid-cols-2">
             <label>
               <div className={labelClass}>Codigo</div>
               <input
@@ -359,7 +357,7 @@ export default function RetoTemplateEditor({
                 placeholder="ejemplo_plantilla_01"
               />
               {editingTemplate && (
-                <div className="mt-1 text-[11px] text-slate-600">
+                <div className="mt-1 text-sm text-slate-600">
                   El codigo no puede cambiarse durante la edicion.
                 </div>
               )}
@@ -409,7 +407,7 @@ export default function RetoTemplateEditor({
               {SOURCES.map((source) => (
                 <label
                   key={source}
-                  className="inline-flex items-center gap-2 text-xs font-semibold text-slate-800"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"
                 >
                   <input
                     type="checkbox"
@@ -424,13 +422,13 @@ export default function RetoTemplateEditor({
 
           <div>
             <div className={labelClass}>Operador</div>
-            <div className="mt-1 rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+            <div className="mt-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
               {operator}
             </div>
           </div>
 
           {form.factType === "integer" && (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
               <label>
                 <div className={labelClass}>Delta falso minimo</div>
                 <input
@@ -460,7 +458,7 @@ export default function RetoTemplateEditor({
           )}
 
           {form.factType === "decimal" && (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
               <label>
                 <div className={labelClass}>Step decimal</div>
                 <input
@@ -487,15 +485,15 @@ export default function RetoTemplateEditor({
           )}
 
           {form.factType !== "integer" && form.factType !== "decimal" && (
-            <div className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700">
+            <div className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
               Este tipo usa configuracion vacia controlada: {"{}"}
             </div>
           )}
 
           <div className="flex gap-2 flex-wrap">
-            <button
+            <AdminButton
               type="button"
-              className={buttonClass}
+              variant="primary"
               disabled={saving}
               onClick={() => void save()}
             >
@@ -504,19 +502,19 @@ export default function RetoTemplateEditor({
                 : editingTemplate
                   ? "Guardar cambios"
                   : "Guardar borrador"}
-            </button>
+            </AdminButton>
 
-            <button
+            <AdminButton
               type="button"
-              className="inline-flex items-center justify-center rounded-xl border-2 border-slate-500 bg-white px-3 py-2 text-xs font-extrabold text-slate-800 hover:bg-slate-100 disabled:opacity-60"
+
               disabled={saving}
               onClick={cancel}
             >
               Cancelar
-            </button>
+            </AdminButton>
           </div>
         </div>
       )}
-    </div>
+    </AdminCard>
   );
 }

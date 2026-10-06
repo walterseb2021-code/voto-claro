@@ -1,7 +1,11 @@
 // src/app/admin/capacitaciones/page.tsx
 "use client";
 
-import Link from "next/link";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -87,19 +91,6 @@ export default function AdminCapacitacionesPage() {
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
   const [rejectedReasons, setRejectedReasons] = useState<Record<string, string>>({});
 
-  const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-6xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
-  const inner = "rounded-2xl border-2 border-red-600 bg-white/85 p-4";
-  const btn =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-  const btnSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
@@ -307,40 +298,30 @@ export default function AdminCapacitacionesPage() {
 
   if (checking) {
     return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin Capacitaciones – VOTO CLARO
-        </h1>
+      <AdminPageShell>
+        <AdminHeader title="Admin Capacitaciones – VOTO CLARO" />
 
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
+        <section>
+          <AdminCard>
+            <div className="text-xl font-extrabold text-black">Cargando…</div>
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
               Verificando sesión.
             </div>
-          </div>
+          </AdminCard>
         </section>
-      </main>
+      </AdminPageShell>
     );
   }
 
   return (
-    <main className={wrap}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          📚 Admin Capacitaciones
-        </h1>
-
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/admin" className={btnSm}>
-            🧭 Admin Central
-          </Link>
-
-          <button type="button" onClick={goBack} className={btnSm}>
-            ← Volver
-          </button>
-        </div>
-      </div>
+    <AdminPageShell>
+      <AdminHeader title="📚 Admin Capacitaciones" actions={
+        <AdminNavActions includeLogout>
+          <AdminButton href="/admin">Admin Central</AdminButton>
+          <AdminButton href="/">Inicio</AdminButton>
+          <AdminButton type="button" onClick={goBack}>← Volver</AdminButton>
+        </AdminNavActions>
+      } />
 
       {message && (
         <div
@@ -354,11 +335,11 @@ export default function AdminCapacitacionesPage() {
         </div>
       )}
 
-      <section className={sectionWrap}>
-        <div className={inner}>
+      <section>
+        <AdminCard>
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
             <div>
-              <div className="text-sm font-extrabold text-slate-900">
+              <div className="text-xl font-extrabold text-black">
                 Moderación de cursos, talleres, videos y materiales
               </div>
 
@@ -369,18 +350,18 @@ export default function AdminCapacitacionesPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button
+              <AdminButton
                 type="button"
                 onClick={() => loadTrainings()}
                 disabled={loading}
-                className={btnSm}
+
               >
                 {loading ? "Cargando..." : "↻ Refrescar"}
-              </button>
+              </AdminButton>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-xs font-bold">
+          <div className="mt-4 grid grid-cols-1 min-[360px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 text-sm font-bold">
             <div className="rounded-xl border border-slate-300 bg-white p-3">
               Total: {counts.total}
             </div>
@@ -400,7 +381,7 @@ export default function AdminCapacitacionesPage() {
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-bold text-slate-700 mb-1">
                 Estado
               </label>
 
@@ -411,7 +392,7 @@ export default function AdminCapacitacionesPage() {
                   setStatusFilter(next);
                   loadTrainings(next);
                 }}
-                className="w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
+                className="min-h-11 w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -422,7 +403,7 @@ export default function AdminCapacitacionesPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-bold text-slate-700 mb-1">
                 Buscar
               </label>
 
@@ -430,17 +411,17 @@ export default function AdminCapacitacionesPage() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
+                className="min-h-11 w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
                 placeholder="Buscar por título, categoría, profesional, código, enlace o nota..."
               />
             </div>
           </div>
-        </div>
+        </AdminCard>
       </section>
 
-      <section className={sectionWrap + " mt-6"}>
-        <div className={inner}>
-          <div className="text-sm font-extrabold text-slate-900">
+      <section>
+        <div>
+          <div className="text-xl font-extrabold text-black">
             Publicaciones encontradas: {filteredItems.length}
           </div>
 
@@ -455,31 +436,28 @@ export default function AdminCapacitacionesPage() {
           ) : (
             <div className="mt-4 grid grid-cols-1 gap-4">
               {filteredItems.map((item) => (
-                <article
-                  key={item.id}
-                  className="rounded-2xl border-2 border-slate-300 bg-white p-4 shadow-sm"
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                <AdminCard key={item.id} className="min-w-0 break-words">
+                  <div className="flex min-w-0 flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className={`rounded-full border px-3 py-1 text-xs font-extrabold ${
+                          className={`rounded-full border px-3 py-1 text-sm font-extrabold ${
                             STATUS_CLASS[item.status]
                           }`}
                         >
                           {STATUS_LABEL[item.status]}
                         </span>
 
-                        <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800">
+                        <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-sm font-bold text-blue-800">
                           {item.category}
                         </span>
 
-                        <span className="rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-xs font-bold text-purple-800">
+                        <span className="rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-sm font-bold text-purple-800">
                           {item.resource_type}
                         </span>
                       </div>
 
-                      <h2 className="mt-3 text-lg font-extrabold text-slate-900">
+                      <h2 className="mt-3 text-xl font-extrabold text-black">
                         {item.title}
                       </h2>
 
@@ -489,7 +467,7 @@ export default function AdminCapacitacionesPage() {
                         </p>
                       )}
 
-                      <div className="mt-3 text-xs text-slate-600 space-y-1">
+                      <div className="mt-3 break-words text-sm text-slate-600 space-y-1">
                         <p>
                           <strong>Profesional:</strong>{" "}
                           {item.professional?.public_name || "No identificado"}
@@ -520,57 +498,57 @@ export default function AdminCapacitacionesPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-2 min-w-full lg:min-w-[220px]">
-                      <a
+                    <div className="flex flex-col gap-2 w-full shrink-0 lg:w-[220px]">
+                      <AdminButton
                         href={item.resource_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={btnSm + " text-center"}
+                        className="text-center"
                       >
                         Abrir recurso →
-                      </a>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
                         onClick={() => updateTrainingStatus(item, "active")}
                         disabled={updatingId === item.id}
-                        className="rounded-xl border-2 border-green-600 bg-green-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-green-800 disabled:opacity-60"
+                        variant="primary"
                       >
                         Aprobar / Activar
-                      </button>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
                         onClick={() => updateTrainingStatus(item, "pending")}
                         disabled={updatingId === item.id}
-                        className="rounded-xl border-2 border-yellow-500 bg-yellow-500 px-3 py-2 text-xs font-extrabold text-white hover:bg-yellow-600 disabled:opacity-60"
+                        variant="warning"
                       >
                         En revisión
-                      </button>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
                         onClick={() => updateTrainingStatus(item, "inactive")}
                         disabled={updatingId === item.id}
-                        className="rounded-xl border-2 border-slate-500 bg-slate-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-slate-700 disabled:opacity-60"
+                        variant="danger"
                       >
                         Desactivar
-                      </button>
+                      </AdminButton>
 
-                      <button
+                      <AdminButton
                         type="button"
                         onClick={() => updateTrainingStatus(item, "rejected")}
                         disabled={updatingId === item.id}
-                        className="rounded-xl border-2 border-red-600 bg-red-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-red-800 disabled:opacity-60"
+                        variant="danger"
                       >
                         Rechazar
-                      </button>
+                      </AdminButton>
                     </div>
                   </div>
 
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-sm font-bold text-slate-700 mb-1">
                         Nota administrativa
                       </label>
 
@@ -583,13 +561,13 @@ export default function AdminCapacitacionesPage() {
                           }))
                         }
                         rows={3}
-                        className="w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
+                        className="min-h-11 w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
                         placeholder="Nota interna del administrador..."
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-sm font-bold text-slate-700 mb-1">
                         Motivo de rechazo
                       </label>
 
@@ -602,45 +580,45 @@ export default function AdminCapacitacionesPage() {
                           }))
                         }
                         rows={3}
-                        className="w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
+                        className="min-h-11 w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-sm"
                         placeholder="Obligatorio si se rechaza la publicación..."
                       />
                     </div>
                   </div>
 
-                  <button
+                  <AdminButton
                     type="button"
                     onClick={() => saveAdminNote(item)}
                     disabled={updatingId === item.id}
-                    className="mt-3 rounded-xl border-2 border-blue-600 bg-blue-700 px-4 py-2 text-xs font-extrabold text-white hover:bg-blue-800 disabled:opacity-60"
+                    variant="primary" className="mt-3"
                   >
                     Guardar nota administrativa
-                  </button>
+                  </AdminButton>
 
                   {item.rejected_reason && (
-                    <div className="mt-3 rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-800">
+                    <div className="mt-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
                       <strong>Motivo de rechazo actual:</strong> {item.rejected_reason}
                     </div>
                   )}
 
                   {item.admin_note && (
-                    <div className="mt-3 rounded-xl border border-blue-300 bg-blue-50 p-3 text-xs text-blue-800">
+                    <div className="mt-3 rounded-xl border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800">
                       <strong>Nota administrativa actual:</strong> {item.admin_note}
                     </div>
                   )}
-                </article>
+                </AdminCard>
               ))}
             </div>
           )}
         </div>
       </section>
 
-      <section className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">
+      <section className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
         <strong>⚠️ Aviso de administración:</strong> Antes de aprobar o mantener
         activa una publicación, revisa que el enlace abra correctamente, que el
         contenido sea coherente con capacitación emprendedora y que no parezca
         engañoso, ofensivo, inseguro o ajeno a los fines de la plataforma.
       </section>
-    </main>
+    </AdminPageShell>
   );
 }

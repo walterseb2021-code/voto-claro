@@ -2,7 +2,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
 import { useRouter } from "next/navigation";
 import {
   getCandidatePanelOptions,
@@ -535,69 +539,47 @@ export default function AdminLivePage() {
   // ===============================
   // UI styles (coherente verde/rojo)
   // ===============================
-  const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
-  const inner = "rounded-2xl border-2 border-red-600 bg-white/85 p-4";
-  const btn =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm";
-  const btnSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 " +
-    "disabled:cursor-not-allowed disabled:hover:bg-green-800";
 
   // ✅ NUEVO: botón peligro (solo visual; no toca estilos globales)
-  const btnDangerSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-red-700 text-white text-xs font-extrabold " +
-    "hover:bg-red-800 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
 
   const input =
-    "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
+    "mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
 
   if (checking) {
     return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – EN VIVO (VOTO CLARO)
-        </h1>
+      <AdminPageShell>
+        <AdminHeader title="Admin – EN VIVO (VOTO CLARO)" />
 
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
+        <section>
+          <AdminCard>
+            <div className="text-xl font-extrabold text-black">Cargando…</div>
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
               Verificando sesión.
             </div>
-          </div>
+          </AdminCard>
         </section>
 
-        <button type="button" onClick={goBack} className={btn + " mt-4"}>
+        <AdminButton type="button" onClick={goBack}  className="mt-4">
           ← Volver
-        </button>
-      </main>
+        </AdminButton>
+      </AdminPageShell>
     );
   }
 
   return (
-    <main className={wrap}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – EN VIVO (VOTO CLARO)
-        </h1>
+    <AdminPageShell>
+      <AdminHeader title="Admin – EN VIVO (VOTO CLARO)" actions={
+          <AdminNavActions includeLogout>
+            <AdminButton href="/admin">Admin Central</AdminButton>
+            <AdminButton href="/">Inicio</AdminButton>
+            <AdminButton type="button" onClick={goBack}>← Volver</AdminButton>
+          </AdminNavActions>
+        } />
 
-        <button type="button" onClick={goBack} className={btn}>
-          ← Volver
-        </button>
-      </div>
-
-      <section className={sectionWrap}>
-        <div className={inner}>
-          <div className="text-sm font-extrabold text-slate-900">Buscar candidato</div>
+      <section>
+        <AdminCard>
+          <div className="text-xl font-extrabold text-black">Buscar candidato</div>
 
           <input
             value={q}
@@ -607,19 +589,19 @@ export default function AdminLivePage() {
           />
 
           {suggestions.length > 0 ? (
-            <div className="mt-2 rounded-2xl border-2 border-red-600 bg-green-50/70 p-2">
+            <div className="mt-2 rounded-2xl border border-slate-300 bg-[#bffcff] p-2">
               {suggestions.map((c, idx) => (
-                <button
+                <AdminButton
                   key={`${c.id}-${idx}`}
                   type="button"
                   onClick={() => {
                     setSelectedCandidateId(c.id);
                     setQ(c.name);
                   }}
-                  className="w-full text-left rounded-xl px-3 py-2 hover:bg-green-100 transition text-sm font-extrabold text-slate-900"
+                   className="w-full text-left"
                 >
                   {c.name}
-                </button>
+                </AdminButton>
               ))}
             </div>
           ) : null}
@@ -629,53 +611,53 @@ export default function AdminLivePage() {
               Selecciona un candidato para gestionar su acceso privado y abrir su panel.
             </div>
           ) : (
-            <div className="mt-5 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4">
-              <div className="text-sm font-extrabold text-slate-900">
+            <div className="mt-5 rounded-2xl border border-slate-300 bg-[#bffcff] p-4">
+              <div className="text-xl font-extrabold text-black">
                 Candidato seleccionado
               </div>
 
-              <div className="mt-1 text-base md:text-lg font-extrabold text-slate-900 break-words">
+              <div className="mt-1 text-base md:text-xl font-extrabold text-black break-words">
                 {selectedCandidate.name}
               </div>
 
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="rounded-2xl border-2 border-red-600 bg-white/85 p-3">
-                  <div className="text-xs font-extrabold text-slate-700">
+                <div className="rounded-2xl border border-slate-300 bg-white p-3">
+                  <div className="text-sm font-extrabold text-slate-700">
                     Panel del candidato (privado)
                   </div>
 
-                  <div className="mt-1 text-[12px] text-slate-700 break-words">
+                  <div className="mt-1 text-sm text-slate-700 break-words">
                     /panel/candidato/{selectedCandidate.id}
                   </div>
 
                   <div className="mt-2 flex gap-2 flex-wrap">
-                    <Link
+                    <AdminButton
                       href={`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`}
-                      className={btnSm}
+
                       target="_blank"
                       rel="noreferrer"
                     >
                       Abrir panel
-                    </Link>
+                    </AdminButton>
 
-                    <button
+                    <AdminButton
                       type="button"
                       onClick={() =>
                         copy(`${PROD_ORIGIN}/panel/candidato/${selectedCandidate.id}`)
                       }
-                      className={btnSm}
+
                     >
                       Copiar link
-                    </button>
+                    </AdminButton>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border-2 border-red-600 bg-white/85 p-3">
-                  <div className="text-xs font-extrabold text-slate-700">
+                <div className="rounded-2xl border border-slate-300 bg-white p-3">
+                  <div className="text-sm font-extrabold text-slate-700">
                     Código de acceso
                   </div>
 
-                  <div className="mt-2 text-xs font-extrabold text-slate-700">
+                  <div className="mt-2 text-sm font-extrabold text-slate-700">
                     {credentialStateLoading
                       ? "Verificando acceso..."
                       : credentialStateQueryFailed
@@ -688,16 +670,17 @@ export default function AdminLivePage() {
                   {!credentialStateLoading &&
                   !credentialStateQueryFailed &&
                   credentialState?.credentialStatus !== "ACTIVE" ? (
-                    <div className="mt-2 text-[11px] text-slate-600">
+                    <div className="mt-2 text-sm text-slate-600">
                       El acceso privado de este candidato está deshabilitado.
                     </div>
                   ) : null}
 
                   <div className="mt-2 flex gap-2 flex-wrap">
-                    <button
+                    <AdminButton
                       type="button"
+                      variant="primary"
                       onClick={() => rotateAccessCode(selectedCandidate)}
-                      className={btnSm}
+
                       disabled={
                         accessCodeLoading ||
                         credentialStateLoading ||
@@ -710,12 +693,12 @@ export default function AdminLivePage() {
                         : accessCodeLoading
                           ? "Generando..."
                           : "Generar código de acceso"}
-                    </button>
+                    </AdminButton>
                   </div>
 
                   {generatedAccessCode?.candidateId === selectedCandidate.canonicalId ? (
-                    <div className="mt-3 rounded-2xl border-2 border-red-600 bg-green-50/70 p-3">
-                      <div className="text-xs font-extrabold text-slate-700">
+                    <div className="mt-3 rounded-2xl border border-slate-300 bg-[#bffcff] p-3">
+                      <div className="text-sm font-extrabold text-slate-700">
                         Código de acceso generado
                       </div>
 
@@ -724,47 +707,47 @@ export default function AdminLivePage() {
                       </div>
 
                       <div className="mt-2 flex gap-2 flex-wrap">
-                        <button
+                        <AdminButton
                           type="button"
                           onClick={() => copy(generatedAccessCode.accessCode)}
-                          className={btnSm}
+
                         >
                           Copiar
-                        </button>
+                        </AdminButton>
 
-                        <button
+                        <AdminButton
                           type="button"
                           onClick={() => setGeneratedAccessCode(null)}
-                          className={btnSm}
+
                         >
                           Ocultar
-                        </button>
+                        </AdminButton>
                       </div>
 
-                      <div className="mt-2 text-[11px] text-slate-600">
+                      <div className="mt-2 text-sm text-slate-600">
                         Guárdalo y entrégalo al candidato por un canal seguro. No
                         podrá recuperarse después.
                       </div>
                     </div>
                   ) : null}
 
-                  <div className="mt-2 text-[11px] text-slate-600">
+                  <div className="mt-2 text-sm text-slate-600">
                     El código solo aparece una vez al generarlo o rotarlo.
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border-2 border-red-600 bg-white/85 p-3">
+              <div className="mt-4 rounded-2xl border border-slate-300 bg-white p-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="text-xs font-extrabold text-slate-700">
+                  <div className="text-sm font-extrabold text-slate-700">
                     Historial del candidato (admin)
                   </div>
 
                   {/* ✅ NUEVO: Eliminar todo (solo si hay historial) */}
                   {selectedHistory.length > 0 ? (
-                    <button
+                    <AdminButton
                       type="button"
-                      className={btnDangerSm}
+                      variant="danger"
                       disabled={deletingAll}
                       onClick={() =>
                         deleteAllLivesForCandidate(
@@ -775,7 +758,7 @@ export default function AdminLivePage() {
                       title="Elimina todo el historial del candidato (global en Supabase)"
                     >
                       {deletingAll ? "Eliminando..." : "🗑️ Eliminar TODO"}
-                    </button>
+                    </AdminButton>
                   ) : null}
                 </div>
 
@@ -788,28 +771,28 @@ export default function AdminLivePage() {
                     {selectedHistory.map((x) => (
                       <div
                         key={x.id}
-                        className="rounded-2xl border-2 border-red-600 bg-green-50/50 p-3"
+                        className="rounded-2xl border border-slate-300 bg-slate-50 p-3"
                       >
                         <div className="flex items-start justify-between gap-2 flex-wrap">
-                          <div className="text-xs font-extrabold text-slate-800">
+                          <div className="text-sm font-extrabold text-slate-800">
                             {new Date(x.createdAt).toLocaleString("es-PE")} ·{" "}
                             {platformLabel(x.platform)} ·{" "}
                             {x.status === "LIVE" ? "🔴 EN VIVO" : "Finalizado"}
                           </div>
 
                           {/* ✅ NUEVO: Eliminar individual */}
-                          <button
+                          <AdminButton
                             type="button"
-                            className={btnDangerSm}
+                            variant="danger"
                             disabled={deletingAll || deletingId === x.id}
                             onClick={() => deleteSingleLive(x)}
                             title="Eliminar este registro (global en Supabase)"
                           >
                             {deletingId === x.id ? "Eliminando..." : "🗑️ Eliminar"}
-                          </button>
+                          </AdminButton>
                         </div>
 
-                        <div className="mt-1 text-[11px] text-slate-600 break-words">
+                        <div className="mt-1 text-sm text-slate-600 break-words">
                           {x.url}
                         </div>
                       </div>
@@ -819,8 +802,8 @@ export default function AdminLivePage() {
               </div>
             </div>
           )}
-        </div>
+        </AdminCard>
       </section>
-    </main>
+    </AdminPageShell>
   );
 }

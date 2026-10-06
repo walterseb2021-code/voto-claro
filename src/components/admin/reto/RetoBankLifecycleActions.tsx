@@ -1,5 +1,7 @@
 "use client";
 
+import AdminButton from "@/components/admin/AdminButton";
+
 import { useState } from "react";
 
 type ReviewStatus = "draft" | "approved" | "retired";
@@ -16,14 +18,7 @@ type Props = {
   onChanged: () => void | Promise<void>;
 };
 
-const btn =
-  "inline-flex items-center justify-center rounded-xl px-3 py-2 " +
-  "border-2 text-xs font-extrabold transition shadow-sm " +
-  "disabled:opacity-60 disabled:cursor-not-allowed";
 
-const approveBtn = `${btn} border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800`;
-const activateBtn = `${btn} border-amber-700 bg-amber-500 text-slate-950 hover:bg-amber-600`;
-const retireBtn = `${btn} border-slate-700 bg-white text-slate-800 hover:bg-slate-100`;
 
 function friendlyError(error: unknown): string {
   switch (error) {
@@ -202,34 +197,34 @@ export default function RetoBankLifecycleActions({
     <>
       {reviewStatus === "draft" && (
         <>
-          <button
+          <AdminButton
             type="button"
-            className={approveBtn}
+            variant="primary"
             disabled={busy}
             onClick={() => void runApprove(false)}
           >
             Aprobar
-          </button>
+          </AdminButton>
 
-          <button
+          <AdminButton
             type="button"
-            className={activateBtn}
+            variant="primary"
             disabled={busy}
             onClick={() => void runApprove(true)}
           >
             Aprobar y activar
-          </button>
+          </AdminButton>
         </>
       )}
 
-      <button
+      <AdminButton
         type="button"
-        className={retireBtn}
+        variant="danger"
         disabled={busy}
         onClick={() => void runRetire()}
       >
         Retirar
-      </button>
+      </AdminButton>
     </>
   );
 }

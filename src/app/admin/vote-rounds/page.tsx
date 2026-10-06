@@ -1,7 +1,11 @@
 // src/app/admin/vote-rounds/page.tsx
 "use client";
 
-import Link from "next/link";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
@@ -78,7 +82,7 @@ const peruPartsFormatter = new Intl.DateTimeFormat("en-CA", {
 
 function Pill({ children }: { children: ReactNode }) {
   return (
-    <span className="text-xs px-3 py-1 rounded-full border border-green-200 bg-green-100 text-green-800 font-medium">
+    <span className="text-sm px-3 py-1 rounded-full border border-green-200 bg-green-100 text-green-800 font-medium">
       {children}
     </span>
   );
@@ -573,78 +577,51 @@ export default function AdminVoteRoundsPage() {
     }
   }
 
-  const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
-  const inner = "rounded-2xl border-2 border-red-600 bg-white/85 p-4";
-  const btn =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-  const btnSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-  const btnDangerSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-red-700 text-white text-xs font-extrabold " +
-    "hover:bg-red-800 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
   const input =
-    "mt-2 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-3 " +
+    "mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 " +
     "text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
   const select =
-    "rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm font-extrabold " +
+    "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-extrabold " +
     "text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600";
 
   if (checking) {
     return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – Rondas de Voto
-        </h1>
+      <AdminPageShell>
+        <AdminHeader title="Admin – Rondas de Voto" />
 
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
+        <section>
+          <div className="space-y-6">
+            <div className="text-xl font-extrabold text-black">Cargando…</div>
             <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
               Verificando sesión.
             </div>
           </div>
         </section>
 
-        <button type="button" onClick={goBack} className={btn + " mt-4"}>
+        <AdminButton type="button" onClick={goBack}  className="mt-4">
           ← Volver
-        </button>
-      </main>
+        </AdminButton>
+      </AdminPageShell>
     );
   }
 
   return (
-    <main className={wrap}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin – Rondas de Voto
-        </h1>
-        <div className="text-xs font-extrabold text-slate-700">
-          Grupo seleccionado: {selectedGroup}
-        </div>
+    <AdminPageShell>
+      <AdminHeader title="Admin – Rondas de Voto" actions={
+          <AdminNavActions includeLogout>
+            <AdminButton href="/admin">Admin Central</AdminButton>
+            <AdminButton href="/">Inicio</AdminButton>
+            <AdminButton href="/admin/live">🔴 Admin EN VIVO</AdminButton>
+            <AdminButton type="button" onClick={goBack}>← Volver</AdminButton>
+          </AdminNavActions>
+        } />
+      <p className="text-base font-bold text-black">Grupo seleccionado: {selectedGroup}</p>
 
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/admin/live" className={btnSm}>
-            🔴 Admin EN VIVO
-          </Link>
-          <button type="button" onClick={goBack} className={btnSm}>
-            ← Volver
-          </button>
-        </div>
-      </div>
-
-      <section className={sectionWrap}>
-        <div className={inner}>
+      <section>
+        <div className="space-y-6">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <div className="text-sm font-extrabold text-slate-900">Ronda activa</div>
+              <div className="text-xl font-extrabold text-black">Ronda activa</div>
               <div className="mt-1 text-sm text-slate-800">
                 {activeRound ? (
                   <>
@@ -657,13 +634,13 @@ export default function AdminVoteRoundsPage() {
                   <span className="text-red-700 font-extrabold">No hay ronda activa</span>
                 )}
               </div>
-              <div className="mt-2 text-xs text-slate-600">
+              <div className="mt-2 text-sm text-slate-600">
                 El público nunca ve rondas. La encuesta usa internamente la ronda activa de {selectedGroup}.
               </div>
             </div>
 
             <div className="flex items-end gap-2 flex-wrap">
-              <label className="text-xs font-extrabold text-slate-700">
+              <label className="text-sm font-extrabold text-slate-700">
                 Grupo
                 <select
                   value={selectedGroup}
@@ -683,14 +660,14 @@ export default function AdminVoteRoundsPage() {
                 </select>
               </label>
 
-              <button
+              <AdminButton
                 type="button"
                 onClick={() => void loadRounds()}
-                className={btnSm}
+
                 disabled={busy}
               >
                 {operation === "load" ? "Cargando…" : "↻ Refrescar"}
-              </button>
+              </AdminButton>
             </div>
           </div>
 
@@ -702,15 +679,15 @@ export default function AdminVoteRoundsPage() {
             </div>
           ) : null}
 
-          <div className="mt-6 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
-            <div className="text-sm font-extrabold text-slate-900">
+          <AdminCard>
+            <div className="text-xl font-extrabold text-black">
               Crear borrador
             </div>
-            <div className="mt-1 text-xs text-slate-600">
+            <div className="mt-1 break-words text-sm text-slate-600">
               Crea una ronda inactiva para {selectedGroup}. La activación se hace después.
             </div>
 
-            <label className="mt-3 block text-xs font-extrabold text-slate-700">
+            <label className="mt-3 block text-sm font-extrabold text-slate-700">
               Nombre
               <input
                 value={newName}
@@ -723,7 +700,7 @@ export default function AdminVoteRoundsPage() {
             </label>
 
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-extrabold text-slate-700">
+              <label className="text-sm font-extrabold text-slate-700">
                 Grupo
                 <select
                   value={selectedGroup}
@@ -743,7 +720,7 @@ export default function AdminVoteRoundsPage() {
                 </select>
               </label>
 
-              <label className="text-xs font-extrabold text-slate-700">
+              <label className="text-sm font-extrabold text-slate-700">
                 Modo
                 <select
                   value={newIdentityMode}
@@ -760,7 +737,7 @@ export default function AdminVoteRoundsPage() {
             </div>
 
             {newIdentityMode === "secure_session" ? (
-              <label className="mt-3 block text-xs font-extrabold text-slate-700">
+              <label className="mt-3 block text-sm font-extrabold text-slate-700">
                 Fecha y hora de cierre
                 <input
                   type="datetime-local"
@@ -769,19 +746,19 @@ export default function AdminVoteRoundsPage() {
                   className={input}
                   disabled={busy}
                 />
-                <span className="mt-1 block text-xs font-semibold text-slate-600">
+                <span className="mt-1 block text-sm font-semibold text-slate-600">
                   Hora de Perú (UTC-5)
                 </span>
               </label>
             ) : null}
 
             {newIdentityMode === "secure_session" && !secureSessionAvailable ? (
-              <div className="mt-3 text-xs font-semibold text-red-700">
+              <div className="mt-3 text-sm font-semibold text-red-700">
                 La configuración de sesión segura aún no está disponible. El borrador no podrá activarse.
               </div>
             ) : null}
 
-            <label className="mt-3 block text-xs font-extrabold text-slate-700">
+            <label className="mt-3 block text-sm font-extrabold text-slate-700">
               Ronda fuente de partidos
               <select
                 value={selectedSourceRoundId}
@@ -801,23 +778,23 @@ export default function AdminVoteRoundsPage() {
             </label>
 
             {sourceRounds.length === 0 ? (
-              <div className="mt-3 text-xs font-semibold text-red-700">
+              <div className="mt-3 text-sm font-semibold text-red-700">
                 No hay ronda fuente elegible para este grupo.
               </div>
             ) : null}
 
-            <button
+            <AdminButton
               type="button"
               onClick={createRound}
-              className={btn + " mt-3"}
+              variant="primary"  className="mt-3"
               disabled={busy || !selectedSourceRound}
             >
               {operation === "create" ? "Creando…" : "➕ Crear borrador"}
-            </button>
-          </div>
+            </AdminButton>
+          </AdminCard>
 
-          <div className="mt-6 rounded-2xl border-2 border-red-600 bg-white/85 p-4">
-            <div className="text-sm font-extrabold text-slate-900">Historial de rondas (admin)</div>
+          <AdminCard>
+            <div className="text-xl font-extrabold text-black">Historial de rondas (admin)</div>
 
             {operation === "load" && visibleRounds.length === 0 ? (
               <div className="mt-3 text-sm text-slate-700">Cargando…</div>
@@ -850,22 +827,22 @@ export default function AdminVoteRoundsPage() {
                   return (
                     <div
                       key={round.id}
-                      className="rounded-2xl border-2 border-red-600 bg-green-50/50 p-3 flex items-start justify-between gap-3 flex-wrap"
+                      className="rounded-2xl border border-slate-300 bg-slate-50 p-3 flex items-start justify-between gap-3 flex-wrap"
                     >
                       <div className="min-w-0">
-                        <div className="text-sm font-extrabold text-slate-900 break-words">
+                        <div className="text-xl font-extrabold text-black break-words">
                           {round.name}
                         </div>
-                        <div className="mt-1 text-[11px] text-slate-600">
+                        <div className="mt-1 break-words text-sm text-slate-600">
                           Creación: {formatPeruDate(round.created_at)} · ID: {round.id}
                         </div>
-                        <div className="mt-1 text-[11px] text-slate-600">
+                        <div className="mt-1 break-words text-sm text-slate-600">
                           Grupo: {round.group_code} · Modo: {modeLabel(round.identity_mode)}
                         </div>
-                        <div className="mt-1 text-[11px] text-slate-600">
+                        <div className="mt-1 break-words text-sm text-slate-600">
                           Fecha de cierre: {formatPeruDate(round.ends_at)}
                         </div>
-                        <div className="mt-1 text-[11px] text-slate-600">
+                        <div className="mt-1 break-words text-sm text-slate-600">
                           Partidos habilitados: {round.enabled_parties_count} ·{" "}
                           {round.catalog_ready ? "Catálogo listo" : "Catálogo pendiente"}
                         </div>
@@ -877,10 +854,11 @@ export default function AdminVoteRoundsPage() {
 
                       <div className="flex gap-2 flex-wrap">
                         {round.lifecycle_state === "draft" ? (
-                          <button
+                          <AdminButton
                             type="button"
-                            className={btnSm}
+
                             disabled={busy || !canActivate}
+                            variant="primary"
                             onClick={() => activateRound(round)}
                             title={
                               activateBlockedByConfig
@@ -891,19 +869,19 @@ export default function AdminVoteRoundsPage() {
                             }
                           >
                             {activating ? "Activando…" : "✅ Activar"}
-                          </button>
+                          </AdminButton>
                         ) : null}
 
                         {canClose ? (
-                          <button
+                          <AdminButton
                             type="button"
-                            className={btnDangerSm}
+                            variant="danger"
                             disabled={busy}
                             onClick={() => closeRound(round)}
                             title="Cierra esta ronda"
                           >
                             {closing ? "Cerrando…" : "⛔ Cerrar"}
-                          </button>
+                          </AdminButton>
                         ) : null}
                       </div>
                     </div>
@@ -911,13 +889,13 @@ export default function AdminVoteRoundsPage() {
                 })}
               </div>
             )}
-          </div>
+          </AdminCard>
 
-          <div className="mt-6 text-xs text-slate-700">
+          <div className="mt-6 text-sm text-slate-700">
             Importante: cerrar una ronda no activa otra automáticamente.
           </div>
         </div>
       </section>
-    </main>
+    </AdminPageShell>
   );
 }

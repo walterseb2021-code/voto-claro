@@ -4,6 +4,12 @@ import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
+import AdminButton from "@/components/admin/AdminButton";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminCard from "@/components/admin/AdminCard";
+
 // ✅ Evita prerender/SSG en build (Vercel) para esta página
 export const dynamic = "force-dynamic";
 
@@ -85,58 +91,48 @@ function AdminLoginInner() {
 }
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 420, border: "1px solid #e5e7eb", borderRadius: 12, padding: 20 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Admin · Voto Claro</h1>
-        <p style={{ marginTop: 0, marginBottom: 16, color: "#6b7280", fontSize: 14 }}>
-          Inicia sesión para acceder al panel.
-        </p>
+    <AdminPageShell centered>
+      <AdminCard elevated className="w-full max-w-md space-y-6">
+        <AdminHeader title="Admin · Voto Claro" description="Inicia sesión para acceder al panel." />
+        <AdminNavActions><AdminButton href="/">🏠 Inicio</AdminButton></AdminNavActions>
 
-        <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 13 }}>Email</span>
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <label className="grid gap-2">
+            <span className="text-base font-semibold">Email</span>
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               type="email"
               autoComplete="email"
               required
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #d1d5db" }}
+              className="min-h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2"
             />
           </label>
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 13 }}>Contraseña</span>
+          <label className="grid gap-2">
+            <span className="text-base font-semibold">Contraseña</span>
             <input
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               type="password"
               autoComplete="current-password"
               required
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #d1d5db" }}
+              className="min-h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2"
             />
           </label>
 
-          <button
+          <AdminButton
             type="submit"
+            variant="primary"
             disabled={loading}
-            style={{
-              padding: 10,
-              borderRadius: 10,
-              border: "1px solid #111827",
-              background: "#111827",
-              color: "white",
-              cursor: "pointer",
-              opacity: loading ? 0.7 : 1,
-            }}
           >
             {loading ? "Ingresando..." : "Ingresar"}
-          </button>
+          </AdminButton>
 
-          {msg ? <div style={{ color: "#b91c1c", fontSize: 13, marginTop: 4 }}>{msg}</div> : null}
+          {msg ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{msg}</div> : null}
         </form>
-      </div>
-    </div>
+      </AdminCard>
+    </AdminPageShell>
   );
 }
 
@@ -144,9 +140,9 @@ export default function AdminLoginPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-          <div style={{ color: "#6b7280", fontSize: 14 }}>Cargando…</div>
-        </div>
+        <AdminPageShell centered>
+          <AdminCard elevated className="w-full max-w-md text-slate-600">Cargando…</AdminCard>
+        </AdminPageShell>
       }
     >
       <AdminLoginInner />

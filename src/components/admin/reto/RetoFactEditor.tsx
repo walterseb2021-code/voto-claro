@@ -1,5 +1,8 @@
 "use client";
 
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
+
 import { useEffect, useMemo, useState } from "react";
 
 type FactType =
@@ -376,47 +379,42 @@ export default function RetoFactEditor({
   }
 
   const inputClass =
-    "mt-1 w-full rounded-xl border-2 border-red-600 bg-white px-3 py-2 text-sm text-slate-900";
-  const labelClass = "text-xs font-extrabold text-slate-900";
-  const buttonClass =
-    "inline-flex items-center justify-center rounded-xl border-2 border-red-600 bg-green-800 px-3 py-2 text-xs font-extrabold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-60";
+    "mt-1 min-h-11 min-w-0 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2";
+  const labelClass = "text-sm font-bold text-black";
 
   return (
-    <div
-      id="reto-fact-editor"
-      className="mt-4 rounded-2xl border-2 border-red-600 bg-green-50 p-4"
-    >
+    <AdminCard id="reto-fact-editor" className="mt-4 min-w-0">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-sm font-extrabold text-slate-900">
+          <div className="text-xl font-extrabold text-black">
             Editor seguro de hechos
           </div>
-          <div className="mt-1 text-xs text-slate-600">
+          <div className="mt-1 text-sm text-slate-600">
             Los nuevos registros se guardan como borradores. Aprobar y activar
             siguen siendo acciones separadas.
           </div>
         </div>
 
         {!open && (
-          <button type="button" className={buttonClass} onClick={startCreate}>
+          <AdminButton type="button" variant="primary" onClick={startCreate}>
             + Nuevo hecho
-          </button>
+          </AdminButton>
         )}
       </div>
 
       {localNotice && (
-        <div className="mt-3 rounded-xl border border-red-400 bg-white px-3 py-2 text-xs font-semibold text-slate-800">
+        <div className="mt-3 rounded-xl border border-red-400 bg-white px-3 py-2 text-sm font-semibold text-slate-800">
           {localNotice}
         </div>
       )}
 
       {open && (
         <div className="mt-4 space-y-4">
-          <div className="text-sm font-extrabold text-slate-900">
+          <div className="text-xl font-extrabold text-black">
             {editingFact ? "Editar borrador" : "Crear nuevo borrador"}
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 gap-3 md:grid-cols-2">
             <label>
               <div className={labelClass}>Clave del hecho</div>
               <input
@@ -426,7 +424,7 @@ export default function RetoFactEditor({
                 onChange={(e) => setField("factKey", e.target.value)}
                 placeholder="ejemplo.hecho_001"
               />
-              <div className="mt-1 text-[11px] text-slate-500">
+              <div className="mt-1 text-sm text-slate-500">
                 Al editar, la clave no puede cambiarse.
               </div>
             </label>
@@ -490,7 +488,7 @@ export default function RetoFactEditor({
               {SOURCES.map((source) => (
                 <label
                   key={source}
-                  className="flex items-center gap-2 rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+                  className="flex items-center gap-2 rounded-xl border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
                 >
                   <input
                     type="checkbox"
@@ -503,7 +501,7 @@ export default function RetoFactEditor({
             </div>
           </div>
 
-          <div className="rounded-xl border border-red-300 bg-white p-3 text-xs text-slate-700">
+          <div className="rounded-xl border border-red-300 bg-white p-3 text-sm text-slate-700">
             Operador automatico: <b>{operator}</b>
           </div>
 
@@ -610,7 +608,7 @@ export default function RetoFactEditor({
           )}
 
           {form.factType === "membership" && (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
               <label>
                 <div className={labelClass}>Miembro / elemento</div>
                 <input
@@ -643,7 +641,7 @@ export default function RetoFactEditor({
             </div>
           )}
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 gap-3 md:grid-cols-2">
             <label>
               <div className={labelClass}>Referencia de fuente (opcional)</div>
               <input
@@ -676,9 +674,9 @@ export default function RetoFactEditor({
           </div>
 
           <div className="flex gap-2 flex-wrap">
-            <button
+            <AdminButton
               type="button"
-              className={buttonClass}
+              variant="primary"
               disabled={saving}
               onClick={() => void save()}
             >
@@ -687,19 +685,19 @@ export default function RetoFactEditor({
                 : editingFact
                   ? "Guardar cambios"
                   : "Guardar borrador"}
-            </button>
+            </AdminButton>
 
-            <button
+            <AdminButton
               type="button"
-              className="inline-flex items-center justify-center rounded-xl border-2 border-slate-500 bg-white px-3 py-2 text-xs font-extrabold text-slate-800 hover:bg-slate-100 disabled:opacity-60"
+
               disabled={saving}
               onClick={cancel}
             >
               Cancelar
-            </button>
+            </AdminButton>
           </div>
         </div>
       )}
-    </div>
+    </AdminCard>
   );
 }

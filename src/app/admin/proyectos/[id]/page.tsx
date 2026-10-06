@@ -1,6 +1,10 @@
 'use client';
 
-import Link from 'next/link';
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 
@@ -128,18 +132,40 @@ export default function AdminProyectoDetallePage() {
   const supportGoal = getMinimumSupports(project?.minimum_supports_required);
   const currentSupports = getSupportCount(project?.beneficiary_count);
 
-  return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <div className="mb-6">
-          <Link
-            href="/admin/proyectos"
-            className="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            Volver a proyectos
-          </Link>
-        </div>
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
+  async function onLogout() {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      const res = await fetch("/api/admin/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        setLogoutError("No se pudo cerrar la sesion.");
+        return;
+      }
+      window.location.href = "/admin/login";
+    } catch {
+      setLogoutError("No se pudo cerrar la sesion.");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
+  return (
+    <AdminPageShell>
+      <AdminHeader title="Detalle admin" actions={
+        <AdminNavActions>
+          <AdminButton href="/admin">Admin Central</AdminButton>
+          <AdminButton href="/">Inicio</AdminButton>
+          <AdminButton href="/admin/proyectos">Volver a proyectos</AdminButton>
+          <AdminButton type="button" onClick={onLogout} disabled={loggingOut}>Cerrar sesión</AdminButton>
+        </AdminNavActions>
+      } />
+      {logoutError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-base text-red-800">{logoutError}</div>}
         {loading && (
           <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-600">
             Cargando proyecto...
@@ -154,15 +180,15 @@ export default function AdminProyectoDetallePage() {
 
         {!loading && project && (
           <div className="space-y-6">
-            <section className="rounded-lg border border-slate-200 bg-white p-6">
+            <AdminCard className="min-w-0">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
                     Detalle admin
                   </p>
-                  <h1 className="mt-2 text-3xl font-bold text-slate-900">
+                  <h2 className="mt-2 break-words text-2xl font-extrabold text-black md:text-3xl">
                     {project.name}
-                  </h1>
+                  </h2>
                   <p className="mt-2 text-slate-600">
                     {project.department || 'Sin departamento'} /{' '}
                     {project.district || 'Sin distrito'}
@@ -173,74 +199,74 @@ export default function AdminProyectoDetallePage() {
                   {project.status || 'Sin estado'}
                 </span>
               </div>
-            </section>
+            </AdminCard>
 
-            <section className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 bg-white p-5">
-                <h2 className="text-lg font-semibold text-slate-900">
+            <section className="grid min-w-0 gap-4 md:grid-cols-2">
+              <AdminCard className="min-w-0">
+                <h2 className="text-xl font-extrabold text-black">
                   Datos principales
                 </h2>
-                <dl className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between gap-4">
+                <dl className="mt-4 space-y-3 text-base">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-slate-500">Categoría</dt>
-                    <dd className="text-right font-medium text-slate-900">
+                    <dd className="min-w-0 break-words font-medium sm:text-right text-slate-900">
                       {project.category || 'Sin categoría'}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-slate-500">Monto solicitado</dt>
-                    <dd className="text-right font-medium text-slate-900">
+                    <dd className="min-w-0 break-words font-medium sm:text-right text-slate-900">
                       {getRequestedBudgetLabel(project.requested_budget)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-slate-500">Rango</dt>
-                    <dd className="text-right font-medium text-slate-900">
+                    <dd className="min-w-0 break-words font-medium sm:text-right text-slate-900">
                       {getBudgetCategoryLabel(project.budget_category)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-slate-500">Apoyos</dt>
-                    <dd className="text-right font-medium text-slate-900">
+                    <dd className="min-w-0 break-words font-medium sm:text-right text-slate-900">
                       {currentSupports} / {supportGoal ?? 'No configurado'}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-slate-500">Creado</dt>
-                    <dd className="text-right font-medium text-slate-900">
+                    <dd className="min-w-0 break-words font-medium sm:text-right text-slate-900">
                       {formatDate(project.created_at)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-slate-500">Revisión final</dt>
-                    <dd className="text-right font-medium text-slate-900">
+                    <dd className="min-w-0 break-words font-medium sm:text-right text-slate-900">
                       {supportGoal != null && currentSupports >= supportGoal
                         ? 'Elegible'
                         : 'No elegible'}
                     </dd>
                   </div>
                 </dl>
-              </div>
+              </AdminCard>
 
-              <div className="rounded-lg border border-slate-200 bg-white p-5">
-                <h2 className="text-lg font-semibold text-slate-900">Líder</h2>
+              <AdminCard className="min-w-0">
+                <h2 className="text-xl font-extrabold text-black">Líder</h2>
                 {project.leader ? (
-                  <dl className="mt-4 space-y-3 text-sm">
+                  <dl className="mt-4 space-y-3 text-base">
                     <div>
                       <dt className="text-slate-500">Nombre</dt>
-                      <dd className="font-medium text-slate-900">
+                      <dd className="break-words font-medium text-slate-900">
                         {project.leader.full_name || 'Sin nombre'}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-slate-500">Alias</dt>
-                      <dd className="font-medium text-slate-900">
+                      <dd className="break-words font-medium text-slate-900">
                         {project.leader.alias || 'Sin alias'}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-slate-500">Email</dt>
-                      <dd className="break-all font-medium text-slate-900">
+                      <dd className="break-all break-words font-medium text-slate-900">
                         {project.leader.email || 'Sin email'}
                       </dd>
                     </div>
@@ -250,43 +276,42 @@ export default function AdminProyectoDetallePage() {
                     No hay líder asociado.
                   </p>
                 )}
-              </div>
+              </AdminCard>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-6">
-              <h2 className="text-lg font-semibold text-slate-900">Objetivo</h2>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+            <AdminCard className="min-w-0">
+              <h2 className="text-xl font-extrabold text-black">Objetivo</h2>
+              <p className="mt-3 break-words whitespace-pre-wrap text-base leading-6 text-slate-700">
                 {project.objective || 'No especificado.'}
               </p>
-            </section>
+            </AdminCard>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-6">
-              <h2 className="text-lg font-semibold text-slate-900">
+            <AdminCard className="min-w-0">
+              <h2 className="text-xl font-extrabold text-black">
                 Descripción
               </h2>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+              <p className="mt-3 break-words whitespace-pre-wrap text-base leading-6 text-slate-700">
                 {project.description || 'No especificada.'}
               </p>
-            </section>
+            </AdminCard>
 
             {project.pdf_url && (
-              <section className="rounded-lg border border-slate-200 bg-white p-6">
-                <h2 className="text-lg font-semibold text-slate-900">
+              <AdminCard className="min-w-0">
+                <h2 className="text-xl font-extrabold text-black">
                   Documento PDF
                 </h2>
-                <a
+                <AdminButton
                   href={project.pdf_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-3 inline-flex rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  className="mt-3"
                 >
                   Ver PDF
-                </a>
-              </section>
+                </AdminButton>
+              </AdminCard>
             )}
           </div>
         )}
-      </div>
-    </div>
+    </AdminPageShell>
   );
 }

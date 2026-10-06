@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminCard from "@/components/admin/AdminCard";
+
 
 type PitchGroup =
   | "GRUPOA"
@@ -195,19 +201,41 @@ export default function AdminTokensPage() {
     void loadTokens();
   }, []);
 
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  async function onLogout() {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      const res = await fetch("/api/admin/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        setLogoutError("No se pudo cerrar la sesion.");
+        return;
+      }
+      window.location.href = "/admin/login";
+    } catch {
+      setLogoutError("No se pudo cerrar la sesion.");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-b from-green-50 via-white to-green-100 px-6 py-8">
-      <div className="mx-auto max-w-5xl">
-        <h1 className="text-2xl font-extrabold text-slate-900">
-          Administración de accesos /pitch
-        </h1>
-
-        <p className="mt-2 text-sm text-slate-700">
-          Genera y administra los tokens de acceso de GRUPOA a GRUPOE.
-        </p>
-
-        <div className="mt-6 rounded-2xl border-2 border-green-700 bg-white p-5">
-          <h2 className="text-lg font-extrabold text-slate-900">
+    <AdminPageShell>
+      <AdminHeader title="Administración de accesos /pitch" description="Genera y administra los tokens de acceso de GRUPOA a GRUPOE." actions={
+        <AdminNavActions>
+          <AdminButton href="/admin">Admin Central</AdminButton>
+          <AdminButton href="/">Inicio</AdminButton>
+          <AdminButton type="button" onClick={onLogout} disabled={loggingOut}>Cerrar sesión</AdminButton>
+        </AdminNavActions>
+      } />
+      {logoutError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-base text-red-800">{logoutError}</div>}
+        <AdminCard elevated>
+          <h2 className="text-xl font-extrabold text-black">
             Generar nuevo token seguro
           </h2>
 
@@ -224,7 +252,7 @@ export default function AdminTokensPage() {
                   event.target.value as PitchGroup
                 )
               }
-              className="rounded-xl border-2 border-slate-300 bg-white px-4 py-2 font-bold text-slate-900"
+              className="min-h-11 max-w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-2 text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 text-slate-900"
             >
               {GROUPS.map((group) => (
                 <option key={group} value={group}>
@@ -233,49 +261,49 @@ export default function AdminTokensPage() {
               ))}
             </select>
 
-            <button
+            <AdminButton
               type="button"
               disabled={loading}
               onClick={generateToken}
-              className="rounded-xl border-2 border-green-900 bg-green-800 px-4 py-2 text-sm font-extrabold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-60"
+              variant="primary"
             >
               Generar token seguro
-            </button>
+            </AdminButton>
 
-            <button
+            <AdminButton
               type="button"
               disabled={loading}
               onClick={loadTokens}
-              className="rounded-xl border-2 border-slate-500 bg-white px-4 py-2 text-sm font-extrabold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+
             >
               Recargar
-            </button>
+            </AdminButton>
           </div>
-        </div>
+        </AdminCard>
 
         {generatedToken && (
-          <div className="mt-5 rounded-2xl border-2 border-amber-500 bg-amber-50 p-4">
-            <div className="text-sm font-extrabold text-slate-900">
+          <AdminCard>
+            <div className="text-base font-bold text-black">
               Nuevo token generado
             </div>
 
-            <div className="mt-2 break-all rounded-xl bg-white p-3 font-mono text-sm text-slate-900">
+            <div className="mt-2 break-all rounded-xl bg-[#bffcff] p-3 font-mono text-sm text-slate-900">
               {generatedToken}
             </div>
 
-            <button
+            <AdminButton
               type="button"
               onClick={copyGeneratedToken}
-              className="mt-3 rounded-xl border-2 border-amber-700 bg-amber-600 px-4 py-2 text-sm font-extrabold text-white hover:bg-amber-700"
+              className="mt-3"
             >
               Copiar token
-            </button>
-          </div>
+            </AdminButton>
+          </AdminCard>
         )}
 
         {notice && (
           <div className="mt-4 text-sm font-semibold text-slate-900">
-            <div className="inline-block rounded-xl border-2 border-red-500 bg-green-50 px-4 py-2">
+            <div className="inline-block max-w-full break-words rounded-xl border border-slate-300 bg-[#bffcff] px-4 py-2">
               {notice}
             </div>
           </div>
@@ -289,41 +317,37 @@ export default function AdminTokensPage() {
           )}
 
           {rows.map((row) => (
-            <div
+            <AdminCard
               key={row.id}
-              className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border-2 border-red-600 bg-white/90 p-4"
+              className="flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:justify-between"
             >
-              <div className="min-w-0 flex-1">
-                <div className="break-all font-mono text-sm font-extrabold text-slate-900">
+              <div className="min-w-0 w-full sm:flex-1">
+                <div className="break-all font-mono text-base font-bold text-black">
                   {row.token}
                 </div>
 
-                <div className="mt-2 text-xs text-slate-600">
+                <div className="mt-2 text-sm text-slate-600">
                   Activo: {row.is_active ? "Sí" : "No"}
                 </div>
 
-                <div className="text-xs text-slate-600">
+                <div className="break-words text-sm text-slate-600">
                   Expira: {row.expires_at ?? "Sin expiración"}
                 </div>
 
-                <div className="text-xs text-slate-600">
+                <div className="break-words text-sm text-slate-600">
                   Nota: {row.note ?? "-"}
                 </div>
               </div>
 
-              <button
+              <AdminButton
                 type="button"
                 disabled={loading}
                 onClick={() => toggleToken(row)}
-                className={`rounded-xl border-2 border-red-600 px-4 py-2 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60 ${
-                  row.is_active
-                    ? "bg-red-700 hover:bg-red-800"
-                    : "bg-green-800 hover:bg-green-900"
-                }`}
+                variant={row.is_active ? "danger" : "primary"}
               >
                 {row.is_active ? "Desactivar" : "Activar"}
-              </button>
-            </div>
+              </AdminButton>
+            </AdminCard>
           ))}
 
           {!loading && rows.length === 0 && (
@@ -332,7 +356,6 @@ export default function AdminTokensPage() {
             </div>
           )}
         </div>
-      </div>
-    </main>
+    </AdminPageShell>
   );
 }

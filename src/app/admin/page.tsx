@@ -1,7 +1,11 @@
 // src/app/admin/page.tsx
 "use client";
 
-import Link from "next/link";
+import AdminButton from "@/components/admin/AdminButton";
+import AdminPageShell from "@/components/admin/AdminPageShell";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminNavActions from "@/components/admin/AdminNavActions";
+import AdminCard from "@/components/admin/AdminCard";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -105,235 +109,208 @@ export default function AdminHubPage() {
     }
   }, [checking]);
 
-  const wrap =
-    "min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto bg-gradient-to-b from-green-50 via-white to-green-100";
-  const sectionWrap =
-    "mt-4 rounded-2xl border-4 border-red-700 bg-green-50/70 p-4 shadow-sm";
-  const inner = "rounded-2xl border-2 border-red-600 bg-white/85 p-4";
-  const btn =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-sm font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-  const btnSm =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
-    "border-2 border-red-600 bg-green-800 text-white text-xs font-extrabold " +
-    "hover:bg-green-900 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-  const card = "rounded-2xl border-2 border-red-600 bg-white/85 p-4 shadow-sm";
-
   if (checking) {
     return (
-      <main className={wrap}>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin Central – VOTO CLARO
-        </h1>
+      <AdminPageShell>
+        <AdminHeader title="Admin Central – VOTO CLARO" />
 
-        <section className={sectionWrap}>
-          <div className={inner}>
-            <div className="text-sm font-extrabold text-slate-900">Cargando…</div>
-            <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+        <section className="space-y-4">
+          <AdminCard elevated>
+            <div className="text-xl font-extrabold text-black">Cargando…</div>
+            <div className="mt-2 text-base text-slate-800 leading-relaxed">
               Verificando sesión.
             </div>
-          </div>
+          </AdminCard>
         </section>
 
-        <button type="button" onClick={goBack} className={btn + " mt-4"}>
+        <AdminButton type="button" onClick={goBack}>
           ← Volver
-        </button>
-      </main>
+        </AdminButton>
+      </AdminPageShell>
     );
   }
 
   return (
-    <main className={wrap}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-          Admin Central – VOTO CLARO
-        </h1>
-
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/" className={btnSm}>
-            🏠 Inicio
-          </Link>
-
-          <button type="button" onClick={goBack} className={btnSm}>
-            ← Volver
-          </button>
-        </div>
-      </div>
+    <AdminPageShell>
+      <AdminHeader title="Admin Central – VOTO CLARO" actions={
+        <AdminNavActions>
+          <AdminButton href="/">🏠 Inicio</AdminButton>
+          <AdminButton type="button" onClick={goBack}>← Volver</AdminButton>
+        </AdminNavActions>
+      } />
 
       {message && (
         <div
-          className={`mt-4 p-3 rounded-lg border ${
+          className={`p-4 rounded-2xl border ${
             message.type === "success"
-              ? "bg-green-100 border-green-400 text-green-800"
-              : "bg-red-100 border-red-400 text-red-800"
+              ? "bg-green-50 border-green-200 text-green-800"
+              : "bg-red-50 border-red-200 text-red-800"
           }`}
         >
           {message.text}
         </div>
       )}
 
-      <section className={sectionWrap}>
-        <div className={inner}>
-          <div className="text-sm font-extrabold text-slate-900">
+      <section className="space-y-4">
+        <div>
+          <div className="text-xl font-extrabold text-black">
             Panel único de administración
           </div>
 
-          <div className="mt-2 text-sm font-semibold text-slate-700 leading-relaxed">
+          <div className="mt-2 text-base text-slate-800 leading-relaxed">
             Desde aquí controlas módulos proactivos, participación ciudadana,
             Espacio Emprendedor, capacitaciones, tokens y dispositivos de prueba.
           </div>
 
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 🔴 Cambio con Valentía
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Videos EN VIVO, historial y borrado (Supabase).
               </div>
-              <Link href="/admin/live" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/live" className="mt-3 w-full">
                 Abrir Admin EN VIVO
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 📊 Intención de Voto
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Crear/activar/cerrar rondas.
               </div>
-              <Link href="/admin/vote-rounds" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/vote-rounds" className="mt-3 w-full">
                 Abrir Admin Rondas
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 🎯 Reto Ciudadano
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Gestión de preguntas, niveles y control.
               </div>
-              <Link href="/admin/reto" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/reto" className="mt-3 w-full">
                 Abrir Admin Reto
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 💬 Comentarios Ciudadanos
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Moderación, modo anónimo, filtro anti-lisuras.
               </div>
-              <Link href="/admin/comments" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/comments" className="mt-3 w-full">
                 Abrir Admin Comentarios
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 🔐 Tokens / Grupos (Supabase)
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Activar/desactivar GRUPOA/B/C/D/E y ver expiración.
               </div>
-              <Link href="/admin/tokens" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/tokens" className="mt-3 w-full">
                 Abrir Admin Tokens
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 👥 Afiliados APP
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Gestionar afiliados manualmente para Espacio Emprendedor.
               </div>
-              <Link href="/admin/afiliados" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/afiliados" className="mt-3 w-full">
                 Abrir Admin Afiliados
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 🏘️ Proyecto Ciudadano
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Revisar y aprobar proyectos presentados por ciudadanos.
               </div>
-              <Link href="/admin/proyectos" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/proyectos" className="mt-3 w-full">
                 Abrir Admin Proyectos
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 🏆 Solo para ganadores
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Gestionar ganadores, evento del semestre, fotos, videos,
                 entrevistas y reconocimientos.
               </div>
-              <Link href="/admin/solo-ganadores" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/solo-ganadores" className="mt-3 w-full">
                 Abrir Admin Ganadores
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
 
-            <div className={card}>
-              <div className="text-sm font-extrabold text-slate-900">
+            <AdminCard>
+              <div className="text-xl font-extrabold text-black">
                 📚 Capacitaciones
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Revisar, aprobar, observar, desactivar o reactivar cursos,
                 talleres, videos y materiales publicados por profesionales.
               </div>
-              <Link href="/admin/capacitaciones" className={btn + " mt-3 w-full"}>
+              <AdminButton href="/admin/capacitaciones" className="mt-3 w-full">
                 Abrir Admin Capacitaciones
-              </Link>
-            </div>
+              </AdminButton>
+            </AdminCard>
           </div>
         </div>
       </section>
 
-      <section className={sectionWrap + " mt-6"}>
-        <div className={inner}>
+      <section>
+        <AdminCard elevated>
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <div className="text-sm font-extrabold text-slate-900">
+              <div className="text-xl font-extrabold text-black">
                 🧪 Dispositivos de Prueba
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-sm text-slate-700">
                 Puedes revisar y resetear dispositivos individuales de prueba.
               </div>
             </div>
 
             <div className="flex gap-2">
-              <button
+              <AdminButton
                 onClick={loadDevices}
-                className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-700"
                 disabled={loadingDevices}
               >
                 {loadingDevices ? "Cargando..." : "↻ Refrescar"}
-              </button>
+              </AdminButton>
             </div>
           </div>
 
           <div className="mt-4">
-            <h3 className="text-sm font-bold mb-2">📱 Dispositivos registrados</h3>
+            <h3 className="text-xl font-bold mb-2">📱 Dispositivos registrados</h3>
 
             {loadingDevices ? (
-              <div className="text-sm text-slate-600">Cargando dispositivos...</div>
+              <div className="text-sm text-slate-700">Cargando dispositivos...</div>
             ) : devices.length === 0 ? (
-              <div className="text-sm text-slate-600 bg-slate-50 p-4 rounded border">
+              <div className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200">
                 No hay dispositivos registrados.
               </div>
             ) : (
-              <div className="overflow-x-auto max-h-96 border rounded">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-100 sticky top-0">
+              <div className="overflow-x-auto max-h-96 rounded-lg border border-slate-200">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead className="bg-slate-50 sticky top-0">
                     <tr>
                       <th className="p-2 text-left">Device ID</th>
                       <th className="p-2 text-left">Email/Celular</th>
@@ -348,13 +325,13 @@ export default function AdminHubPage() {
 
                   <tbody>
                     {devices.map((d) => (
-                      <tr key={d.device_id} className="border-t hover:bg-slate-50">
-                        <td className="p-2 font-mono text-xs">
+                      <tr key={d.device_id} className="border-t border-slate-200 hover:bg-slate-50">
+                        <td className="p-2 font-mono text-sm">
                           {d.device_id.slice(0, 8)}...
                         </td>
                         <td className="p-2">{d.email || d.celular || "-"}</td>
                         <td className="p-2">{d.forum_alias || "-"}</td>
-                        <td className="p-2 text-xs">
+                        <td className="p-2 text-sm">
                           {new Date(d.created_at).toLocaleDateString()}
                         </td>
                         <td className="p-2 text-center">
@@ -364,13 +341,13 @@ export default function AdminHubPage() {
                           {d.commentCount || 0}
                         </td>
                         <td className="p-2 text-center">
-                          <button
+                          <AdminButton
                             onClick={() => resetDevice(d.device_id)}
-                            className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600"
+                            variant="danger"
                             title="Resetear este dispositivo"
                           >
                             Reset
-                          </button>
+                          </AdminButton>
                         </td>
                       </tr>
                     ))}
@@ -380,16 +357,16 @@ export default function AdminHubPage() {
             )}
           </div>
 
-          <div className="mt-4 text-xs text-slate-500">
+          <div className="mt-4 text-sm text-slate-700">
             * Al resetear un dispositivo, se eliminan sus datos de: Intención de
             Voto y Comentarios.
           </div>
-        </div>
+        </AdminCard>
       </section>
 
-      <div className="mt-5 text-xs text-slate-600">
+      <div className="text-sm text-slate-700">
         Nota: si compartes links internos, igual quedan protegidos por el gate global (/pitch + cookie).
       </div>
-    </main>
+    </AdminPageShell>
   );
 }
